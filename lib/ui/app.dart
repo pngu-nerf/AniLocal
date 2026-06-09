@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'player_screen.dart';
+
 /// Root of the AniLocal UI.
 ///
 /// Seam #1: the UI imports only Flutter and `lib/domain` — never AniList,
@@ -19,7 +21,7 @@ class AniLocalApp extends StatelessWidget {
       ),
       home: Scaffold(
         appBar: AppBar(title: const Text('AniLocal')),
-        body: const Center(child: Text('No library folders yet')),
+        body: const PlayerScreen(),
       ),
     );
   }

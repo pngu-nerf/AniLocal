@@ -2,7 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- media_kit: sandbox off so libmpv can open arbitrary local files; we do
+	     not target the Mac App Store (GPL/libmpv), so sandboxing is not required. -->
 	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<!-- media_kit + AniList reads need outbound network. -->
+	<key>com.apple.security.network.client</key>
 	<true/>
 </dict>
 </plist>
