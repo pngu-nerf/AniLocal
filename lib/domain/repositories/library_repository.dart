@@ -1,4 +1,5 @@
 import '../models/episode.dart';
+import '../models/identified_episode.dart';
 import '../models/library_folder.dart';
 import '../models/series.dart';
 
@@ -10,6 +11,13 @@ abstract interface class LibraryRepository {
   Future<void> addFolder(String path);
   Future<void> removeFolder(LibraryFolder folder);
 
+  /// All matched series in the library (for the grid).
   Future<List<Series>> allSeries();
+
+  /// Episodes (matched files) for a series, ordered by episode number.
   Future<List<Episode>> episodesFor(int anilistId);
+
+  /// Files that scanned but matched no AniList entry — kept on record so they
+  /// don't vanish on rescan (Stage 5 fix-match will resolve them).
+  Future<List<IdentifiedEpisode>> unmatchedFiles();
 }

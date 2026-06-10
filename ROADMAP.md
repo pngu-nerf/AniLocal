@@ -115,6 +115,7 @@ Each stage ends *runnable*. Don't start a stage until the previous "Done when" i
 
 - Multiple `LibraryFolder`s the user adds/removes; the scanner walks all of them.
 - **Manual fix-match UI:** when auto-ID is wrong/uncertain, the user picks the correct AniList entry. Store the override; rescans MUST respect it (seam rule #5).
+  - **Carryover from Stage 4:** `file_cache` is per-path with its own `anilistId` (different files / same folder can map to different series — the shape is right). Two *additive* migrations make overrides robust: (1) add a `matchOverridden` flag and have the sync classifier skip re-matching overridden rows (so an override survives even if the file's bytes change, not just when unchanged); (2) build the title→id reuse map (`knownTitleToId` in `LibrarySync`) from auto-matched rows only, so an override on one file doesn't leak onto new siblings of the same title.
 - First-run onboarding: add your first folder → scan → done. No accounts, no servers.
 
 **Done when:** a fresh user adds folders, scans, and corrects any mismatch — and the correction sticks across rescans.
