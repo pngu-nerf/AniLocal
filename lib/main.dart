@@ -5,15 +5,16 @@ import 'data/cache/art_cache.dart';
 import 'data/cache/cache_connection.dart';
 import 'data/cache/cache_database.dart';
 import 'data/cache/drift_library_repository.dart';
+import 'data/folders/file_selector_folder_picker.dart';
+import 'data/folders/folder_access.dart';
+import 'data/folders/tcc_folder_access.dart';
 import 'data/scanner/folder_scanner.dart';
 import 'data/scanner/heuristic_filename_parser.dart';
 import 'data/scanner/series_matcher.dart';
+import 'domain/models/sync_summary.dart';
+import 'sync/fix_match_service.dart';
 import 'sync/library_sync.dart';
 import 'ui/app.dart';
-
-/// Stage 4 spike: a hardcoded library folder (settings UI is Stage 5). Must be
-/// a NON-TCC-protected location (not ~/Desktop, ~/Documents, ~/Downloads).
-const String kLibraryPath = '/Users/pngu/anilocal-test/library';
 
 /// Episodic formats for the AniList candidate search (cut MUSIC false-positives).
 const List<String> kEpisodicAnimeFormats = [
@@ -28,8 +29,8 @@ const List<String> kEpisodicAnimeFormats = [
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Composition root: build the cache (read path) and the sync pipeline (fill
-  // path) separately. The UI is handed the repository + a scan callback only.
+  // Composition root. Read path (cache) and fill path (sync) are built
+  // separately; the UI gets the repository + scan/add-folder callbacks only.
   final database = CacheDatabase(openCacheDatabase());
   final repository = DriftLibraryRepository(database);
   final sync = LibrarySync(
@@ -42,8 +43,61 @@ void main() {
     cache: database,
     art: ArtCache(directory: coverArtDirectory),
   );
+  // Fix-match: the ONLY writer of overrides (LibrarySync can't reach it).
+  final fixMatch = FixMatchService(
+    anilist: AniListClient(),
+    art: ArtCache(directory: coverArtDirectory),
+    cache: database,
+    formatsIn: kEpisodicAnimeFormats,
+  );
+  const FolderPicker picker = FileSelectorFolderPicker();
+  final FolderAccess folderAccess = TccFolderAccess();
+
+  // Shared denied-state: one source of truth for both the add-dialog and the
+  // ambient banner, so they can't disagree. Holds the denied category labels.
+  final accessIssues = ValueNotifier<List<String>>(const []);
+  void applyAccess(FolderAccessResult r) {
+    if (r.categoryLabel == null) return; // not a TCC category
+    final set = {...accessIssues.value};
+    r.isDenied ? set.add(r.categoryLabel!) : set.remove(r.categoryLabel!);
+    accessIssues.value = set.toList()..sort();
+  }
+
+  // Folders are user-picked via the native panel — there is NO hardcoded path.
+  // Adding a folder under a TCC category provokes the folder-wide prompt (so
+  // the picker stops greying siblings); a denial surfaces via [deniedLabel] +
+  // the shared accessIssues. The folder is still recorded and scans via its own
+  // inferred-consent grant (additive — a category deny never regresses it).
+  Future<({bool added, String? deniedLabel})> addFolder() async {
+    final token = await picker.pickFolder();
+    if (token == null) return (added: false, deniedLabel: null);
+    await repository.addFolder(token.path);
+    final result = await folderAccess.ensureAccess(token.path);
+    applyAccess(result);
+    return (
+      added: true,
+      deniedLabel: result.isDenied ? result.categoryLabel : null,
+    );
+  }
+
+  Future<SyncSummary> scan() async {
+    final folders = await repository.watchedFolders();
+    // Confirm/upgrade folder-wide access per category (additive — does NOT gate
+    // the scan; the scanner still reads each folder via whatever grant it has).
+    for (final f in folders) {
+      applyAccess(await folderAccess.ensureAccess(f.path));
+    }
+    return sync.sync([for (final f in folders) f.path]);
+  }
 
   runApp(
-    AniLocalApp(repository: repository, onScan: () => sync.sync(kLibraryPath)),
+    AniLocalApp(
+      repository: repository,
+      fixMatch: fixMatch,
+      onScan: scan,
+      onAddFolder: addFolder,
+      accessIssues: accessIssues,
+      onOpenAccessSettings: openPrivacyFilesAndFoldersSettings,
+    ),
   );
 }

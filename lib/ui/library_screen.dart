@@ -1,25 +1,43 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../domain/models/series.dart';
 import '../domain/models/sync_summary.dart';
+import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import 'access_recovery.dart';
+import 'folders_screen.dart';
 import 'series_detail_screen.dart';
 import 'unmatched_screen.dart';
 
-/// Stage 4 home: browse the cached library. Reads ONLY from the repository
-/// (cache) — instant and offline. The scan/refresh action triggers the fill
-/// path via [onScan]; the UI never imports sync/cache/AniList types (seam #1).
+/// Stage 4/5 home: browse the cached library. Reads ONLY from the repository
+/// (cache) — instant and offline. Scan (fill path) and add-folder (native
+/// picker) are injected callbacks; the UI never imports sync/cache/picker types.
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
     required this.repository,
+    required this.fixMatch,
     required this.onScan,
+    required this.onAddFolder,
+    required this.accessIssues,
+    required this.onOpenAccessSettings,
   });
 
   final LibraryRepository repository;
+  final FixMatchRepository fixMatch;
   final Future<SyncSummary> Function() onScan;
+
+  /// Opens the native folder picker; reports whether a folder was added and the
+  /// denied TCC category label (if the folder's category access was refused).
+  final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
+
+  /// Shared denied-state (category labels) — drives the banner; the add-dialog
+  /// reads the same source via [onAddFolder]'s result.
+  final ValueListenable<List<String>> accessIssues;
+  final Future<bool> Function() onOpenAccessSettings;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -46,9 +64,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
     try {
       final summary = await widget.onScan();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_summaryText(summary))));
+      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      messenger.showSnackBar(SnackBar(content: Text(_summaryText(summary))));
+      if (summary.unreadableFolders.isNotEmpty) {
+        messenger.showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            content: Text(
+              '⚠ Could not read: ${summary.unreadableFolders.join(", ")}. '
+              'Re-add the folder to restore access (its cached items were kept).',
+            ),
+          ),
+        );
+      }
       _reload();
     } catch (e) {
       if (!mounted) return;
@@ -57,6 +86,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ).showSnackBar(SnackBar(content: Text('Scan failed: $e')));
     } finally {
       if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _addFolder() async {
+    final result = await widget.onAddFolder();
+    if (!mounted) return;
+    if (result.deniedLabel != null) {
+      await showAccessDeniedDialog(
+        context,
+        result.deniedLabel!,
+        widget.onOpenAccessSettings,
+      );
+    }
+    if (result.added && mounted) {
+      await _scan(); // onboarding: add -> scan -> done
     }
   }
 
@@ -73,11 +117,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
         title: const Text('AniLocal'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.folder_outlined),
+            tooltip: 'Library folders',
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => FoldersScreen(
+                    repository: widget.repository,
+                    onAddFolder: widget.onAddFolder,
+                    onOpenAccessSettings: widget.onOpenAccessSettings,
+                  ),
+                ),
+              );
+              _reload(); // folders may have changed
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.help_outline),
             tooltip: 'Unmatched files',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => UnmatchedScreen(repository: widget.repository),
+                builder: (_) => UnmatchedScreen(
+                  repository: widget.repository,
+                  fixMatch: widget.fixMatch,
+                ),
               ),
             ),
           ),
@@ -98,41 +161,97 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
         ],
       ),
-      body: FutureBuilder<List<Series>>(
-        future: _series,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final series = snapshot.data ?? const [];
-          if (series.isEmpty) {
-            return const Center(
-              child: Text('No library yet — tap the refresh icon to scan.'),
-            );
-          }
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 200,
-              childAspectRatio: 0.62,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+      body: Column(
+        children: [
+          // Ambient access-recovery banner (shared denied-state).
+          ValueListenableBuilder<List<String>>(
+            valueListenable: widget.accessIssues,
+            builder: (context, labels, _) => labels.isEmpty
+                ? const SizedBox.shrink()
+                : AccessBanner(
+                    labels: labels,
+                    onOpenSettings: widget.onOpenAccessSettings,
+                    onRescan: _scanning ? () {} : _scan,
+                  ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Series>>(
+              future: _series,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final series = snapshot.data ?? const [];
+                if (series.isEmpty) {
+                  return _EmptyState(
+                    scanning: _scanning,
+                    onAddFolder: _addFolder,
+                  );
+                }
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200,
+                    childAspectRatio: 0.62,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: series.length,
+                  itemBuilder: (_, i) => _SeriesCard(
+                    series: series[i],
+                    repository: widget.repository,
+                    fixMatch: widget.fixMatch,
+                  ),
+                );
+              },
             ),
-            itemCount: series.length,
-            itemBuilder: (_, i) =>
-                _SeriesCard(series: series[i], repository: widget.repository),
-          );
-        },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.scanning, required this.onAddFolder});
+
+  final bool scanning;
+  final Future<void> Function() onAddFolder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Your library is empty.'),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: scanning ? null : onAddFolder,
+            icon: const Icon(Icons.create_new_folder_outlined),
+            label: const Text('Add your first folder'),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Pick a folder of anime — it scans automatically.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
     );
   }
 }
 
 class _SeriesCard extends StatelessWidget {
-  const _SeriesCard({required this.series, required this.repository});
+  const _SeriesCard({
+    required this.series,
+    required this.repository,
+    required this.fixMatch,
+  });
 
   final Series series;
   final LibraryRepository repository;
+  final FixMatchRepository fixMatch;
 
   @override
   Widget build(BuildContext context) {
@@ -145,8 +264,11 @@ class _SeriesCard extends StatelessWidget {
     return InkWell(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              SeriesDetailScreen(series: series, repository: repository),
+          builder: (_) => SeriesDetailScreen(
+            series: series,
+            repository: repository,
+            fixMatch: fixMatch,
+          ),
         ),
       ),
       child: Column(

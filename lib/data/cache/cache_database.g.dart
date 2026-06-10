@@ -1074,16 +1074,735 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
   }
 }
 
+class $LibraryFoldersTable extends LibraryFolders
+    with TableInfo<$LibraryFoldersTable, LibraryFolderRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LibraryFoldersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _pathMeta = const VerificationMeta('path');
+  @override
+  late final GeneratedColumn<String> path = GeneratedColumn<String>(
+    'path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _addedAtMsMeta = const VerificationMeta(
+    'addedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> addedAtMs = GeneratedColumn<int>(
+    'added_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [path, addedAtMs, sortOrder];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'library_folders';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LibraryFolderRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('path')) {
+      context.handle(
+        _pathMeta,
+        path.isAcceptableOrUnknown(data['path']!, _pathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pathMeta);
+    }
+    if (data.containsKey('added_at_ms')) {
+      context.handle(
+        _addedAtMsMeta,
+        addedAtMs.isAcceptableOrUnknown(data['added_at_ms']!, _addedAtMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_addedAtMsMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {path};
+  @override
+  LibraryFolderRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LibraryFolderRow(
+      path: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}path'],
+      )!,
+      addedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}added_at_ms'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+    );
+  }
+
+  @override
+  $LibraryFoldersTable createAlias(String alias) {
+    return $LibraryFoldersTable(attachedDatabase, alias);
+  }
+}
+
+class LibraryFolderRow extends DataClass
+    implements Insertable<LibraryFolderRow> {
+  final String path;
+  final int addedAtMs;
+
+  /// User-controllable rank (lower = higher priority). Stored so the order is
+  /// stable across relaunch and expresses "A ranks above B" — a near-future
+  /// feature (multi-source episodes) makes this order semantically meaningful
+  /// (top = default playback source). No reorder UI / priority meaning yet.
+  final int sortOrder;
+  const LibraryFolderRow({
+    required this.path,
+    required this.addedAtMs,
+    required this.sortOrder,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['path'] = Variable<String>(path);
+    map['added_at_ms'] = Variable<int>(addedAtMs);
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  LibraryFoldersCompanion toCompanion(bool nullToAbsent) {
+    return LibraryFoldersCompanion(
+      path: Value(path),
+      addedAtMs: Value(addedAtMs),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory LibraryFolderRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LibraryFolderRow(
+      path: serializer.fromJson<String>(json['path']),
+      addedAtMs: serializer.fromJson<int>(json['addedAtMs']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'path': serializer.toJson<String>(path),
+      'addedAtMs': serializer.toJson<int>(addedAtMs),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  LibraryFolderRow copyWith({String? path, int? addedAtMs, int? sortOrder}) =>
+      LibraryFolderRow(
+        path: path ?? this.path,
+        addedAtMs: addedAtMs ?? this.addedAtMs,
+        sortOrder: sortOrder ?? this.sortOrder,
+      );
+  LibraryFolderRow copyWithCompanion(LibraryFoldersCompanion data) {
+    return LibraryFolderRow(
+      path: data.path.present ? data.path.value : this.path,
+      addedAtMs: data.addedAtMs.present ? data.addedAtMs.value : this.addedAtMs,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LibraryFolderRow(')
+          ..write('path: $path, ')
+          ..write('addedAtMs: $addedAtMs, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(path, addedAtMs, sortOrder);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LibraryFolderRow &&
+          other.path == this.path &&
+          other.addedAtMs == this.addedAtMs &&
+          other.sortOrder == this.sortOrder);
+}
+
+class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolderRow> {
+  final Value<String> path;
+  final Value<int> addedAtMs;
+  final Value<int> sortOrder;
+  final Value<int> rowid;
+  const LibraryFoldersCompanion({
+    this.path = const Value.absent(),
+    this.addedAtMs = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LibraryFoldersCompanion.insert({
+    required String path,
+    required int addedAtMs,
+    this.sortOrder = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : path = Value(path),
+       addedAtMs = Value(addedAtMs);
+  static Insertable<LibraryFolderRow> custom({
+    Expression<String>? path,
+    Expression<int>? addedAtMs,
+    Expression<int>? sortOrder,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (path != null) 'path': path,
+      if (addedAtMs != null) 'added_at_ms': addedAtMs,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LibraryFoldersCompanion copyWith({
+    Value<String>? path,
+    Value<int>? addedAtMs,
+    Value<int>? sortOrder,
+    Value<int>? rowid,
+  }) {
+    return LibraryFoldersCompanion(
+      path: path ?? this.path,
+      addedAtMs: addedAtMs ?? this.addedAtMs,
+      sortOrder: sortOrder ?? this.sortOrder,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (path.present) {
+      map['path'] = Variable<String>(path.value);
+    }
+    if (addedAtMs.present) {
+      map['added_at_ms'] = Variable<int>(addedAtMs.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LibraryFoldersCompanion(')
+          ..write('path: $path, ')
+          ..write('addedAtMs: $addedAtMs, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MatchOverridesTable extends MatchOverrides
+    with TableInfo<$MatchOverridesTable, MatchOverrideRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MatchOverridesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _fileSizeMeta = const VerificationMeta(
+    'fileSize',
+  );
+  @override
+  late final GeneratedColumn<int> fileSize = GeneratedColumn<int>(
+    'file_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modifiedAtMsMeta = const VerificationMeta(
+    'modifiedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> modifiedAtMs = GeneratedColumn<int>(
+    'modified_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
+    'anilistId',
+  );
+  @override
+  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
+    'anilist_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _anchoredEpisodeMeta = const VerificationMeta(
+    'anchoredEpisode',
+  );
+  @override
+  late final GeneratedColumn<int> anchoredEpisode = GeneratedColumn<int>(
+    'anchored_episode',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _continuousOffsetMeta = const VerificationMeta(
+    'continuousOffset',
+  );
+  @override
+  late final GeneratedColumn<int> continuousOffset = GeneratedColumn<int>(
+    'continuous_offset',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _displayContinuousMeta = const VerificationMeta(
+    'displayContinuous',
+  );
+  @override
+  late final GeneratedColumn<bool> displayContinuous = GeneratedColumn<bool>(
+    'display_continuous',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("display_continuous" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    fileSize,
+    modifiedAtMs,
+    anilistId,
+    anchoredEpisode,
+    continuousOffset,
+    displayContinuous,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'match_overrides';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MatchOverrideRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('file_size')) {
+      context.handle(
+        _fileSizeMeta,
+        fileSize.isAcceptableOrUnknown(data['file_size']!, _fileSizeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fileSizeMeta);
+    }
+    if (data.containsKey('modified_at_ms')) {
+      context.handle(
+        _modifiedAtMsMeta,
+        modifiedAtMs.isAcceptableOrUnknown(
+          data['modified_at_ms']!,
+          _modifiedAtMsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_modifiedAtMsMeta);
+    }
+    if (data.containsKey('anilist_id')) {
+      context.handle(
+        _anilistIdMeta,
+        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_anilistIdMeta);
+    }
+    if (data.containsKey('anchored_episode')) {
+      context.handle(
+        _anchoredEpisodeMeta,
+        anchoredEpisode.isAcceptableOrUnknown(
+          data['anchored_episode']!,
+          _anchoredEpisodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('continuous_offset')) {
+      context.handle(
+        _continuousOffsetMeta,
+        continuousOffset.isAcceptableOrUnknown(
+          data['continuous_offset']!,
+          _continuousOffsetMeta,
+        ),
+      );
+    }
+    if (data.containsKey('display_continuous')) {
+      context.handle(
+        _displayContinuousMeta,
+        displayContinuous.isAcceptableOrUnknown(
+          data['display_continuous']!,
+          _displayContinuousMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {fileSize, modifiedAtMs};
+  @override
+  MatchOverrideRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MatchOverrideRow(
+      fileSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}file_size'],
+      )!,
+      modifiedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}modified_at_ms'],
+      )!,
+      anilistId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}anilist_id'],
+      )!,
+      anchoredEpisode: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}anchored_episode'],
+      ),
+      continuousOffset: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}continuous_offset'],
+      )!,
+      displayContinuous: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}display_continuous'],
+      )!,
+    );
+  }
+
+  @override
+  $MatchOverridesTable createAlias(String alias) {
+    return $MatchOverridesTable(attachedDatabase, alias);
+  }
+}
+
+class MatchOverrideRow extends DataClass
+    implements Insertable<MatchOverrideRow> {
+  final int fileSize;
+  final int modifiedAtMs;
+  final int anilistId;
+  final int? anchoredEpisode;
+  final int continuousOffset;
+  final bool displayContinuous;
+  const MatchOverrideRow({
+    required this.fileSize,
+    required this.modifiedAtMs,
+    required this.anilistId,
+    this.anchoredEpisode,
+    required this.continuousOffset,
+    required this.displayContinuous,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['file_size'] = Variable<int>(fileSize);
+    map['modified_at_ms'] = Variable<int>(modifiedAtMs);
+    map['anilist_id'] = Variable<int>(anilistId);
+    if (!nullToAbsent || anchoredEpisode != null) {
+      map['anchored_episode'] = Variable<int>(anchoredEpisode);
+    }
+    map['continuous_offset'] = Variable<int>(continuousOffset);
+    map['display_continuous'] = Variable<bool>(displayContinuous);
+    return map;
+  }
+
+  MatchOverridesCompanion toCompanion(bool nullToAbsent) {
+    return MatchOverridesCompanion(
+      fileSize: Value(fileSize),
+      modifiedAtMs: Value(modifiedAtMs),
+      anilistId: Value(anilistId),
+      anchoredEpisode: anchoredEpisode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(anchoredEpisode),
+      continuousOffset: Value(continuousOffset),
+      displayContinuous: Value(displayContinuous),
+    );
+  }
+
+  factory MatchOverrideRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MatchOverrideRow(
+      fileSize: serializer.fromJson<int>(json['fileSize']),
+      modifiedAtMs: serializer.fromJson<int>(json['modifiedAtMs']),
+      anilistId: serializer.fromJson<int>(json['anilistId']),
+      anchoredEpisode: serializer.fromJson<int?>(json['anchoredEpisode']),
+      continuousOffset: serializer.fromJson<int>(json['continuousOffset']),
+      displayContinuous: serializer.fromJson<bool>(json['displayContinuous']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'fileSize': serializer.toJson<int>(fileSize),
+      'modifiedAtMs': serializer.toJson<int>(modifiedAtMs),
+      'anilistId': serializer.toJson<int>(anilistId),
+      'anchoredEpisode': serializer.toJson<int?>(anchoredEpisode),
+      'continuousOffset': serializer.toJson<int>(continuousOffset),
+      'displayContinuous': serializer.toJson<bool>(displayContinuous),
+    };
+  }
+
+  MatchOverrideRow copyWith({
+    int? fileSize,
+    int? modifiedAtMs,
+    int? anilistId,
+    Value<int?> anchoredEpisode = const Value.absent(),
+    int? continuousOffset,
+    bool? displayContinuous,
+  }) => MatchOverrideRow(
+    fileSize: fileSize ?? this.fileSize,
+    modifiedAtMs: modifiedAtMs ?? this.modifiedAtMs,
+    anilistId: anilistId ?? this.anilistId,
+    anchoredEpisode: anchoredEpisode.present
+        ? anchoredEpisode.value
+        : this.anchoredEpisode,
+    continuousOffset: continuousOffset ?? this.continuousOffset,
+    displayContinuous: displayContinuous ?? this.displayContinuous,
+  );
+  MatchOverrideRow copyWithCompanion(MatchOverridesCompanion data) {
+    return MatchOverrideRow(
+      fileSize: data.fileSize.present ? data.fileSize.value : this.fileSize,
+      modifiedAtMs: data.modifiedAtMs.present
+          ? data.modifiedAtMs.value
+          : this.modifiedAtMs,
+      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      anchoredEpisode: data.anchoredEpisode.present
+          ? data.anchoredEpisode.value
+          : this.anchoredEpisode,
+      continuousOffset: data.continuousOffset.present
+          ? data.continuousOffset.value
+          : this.continuousOffset,
+      displayContinuous: data.displayContinuous.present
+          ? data.displayContinuous.value
+          : this.displayContinuous,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MatchOverrideRow(')
+          ..write('fileSize: $fileSize, ')
+          ..write('modifiedAtMs: $modifiedAtMs, ')
+          ..write('anilistId: $anilistId, ')
+          ..write('anchoredEpisode: $anchoredEpisode, ')
+          ..write('continuousOffset: $continuousOffset, ')
+          ..write('displayContinuous: $displayContinuous')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    fileSize,
+    modifiedAtMs,
+    anilistId,
+    anchoredEpisode,
+    continuousOffset,
+    displayContinuous,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MatchOverrideRow &&
+          other.fileSize == this.fileSize &&
+          other.modifiedAtMs == this.modifiedAtMs &&
+          other.anilistId == this.anilistId &&
+          other.anchoredEpisode == this.anchoredEpisode &&
+          other.continuousOffset == this.continuousOffset &&
+          other.displayContinuous == this.displayContinuous);
+}
+
+class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
+  final Value<int> fileSize;
+  final Value<int> modifiedAtMs;
+  final Value<int> anilistId;
+  final Value<int?> anchoredEpisode;
+  final Value<int> continuousOffset;
+  final Value<bool> displayContinuous;
+  final Value<int> rowid;
+  const MatchOverridesCompanion({
+    this.fileSize = const Value.absent(),
+    this.modifiedAtMs = const Value.absent(),
+    this.anilistId = const Value.absent(),
+    this.anchoredEpisode = const Value.absent(),
+    this.continuousOffset = const Value.absent(),
+    this.displayContinuous = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MatchOverridesCompanion.insert({
+    required int fileSize,
+    required int modifiedAtMs,
+    required int anilistId,
+    this.anchoredEpisode = const Value.absent(),
+    this.continuousOffset = const Value.absent(),
+    this.displayContinuous = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : fileSize = Value(fileSize),
+       modifiedAtMs = Value(modifiedAtMs),
+       anilistId = Value(anilistId);
+  static Insertable<MatchOverrideRow> custom({
+    Expression<int>? fileSize,
+    Expression<int>? modifiedAtMs,
+    Expression<int>? anilistId,
+    Expression<int>? anchoredEpisode,
+    Expression<int>? continuousOffset,
+    Expression<bool>? displayContinuous,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (fileSize != null) 'file_size': fileSize,
+      if (modifiedAtMs != null) 'modified_at_ms': modifiedAtMs,
+      if (anilistId != null) 'anilist_id': anilistId,
+      if (anchoredEpisode != null) 'anchored_episode': anchoredEpisode,
+      if (continuousOffset != null) 'continuous_offset': continuousOffset,
+      if (displayContinuous != null) 'display_continuous': displayContinuous,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MatchOverridesCompanion copyWith({
+    Value<int>? fileSize,
+    Value<int>? modifiedAtMs,
+    Value<int>? anilistId,
+    Value<int?>? anchoredEpisode,
+    Value<int>? continuousOffset,
+    Value<bool>? displayContinuous,
+    Value<int>? rowid,
+  }) {
+    return MatchOverridesCompanion(
+      fileSize: fileSize ?? this.fileSize,
+      modifiedAtMs: modifiedAtMs ?? this.modifiedAtMs,
+      anilistId: anilistId ?? this.anilistId,
+      anchoredEpisode: anchoredEpisode ?? this.anchoredEpisode,
+      continuousOffset: continuousOffset ?? this.continuousOffset,
+      displayContinuous: displayContinuous ?? this.displayContinuous,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (fileSize.present) {
+      map['file_size'] = Variable<int>(fileSize.value);
+    }
+    if (modifiedAtMs.present) {
+      map['modified_at_ms'] = Variable<int>(modifiedAtMs.value);
+    }
+    if (anilistId.present) {
+      map['anilist_id'] = Variable<int>(anilistId.value);
+    }
+    if (anchoredEpisode.present) {
+      map['anchored_episode'] = Variable<int>(anchoredEpisode.value);
+    }
+    if (continuousOffset.present) {
+      map['continuous_offset'] = Variable<int>(continuousOffset.value);
+    }
+    if (displayContinuous.present) {
+      map['display_continuous'] = Variable<bool>(displayContinuous.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MatchOverridesCompanion(')
+          ..write('fileSize: $fileSize, ')
+          ..write('modifiedAtMs: $modifiedAtMs, ')
+          ..write('anilistId: $anilistId, ')
+          ..write('anchoredEpisode: $anchoredEpisode, ')
+          ..write('continuousOffset: $continuousOffset, ')
+          ..write('displayContinuous: $displayContinuous, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$CacheDatabase extends GeneratedDatabase {
   _$CacheDatabase(QueryExecutor e) : super(e);
   $CacheDatabaseManager get managers => $CacheDatabaseManager(this);
   late final $SeriesCacheTable seriesCache = $SeriesCacheTable(this);
   late final $FileCacheTable fileCache = $FileCacheTable(this);
+  late final $LibraryFoldersTable libraryFolders = $LibraryFoldersTable(this);
+  late final $MatchOverridesTable matchOverrides = $MatchOverridesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [seriesCache, fileCache];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    seriesCache,
+    fileCache,
+    libraryFolders,
+    matchOverrides,
+  ];
 }
 
 typedef $$SeriesCacheTableCreateCompanionBuilder =
@@ -1612,6 +2331,407 @@ typedef $$FileCacheTableProcessedTableManager =
       CachedFileRow,
       PrefetchHooks Function()
     >;
+typedef $$LibraryFoldersTableCreateCompanionBuilder =
+    LibraryFoldersCompanion Function({
+      required String path,
+      required int addedAtMs,
+      Value<int> sortOrder,
+      Value<int> rowid,
+    });
+typedef $$LibraryFoldersTableUpdateCompanionBuilder =
+    LibraryFoldersCompanion Function({
+      Value<String> path,
+      Value<int> addedAtMs,
+      Value<int> sortOrder,
+      Value<int> rowid,
+    });
+
+class $$LibraryFoldersTableFilterComposer
+    extends Composer<_$CacheDatabase, $LibraryFoldersTable> {
+  $$LibraryFoldersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get addedAtMs => $composableBuilder(
+    column: $table.addedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LibraryFoldersTableOrderingComposer
+    extends Composer<_$CacheDatabase, $LibraryFoldersTable> {
+  $$LibraryFoldersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get addedAtMs => $composableBuilder(
+    column: $table.addedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LibraryFoldersTableAnnotationComposer
+    extends Composer<_$CacheDatabase, $LibraryFoldersTable> {
+  $$LibraryFoldersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get path =>
+      $composableBuilder(column: $table.path, builder: (column) => column);
+
+  GeneratedColumn<int> get addedAtMs =>
+      $composableBuilder(column: $table.addedAtMs, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+}
+
+class $$LibraryFoldersTableTableManager
+    extends
+        RootTableManager<
+          _$CacheDatabase,
+          $LibraryFoldersTable,
+          LibraryFolderRow,
+          $$LibraryFoldersTableFilterComposer,
+          $$LibraryFoldersTableOrderingComposer,
+          $$LibraryFoldersTableAnnotationComposer,
+          $$LibraryFoldersTableCreateCompanionBuilder,
+          $$LibraryFoldersTableUpdateCompanionBuilder,
+          (
+            LibraryFolderRow,
+            BaseReferences<
+              _$CacheDatabase,
+              $LibraryFoldersTable,
+              LibraryFolderRow
+            >,
+          ),
+          LibraryFolderRow,
+          PrefetchHooks Function()
+        > {
+  $$LibraryFoldersTableTableManager(
+    _$CacheDatabase db,
+    $LibraryFoldersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LibraryFoldersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LibraryFoldersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LibraryFoldersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> path = const Value.absent(),
+                Value<int> addedAtMs = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LibraryFoldersCompanion(
+                path: path,
+                addedAtMs: addedAtMs,
+                sortOrder: sortOrder,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String path,
+                required int addedAtMs,
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LibraryFoldersCompanion.insert(
+                path: path,
+                addedAtMs: addedAtMs,
+                sortOrder: sortOrder,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LibraryFoldersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$CacheDatabase,
+      $LibraryFoldersTable,
+      LibraryFolderRow,
+      $$LibraryFoldersTableFilterComposer,
+      $$LibraryFoldersTableOrderingComposer,
+      $$LibraryFoldersTableAnnotationComposer,
+      $$LibraryFoldersTableCreateCompanionBuilder,
+      $$LibraryFoldersTableUpdateCompanionBuilder,
+      (
+        LibraryFolderRow,
+        BaseReferences<_$CacheDatabase, $LibraryFoldersTable, LibraryFolderRow>,
+      ),
+      LibraryFolderRow,
+      PrefetchHooks Function()
+    >;
+typedef $$MatchOverridesTableCreateCompanionBuilder =
+    MatchOverridesCompanion Function({
+      required int fileSize,
+      required int modifiedAtMs,
+      required int anilistId,
+      Value<int?> anchoredEpisode,
+      Value<int> continuousOffset,
+      Value<bool> displayContinuous,
+      Value<int> rowid,
+    });
+typedef $$MatchOverridesTableUpdateCompanionBuilder =
+    MatchOverridesCompanion Function({
+      Value<int> fileSize,
+      Value<int> modifiedAtMs,
+      Value<int> anilistId,
+      Value<int?> anchoredEpisode,
+      Value<int> continuousOffset,
+      Value<bool> displayContinuous,
+      Value<int> rowid,
+    });
+
+class $$MatchOverridesTableFilterComposer
+    extends Composer<_$CacheDatabase, $MatchOverridesTable> {
+  $$MatchOverridesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get fileSize => $composableBuilder(
+    column: $table.fileSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get modifiedAtMs => $composableBuilder(
+    column: $table.modifiedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get anchoredEpisode => $composableBuilder(
+    column: $table.anchoredEpisode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get continuousOffset => $composableBuilder(
+    column: $table.continuousOffset,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get displayContinuous => $composableBuilder(
+    column: $table.displayContinuous,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MatchOverridesTableOrderingComposer
+    extends Composer<_$CacheDatabase, $MatchOverridesTable> {
+  $$MatchOverridesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get fileSize => $composableBuilder(
+    column: $table.fileSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get modifiedAtMs => $composableBuilder(
+    column: $table.modifiedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get anchoredEpisode => $composableBuilder(
+    column: $table.anchoredEpisode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get continuousOffset => $composableBuilder(
+    column: $table.continuousOffset,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get displayContinuous => $composableBuilder(
+    column: $table.displayContinuous,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MatchOverridesTableAnnotationComposer
+    extends Composer<_$CacheDatabase, $MatchOverridesTable> {
+  $$MatchOverridesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get fileSize =>
+      $composableBuilder(column: $table.fileSize, builder: (column) => column);
+
+  GeneratedColumn<int> get modifiedAtMs => $composableBuilder(
+    column: $table.modifiedAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get anilistId =>
+      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+
+  GeneratedColumn<int> get anchoredEpisode => $composableBuilder(
+    column: $table.anchoredEpisode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get continuousOffset => $composableBuilder(
+    column: $table.continuousOffset,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get displayContinuous => $composableBuilder(
+    column: $table.displayContinuous,
+    builder: (column) => column,
+  );
+}
+
+class $$MatchOverridesTableTableManager
+    extends
+        RootTableManager<
+          _$CacheDatabase,
+          $MatchOverridesTable,
+          MatchOverrideRow,
+          $$MatchOverridesTableFilterComposer,
+          $$MatchOverridesTableOrderingComposer,
+          $$MatchOverridesTableAnnotationComposer,
+          $$MatchOverridesTableCreateCompanionBuilder,
+          $$MatchOverridesTableUpdateCompanionBuilder,
+          (
+            MatchOverrideRow,
+            BaseReferences<
+              _$CacheDatabase,
+              $MatchOverridesTable,
+              MatchOverrideRow
+            >,
+          ),
+          MatchOverrideRow,
+          PrefetchHooks Function()
+        > {
+  $$MatchOverridesTableTableManager(
+    _$CacheDatabase db,
+    $MatchOverridesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MatchOverridesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MatchOverridesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MatchOverridesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> fileSize = const Value.absent(),
+                Value<int> modifiedAtMs = const Value.absent(),
+                Value<int> anilistId = const Value.absent(),
+                Value<int?> anchoredEpisode = const Value.absent(),
+                Value<int> continuousOffset = const Value.absent(),
+                Value<bool> displayContinuous = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MatchOverridesCompanion(
+                fileSize: fileSize,
+                modifiedAtMs: modifiedAtMs,
+                anilistId: anilistId,
+                anchoredEpisode: anchoredEpisode,
+                continuousOffset: continuousOffset,
+                displayContinuous: displayContinuous,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int fileSize,
+                required int modifiedAtMs,
+                required int anilistId,
+                Value<int?> anchoredEpisode = const Value.absent(),
+                Value<int> continuousOffset = const Value.absent(),
+                Value<bool> displayContinuous = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MatchOverridesCompanion.insert(
+                fileSize: fileSize,
+                modifiedAtMs: modifiedAtMs,
+                anilistId: anilistId,
+                anchoredEpisode: anchoredEpisode,
+                continuousOffset: continuousOffset,
+                displayContinuous: displayContinuous,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MatchOverridesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$CacheDatabase,
+      $MatchOverridesTable,
+      MatchOverrideRow,
+      $$MatchOverridesTableFilterComposer,
+      $$MatchOverridesTableOrderingComposer,
+      $$MatchOverridesTableAnnotationComposer,
+      $$MatchOverridesTableCreateCompanionBuilder,
+      $$MatchOverridesTableUpdateCompanionBuilder,
+      (
+        MatchOverrideRow,
+        BaseReferences<_$CacheDatabase, $MatchOverridesTable, MatchOverrideRow>,
+      ),
+      MatchOverrideRow,
+      PrefetchHooks Function()
+    >;
 
 class $CacheDatabaseManager {
   final _$CacheDatabase _db;
@@ -1620,4 +2740,8 @@ class $CacheDatabaseManager {
       $$SeriesCacheTableTableManager(_db, _db.seriesCache);
   $$FileCacheTableTableManager get fileCache =>
       $$FileCacheTableTableManager(_db, _db.fileCache);
+  $$LibraryFoldersTableTableManager get libraryFolders =>
+      $$LibraryFoldersTableTableManager(_db, _db.libraryFolders);
+  $$MatchOverridesTableTableManager get matchOverrides =>
+      $$MatchOverridesTableTableManager(_db, _db.matchOverrides);
 }

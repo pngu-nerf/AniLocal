@@ -4,9 +4,34 @@ import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/sync_summary.dart';
 import 'package:anilocal/domain/models/titles.dart';
+import 'package:anilocal/domain/repositories/fix_match_repository.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
 import 'package:anilocal/ui/app.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _FakeFixMatch implements FixMatchRepository {
+  @override
+  Future<List<Series>> searchCandidates(String query) async => const [];
+  @override
+  Future<void> assignFile({
+    required String filePath,
+    required Series chosen,
+    int? anchoredEpisode,
+    int continuousOffset = 0,
+    bool displayContinuous = false,
+  }) async {}
+  @override
+  Future<void> assignRange({
+    required List<String> filePaths,
+    required Series chosen,
+    int anchorStart = 1,
+    int continuousOffset = 0,
+    bool displayContinuous = false,
+  }) async {}
+  @override
+  Future<void> clearOverride(String filePath) async {}
+}
 
 class _FakeRepository implements LibraryRepository {
   @override
@@ -42,6 +67,7 @@ void main() {
     await tester.pumpWidget(
       AniLocalApp(
         repository: _FakeRepository(),
+        fixMatch: _FakeFixMatch(),
         onScan: () async => const SyncSummary(
           filesScanned: 0,
           unchanged: 0,
@@ -52,6 +78,9 @@ void main() {
           errored: 0,
           anilistLookups: 0,
         ),
+        onAddFolder: () async => (added: false, deniedLabel: null),
+        accessIssues: ValueNotifier<List<String>>(const []),
+        onOpenAccessSettings: () async => true,
       ),
     );
     await tester.pumpAndSettle();

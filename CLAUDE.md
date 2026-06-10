@@ -43,6 +43,8 @@ Trackers / AniList list-sync (needs per-user OAuth — deferred) · server-side 
 ## Deferred features (only after Stage 6 holds; one at a time)
 Anime4K shaders · OP/ED auto-skip (AniSkip) · relation / watch-order (from AniList `relations`) · (maybe) JP-study dual subtitles. Do NOT start these yet.
 
+**Multi-source episodes** (post–Stage 6; do NOT build yet). One logical episode = files sharing `(AniList entry, anchored position)` — dedup key from Stage 5 Part B's anchored position. Library folders are an **ordered priority list** (top = default source; `library_folders.sortOrder` exists for this). Episode auto-plays from the highest-priority folder containing it, falling back down; a per-episode manual source override beats the default and survives rescans (seam #5, source dimension). Files never move/delete — "switch source" only changes which file the player opens (duplicates across drives are legitimate). UI de-duplication (one row per episode) is this feature's front end — build it *with* the model, not earlier. Depends on Part B (identity) + Stage 6 (watch-state).
+
 ## Commands
 - Run: `flutter run -d macos`
 - Check: `flutter analyze` then `dart format .`
@@ -62,3 +64,4 @@ Anime4K shaders · OP/ED auto-skip (AniSkip) · relation / watch-order (from Ani
 - `sqlite3_flutter_libs` — bundles the native sqlite3 lib for drift (no system install). Added in Stage 4.
 - `path_provider` — locate the on-disk cache DB + cached art directory. Added in Stage 4.
 - `drift_dev` + `build_runner` (dev) — codegen for drift tables/queries. Added in Stage 4.
+- `file_selector` — native folder open-panel (`NSOpenPanel`) for adding library folders. Added in Stage 5. Chosen over `file_picker` (capped to an ancient 3.0.4 by transitive constraints; no sandbox-off support). NO security-scoped-bookmark package: bookmarks require the App Sandbox (`startAccessingSecurityScopedResource` is a no-op unsandboxed), and we run unsandboxed for libmpv. Persistent access to a user-picked protected folder (Downloads/Documents/Desktop) comes from the panel selection's inferred consent (`com.apple.macl` xattr on the folder), which survives relaunch — NOT from owning the path. See [[macos-tcc-blocks-special-folders]].

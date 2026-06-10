@@ -36,12 +36,22 @@ class LibrarySync {
   final CacheDatabase cache;
   final ArtCache art;
 
-  Future<SyncSummary> sync(String folderPath) async {
-    final paths = await scanner.findVideoFiles(folderPath);
-    final stats = <String, FileStat>{
-      for (final p in paths) p: await File(p).stat(),
-    };
-    final scannedSet = paths.toSet();
+  Future<SyncSummary> sync(List<String> folderPaths) async {
+    // Scan each folder independently. A folder we can't read (access lapsed or
+    // moved) is surfaced loudly and its cached files are PRESERVED — never
+    // treated as removed (no silent data loss).
+    final stats = <String, FileStat>{};
+    final unreadableFolders = <String>[];
+    for (final folder in folderPaths) {
+      try {
+        for (final p in await scanner.findVideoFiles(folder)) {
+          stats[p] = await File(p).stat();
+        }
+      } on FileSystemException {
+        unreadableFolders.add(folder);
+      }
+    }
+    final scannedSet = stats.keys.toSet();
 
     final cachedFiles = {for (final r in await cache.allFileRows()) r.path: r};
     final cachedSeries = {
@@ -63,7 +73,7 @@ class LibrarySync {
     // Classify scanned files against the cache.
     final toIdentify = <String>[];
     var unchanged = 0;
-    for (final p in paths) {
+    for (final p in scannedSet) {
       final c = cachedFiles[p];
       final s = stats[p]!;
       if (c != null &&
@@ -74,9 +84,12 @@ class LibrarySync {
         toIdentify.add(p);
       }
     }
+    // Removed = cached files not found this scan, EXCEPT those under a folder
+    // we couldn't read (preserve those — access lapsed, not deleted).
     final removedPaths = [
       for (final p in cachedFiles.keys)
-        if (!scannedSet.contains(p)) p,
+        if (!scannedSet.contains(p) && !_underAnyFolder(p, unreadableFolders))
+          p,
     ];
 
     // Parse the deltas and collect distinct titles.
@@ -170,7 +183,7 @@ class LibrarySync {
     );
 
     return SyncSummary(
-      filesScanned: paths.length,
+      filesScanned: scannedSet.length,
       unchanged: unchanged,
       processed: matched + unmatched,
       removed: removedPaths.length,
@@ -178,7 +191,15 @@ class LibrarySync {
       unmatched: unmatched,
       errored: errored,
       anilistLookups: anilistLookups,
+      unreadableFolders: unreadableFolders,
     );
+  }
+
+  bool _underAnyFolder(String filePath, List<String> folders) {
+    for (final f in folders) {
+      if (filePath == f || filePath.startsWith('$f/')) return true;
+    }
+    return false;
   }
 
   CachedSeriesRow _seriesRow(Series s, String? artPath) => CachedSeriesRow(

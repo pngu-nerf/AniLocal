@@ -137,6 +137,7 @@ Thin modules slotting into existing seams. One at a time.
 - **OP/ED auto-skip** — AniSkip timestamps (keyed by AniList/MAL IDs you already hold) + MKV chapter fallback; fire skip on the libmpv position. *Verify AniSkip's current API before building.*
 - **Relation / watch-order surfacing** — from AniList `relations` (already fetched in Stage 2). Cheap win.
 - **JP-study dual subtitles** — *maybe*. Secondary subtitle track + dictionary/Anki hook. First to cut.
+- **Multi-source episodes** (post–Stage 6; depends on Part B identity + Stage 6 watch-state). One logical episode = files sharing `(AniList entry, anchored position)` — the dedup key comes straight from Part B's anchored episode position. **Library folders are an ordered priority list** (top = default source — this is why Stage 5 stores `library_folders.sortOrder` now); an episode auto-plays from the highest-priority folder containing it, falling back down the order. A **per-episode manual source override** beats the folder-priority default and survives rescans (seam #5, extended to a source dimension). Files never move or get deleted — "switch source" only changes which file the player opens; users may legitimately keep duplicates across drives. **UI de-duplication** (one row per episode, not 1,1,2,2) is the front end of this feature — build it *here, with the model*, not as an earlier standalone patch.
 
 ---
 

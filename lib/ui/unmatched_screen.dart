@@ -1,21 +1,60 @@
 import 'package:flutter/material.dart';
 
 import '../domain/models/identified_episode.dart';
+import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import 'fix_match_screen.dart';
 
-/// Lists files that scanned but matched no AniList entry. These are kept on
-/// record (they persist across rescans) so Stage 5 fix-match can resolve them.
-class UnmatchedScreen extends StatelessWidget {
-  const UnmatchedScreen({super.key, required this.repository});
+/// Lists files that matched no AniList entry (kept on record across rescans).
+/// Tapping one opens fix-match to assign it (the OPM Specials case).
+class UnmatchedScreen extends StatefulWidget {
+  const UnmatchedScreen({
+    super.key,
+    required this.repository,
+    required this.fixMatch,
+  });
 
   final LibraryRepository repository;
+  final FixMatchRepository fixMatch;
+
+  @override
+  State<UnmatchedScreen> createState() => _UnmatchedScreenState();
+}
+
+class _UnmatchedScreenState extends State<UnmatchedScreen> {
+  late Future<List<IdentifiedEpisode>> _files;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  void _reload() {
+    setState(() {
+      _files = widget.repository.unmatchedFiles();
+    });
+  }
+
+  Future<void> _fix(IdentifiedEpisode f) async {
+    final done = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => FixMatchScreen(
+          fixMatch: widget.fixMatch,
+          filePaths: [f.filePath],
+          prefillQuery: f.parsedTitle,
+        ),
+      ),
+    );
+    if (done == true) _reload();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Unmatched files')),
       body: FutureBuilder<List<IdentifiedEpisode>>(
-        future: repository.unmatchedFiles(),
+        future: _files,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
@@ -36,6 +75,8 @@ class UnmatchedScreen extends StatelessWidget {
                   'parsed: "${f.parsedTitle}"'
                   '${f.parsedEpisodeNumber != null ? ' · ep ${f.parsedEpisodeNumber}' : ''}',
                 ),
+                trailing: const Icon(Icons.edit),
+                onTap: () => _fix(f),
               );
             },
           );

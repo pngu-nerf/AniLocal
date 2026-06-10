@@ -84,7 +84,7 @@ void main() {
       await touch('Cowboy Bebop - 01.mkv');
       await touch('Totally Unknown Show - 01.mkv');
 
-      final s = await sync.sync(dir.path);
+      final s = await sync.sync([dir.path]);
 
       expect(s.filesScanned, 2);
       expect(s.matched, 1);
@@ -106,10 +106,10 @@ void main() {
     () async {
       await touch('Cowboy Bebop - 01.mkv');
       await touch('Totally Unknown Show - 01.mkv');
-      await sync.sync(dir.path);
+      await sync.sync([dir.path]);
       final callsAfterFirst = anilistCalls;
 
-      final s = await sync.sync(dir.path);
+      final s = await sync.sync([dir.path]);
 
       expect(s.unchanged, 2);
       expect(s.processed, 0);
@@ -123,11 +123,11 @@ void main() {
     'adding an episode of a known series: only that file, no AniList call',
     () async {
       await touch('Cowboy Bebop - 01.mkv');
-      await sync.sync(dir.path);
+      await sync.sync([dir.path]);
       final callsAfterFirst = anilistCalls;
 
       await touch('Cowboy Bebop - 02.mkv');
-      final s = await sync.sync(dir.path);
+      final s = await sync.sync([dir.path]);
 
       expect(s.processed, 1);
       expect(s.unchanged, 1);
@@ -140,11 +140,11 @@ void main() {
 
   test('removing a file: cache updates, orphan series pruned', () async {
     final ep1 = await touch('Cowboy Bebop - 01.mkv');
-    await sync.sync(dir.path);
+    await sync.sync([dir.path]);
     expect((await repo.allSeries()).length, 1);
 
     await ep1.delete();
-    final s = await sync.sync(dir.path);
+    final s = await sync.sync([dir.path]);
 
     expect(s.removed, 1);
     expect(
@@ -174,7 +174,7 @@ void main() {
       );
       await touch('Cowboy Bebop - 01.mkv');
 
-      final s = await failing.sync(dir.path);
+      final s = await failing.sync([dir.path]);
 
       expect(s.errored, 1);
       expect(s.matched, 0);
@@ -182,6 +182,32 @@ void main() {
       // Not recorded at all -> will be retried next scan, not stuck as unmatched.
       expect(await repo.unmatchedFiles(), isEmpty);
       expect(await repo.allSeries(), isEmpty);
+    },
+  );
+
+  test(
+    'unreadable watched folder: cached files preserved, surfaced loudly',
+    () async {
+      // Scan a subfolder, then make it unreadable (delete it) and rescan it.
+      final libDir = await Directory('${dir.path}/lib').create();
+      await File('${libDir.path}/Cowboy Bebop - 01.mkv').writeAsString('x');
+      await sync.sync([libDir.path]);
+      expect((await repo.allSeries()).length, 1);
+
+      await libDir.delete(recursive: true); // folder vanished -> unreadable
+      final s = await sync.sync([libDir.path]);
+
+      expect(s.unreadableFolders, [libDir.path]);
+      expect(
+        s.removed,
+        0,
+        reason: 'do NOT delete files under an unreadable folder',
+      );
+      expect(
+        (await repo.allSeries()).length,
+        1,
+        reason: 'cached items preserved',
+      );
     },
   );
 }

@@ -12,6 +12,7 @@ class SyncSummary extends Equatable {
     required this.unmatched,
     required this.errored,
     required this.anilistLookups,
+    this.unreadableFolders = const [],
   });
 
   /// Total video files found on disk.
@@ -37,6 +38,11 @@ class SyncSummary extends Equatable {
   /// already-cached series (proves "never refetch unchanged").
   final int anilistLookups;
 
+  /// Watched folders that could not be read this scan (e.g. access lapsed or
+  /// folder moved). Surfaced loudly; their cached files are preserved, never
+  /// silently dropped.
+  final List<String> unreadableFolders;
+
   @override
   List<Object?> get props => [
     filesScanned,
@@ -47,5 +53,6 @@ class SyncSummary extends Equatable {
     unmatched,
     errored,
     anilistLookups,
+    unreadableFolders,
   ];
 }
