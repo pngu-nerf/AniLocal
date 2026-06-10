@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'data/anilist/anilist_client.dart';
 import 'data/cache/art_cache.dart';
@@ -28,6 +29,8 @@ const List<String> kEpisodicAnimeFormats = [
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Initialize libmpv before any Player is constructed (library playback).
+  MediaKit.ensureInitialized();
 
   // Composition root. Read path (cache) and fill path (sync) are built
   // separately; the UI gets the repository + scan/add-folder callbacks only.

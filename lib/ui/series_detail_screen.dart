@@ -7,6 +7,7 @@ import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import 'fix_match_screen.dart';
+import 'player_screen.dart';
 
 /// Series detail: cover + metadata + the episodes (matched files) for this
 /// series. Each episode can be reassigned, or used as a season-split point.
@@ -46,6 +47,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       widget.series.titles.english ??
       widget.series.titles.native ??
       '';
+
+  void _play(Episode e) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => PlayerScreen(episode: e)));
+  }
 
   Future<void> _reassignOne(Episode e) async {
     final done = await Navigator.of(context).push<bool>(
@@ -148,6 +155,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 for (var i = 0; i < episodes.length; i++)
                   ListTile(
                     dense: true,
+                    onTap: () => _play(episodes[i]),
                     leading: CircleAvatar(child: Text('${episodes[i].number}')),
                     title: Text(
                       episodes[i].title ?? 'Episode ${episodes[i].number}',
