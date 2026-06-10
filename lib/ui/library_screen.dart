@@ -59,6 +59,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
+  Future<Set<String>> _folderPaths() async =>
+      (await widget.repository.watchedFolders()).map((f) => f.path).toSet();
+
   Future<void> _scan() async {
     setState(() => _scanning = true);
     try {
@@ -120,6 +123,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
             icon: const Icon(Icons.folder_outlined),
             tooltip: 'Library folders',
             onPressed: () async {
+              // If the folder SET actually changed while managing folders,
+              // trigger an incremental rescan (existing scan path); a no-op
+              // dismissal scans nothing. Compare before/after so it's robust to
+              // however the screen was closed.
+              final before = await _folderPaths();
+              if (!context.mounted) return;
               await Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => FoldersScreen(
@@ -129,7 +138,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ),
                 ),
               );
-              _reload(); // folders may have changed
+              if (!mounted) return;
+              final after = await _folderPaths();
+              if (!setEquals(before, after)) {
+                await _scan();
+              }
             },
           ),
           IconButton(
