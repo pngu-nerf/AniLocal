@@ -49,18 +49,40 @@ class LibraryIdentifier {
     for (final entry in samplePerTitle.entries) {
       if (!first) await Future<void>.delayed(requestSpacing);
       first = false;
-      final candidates = await anilist.searchSeriesCandidates(
-        entry.value,
-        formatsIn: formatsIn,
-        perPage: candidatesPerTitle,
-      );
-      matches[entry.key] = rankCandidates(entry.value, candidates);
+      matches[entry.key] = await _match(entry.value);
     }
 
     return [
       for (final f in files)
         _toResult(f, parsed[f]!, matches[normalizeTitle(parsed[f]!.title)]),
     ];
+  }
+
+  /// Search + rank for one title. If the search returns nothing and the title
+  /// has more than one word, retry once with the leading word dropped — a
+  /// general fix for unrecognized leading junk (e.g. site-ripper prefixes)
+  /// that pollutes the query, without enumerating site names.
+  Future<MatchResult> _match(String title) async {
+    var candidates = await anilist.searchSeriesCandidates(
+      title,
+      formatsIn: formatsIn,
+      perPage: candidatesPerTitle,
+    );
+    if (candidates.isEmpty) {
+      final space = title.indexOf(' ');
+      if (space > 0) {
+        final trimmed = title.substring(space + 1).trim();
+        if (trimmed.isNotEmpty) {
+          candidates = await anilist.searchSeriesCandidates(
+            trimmed,
+            formatsIn: formatsIn,
+            perPage: candidatesPerTitle,
+          );
+          if (candidates.isNotEmpty) return rankCandidates(trimmed, candidates);
+        }
+      }
+    }
+    return rankCandidates(title, candidates);
   }
 
   IdentifiedEpisode _toResult(

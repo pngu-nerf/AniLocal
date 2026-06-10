@@ -68,6 +68,12 @@ class HeuristicFilenameParser implements FilenameParser {
     'multisubs',
   };
 
+  // Bare leading source/site-ripper prefixes (no brackets), e.g. AnimePahe.
+  // Deliberately TINY and non-exhaustive — the general safety net is the
+  // identifier's retry-without-leading-word. Do not grow this into a site
+  // denylist treadmill.
+  static const Set<String> _sourcePrefixes = {'animepahe'};
+
   // Numeric tokens that are resolutions/years, never episode numbers.
   static const Set<int> _resolutionNumbers = {
     360,
@@ -209,6 +215,14 @@ class HeuristicFilenameParser implements FilenameParser {
               !_version.hasMatch(t),
         )
         .toList();
+
+    // Drop a known bare source prefix when it leads the title (keep at least
+    // one token). General unknown prefixes are handled by the identifier's
+    // retry instead.
+    if (titleTokens.length > 1 &&
+        _sourcePrefixes.contains(titleTokens.first.toLowerCase())) {
+      titleTokens.removeAt(0);
+    }
 
     final title = titleTokens
         .join(' ')

@@ -75,5 +75,21 @@ void main() {
       expect(p.title, 'Bocchi the Rock!');
       expect(p.episodeNumber, 8);
     });
+
+    test('strips a known leading source prefix (AnimePahe)', () {
+      final p = parser.parse(
+        'AnimePahe_One_Punch_Man_-_01_BD_1080p_Kametsu.mp4',
+      );
+      expect(p.title, 'One Punch Man');
+      expect(p.episodeNumber, 1);
+    });
+
+    test('source prefix strip keeps season/qualifier text', () {
+      final p = parser.parse(
+        'AnimePahe_One_Punch_Man_2nd_Season_-_01_BD_1080p_EMBER.mp4',
+      );
+      expect(p.title, 'One Punch Man 2nd Season');
+      expect(p.episodeNumber, 1);
+    });
   });
 }
