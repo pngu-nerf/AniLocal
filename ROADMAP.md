@@ -96,6 +96,7 @@ Each stage ends *runnable*. Don't start a stage until the previous "Done when" i
 - Filename **identifier** behind an interface: parse release name → title + episode number. Start with a focused heuristic/Anitomy-style tokenizer (no Dart package exists — build it small and tested).
 - Match parsed title → AniList `Media` (search + best-candidate pick). Produce `file → (series, episode)` mappings with a confidence signal.
 - Auto-match only; wrong matches are expected here and fixed in Stage 5.
+- **Carryover from Stage 2 recon:** a bare `Media(search:)` top result is unreliable — `Fate` returns the `Unmei` MUSIC PV ahead of real anime. **Turn the format filter ON** (`main.dart` `kFormatFilter` → `kEpisodicAnimeFormats`; `everything` was only a Stage-2 spike default) and rank candidates rather than trusting hit #1. Search is otherwise forgiving of messy/partial input.
 
 **Done when:** pointing at a folder produces a list of identified episodes mapped to AniList entries. **Not yet:** cache, persistence, fixing matches.
 

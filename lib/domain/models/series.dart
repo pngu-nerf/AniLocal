@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'related_series.dart';
 import 'titles.dart';
 
 /// A single anime entry, keyed by its AniList ID.
@@ -13,6 +14,8 @@ class Series extends Equatable {
     required this.titles,
     this.format,
     this.coverImageRef,
+    this.episodeCount,
+    this.relations = const [],
   });
 
   final int anilistId;
@@ -21,10 +24,23 @@ class Series extends Equatable {
   /// AniList format, e.g. `TV`, `MOVIE`, `OVA`. Free-form for now.
   final String? format;
 
-  /// Reference to cover art — a local cached file path or remote URL,
-  /// resolved by the repository layer. The UI does not care which.
+  /// Reference to cover art — a remote URL now, a local cached file path once
+  /// the cache lands (Stage 4). The UI does not care which.
   final String? coverImageRef;
 
+  /// Total episode count reported by AniList, when known.
+  final int? episodeCount;
+
+  /// Related entries (sequels, prequels, side stories, adaptations).
+  final List<RelatedSeries> relations;
+
   @override
-  List<Object?> get props => [anilistId, titles, format, coverImageRef];
+  List<Object?> get props => [
+    anilistId,
+    titles,
+    format,
+    coverImageRef,
+    episodeCount,
+    relations,
+  ];
 }

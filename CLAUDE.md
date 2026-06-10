@@ -57,5 +57,5 @@ Anime4K shaders · OP/ED auto-skip (AniSkip) · relation / watch-order (from Ani
 ## Dependencies (log every add here, with a reason)
 - `equatable` — value equality on domain models without manual ==/hashCode. Added in Stage 0.
 - `media_kit`, `media_kit_video`, `media_kit_libs_video` — playback engine (libmpv). Added in Stage 1.
-- `http` or `dio` — AniList GraphQL requests. Added in Stage 2.
+- `http` — AniList GraphQL requests (plain POST + query string; `graphql_flutter` unnecessary). Added in Stage 2.
 - `drift` (+ `sqlite3_flutter_libs`, `path_provider`) — local offline cache. Added in Stage 4.

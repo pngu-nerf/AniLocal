@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
-import 'player_screen.dart';
+import '../domain/models/series.dart';
+import 'metadata_screen.dart';
 
 /// Root of the AniLocal UI.
 ///
 /// Seam #1: the UI imports only Flutter and `lib/domain` — never AniList,
-/// Drift, or scanner types. Stage 0 is an empty shell; the library grid,
-/// detail, player, and settings views arrive in later stages.
+/// Drift, or scanner types. The metadata to show arrives as a `Future<Series>`
+/// supplied by the composition root; the UI has no idea it came from AniList.
 class AniLocalApp extends StatelessWidget {
-  const AniLocalApp({super.key});
+  const AniLocalApp({super.key, required this.seriesFuture});
+
+  final Future<Series> seriesFuture;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +24,7 @@ class AniLocalApp extends StatelessWidget {
       ),
       home: Scaffold(
         appBar: AppBar(title: const Text('AniLocal')),
-        body: const PlayerScreen(),
+        body: MetadataScreen(seriesFuture: seriesFuture),
       ),
     );
   }
