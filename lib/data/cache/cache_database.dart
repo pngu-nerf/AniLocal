@@ -96,16 +96,59 @@ class MatchOverrides extends Table {
   String get tableName => 'match_overrides';
 }
 
-@DriftDatabase(tables: [SeriesCache, FileCache, LibraryFolders, MatchOverrides])
+/// Local watch state (Stage 6). Keyed by EPISODE IDENTITY — [anilistId] + the
+/// anchored (AniList-faithful) [episode] position — NOT by file path or player
+/// session. This is what survives a file move and what the future multi-source
+/// stage needs: "resume episode 5" is episode 5 whatever file played it.
+@DataClassName('WatchStateRow')
+class WatchStates extends Table {
+  IntColumn get anilistId => integer()();
+  IntColumn get episode => integer()();
+  IntColumn get resumePositionMs => integer().withDefault(const Constant(0))();
+  IntColumn get durationMs => integer().withDefault(const Constant(0))();
+  BoolColumn get watched => boolean().withDefault(const Constant(false))();
+  IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {anilistId, episode};
+
+  @override
+  String get tableName => 'watch_state';
+}
+
+/// App preferences (key/value). NOT part of the AniList projection — a small
+/// local store for UI choices like the collapsed "Continue watching" section.
+@DataClassName('AppSettingRow')
+class AppSettings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
+
+  @override
+  String get tableName => 'app_settings';
+}
+
+@DriftDatabase(
+  tables: [
+    SeriesCache,
+    FileCache,
+    LibraryFolders,
+    MatchOverrides,
+    WatchStates,
+    AppSettings,
+  ],
+)
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
-  // migration). v2 adds library_folders; v3 adds match_overrides; v4 adds a
-  // controllable sort order to library_folders.
+  // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
+  // v5 watch_state; v6 app_settings.
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
@@ -122,6 +165,12 @@ class CacheDatabase extends _$CacheDatabase {
         await customStatement(
           'UPDATE library_folders SET sort_order = added_at_ms',
         );
+      }
+      if (from < 5) {
+        await m.createTable(watchStates);
+      }
+      if (from < 6) {
+        await m.createTable(appSettings);
       }
     },
   );
@@ -200,6 +249,54 @@ class CacheDatabase extends _$CacheDatabase {
                 o.modifiedAtMs.equals(modifiedAtMs),
           ))
           .go();
+
+  // --- Watch state (Stage 6). Keyed by episode identity (anilistId, episode). ---
+
+  Future<List<WatchStateRow>> allWatchStateRows() => select(watchStates).get();
+
+  /// In-progress episodes: a saved resume position and not yet watched,
+  /// most-recently-updated first (for the "Continue watching" row).
+  Future<List<WatchStateRow>> inProgressWatchStates() =>
+      (select(watchStates)
+            ..where(
+              (w) =>
+                  w.resumePositionMs.isBiggerThanValue(0) &
+                  w.watched.equals(false),
+            )
+            ..orderBy([
+              (w) => OrderingTerm(
+                expression: w.updatedAtMs,
+                mode: OrderingMode.desc,
+              ),
+            ]))
+          .get();
+
+  Future<WatchStateRow?> watchStateFor(int anilistId, int episode) =>
+      (select(watchStates)..where(
+            (w) => w.anilistId.equals(anilistId) & w.episode.equals(episode),
+          ))
+          .getSingleOrNull();
+
+  Future<void> upsertWatchState(WatchStateRow row) =>
+      into(watchStates).insertOnConflictUpdate(row);
+
+  /// Remove an episode's watch state entirely (dismiss from "Continue
+  /// watching" without marking it watched).
+  Future<void> deleteWatchState(int anilistId, int episode) =>
+      (delete(watchStates)..where(
+            (w) => w.anilistId.equals(anilistId) & w.episode.equals(episode),
+          ))
+          .go();
+
+  // --- App settings (key/value preferences) ---
+
+  Future<String?> getSetting(String key) => (select(
+    appSettings,
+  )..where((s) => s.key.equals(key))).getSingleOrNull().then((r) => r?.value);
+
+  Future<void> setSetting(String key, String value) => into(
+    appSettings,
+  ).insertOnConflictUpdate(AppSettingRow(key: key, value: value));
 
   // --- Fill path (used by LibrarySync) ---
 

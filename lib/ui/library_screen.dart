@@ -3,12 +3,16 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../domain/models/continue_watching.dart';
 import '../domain/models/series.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import '../domain/repositories/watch_state_repository.dart';
 import 'access_recovery.dart';
+import 'continue_watching_row.dart';
 import 'folders_screen.dart';
+import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import 'unmatched_screen.dart';
 
@@ -20,15 +24,23 @@ class LibraryScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.fixMatch,
+    required this.watchState,
     required this.onScan,
     required this.onAddFolder,
     required this.accessIssues,
     required this.onOpenAccessSettings,
+    required this.loadContinueCollapsed,
+    required this.setContinueCollapsed,
   });
 
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
+  final WatchStateRepository watchState;
   final Future<SyncSummary> Function() onScan;
+
+  /// Load/persist the collapsed state of the "Continue watching" section.
+  final Future<bool> Function() loadContinueCollapsed;
+  final Future<void> Function(bool collapsed) setContinueCollapsed;
 
   /// Opens the native folder picker; reports whether a folder was added and the
   /// denied TCC category label (if the folder's category access was refused).
@@ -45,18 +57,44 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   late Future<List<Series>> _series;
+  late Future<List<ContinueWatching>> _continue;
   bool _scanning = false;
+  bool _continueCollapsed = false;
 
   @override
   void initState() {
     super.initState();
+    _reload();
+    widget.loadContinueCollapsed().then((c) {
+      if (mounted) setState(() => _continueCollapsed = c);
+    });
+  }
+
+  void _toggleContinueCollapsed() {
+    setState(() => _continueCollapsed = !_continueCollapsed);
+    widget.setContinueCollapsed(_continueCollapsed);
+  }
+
+  Future<void> _dismissFromContinue(ContinueWatching entry) async {
+    await widget.watchState.clearProgress(entry.episode);
     _reload();
   }
 
   void _reload() {
     setState(() {
       _series = widget.repository.allSeries();
+      _continue = widget.watchState.continueWatching();
     });
+  }
+
+  Future<void> _playFromContinue(ContinueWatching entry) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            PlayerScreen(episode: entry.episode, watchState: widget.watchState),
+      ),
+    );
+    _reload(); // progress/watched may have changed
   }
 
   Future<Set<String>> _folderPaths() async =>
@@ -187,6 +225,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     onRescan: _scanning ? () {} : _scan,
                   ),
           ),
+          // "Continue watching" — in-progress episodes, most recent first.
+          FutureBuilder<List<ContinueWatching>>(
+            future: _continue,
+            builder: (context, snapshot) {
+              final entries = snapshot.data ?? const <ContinueWatching>[];
+              if (entries.isEmpty) return const SizedBox.shrink();
+              return ContinueWatchingRow(
+                entries: entries,
+                onPlay: _playFromContinue,
+                onDismiss: _dismissFromContinue,
+                collapsed: _continueCollapsed,
+                onToggleCollapsed: _toggleContinueCollapsed,
+              );
+            },
+          ),
           Expanded(
             child: FutureBuilder<List<Series>>(
               future: _series,
@@ -214,6 +267,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     series: series[i],
                     repository: widget.repository,
                     fixMatch: widget.fixMatch,
+                    watchState: widget.watchState,
+                    onReturn: _reload,
                   ),
                 );
               },
@@ -260,11 +315,15 @@ class _SeriesCard extends StatelessWidget {
     required this.series,
     required this.repository,
     required this.fixMatch,
+    required this.watchState,
+    required this.onReturn,
   });
 
   final Series series;
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
+  final WatchStateRepository watchState;
+  final VoidCallback onReturn;
 
   @override
   Widget build(BuildContext context) {
@@ -275,15 +334,19 @@ class _SeriesCard extends StatelessWidget {
         '#${series.anilistId}';
     final art = series.coverImageRef;
     return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => SeriesDetailScreen(
-            series: series,
-            repository: repository,
-            fixMatch: fixMatch,
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => SeriesDetailScreen(
+              series: series,
+              repository: repository,
+              fixMatch: fixMatch,
+              watchState: watchState,
+            ),
           ),
-        ),
-      ),
+        );
+        onReturn(); // continue-watching may have changed
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -1,9 +1,11 @@
+import '../../domain/models/continue_watching.dart';
 import '../../domain/models/episode.dart';
 import '../../domain/models/identified_episode.dart';
 import '../../domain/models/library_folder.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/titles.dart';
 import '../../domain/repositories/library_repository.dart';
+import '../../domain/repositories/watch_state_repository.dart';
 import 'cache_database.dart';
 
 /// The effective match for a file after applying any override.
@@ -12,20 +14,24 @@ class _Effective {
     required this.file,
     required this.anilistId,
     required this.displayNumber,
+    required this.anchoredNumber,
   });
 
   final CachedFileRow file;
   final int? anilistId; // null = unmatched
-  final int? displayNumber;
+  final int? displayNumber; // presentation number (continuous or faithful)
+  final int anchoredNumber; // AniList-faithful position = watch-state identity
 }
 
-/// Cache-backed read path (seam #2). Maps Drift rows to domain models — no
-/// Drift type leaks out. Reads never touch the network.
+/// Cache-backed read path (seam #2). Maps Drift rows to domain models — no Drift
+/// type leaks out. Reads never touch the network.
 ///
-/// The read MERGES the auto-match (`file_cache`, recomputed each scan) with the
-/// user override store (`match_overrides`): if an override exists for a file's
-/// content fingerprint, the override IS the match and the auto-guess is ignored.
-class DriftLibraryRepository implements LibraryRepository {
+/// Merges three stores: the auto-match (`file_cache`), user overrides
+/// (`match_overrides`, which win), and watch state (`watch_state`, keyed by
+/// episode identity = AniList entry + anchored position). Also implements the
+/// watch-state writes, all keyed by that same identity (never by file path).
+class DriftLibraryRepository
+    implements LibraryRepository, WatchStateRepository {
   DriftLibraryRepository(this._db);
 
   final CacheDatabase _db;
@@ -42,19 +48,22 @@ class DriftLibraryRepository implements LibraryRepository {
         () {
           final o = overrides[(f.fileSize, f.modifiedAtMs)];
           if (o != null) {
+            final anchored = o.anchoredEpisode ?? 0;
             final display = o.displayContinuous
-                ? (o.anchoredEpisode ?? 0) + o.continuousOffset
+                ? anchored + o.continuousOffset
                 : o.anchoredEpisode;
             return _Effective(
               file: f,
               anilistId: o.anilistId,
               displayNumber: display,
+              anchoredNumber: anchored,
             );
           }
           return _Effective(
             file: f,
             anilistId: f.anilistId,
             displayNumber: f.episodeNumber,
+            anchoredNumber: f.episodeNumber ?? 0,
           );
         }(),
     ];
@@ -78,15 +87,14 @@ class DriftLibraryRepository implements LibraryRepository {
   @override
   Future<List<Episode>> episodesFor(int anilistId) async {
     final effective = await _effectiveMatches();
+    final watch = {
+      for (final w in await _db.allWatchStateRows())
+        (w.anilistId, w.episode): w,
+    };
     final mine = effective.where((e) => e.anilistId == anilistId).toList()
       ..sort((a, b) => (a.displayNumber ?? 0).compareTo(b.displayNumber ?? 0));
     return [
-      for (final e in mine)
-        Episode(
-          number: e.displayNumber ?? 0,
-          fileRef: e.file.path,
-          title: e.displayNumber != null ? 'Episode ${e.displayNumber}' : null,
-        ),
+      for (final e in mine) _toEpisode(e, watch[(anilistId, e.anchoredNumber)]),
     ];
   }
 
@@ -106,6 +114,79 @@ class DriftLibraryRepository implements LibraryRepository {
     ];
   }
 
+  // --- Watch state (keyed by episode identity, never file path) ---
+
+  @override
+  Future<void> saveProgress(
+    Episode episode, {
+    required Duration position,
+    required Duration duration,
+  }) {
+    return _db.upsertWatchState(
+      WatchStateRow(
+        anilistId: episode.seriesAnilistId,
+        episode: episode.anchoredNumber,
+        resumePositionMs: position.inMilliseconds,
+        durationMs: duration.inMilliseconds,
+        watched: false,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  @override
+  Future<void> setWatched(Episode episode, {required bool watched}) async {
+    final existing = await _db.watchStateFor(
+      episode.seriesAnilistId,
+      episode.anchoredNumber,
+    );
+    await _db.upsertWatchState(
+      WatchStateRow(
+        anilistId: episode.seriesAnilistId,
+        episode: episode.anchoredNumber,
+        // Marking watched clears resume so it leaves "Continue watching".
+        resumePositionMs: watched ? 0 : (existing?.resumePositionMs ?? 0),
+        durationMs: existing?.durationMs ?? episode.duration.inMilliseconds,
+        watched: watched,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  @override
+  Future<void> clearProgress(Episode episode) =>
+      _db.deleteWatchState(episode.seriesAnilistId, episode.anchoredNumber);
+
+  @override
+  Future<List<ContinueWatching>> continueWatching() async {
+    final inProgress = await _db
+        .inProgressWatchStates(); // ordered, recent first
+    final effective = await _effectiveMatches();
+    final fileByIdentity = <(int, int), _Effective>{};
+    for (final e in effective) {
+      if (e.anilistId != null) {
+        fileByIdentity.putIfAbsent((e.anilistId!, e.anchoredNumber), () => e);
+      }
+    }
+    final seriesById = {
+      for (final r in await _db.allSeriesRows()) r.anilistId: r,
+    };
+
+    final result = <ContinueWatching>[];
+    for (final w in inProgress) {
+      final match = fileByIdentity[(w.anilistId, w.episode)];
+      final series = seriesById[w.anilistId];
+      if (match == null || series == null) continue; // file/series gone
+      result.add(
+        ContinueWatching(
+          series: _toSeries(series),
+          episode: _toEpisode(match, w),
+        ),
+      );
+    }
+    return result;
+  }
+
   @override
   Future<List<LibraryFolder>> watchedFolders() async {
     final rows = await _db.allFolderRows();
@@ -118,6 +199,17 @@ class DriftLibraryRepository implements LibraryRepository {
   @override
   Future<void> removeFolder(LibraryFolder folder) =>
       _db.removeFolderAndFiles(folder.path);
+
+  Episode _toEpisode(_Effective e, WatchStateRow? w) => Episode(
+    number: e.displayNumber ?? 0,
+    fileRef: e.file.path,
+    title: e.displayNumber != null ? 'Episode ${e.displayNumber}' : null,
+    seriesAnilistId: e.anilistId ?? 0,
+    anchoredNumber: e.anchoredNumber,
+    watched: w?.watched ?? false,
+    resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
+    duration: Duration(milliseconds: w?.durationMs ?? 0),
+  );
 
   Series _toSeries(CachedSeriesRow r) => Series(
     anilistId: r.anilistId,

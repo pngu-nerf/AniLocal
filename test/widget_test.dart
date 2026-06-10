@@ -1,3 +1,4 @@
+import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/library_folder.dart';
@@ -6,6 +7,7 @@ import 'package:anilocal/domain/models/sync_summary.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/domain/repositories/fix_match_repository.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
+import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +35,7 @@ class _FakeFixMatch implements FixMatchRepository {
   Future<void> clearOverride(String filePath) async {}
 }
 
-class _FakeRepository implements LibraryRepository {
+class _FakeRepository implements LibraryRepository, WatchStateRepository {
   @override
   Future<List<Series>> allSeries() async => const [
     Series(
@@ -58,6 +60,22 @@ class _FakeRepository implements LibraryRepository {
 
   @override
   Future<void> removeFolder(LibraryFolder folder) async {}
+
+  @override
+  Future<void> saveProgress(
+    Episode episode, {
+    required Duration position,
+    required Duration duration,
+  }) async {}
+
+  @override
+  Future<void> setWatched(Episode episode, {required bool watched}) async {}
+
+  @override
+  Future<void> clearProgress(Episode episode) async {}
+
+  @override
+  Future<List<ContinueWatching>> continueWatching() async => const [];
 }
 
 void main() {
@@ -68,6 +86,7 @@ void main() {
       AniLocalApp(
         repository: _FakeRepository(),
         fixMatch: _FakeFixMatch(),
+        watchState: _FakeRepository(),
         onScan: () async => const SyncSummary(
           filesScanned: 0,
           unchanged: 0,
@@ -81,6 +100,8 @@ void main() {
         onAddFolder: () async => (added: false, deniedLabel: null),
         accessIssues: ValueNotifier<List<String>>(const []),
         onOpenAccessSettings: () async => true,
+        loadContinueCollapsed: () async => false,
+        setContinueCollapsed: (_) async {},
       ),
     );
     await tester.pumpAndSettle();

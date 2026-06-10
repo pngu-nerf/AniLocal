@@ -6,6 +6,7 @@ import '../domain/models/episode.dart';
 import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
 import 'player_screen.dart';
 
@@ -17,11 +18,13 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.series,
     required this.repository,
     required this.fixMatch,
+    required this.watchState,
   });
 
   final Series series;
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
+  final WatchStateRepository watchState;
 
   @override
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
@@ -48,10 +51,19 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       widget.series.titles.native ??
       '';
 
-  void _play(Episode e) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => PlayerScreen(episode: e)));
+  Future<void> _play(Episode e) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerScreen(episode: e, watchState: widget.watchState),
+      ),
+    );
+    _reload(); // reflect updated watched / resume position
+  }
+
+  static String _fmt(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   Future<void> _reassignOne(Episode e) async {
@@ -161,21 +173,37 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                       episodes[i].title ?? 'Episode ${episodes[i].number}',
                     ),
                     subtitle: Text(
-                      episodes[i].fileRef.split(Platform.pathSeparator).last,
+                      [
+                        episodes[i].fileRef.split(Platform.pathSeparator).last,
+                        if (!episodes[i].watched &&
+                            episodes[i].resumePosition > Duration.zero)
+                          '▸ resume ${_fmt(episodes[i].resumePosition)}',
+                      ].join('\n'),
                     ),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (v) {
-                        if (v == 'reassign') _reassignOne(episodes[i]);
-                        if (v == 'split') _splitFromHere(episodes, i);
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                          value: 'reassign',
-                          child: Text('Reassign this episode…'),
-                        ),
-                        PopupMenuItem(
-                          value: 'split',
-                          child: Text('Split: reassign from here…'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (episodes[i].watched)
+                          Icon(
+                            Icons.check_circle,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        PopupMenuButton<String>(
+                          onSelected: (v) {
+                            if (v == 'reassign') _reassignOne(episodes[i]);
+                            if (v == 'split') _splitFromHere(episodes, i);
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'reassign',
+                              child: Text('Reassign this episode…'),
+                            ),
+                            PopupMenuItem(
+                              value: 'split',
+                              child: Text('Split: reassign from here…'),
+                            ),
+                          ],
                         ),
                       ],
                     ),

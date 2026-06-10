@@ -7,8 +7,8 @@ import '../domain/models/episode.dart';
 ///
 /// The single place that owns playback engine objects. The UI hands it a domain
 /// [Episode] — never a raw path or a data-layer type — and gets a
-/// [VideoController] to render. Online vs offline / where the file came from is
-/// invisible here.
+/// [VideoController] to render plus position/duration streams to report
+/// progress (Stage 6 watch state).
 class PlaybackController {
   PlaybackController() : player = Player() {
     controller = VideoController(player);
@@ -17,10 +17,16 @@ class PlaybackController {
   final Player player;
   late final VideoController controller;
 
-  /// Play [episode]'s file. The plain absolute path is passed to media_kit,
-  /// which normalizes it for libmpv — robust to spaces and `[brackets]` in real
-  /// release filenames (a `file://` string would mis-parse those).
-  Future<void> open(Episode episode) => player.open(Media(episode.fileRef));
+  /// Play [episode], resuming at [startAt]. media_kit normalizes the plain path
+  /// for libmpv — robust to spaces and `[brackets]` in release filenames.
+  Future<void> open(Episode episode, {Duration startAt = Duration.zero}) {
+    return player.open(
+      Media(episode.fileRef, start: startAt > Duration.zero ? startAt : null),
+    );
+  }
+
+  Stream<Duration> get positionStream => player.stream.position;
+  Stream<Duration> get durationStream => player.stream.duration;
 
   Future<void> dispose() => player.dispose();
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import '../domain/repositories/watch_state_repository.dart';
 import 'library_screen.dart';
 
 /// Root of the AniLocal UI.
@@ -16,15 +17,21 @@ class AniLocalApp extends StatelessWidget {
     super.key,
     required this.repository,
     required this.fixMatch,
+    required this.watchState,
     required this.onScan,
     required this.onAddFolder,
     required this.accessIssues,
     required this.onOpenAccessSettings,
+    required this.loadContinueCollapsed,
+    required this.setContinueCollapsed,
   });
 
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
+  final WatchStateRepository watchState;
   final Future<SyncSummary> Function() onScan;
+  final Future<bool> Function() loadContinueCollapsed;
+  final Future<void> Function(bool collapsed) setContinueCollapsed;
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 
   /// Denied TCC category labels — shared by the add-dialog and the banner.
@@ -46,10 +53,13 @@ class AniLocalApp extends StatelessWidget {
       home: LibraryScreen(
         repository: repository,
         fixMatch: fixMatch,
+        watchState: watchState,
         onScan: onScan,
         onAddFolder: onAddFolder,
         accessIssues: accessIssues,
         onOpenAccessSettings: onOpenAccessSettings,
+        loadContinueCollapsed: loadContinueCollapsed,
+        setContinueCollapsed: setContinueCollapsed,
       ),
     );
   }

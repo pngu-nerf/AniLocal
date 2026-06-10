@@ -41,7 +41,7 @@ Folders: `lib/ui`, `lib/domain` (models + repository *interfaces*), `lib/data/ca
 Trackers / AniList list-sync (needs per-user OAuth — deferred) · server-side transcoding · download/torrent automation · watch-together · multi-user accounts · re-adding Shoko or any bundled server. Each is a separate product. If a task drifts toward these, STOP and flag it.
 
 ## Deferred features (only after Stage 6 holds; one at a time)
-Anime4K shaders · OP/ED auto-skip (AniSkip) · relation / watch-order (from AniList `relations`) · (maybe) JP-study dual subtitles. Do NOT start these yet.
+Anime4K shaders · OP/ED auto-skip (AniSkip) · relation / watch-order (from AniList `relations`) — **incl. "Up Next"/next-episode, which must use relations to cross season boundaries (S1→S2 is a different AniList entry; naive `episode+1` breaks at splits), so it is NOT a continue-watching tweak** · (maybe) JP-study dual subtitles. Do NOT start these yet.
 
 **Multi-source episodes** (post–Stage 6; do NOT build yet). One logical episode = files sharing `(AniList entry, anchored position)` — dedup key from Stage 5 Part B's anchored position. Library folders are an **ordered priority list** (top = default source; `library_folders.sortOrder` exists for this). Episode auto-plays from the highest-priority folder containing it, falling back down; a per-episode manual source override beats the default and survives rescans (seam #5, source dimension). Files never move/delete — "switch source" only changes which file the player opens (duplicates across drives are legitimate). UI de-duplication (one row per episode) is this feature's front end — build it *with* the model, not earlier. Depends on Part B (identity) + Stage 6 (watch-state).
 

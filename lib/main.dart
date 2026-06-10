@@ -93,14 +93,22 @@ void main() {
     return sync.sync([for (final f in folders) f.path]);
   }
 
+  const continueCollapsedKey = 'continue_watching_collapsed';
+
   runApp(
     AniLocalApp(
       repository: repository,
       fixMatch: fixMatch,
+      // DriftLibraryRepository implements WatchStateRepository too.
+      watchState: repository,
       onScan: scan,
       onAddFolder: addFolder,
       accessIssues: accessIssues,
       onOpenAccessSettings: openPrivacyFilesAndFoldersSettings,
+      loadContinueCollapsed: () async =>
+          await database.getSetting(continueCollapsedKey) == 'true',
+      setContinueCollapsed: (collapsed) =>
+          database.setSetting(continueCollapsedKey, '$collapsed'),
     ),
   );
 }
