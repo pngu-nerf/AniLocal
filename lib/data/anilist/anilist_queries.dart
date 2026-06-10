@@ -61,3 +61,30 @@ $_mediaFields
   }
 }
 ''';
+
+/// Multi-candidate search (a `Page` of media) for Stage 3 matching — the top
+/// hit alone is unreliable, so we rank a handful client-side. `SEARCH_MATCH`
+/// orders by relevance; we still re-rank by title similarity.
+const String mediaCandidatesQuery =
+    '''
+query (\$search: String, \$perPage: Int) {
+  Page(page: 1, perPage: \$perPage) {
+    media(search: \$search, type: ANIME, sort: SEARCH_MATCH) {
+$_mediaFields
+    }
+  }
+}
+''';
+
+/// Filtered variant of [mediaCandidatesQuery] (omits `format_in` when null —
+/// see the note on [mediaSearchQueryFiltered]).
+const String mediaCandidatesQueryFiltered =
+    '''
+query (\$search: String, \$perPage: Int, \$format: [MediaFormat]) {
+  Page(page: 1, perPage: \$perPage) {
+    media(search: \$search, type: ANIME, format_in: \$format, sort: SEARCH_MATCH) {
+$_mediaFields
+    }
+  }
+}
+''';

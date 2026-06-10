@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 
 import 'data/anilist/anilist_client.dart';
+import 'data/scanner/folder_scanner.dart';
+import 'data/scanner/heuristic_filename_parser.dart';
+import 'data/scanner/library_identifier.dart';
 import 'ui/app.dart';
 
-/// Stage 2: one hardcoded title to validate the AniList client + data seam.
-const String kSearchTitle = 'Frieren';
+/// Stage 3 spike: a hardcoded library folder to scan + identify. No settings UI
+/// (Stage 5). Must be a NON-TCC-protected location — not ~/Desktop, ~/Documents,
+/// or ~/Downloads (those fail with permission errors unrelated to the scanner).
+const String kLibraryPath = '/Users/pngu/anilocal-test/library';
 
-/// Episodic anime formats — flip [kFormatFilter] to this to exclude MUSIC PVs
-/// and other non-episodic noise from search.
+/// Episodic anime formats — applied to the AniList candidate search so MUSIC
+/// PVs and other non-episodic noise don't win the match (Stage 2 recon).
 const List<String> kEpisodicAnimeFormats = [
   'TV',
   'TV_SHORT',
@@ -17,27 +22,15 @@ const List<String> kEpisodicAnimeFormats = [
   'ONA',
 ];
 
-/// Search format allow-list. `null` = everything.
-///
-/// DECISION (revisit in Stage 3, see ROADMAP): `null`/everything is a Stage-2
-/// spike convenience, NOT the intended product default. Case-2 recon showed the
-/// "everything" search surfaces garbage — `Fate` returns the `Unmei` MUSIC PV
-/// ahead of real Fate anime — and [kEpisodicAnimeFormats] fixes it. The product
-/// will almost certainly ship with the filter ON; do not ship `everything` by
-/// accident.
-const List<String>? kFormatFilter = null;
-
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // Composition root: construct the data layer and hand the UI a domain Future.
-  // The UI never sees AniListClient.
-  final client = AniListClient();
-  runApp(
-    AniLocalApp(
-      seriesFuture: client.fetchSeriesByTitle(
-        kSearchTitle,
-        formatsIn: kFormatFilter,
-      ),
-    ),
+  // Composition root: assemble the scan+identify pipeline and hand the UI a
+  // domain Future. The UI never sees the scanner or AniList types.
+  final identifier = LibraryIdentifier(
+    scanner: const FileSystemFolderScanner(),
+    parser: const HeuristicFilenameParser(),
+    anilist: AniListClient(),
+    formatsIn: kEpisodicAnimeFormats,
   );
+  runApp(AniLocalApp(resultsFuture: identifier.identifyFolder(kLibraryPath)));
 }

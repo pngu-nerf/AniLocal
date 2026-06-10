@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../domain/models/series.dart';
-import 'metadata_screen.dart';
+import '../domain/models/identified_episode.dart';
+import 'scan_results_screen.dart';
 
 /// Root of the AniLocal UI.
 ///
 /// Seam #1: the UI imports only Flutter and `lib/domain` — never AniList,
-/// Drift, or scanner types. The metadata to show arrives as a `Future<Series>`
-/// supplied by the composition root; the UI has no idea it came from AniList.
+/// Drift, or scanner types. The scan results arrive as a domain
+/// `Future<List<IdentifiedEpisode>>` from the composition root; the UI has no
+/// idea they came from a folder scan + AniList matching.
 class AniLocalApp extends StatelessWidget {
-  const AniLocalApp({super.key, required this.seriesFuture});
+  const AniLocalApp({super.key, required this.resultsFuture});
 
-  final Future<Series> seriesFuture;
+  final Future<List<IdentifiedEpisode>> resultsFuture;
 
   @override
   Widget build(BuildContext context) {
@@ -23,8 +24,8 @@ class AniLocalApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: Scaffold(
-        appBar: AppBar(title: const Text('AniLocal')),
-        body: MetadataScreen(seriesFuture: seriesFuture),
+        appBar: AppBar(title: const Text('AniLocal — Scan')),
+        body: ScanResultsScreen(resultsFuture: resultsFuture),
       ),
     );
   }

@@ -51,6 +51,50 @@ class AniListClient {
             'variables': {'search': title},
           };
 
+    final decoded = await _post(body);
+    final data = decoded['data'] as Map<String, dynamic>?;
+    final media = data?['Media'] as Map<String, dynamic>?;
+    if (media == null) {
+      throw AniListException('No AniList match for "$title".');
+    }
+
+    return seriesFromMediaJson(media);
+  }
+
+  /// Search for up to [perPage] anime candidates by [title], for client-side
+  /// ranking (Stage 3). [formatsIn] restricts formats; pass episodic formats to
+  /// cut MUSIC-type false-positives. Returns `[]` when nothing matches.
+  Future<List<Series>> searchSeriesCandidates(
+    String title, {
+    List<String>? formatsIn,
+    int perPage = 10,
+  }) async {
+    final filtering = formatsIn != null && formatsIn.isNotEmpty;
+    final body = filtering
+        ? {
+            'query': mediaCandidatesQueryFiltered,
+            'variables': {
+              'search': title,
+              'perPage': perPage,
+              'format': formatsIn,
+            },
+          }
+        : {
+            'query': mediaCandidatesQuery,
+            'variables': {'search': title, 'perPage': perPage},
+          };
+
+    final decoded = await _post(body);
+    final page =
+        (decoded['data'] as Map<String, dynamic>?)?['Page']
+            as Map<String, dynamic>?;
+    final media = page?['media'] as List<dynamic>?;
+    if (media == null) return const [];
+    return seriesListFromMediaList(media);
+  }
+
+  /// Shared POST + error handling. Returns the decoded JSON body.
+  Future<Map<String, dynamic>> _post(Map<String, dynamic> body) async {
     final http.Response response;
     try {
       response = await _http.post(
@@ -80,14 +124,7 @@ class AniListClient {
     if (decoded['errors'] != null) {
       throw AniListException('AniList GraphQL error: ${decoded['errors']}');
     }
-
-    final data = decoded['data'] as Map<String, dynamic>?;
-    final media = data?['Media'] as Map<String, dynamic>?;
-    if (media == null) {
-      throw AniListException('No AniList match for "$title".');
-    }
-
-    return seriesFromMediaJson(media);
+    return decoded;
   }
 
   void dispose() => _http.close();

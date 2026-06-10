@@ -21,6 +21,13 @@ Series seriesFromMediaJson(Map<String, dynamic> media) {
   );
 }
 
+/// Maps a `Page.media` list of AniList entries to domain [Series].
+List<Series> seriesListFromMediaList(List<dynamic> media) {
+  return media
+      .map((m) => seriesFromMediaJson(m as Map<String, dynamic>))
+      .toList();
+}
+
 Titles _titlesFrom(Map<String, dynamic>? title) {
   return Titles(
     romaji: title?['romaji'] as String?,
