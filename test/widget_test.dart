@@ -67,6 +67,9 @@ class _FakeRepository
   Future<void> removeFolder(LibraryFolder folder) async {}
 
   @override
+  Future<void> reorderFolders(List<LibraryFolder> orderedFolders) async {}
+
+  @override
   Future<void> saveProgress(
     Episode episode, {
     required Duration position,

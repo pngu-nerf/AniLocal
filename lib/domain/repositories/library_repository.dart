@@ -11,6 +11,12 @@ abstract interface class LibraryRepository {
   Future<void> addFolder(String path);
   Future<void> removeFolder(LibraryFolder folder);
 
+  /// Persist a new priority order for the watched folders (index 0 = highest
+  /// priority / preferred default source). Multi-source episodes on Automatic
+  /// re-resolve their default to this order on the next read — no rescan, no
+  /// network. Per-episode source pins are untouched (seam #5).
+  Future<void> reorderFolders(List<LibraryFolder> orderedFolders);
+
   /// All matched series in the library (for the grid).
   Future<List<Series>> allSeries();
 

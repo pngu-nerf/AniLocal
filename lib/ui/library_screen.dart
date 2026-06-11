@@ -167,7 +167,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
               // If the folder SET actually changed while managing folders,
               // trigger an incremental rescan (existing scan path); a no-op
               // dismissal scans nothing. Compare before/after so it's robust to
-              // however the screen was closed.
+              // however the screen was closed. (A pure REORDER leaves the set
+              // unchanged — no rescan, but reload below so re-resolved default
+              // sources show immediately.)
               final before = await _folderPaths();
               if (!context.mounted) return;
               await Navigator.of(context).push(
@@ -183,6 +185,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
               final after = await _folderPaths();
               if (!setEquals(before, after)) {
                 await _scan();
+              } else {
+                _reload(); // order may have changed — re-resolve sources, no scan
               }
             },
           ),

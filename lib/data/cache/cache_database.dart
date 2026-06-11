@@ -53,10 +53,9 @@ class LibraryFolders extends Table {
   TextColumn get path => text()();
   IntColumn get addedAtMs => integer()();
 
-  /// User-controllable rank (lower = higher priority). Stored so the order is
-  /// stable across relaunch and expresses "A ranks above B" — a near-future
-  /// feature (multi-source episodes) makes this order semantically meaningful
-  /// (top = default playback source). No reorder UI / priority meaning yet.
+  /// User-controllable rank (lower = higher priority). Drives multi-source
+  /// priority: top = preferred default playback source. Set by drag-to-reorder
+  /// in the folders screen (see [reorderFolders]); stable across relaunch.
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
   @override
@@ -234,6 +233,21 @@ class CacheDatabase extends _$CacheDatabase {
         sortOrder: nextOrder,
       ),
     );
+  }
+
+  /// Persist a new priority order: sortOrder = position in [pathsInOrder]
+  /// (index 0 = highest priority). Re-bases all ranks to 0..n-1 atomically, so
+  /// a later [insertFolder] still appends at the end. Touches ONLY sortOrder —
+  /// no file or override row is affected, so source resolution simply re-reads
+  /// the new order on the next query (no rescan needed).
+  Future<void> reorderFolders(List<String> pathsInOrder) {
+    return transaction(() async {
+      for (var i = 0; i < pathsInOrder.length; i++) {
+        await (update(libraryFolders)
+              ..where((f) => f.path.equals(pathsInOrder[i])))
+            .write(LibraryFoldersCompanion(sortOrder: Value(i)));
+      }
+    });
   }
 
   Future<void> deleteFolder(String path) =>

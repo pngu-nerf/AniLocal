@@ -49,6 +49,10 @@ class _MutableRepo
       folders = folders.where((p) => p != folder.path).toList();
 
   @override
+  Future<void> reorderFolders(List<LibraryFolder> orderedFolders) async =>
+      folders = [for (final f in orderedFolders) f.path];
+
+  @override
   Future<void> saveProgress(
     Episode episode, {
     required Duration position,

@@ -311,6 +311,10 @@ class DriftLibraryRepository
   Future<void> removeFolder(LibraryFolder folder) =>
       _db.removeFolderAndFiles(folder.path);
 
+  @override
+  Future<void> reorderFolders(List<LibraryFolder> orderedFolders) =>
+      _db.reorderFolders([for (final f in orderedFolders) f.path]);
+
   // --- Source selection (multi-source). Sole writer of source_overrides;
   //     keyed by episode identity, never clobbered by a rescan (seam #5). ---
 
