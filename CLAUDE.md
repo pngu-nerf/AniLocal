@@ -6,7 +6,7 @@
 AniLocal is a **light, offline-first, distributable** desktop anime library player. It scans the user's anime folders, identifies files by parsing their names, enriches them with metadata from **AniList** (public API, no account), caches everything locally, and plays via **libmpv (media_kit)**. Built to be downloaded by anyone — no server, no account, point at a folder and go. macOS first; Linux/Windows later by recompile.
 
 ## Current stage
-**Stage 0 — scaffolding.** See `ROADMAP.md` for "done when". Do NOT pull later stages or features forward.
+**Post–Stage 6.** Stages 0–6 complete (offline cache · scan/identify · manual fix-match · multiple libraries · libmpv playback · local watch state). First post-Stage-6 feature **multi-source episodes** built (schema v7). Remaining deferred features are built one at a time — do NOT pull more than one forward. See `ROADMAP.md`.
 
 ## Locked stack (do not swap without updating this file)
 - **UI:** Flutter (Dart), stable 3.44.x. Target macOS desktop only for now.
@@ -21,7 +21,7 @@ AniLocal is a **light, offline-first, distributable** desktop anime library play
 2. **The cache is the primary read path.** UI reads from cache; the pipeline fills it from AniList at scan/refresh time. The UI MUST never wait on the network. Online vs offline is invisible to the UI.
 3. **All AniList access lives in `lib/data/anilist` only.** A schema/API change touches exactly one module.
 4. **Identification lives behind one interface** in `lib/data/scanner`. The parser is swappable without touching anything else.
-5. **YOU MUST NOT let a rescan overwrite a manual match override.** User corrections are sacred.
+5. **YOU MUST NOT let a rescan overwrite a manual override** — match (which AniList entry/episode a file is) OR source (which copy a multi-source episode plays). Both override stores have NO write path from the fill path (`applySync`). User corrections are sacred.
 
 Folders: `lib/ui`, `lib/domain` (models + repository *interfaces*), `lib/data/cache`, `lib/data/anilist`, `lib/data/scanner`, `lib/sync` (pipeline), `lib/playback`.
 
@@ -43,7 +43,7 @@ Trackers / AniList list-sync (needs per-user OAuth — deferred) · server-side 
 ## Deferred features (only after Stage 6 holds; one at a time)
 Anime4K shaders · OP/ED auto-skip (AniSkip) · relation / watch-order (from AniList `relations`) — **incl. "Up Next"/next-episode, which must use relations to cross season boundaries (S1→S2 is a different AniList entry; naive `episode+1` breaks at splits), so it is NOT a continue-watching tweak** · (maybe) JP-study dual subtitles. Do NOT start these yet.
 
-**Multi-source episodes** (post–Stage 6; do NOT build yet). One logical episode = files sharing `(AniList entry, anchored position)` — dedup key from Stage 5 Part B's anchored position. Library folders are an **ordered priority list** (top = default source; `library_folders.sortOrder` exists for this). Episode auto-plays from the highest-priority folder containing it, falling back down; a per-episode manual source override beats the default and survives rescans (seam #5, source dimension). Files never move/delete — "switch source" only changes which file the player opens (duplicates across drives are legitimate). UI de-duplication (one row per episode) is this feature's front end — build it *with* the model, not earlier. Depends on Part B (identity) + Stage 6 (watch-state).
+**Multi-source episodes** — ✅ BUILT (schema v7). One logical episode = files sharing `(AniList entry, anchored position)`; the repository collapses them to one `Episode` carrying its priority-ordered `sources`. Library folders are an **ordered priority list** (`library_folders.sortOrder`, top = preferred); the default source is the highest-priority folder that has the episode, falling back down. A per-episode manual source override (`source_overrides`, keyed by episode identity) beats the default and is **sacred across rescans** (seam #5, source dimension — no fill-path writer). Durable invariants to keep: **files never move or get deleted** — "switch source" only changes which file the player opens (duplicates across drives are legitimate); resolution lives in the data layer (UI sees one `Episode`, never source-resolution types); watch state stays per logical episode (shared across sources).
 
 ## Commands
 - Run: `flutter run -d macos`

@@ -6,6 +6,7 @@ import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/sync_summary.dart';
 import 'package:anilocal/domain/repositories/fix_match_repository.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
+import 'package:anilocal/domain/repositories/source_selection_repository.dart';
 import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/foundation.dart';
@@ -22,7 +23,11 @@ const _emptySummary = SyncSummary(
   anilistLookups: 0,
 );
 
-class _MutableRepo implements LibraryRepository, WatchStateRepository {
+class _MutableRepo
+    implements
+        LibraryRepository,
+        WatchStateRepository,
+        SourceSelectionRepository {
   _MutableRepo(this.folders);
   List<String> folders;
 
@@ -55,6 +60,14 @@ class _MutableRepo implements LibraryRepository, WatchStateRepository {
   Future<void> clearProgress(Episode episode) async {}
   @override
   Future<List<ContinueWatching>> continueWatching() async => const [];
+
+  @override
+  Future<void> selectSource(
+    Episode episode, {
+    required String folderPath,
+  }) async {}
+  @override
+  Future<void> clearSource(Episode episode) async {}
 }
 
 class _FakeFixMatch implements FixMatchRepository {
@@ -92,6 +105,7 @@ void main() {
         repository: repo,
         fixMatch: _FakeFixMatch(),
         watchState: repo,
+        sourceSelection: repo,
         onScan: () async {
           scans++;
           return _emptySummary;

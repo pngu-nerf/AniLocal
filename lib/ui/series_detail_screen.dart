@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../domain/models/episode.dart';
+import '../domain/models/episode_source.dart';
 import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
 import 'player_screen.dart';
@@ -19,12 +21,14 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.repository,
     required this.fixMatch,
     required this.watchState,
+    required this.sourceSelection,
   });
 
   final Series series;
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
   final WatchStateRepository watchState;
+  final SourceSelectionRepository sourceSelection;
 
   @override
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
@@ -79,6 +83,74 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     if (done == true) _reload();
   }
 
+  static String _name(String path) => path.split(Platform.pathSeparator).last;
+
+  /// Pick which source a multi-source episode plays from: "Automatic" (folder
+  /// priority — the default) or a specific copy (a manual pin that survives
+  /// rescans). Switching only changes which file opens — nothing on disk moves.
+  Future<void> _chooseSource(Episode e) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final priorityDefault = e.sources.first; // sources are priority-ordered
+        return AlertDialog(
+          title: Text('Episode ${e.number} — source'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: Icon(
+                    e.pinnedSourceFolder == null
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                  ),
+                  title: const Text('Automatic (highest priority)'),
+                  subtitle: Text('Plays from ${priorityDefault.fileRef}'),
+                  onTap: () async {
+                    await widget.sourceSelection.clearSource(e);
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop(true);
+                    }
+                  },
+                ),
+                const Divider(height: 1),
+                for (final EpisodeSource s in e.sources)
+                  ListTile(
+                    leading: Icon(
+                      e.pinnedSourceFolder == s.folderPath
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                    ),
+                    title: Text(s.fileRef),
+                    subtitle: s == priorityDefault
+                        ? const Text('default')
+                        : null,
+                    onTap: () async {
+                      await widget.sourceSelection.selectSource(
+                        e,
+                        folderPath: s.folderPath,
+                      );
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
+                    },
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+    if (changed == true) _reload();
+  }
+
   Future<void> _splitFromHere(List<Episode> all, int index) async {
     final range = all.sublist(index).map((e) => e.fileRef).toList();
     // Real prior-season count: this series' AniList episode count (fallback to
@@ -96,6 +168,67 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       ),
     );
     if (done == true) _reload();
+  }
+
+  Widget _episodeTile(List<Episode> episodes, int i) {
+    final e = episodes[i];
+    final multi = e.hasMultipleSources;
+    return ListTile(
+      dense: true,
+      onTap: () => _play(e),
+      leading: CircleAvatar(child: Text('${e.number}')),
+      title: Text(e.title ?? 'Episode ${e.number}'),
+      subtitle: Text(
+        [
+          _name(e.fileRef),
+          if (multi) '${e.sources.length} sources · from ${e.fileRef}',
+          if (!e.watched && e.resumePosition > Duration.zero)
+            '▸ resume ${_fmt(e.resumePosition)}',
+        ].join('\n'),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (e.watched)
+            Icon(
+              Icons.check_circle,
+              size: 18,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          if (multi)
+            IconButton(
+              tooltip: '${e.sources.length} sources — choose…',
+              icon: Badge(
+                label: Text('${e.sources.length}'),
+                child: const Icon(Icons.layers_outlined),
+              ),
+              onPressed: () => _chooseSource(e),
+            ),
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              if (v == 'reassign') _reassignOne(e);
+              if (v == 'split') _splitFromHere(episodes, i);
+              if (v == 'source') _chooseSource(e);
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'reassign',
+                child: Text('Reassign this episode…'),
+              ),
+              const PopupMenuItem(
+                value: 'split',
+                child: Text('Split: reassign from here…'),
+              ),
+              if (multi)
+                const PopupMenuItem(
+                  value: 'source',
+                  child: Text('Choose source…'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -165,49 +298,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 )
               else
                 for (var i = 0; i < episodes.length; i++)
-                  ListTile(
-                    dense: true,
-                    onTap: () => _play(episodes[i]),
-                    leading: CircleAvatar(child: Text('${episodes[i].number}')),
-                    title: Text(
-                      episodes[i].title ?? 'Episode ${episodes[i].number}',
-                    ),
-                    subtitle: Text(
-                      [
-                        episodes[i].fileRef.split(Platform.pathSeparator).last,
-                        if (!episodes[i].watched &&
-                            episodes[i].resumePosition > Duration.zero)
-                          '▸ resume ${_fmt(episodes[i].resumePosition)}',
-                      ].join('\n'),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (episodes[i].watched)
-                          Icon(
-                            Icons.check_circle,
-                            size: 18,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        PopupMenuButton<String>(
-                          onSelected: (v) {
-                            if (v == 'reassign') _reassignOne(episodes[i]);
-                            if (v == 'split') _splitFromHere(episodes, i);
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'reassign',
-                              child: Text('Reassign this episode…'),
-                            ),
-                            PopupMenuItem(
-                              value: 'split',
-                              child: Text('Split: reassign from here…'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                  _episodeTile(episodes, i),
             ],
           );
         },

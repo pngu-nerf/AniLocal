@@ -1,12 +1,18 @@
 import '../../domain/models/continue_watching.dart';
 import '../../domain/models/episode.dart';
+import '../../domain/models/episode_source.dart';
 import '../../domain/models/identified_episode.dart';
 import '../../domain/models/library_folder.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/titles.dart';
 import '../../domain/repositories/library_repository.dart';
+import '../../domain/repositories/source_selection_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
 import 'cache_database.dart';
+
+/// Sort rank for a file not under any known library folder (orphan from a
+/// removed folder) — below every real folder, so it's the last-resort source.
+const int _unfiledSortOrder = 1 << 30;
 
 /// The effective match for a file after applying any override.
 class _Effective {
@@ -23,6 +29,27 @@ class _Effective {
   final int anchoredNumber; // AniList-faithful position = watch-state identity
 }
 
+/// One LOGICAL episode = the files sharing an identity (anilistId, anchored),
+/// collapsed to a single playable unit with its priority-ordered [sources] and
+/// the resolved [activeFileRef] (manual source override if set, else priority).
+class _Logical {
+  _Logical({
+    required this.anilistId,
+    required this.anchored,
+    required this.displayNumber,
+    required this.sources,
+    required this.activeFileRef,
+    required this.pinnedFolder,
+  });
+
+  final int anilistId;
+  final int anchored;
+  final int? displayNumber;
+  final List<EpisodeSource> sources; // priority-ordered (default = first)
+  final String activeFileRef;
+  final String? pinnedFolder; // in-effect manual pin, else null (automatic)
+}
+
 /// Cache-backed read path (seam #2). Maps Drift rows to domain models — no Drift
 /// type leaks out. Reads never touch the network.
 ///
@@ -31,7 +58,10 @@ class _Effective {
 /// episode identity = AniList entry + anchored position). Also implements the
 /// watch-state writes, all keyed by that same identity (never by file path).
 class DriftLibraryRepository
-    implements LibraryRepository, WatchStateRepository {
+    implements
+        LibraryRepository,
+        WatchStateRepository,
+        SourceSelectionRepository {
   DriftLibraryRepository(this._db);
 
   final CacheDatabase _db;
@@ -69,6 +99,91 @@ class DriftLibraryRepository
     ];
   }
 
+  /// Collapse matched files into logical episodes keyed by identity
+  /// (anilistId, anchored). Each gets its sources priority-ordered by the
+  /// containing folder's sortOrder, and an active source resolved as:
+  /// manual override (if its folder still holds the episode) else the
+  /// highest-priority source. This is where multi-source de-duplication and
+  /// source resolution live — entirely in the data layer (the UI sees one
+  /// Episode per identity).
+  Future<Map<(int, int), _Logical>> _logicalEpisodes() async {
+    final effective = await _effectiveMatches();
+    final folders = await _db.allFolderRows(); // sorted by sortOrder asc
+    final overrides = {
+      for (final o in await _db.allSourceOverrideRows())
+        (o.anilistId, o.episode): o,
+    };
+
+    final groups = <(int, int), List<_Effective>>{};
+    for (final e in effective) {
+      if (e.anilistId == null) continue;
+      groups.putIfAbsent((e.anilistId!, e.anchoredNumber), () => []).add(e);
+    }
+
+    final result = <(int, int), _Logical>{};
+    groups.forEach((key, files) {
+      final sources =
+          [
+            for (final e in files)
+              () {
+                final owner = _owningFolder(e.file.path, folders);
+                return EpisodeSource(
+                  fileRef: e.file.path,
+                  folderPath: owner?.path ?? _parentDir(e.file.path),
+                  folderSortOrder: owner?.sortOrder ?? _unfiledSortOrder,
+                );
+              }(),
+          ]..sort((a, b) {
+            final c = a.folderSortOrder.compareTo(b.folderSortOrder);
+            return c != 0 ? c : a.fileRef.compareTo(b.fileRef);
+          });
+
+      // Resolve the active source: a manual override wins, but only while its
+      // folder still holds the episode; otherwise fall back to priority. The
+      // pin is "in effect" only when it actually selects a present source.
+      var active = sources.first;
+      String? pinnedFolder;
+      final ov = overrides[key];
+      if (ov != null) {
+        final pinned = sources.where((s) => s.folderPath == ov.folderPath);
+        if (pinned.isNotEmpty) {
+          active = pinned.first;
+          pinnedFolder = ov.folderPath;
+        }
+      }
+
+      // Display number comes from the active source's effective match (all
+      // sources are the same episode; normally identical).
+      final activeEff = files.firstWhere((e) => e.file.path == active.fileRef);
+      result[key] = _Logical(
+        anilistId: key.$1,
+        anchored: key.$2,
+        displayNumber: activeEff.displayNumber,
+        sources: sources,
+        activeFileRef: active.fileRef,
+        pinnedFolder: pinnedFolder,
+      );
+    });
+    return result;
+  }
+
+  /// The library folder that owns [path] — the longest matching path prefix
+  /// (most specific folder when folders nest). Null if none (orphan file).
+  LibraryFolderRow? _owningFolder(String path, List<LibraryFolderRow> folders) {
+    LibraryFolderRow? best;
+    for (final f in folders) {
+      if (path == f.path || path.startsWith('${f.path}/')) {
+        if (best == null || f.path.length > best.path.length) best = f;
+      }
+    }
+    return best;
+  }
+
+  String _parentDir(String path) {
+    final i = path.lastIndexOf('/');
+    return i <= 0 ? path : path.substring(0, i);
+  }
+
   @override
   Future<List<Series>> allSeries() async {
     final effective = await _effectiveMatches();
@@ -86,15 +201,17 @@ class DriftLibraryRepository
 
   @override
   Future<List<Episode>> episodesFor(int anilistId) async {
-    final effective = await _effectiveMatches();
+    final logical = await _logicalEpisodes();
     final watch = {
       for (final w in await _db.allWatchStateRows())
         (w.anilistId, w.episode): w,
     };
-    final mine = effective.where((e) => e.anilistId == anilistId).toList()
-      ..sort((a, b) => (a.displayNumber ?? 0).compareTo(b.displayNumber ?? 0));
+    final mine = [
+      for (final l in logical.values)
+        if (l.anilistId == anilistId) l,
+    ]..sort((a, b) => (a.displayNumber ?? 0).compareTo(b.displayNumber ?? 0));
     return [
-      for (final e in mine) _toEpisode(e, watch[(anilistId, e.anchoredNumber)]),
+      for (final l in mine) _toEpisode(l, watch[(anilistId, l.anchored)]),
     ];
   }
 
@@ -161,20 +278,14 @@ class DriftLibraryRepository
   Future<List<ContinueWatching>> continueWatching() async {
     final inProgress = await _db
         .inProgressWatchStates(); // ordered, recent first
-    final effective = await _effectiveMatches();
-    final fileByIdentity = <(int, int), _Effective>{};
-    for (final e in effective) {
-      if (e.anilistId != null) {
-        fileByIdentity.putIfAbsent((e.anilistId!, e.anchoredNumber), () => e);
-      }
-    }
+    final logical = await _logicalEpisodes(); // one per episode identity
     final seriesById = {
       for (final r in await _db.allSeriesRows()) r.anilistId: r,
     };
 
     final result = <ContinueWatching>[];
     for (final w in inProgress) {
-      final match = fileByIdentity[(w.anilistId, w.episode)];
+      final match = logical[(w.anilistId, w.episode)];
       final series = seriesById[w.anilistId];
       if (match == null || series == null) continue; // file/series gone
       result.add(
@@ -200,15 +311,35 @@ class DriftLibraryRepository
   Future<void> removeFolder(LibraryFolder folder) =>
       _db.removeFolderAndFiles(folder.path);
 
-  Episode _toEpisode(_Effective e, WatchStateRow? w) => Episode(
-    number: e.displayNumber ?? 0,
-    fileRef: e.file.path,
-    title: e.displayNumber != null ? 'Episode ${e.displayNumber}' : null,
-    seriesAnilistId: e.anilistId ?? 0,
-    anchoredNumber: e.anchoredNumber,
+  // --- Source selection (multi-source). Sole writer of source_overrides;
+  //     keyed by episode identity, never clobbered by a rescan (seam #5). ---
+
+  @override
+  Future<void> selectSource(Episode episode, {required String folderPath}) =>
+      _db.upsertSourceOverride(
+        SourceOverrideRow(
+          anilistId: episode.seriesAnilistId,
+          episode: episode.anchoredNumber,
+          folderPath: folderPath,
+          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+
+  @override
+  Future<void> clearSource(Episode episode) =>
+      _db.deleteSourceOverride(episode.seriesAnilistId, episode.anchoredNumber);
+
+  Episode _toEpisode(_Logical l, WatchStateRow? w) => Episode(
+    number: l.displayNumber ?? 0,
+    fileRef: l.activeFileRef,
+    title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
+    seriesAnilistId: l.anilistId,
+    anchoredNumber: l.anchored,
     watched: w?.watched ?? false,
     resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
     duration: Duration(milliseconds: w?.durationMs ?? 0),
+    sources: l.sources,
+    pinnedSourceFolder: l.pinnedFolder,
   );
 
   Series _toSeries(CachedSeriesRow r) => Series(

@@ -99,8 +99,10 @@ void main() {
     AniLocalApp(
       repository: repository,
       fixMatch: fixMatch,
-      // DriftLibraryRepository implements WatchStateRepository too.
+      // DriftLibraryRepository implements WatchStateRepository +
+      // SourceSelectionRepository too (read + per-episode-identity writes).
       watchState: repository,
+      sourceSelection: repository,
       onScan: scan,
       onAddFolder: addFolder,
       accessIssues: accessIssues,

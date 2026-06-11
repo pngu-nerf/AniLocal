@@ -116,6 +116,32 @@ class WatchStates extends Table {
   String get tableName => 'watch_state';
 }
 
+/// Manual SOURCE override (multi-source episodes). One logical episode = the
+/// files sharing an episode identity `(anilistId, anchored episode)` across
+/// library folders; by default it plays from the highest-priority folder
+/// (lowest `library_folders.sortOrder`) that has it. This table pins a specific
+/// source instead — keyed by that SAME episode identity (so it is shared across
+/// every file of the episode), storing the chosen library [folderPath].
+///
+/// Sacred across rescans (seam #5, source dimension): the auto path (LibrarySync
+/// → applySync) never writes this table, so a rescan cannot clobber the choice —
+/// even if a higher-priority folder later gains the episode. If the chosen
+/// folder no longer holds the episode, resolution falls back to folder priority
+/// and the row sits inert (re-applies if that folder returns).
+@DataClassName('SourceOverrideRow')
+class SourceOverrides extends Table {
+  IntColumn get anilistId => integer()();
+  IntColumn get episode => integer()();
+  TextColumn get folderPath => text()();
+  IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {anilistId, episode};
+
+  @override
+  String get tableName => 'source_overrides';
+}
+
 /// App preferences (key/value). NOT part of the AniList projection — a small
 /// local store for UI choices like the collapsed "Continue watching" section.
 @DataClassName('AppSettingRow')
@@ -137,6 +163,7 @@ class AppSettings extends Table {
     LibraryFolders,
     MatchOverrides,
     WatchStates,
+    SourceOverrides,
     AppSettings,
   ],
 )
@@ -144,11 +171,11 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
-  // v5 watch_state; v6 app_settings.
+  // v5 watch_state; v6 app_settings; v7 source_overrides.
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
@@ -171,6 +198,9 @@ class CacheDatabase extends _$CacheDatabase {
       }
       if (from < 6) {
         await m.createTable(appSettings);
+      }
+      if (from < 7) {
+        await m.createTable(sourceOverrides);
       }
     },
   );
@@ -285,6 +315,22 @@ class CacheDatabase extends _$CacheDatabase {
   Future<void> deleteWatchState(int anilistId, int episode) =>
       (delete(watchStates)..where(
             (w) => w.anilistId.equals(anilistId) & w.episode.equals(episode),
+          ))
+          .go();
+
+  // --- Source overrides (multi-source). Written ONLY by the source-selection
+  //     path; LibrarySync's fill path (applySync) never touches this table, so
+  //     a rescan cannot clobber a manual source choice (seam #5). ---
+
+  Future<List<SourceOverrideRow>> allSourceOverrideRows() =>
+      select(sourceOverrides).get();
+
+  Future<void> upsertSourceOverride(SourceOverrideRow row) =>
+      into(sourceOverrides).insertOnConflictUpdate(row);
+
+  Future<void> deleteSourceOverride(int anilistId, int episode) =>
+      (delete(sourceOverrides)..where(
+            (s) => s.anilistId.equals(anilistId) & s.episode.equals(episode),
           ))
           .go();
 

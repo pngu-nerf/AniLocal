@@ -2214,6 +2214,332 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
   }
 }
 
+class $SourceOverridesTable extends SourceOverrides
+    with TableInfo<$SourceOverridesTable, SourceOverrideRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SourceOverridesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
+    'anilistId',
+  );
+  @override
+  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
+    'anilist_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _episodeMeta = const VerificationMeta(
+    'episode',
+  );
+  @override
+  late final GeneratedColumn<int> episode = GeneratedColumn<int>(
+    'episode',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _folderPathMeta = const VerificationMeta(
+    'folderPath',
+  );
+  @override
+  late final GeneratedColumn<String> folderPath = GeneratedColumn<String>(
+    'folder_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
+    'updatedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAtMs = GeneratedColumn<int>(
+    'updated_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    anilistId,
+    episode,
+    folderPath,
+    updatedAtMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'source_overrides';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SourceOverrideRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('anilist_id')) {
+      context.handle(
+        _anilistIdMeta,
+        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_anilistIdMeta);
+    }
+    if (data.containsKey('episode')) {
+      context.handle(
+        _episodeMeta,
+        episode.isAcceptableOrUnknown(data['episode']!, _episodeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_episodeMeta);
+    }
+    if (data.containsKey('folder_path')) {
+      context.handle(
+        _folderPathMeta,
+        folderPath.isAcceptableOrUnknown(data['folder_path']!, _folderPathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_folderPathMeta);
+    }
+    if (data.containsKey('updated_at_ms')) {
+      context.handle(
+        _updatedAtMsMeta,
+        updatedAtMs.isAcceptableOrUnknown(
+          data['updated_at_ms']!,
+          _updatedAtMsMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {anilistId, episode};
+  @override
+  SourceOverrideRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SourceOverrideRow(
+      anilistId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}anilist_id'],
+      )!,
+      episode: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode'],
+      )!,
+      folderPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}folder_path'],
+      )!,
+      updatedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $SourceOverridesTable createAlias(String alias) {
+    return $SourceOverridesTable(attachedDatabase, alias);
+  }
+}
+
+class SourceOverrideRow extends DataClass
+    implements Insertable<SourceOverrideRow> {
+  final int anilistId;
+  final int episode;
+  final String folderPath;
+  final int updatedAtMs;
+  const SourceOverrideRow({
+    required this.anilistId,
+    required this.episode,
+    required this.folderPath,
+    required this.updatedAtMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['anilist_id'] = Variable<int>(anilistId);
+    map['episode'] = Variable<int>(episode);
+    map['folder_path'] = Variable<String>(folderPath);
+    map['updated_at_ms'] = Variable<int>(updatedAtMs);
+    return map;
+  }
+
+  SourceOverridesCompanion toCompanion(bool nullToAbsent) {
+    return SourceOverridesCompanion(
+      anilistId: Value(anilistId),
+      episode: Value(episode),
+      folderPath: Value(folderPath),
+      updatedAtMs: Value(updatedAtMs),
+    );
+  }
+
+  factory SourceOverrideRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SourceOverrideRow(
+      anilistId: serializer.fromJson<int>(json['anilistId']),
+      episode: serializer.fromJson<int>(json['episode']),
+      folderPath: serializer.fromJson<String>(json['folderPath']),
+      updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'anilistId': serializer.toJson<int>(anilistId),
+      'episode': serializer.toJson<int>(episode),
+      'folderPath': serializer.toJson<String>(folderPath),
+      'updatedAtMs': serializer.toJson<int>(updatedAtMs),
+    };
+  }
+
+  SourceOverrideRow copyWith({
+    int? anilistId,
+    int? episode,
+    String? folderPath,
+    int? updatedAtMs,
+  }) => SourceOverrideRow(
+    anilistId: anilistId ?? this.anilistId,
+    episode: episode ?? this.episode,
+    folderPath: folderPath ?? this.folderPath,
+    updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+  );
+  SourceOverrideRow copyWithCompanion(SourceOverridesCompanion data) {
+    return SourceOverrideRow(
+      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      episode: data.episode.present ? data.episode.value : this.episode,
+      folderPath: data.folderPath.present
+          ? data.folderPath.value
+          : this.folderPath,
+      updatedAtMs: data.updatedAtMs.present
+          ? data.updatedAtMs.value
+          : this.updatedAtMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SourceOverrideRow(')
+          ..write('anilistId: $anilistId, ')
+          ..write('episode: $episode, ')
+          ..write('folderPath: $folderPath, ')
+          ..write('updatedAtMs: $updatedAtMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(anilistId, episode, folderPath, updatedAtMs);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SourceOverrideRow &&
+          other.anilistId == this.anilistId &&
+          other.episode == this.episode &&
+          other.folderPath == this.folderPath &&
+          other.updatedAtMs == this.updatedAtMs);
+}
+
+class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
+  final Value<int> anilistId;
+  final Value<int> episode;
+  final Value<String> folderPath;
+  final Value<int> updatedAtMs;
+  final Value<int> rowid;
+  const SourceOverridesCompanion({
+    this.anilistId = const Value.absent(),
+    this.episode = const Value.absent(),
+    this.folderPath = const Value.absent(),
+    this.updatedAtMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SourceOverridesCompanion.insert({
+    required int anilistId,
+    required int episode,
+    required String folderPath,
+    this.updatedAtMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : anilistId = Value(anilistId),
+       episode = Value(episode),
+       folderPath = Value(folderPath);
+  static Insertable<SourceOverrideRow> custom({
+    Expression<int>? anilistId,
+    Expression<int>? episode,
+    Expression<String>? folderPath,
+    Expression<int>? updatedAtMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (anilistId != null) 'anilist_id': anilistId,
+      if (episode != null) 'episode': episode,
+      if (folderPath != null) 'folder_path': folderPath,
+      if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SourceOverridesCompanion copyWith({
+    Value<int>? anilistId,
+    Value<int>? episode,
+    Value<String>? folderPath,
+    Value<int>? updatedAtMs,
+    Value<int>? rowid,
+  }) {
+    return SourceOverridesCompanion(
+      anilistId: anilistId ?? this.anilistId,
+      episode: episode ?? this.episode,
+      folderPath: folderPath ?? this.folderPath,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (anilistId.present) {
+      map['anilist_id'] = Variable<int>(anilistId.value);
+    }
+    if (episode.present) {
+      map['episode'] = Variable<int>(episode.value);
+    }
+    if (folderPath.present) {
+      map['folder_path'] = Variable<String>(folderPath.value);
+    }
+    if (updatedAtMs.present) {
+      map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SourceOverridesCompanion(')
+          ..write('anilistId: $anilistId, ')
+          ..write('episode: $episode, ')
+          ..write('folderPath: $folderPath, ')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AppSettingsTable extends AppSettings
     with TableInfo<$AppSettingsTable, AppSettingRow> {
   @override
@@ -2430,6 +2756,9 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
   late final $LibraryFoldersTable libraryFolders = $LibraryFoldersTable(this);
   late final $MatchOverridesTable matchOverrides = $MatchOverridesTable(this);
   late final $WatchStatesTable watchStates = $WatchStatesTable(this);
+  late final $SourceOverridesTable sourceOverrides = $SourceOverridesTable(
+    this,
+  );
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -2441,6 +2770,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     libraryFolders,
     matchOverrides,
     watchStates,
+    sourceOverrides,
     appSettings,
   ];
 }
@@ -3597,6 +3927,201 @@ typedef $$WatchStatesTableProcessedTableManager =
       WatchStateRow,
       PrefetchHooks Function()
     >;
+typedef $$SourceOverridesTableCreateCompanionBuilder =
+    SourceOverridesCompanion Function({
+      required int anilistId,
+      required int episode,
+      required String folderPath,
+      Value<int> updatedAtMs,
+      Value<int> rowid,
+    });
+typedef $$SourceOverridesTableUpdateCompanionBuilder =
+    SourceOverridesCompanion Function({
+      Value<int> anilistId,
+      Value<int> episode,
+      Value<String> folderPath,
+      Value<int> updatedAtMs,
+      Value<int> rowid,
+    });
+
+class $$SourceOverridesTableFilterComposer
+    extends Composer<_$CacheDatabase, $SourceOverridesTable> {
+  $$SourceOverridesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get episode => $composableBuilder(
+    column: $table.episode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get folderPath => $composableBuilder(
+    column: $table.folderPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SourceOverridesTableOrderingComposer
+    extends Composer<_$CacheDatabase, $SourceOverridesTable> {
+  $$SourceOverridesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get episode => $composableBuilder(
+    column: $table.episode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get folderPath => $composableBuilder(
+    column: $table.folderPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SourceOverridesTableAnnotationComposer
+    extends Composer<_$CacheDatabase, $SourceOverridesTable> {
+  $$SourceOverridesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get anilistId =>
+      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+
+  GeneratedColumn<int> get episode =>
+      $composableBuilder(column: $table.episode, builder: (column) => column);
+
+  GeneratedColumn<String> get folderPath => $composableBuilder(
+    column: $table.folderPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get updatedAtMs => $composableBuilder(
+    column: $table.updatedAtMs,
+    builder: (column) => column,
+  );
+}
+
+class $$SourceOverridesTableTableManager
+    extends
+        RootTableManager<
+          _$CacheDatabase,
+          $SourceOverridesTable,
+          SourceOverrideRow,
+          $$SourceOverridesTableFilterComposer,
+          $$SourceOverridesTableOrderingComposer,
+          $$SourceOverridesTableAnnotationComposer,
+          $$SourceOverridesTableCreateCompanionBuilder,
+          $$SourceOverridesTableUpdateCompanionBuilder,
+          (
+            SourceOverrideRow,
+            BaseReferences<
+              _$CacheDatabase,
+              $SourceOverridesTable,
+              SourceOverrideRow
+            >,
+          ),
+          SourceOverrideRow,
+          PrefetchHooks Function()
+        > {
+  $$SourceOverridesTableTableManager(
+    _$CacheDatabase db,
+    $SourceOverridesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SourceOverridesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SourceOverridesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SourceOverridesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> anilistId = const Value.absent(),
+                Value<int> episode = const Value.absent(),
+                Value<String> folderPath = const Value.absent(),
+                Value<int> updatedAtMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SourceOverridesCompanion(
+                anilistId: anilistId,
+                episode: episode,
+                folderPath: folderPath,
+                updatedAtMs: updatedAtMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int anilistId,
+                required int episode,
+                required String folderPath,
+                Value<int> updatedAtMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SourceOverridesCompanion.insert(
+                anilistId: anilistId,
+                episode: episode,
+                folderPath: folderPath,
+                updatedAtMs: updatedAtMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SourceOverridesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$CacheDatabase,
+      $SourceOverridesTable,
+      SourceOverrideRow,
+      $$SourceOverridesTableFilterComposer,
+      $$SourceOverridesTableOrderingComposer,
+      $$SourceOverridesTableAnnotationComposer,
+      $$SourceOverridesTableCreateCompanionBuilder,
+      $$SourceOverridesTableUpdateCompanionBuilder,
+      (
+        SourceOverrideRow,
+        BaseReferences<
+          _$CacheDatabase,
+          $SourceOverridesTable,
+          SourceOverrideRow
+        >,
+      ),
+      SourceOverrideRow,
+      PrefetchHooks Function()
+    >;
 typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
       required String key,
@@ -3750,6 +4275,8 @@ class $CacheDatabaseManager {
       $$MatchOverridesTableTableManager(_db, _db.matchOverrides);
   $$WatchStatesTableTableManager get watchStates =>
       $$WatchStatesTableTableManager(_db, _db.watchStates);
+  $$SourceOverridesTableTableManager get sourceOverrides =>
+      $$SourceOverridesTableTableManager(_db, _db.sourceOverrides);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
 }

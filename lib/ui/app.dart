@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'library_screen.dart';
 
@@ -18,6 +19,7 @@ class AniLocalApp extends StatelessWidget {
     required this.repository,
     required this.fixMatch,
     required this.watchState,
+    required this.sourceSelection,
     required this.onScan,
     required this.onAddFolder,
     required this.accessIssues,
@@ -29,6 +31,7 @@ class AniLocalApp extends StatelessWidget {
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
   final WatchStateRepository watchState;
+  final SourceSelectionRepository sourceSelection;
   final Future<SyncSummary> Function() onScan;
   final Future<bool> Function() loadContinueCollapsed;
   final Future<void> Function(bool collapsed) setContinueCollapsed;
@@ -54,6 +57,7 @@ class AniLocalApp extends StatelessWidget {
         repository: repository,
         fixMatch: fixMatch,
         watchState: watchState,
+        sourceSelection: sourceSelection,
         onScan: onScan,
         onAddFolder: onAddFolder,
         accessIssues: accessIssues,

@@ -8,6 +8,7 @@ import '../domain/models/series.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'access_recovery.dart';
 import 'continue_watching_row.dart';
@@ -25,6 +26,7 @@ class LibraryScreen extends StatefulWidget {
     required this.repository,
     required this.fixMatch,
     required this.watchState,
+    required this.sourceSelection,
     required this.onScan,
     required this.onAddFolder,
     required this.accessIssues,
@@ -36,6 +38,7 @@ class LibraryScreen extends StatefulWidget {
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
   final WatchStateRepository watchState;
+  final SourceSelectionRepository sourceSelection;
   final Future<SyncSummary> Function() onScan;
 
   /// Load/persist the collapsed state of the "Continue watching" section.
@@ -268,6 +271,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     repository: widget.repository,
                     fixMatch: widget.fixMatch,
                     watchState: widget.watchState,
+                    sourceSelection: widget.sourceSelection,
                     onReturn: _reload,
                   ),
                 );
@@ -316,6 +320,7 @@ class _SeriesCard extends StatelessWidget {
     required this.repository,
     required this.fixMatch,
     required this.watchState,
+    required this.sourceSelection,
     required this.onReturn,
   });
 
@@ -323,6 +328,7 @@ class _SeriesCard extends StatelessWidget {
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
   final WatchStateRepository watchState;
+  final SourceSelectionRepository sourceSelection;
   final VoidCallback onReturn;
 
   @override
@@ -342,6 +348,7 @@ class _SeriesCard extends StatelessWidget {
               repository: repository,
               fixMatch: fixMatch,
               watchState: watchState,
+              sourceSelection: sourceSelection,
             ),
           ),
         );
