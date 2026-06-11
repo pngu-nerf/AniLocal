@@ -8,6 +8,7 @@ import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
+import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
 import 'player_screen.dart';
@@ -22,6 +23,8 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.fixMatch,
     required this.watchState,
     required this.sourceSelection,
+    required this.watchOrder,
+    required this.loadAutoPlayNext,
   });
 
   final Series series;
@@ -29,6 +32,8 @@ class SeriesDetailScreen extends StatefulWidget {
   final FixMatchRepository fixMatch;
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
+  final WatchOrderRepository watchOrder;
+  final Future<bool> Function() loadAutoPlayNext;
 
   @override
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
@@ -36,6 +41,7 @@ class SeriesDetailScreen extends StatefulWidget {
 
 class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   late Future<List<Episode>> _episodes;
+  Episode? _next; // next episode to watch for this series (relations-aware)
 
   @override
   void initState() {
@@ -46,6 +52,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   void _reload() {
     setState(() {
       _episodes = widget.repository.episodesFor(widget.series.anilistId);
+    });
+    widget.watchOrder.upNextBySeries().then((m) {
+      if (mounted) setState(() => _next = m[widget.series.anilistId]);
     });
   }
 
@@ -58,10 +67,15 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Future<void> _play(Episode e) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PlayerScreen(episode: e, watchState: widget.watchState),
+        builder: (_) => PlayerScreen(
+          episode: e,
+          watchState: widget.watchState,
+          watchOrder: widget.watchOrder,
+          autoPlayEnabled: widget.loadAutoPlayNext,
+        ),
       ),
     );
-    _reload(); // reflect updated watched / resume position
+    _reload(); // reflect updated watched / resume position / up-next
   }
 
   static String _fmt(Duration d) {
@@ -285,7 +299,21 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              if (_next != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: () => _play(_next!),
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text(
+                      _next!.seriesAnilistId == series.anilistId
+                          ? 'Play next: Episode ${_next!.number}'
+                          : 'Play next: Episode ${_next!.number} (sequel)',
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
               Text(
                 'Episodes (in library)',
                 style: Theme.of(context).textTheme.titleMedium,

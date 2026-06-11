@@ -4,9 +4,11 @@ import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/sync_summary.dart';
+import 'package:anilocal/domain/models/next_result.dart';
 import 'package:anilocal/domain/repositories/fix_match_repository.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
 import 'package:anilocal/domain/repositories/source_selection_repository.dart';
+import 'package:anilocal/domain/repositories/watch_order_repository.dart';
 import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/foundation.dart';
@@ -27,7 +29,8 @@ class _MutableRepo
     implements
         LibraryRepository,
         WatchStateRepository,
-        SourceSelectionRepository {
+        SourceSelectionRepository,
+        WatchOrderRepository {
   _MutableRepo(this.folders);
   List<String> folders;
 
@@ -72,6 +75,12 @@ class _MutableRepo
   }) async {}
   @override
   Future<void> clearSource(Episode episode) async {}
+
+  @override
+  Future<NextResult> nextEpisode(Episode current) async =>
+      const NoNextEpisode();
+  @override
+  Future<Map<int, Episode>> upNextBySeries() async => const {};
 }
 
 class _FakeFixMatch implements FixMatchRepository {
@@ -110,6 +119,7 @@ void main() {
         fixMatch: _FakeFixMatch(),
         watchState: repo,
         sourceSelection: repo,
+        watchOrder: repo,
         onScan: () async {
           scans++;
           return _emptySummary;
@@ -119,6 +129,8 @@ void main() {
         onOpenAccessSettings: () async => true,
         loadContinueCollapsed: () async => false,
         setContinueCollapsed: (_) async {},
+        loadAutoPlayNext: () async => true,
+        setAutoPlayNext: (_) async {},
       ),
     );
     await tester.pumpAndSettle();

@@ -175,6 +175,13 @@ class CacheDatabase extends _$CacheDatabase {
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
   // v5 watch_state; v6 app_settings; v7 source_overrides.
+  //
+  // NEXT real migration REUSES v8. v8 was scratch on an unshipped branch
+  // (series_relations, the "Up Next" overshoot) and was reverted; it never
+  // reached main, and drift normalized the one dev cache that touched it back
+  // to user_version 7 — so no DB sits at 8 and the number is free to reclaim.
+  // (If that future migration recreates series_relations, use CREATE TABLE IF
+  // NOT EXISTS, in case a backup-restored cache still carries the orphan table.)
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),

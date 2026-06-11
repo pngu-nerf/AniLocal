@@ -4,11 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../domain/models/continue_watching.dart';
+import '../domain/models/episode.dart';
 import '../domain/models/series.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
+import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'access_recovery.dart';
 import 'continue_watching_row.dart';
@@ -27,23 +29,31 @@ class LibraryScreen extends StatefulWidget {
     required this.fixMatch,
     required this.watchState,
     required this.sourceSelection,
+    required this.watchOrder,
     required this.onScan,
     required this.onAddFolder,
     required this.accessIssues,
     required this.onOpenAccessSettings,
     required this.loadContinueCollapsed,
     required this.setContinueCollapsed,
+    required this.loadAutoPlayNext,
+    required this.setAutoPlayNext,
   });
 
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
+  final WatchOrderRepository watchOrder;
   final Future<SyncSummary> Function() onScan;
 
   /// Load/persist the collapsed state of the "Continue watching" section.
   final Future<bool> Function() loadContinueCollapsed;
   final Future<void> Function(bool collapsed) setContinueCollapsed;
+
+  /// Auto-play-next setting (persisted); read by the player, toggled here.
+  final Future<bool> Function() loadAutoPlayNext;
+  final Future<void> Function(bool enabled) setAutoPlayNext;
 
   /// Opens the native folder picker; reports whether a folder was added and the
   /// denied TCC category label (if the folder's category access was refused).
@@ -61,6 +71,9 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   late Future<List<Series>> _series;
   late Future<List<ContinueWatching>> _continue;
+  // anilistId -> the next episode to watch (relations-aware). Loaded async;
+  // cards show their "Next" affordance once it arrives.
+  Map<int, Episode> _upNext = {};
   bool _scanning = false;
   bool _continueCollapsed = false;
 
@@ -88,16 +101,58 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _series = widget.repository.allSeries();
       _continue = widget.watchState.continueWatching();
     });
+    // "Up Next" per series — resolved off the cache; updates the grid when ready.
+    widget.watchOrder.upNextBySeries().then((m) {
+      if (mounted) setState(() => _upNext = m);
+    });
   }
 
-  Future<void> _playFromContinue(ContinueWatching entry) async {
+  Future<void> _play(Episode episode) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            PlayerScreen(episode: entry.episode, watchState: widget.watchState),
+        builder: (_) => PlayerScreen(
+          episode: episode,
+          watchState: widget.watchState,
+          watchOrder: widget.watchOrder,
+          autoPlayEnabled: widget.loadAutoPlayNext,
+        ),
       ),
     );
-    _reload(); // progress/watched may have changed
+    _reload(); // progress/watched/up-next may have changed
+  }
+
+  Future<void> _playFromContinue(ContinueWatching entry) =>
+      _play(entry.episode);
+
+  Future<void> _openAutoPlaySetting() async {
+    var enabled = await widget.loadAutoPlayNext();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Settings'),
+        content: StatefulBuilder(
+          builder: (context, setLocal) => SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Auto-play next episode'),
+            subtitle: const Text(
+              'When an episode ends, play the next one (crosses seasons).',
+            ),
+            value: enabled,
+            onChanged: (v) {
+              setLocal(() => enabled = v);
+              widget.setAutoPlayNext(v);
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<Set<String>> _folderPaths() async =>
@@ -217,6 +272,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
               tooltip: 'Scan / refresh',
               onPressed: _scan,
             ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: _openAutoPlaySetting,
+          ),
         ],
       ),
       body: Column(
@@ -276,6 +336,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     fixMatch: widget.fixMatch,
                     watchState: widget.watchState,
                     sourceSelection: widget.sourceSelection,
+                    watchOrder: widget.watchOrder,
+                    nextEpisode: _upNext[series[i].anilistId],
+                    onPlay: _play,
+                    loadAutoPlayNext: widget.loadAutoPlayNext,
                     onReturn: _reload,
                   ),
                 );
@@ -325,6 +389,10 @@ class _SeriesCard extends StatelessWidget {
     required this.fixMatch,
     required this.watchState,
     required this.sourceSelection,
+    required this.watchOrder,
+    required this.nextEpisode,
+    required this.onPlay,
+    required this.loadAutoPlayNext,
     required this.onReturn,
   });
 
@@ -333,6 +401,13 @@ class _SeriesCard extends StatelessWidget {
   final FixMatchRepository fixMatch;
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
+  final WatchOrderRepository watchOrder;
+
+  /// The next episode to watch for this series (relations-aware), or null when
+  /// the series isn't started / has nothing next. Drives the "Next" button.
+  final Episode? nextEpisode;
+  final Future<void> Function(Episode) onPlay;
+  final Future<bool> Function() loadAutoPlayNext;
   final VoidCallback onReturn;
 
   @override
@@ -353,10 +428,12 @@ class _SeriesCard extends StatelessWidget {
               fixMatch: fixMatch,
               watchState: watchState,
               sourceSelection: sourceSelection,
+              watchOrder: watchOrder,
+              loadAutoPlayNext: loadAutoPlayNext,
             ),
           ),
         );
-        onReturn(); // continue-watching may have changed
+        onReturn(); // continue-watching / up-next may have changed
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -394,6 +471,24 @@ class _SeriesCard extends StatelessWidget {
             ].join(' · '),
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (nextEpisode != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () async {
+                  await onPlay(nextEpisode!);
+                  onReturn();
+                },
+                icon: const Icon(Icons.play_circle_outline, size: 16),
+                label: Text('Next: Ep ${nextEpisode!.number}'),
+              ),
+            ),
         ],
       ),
     );

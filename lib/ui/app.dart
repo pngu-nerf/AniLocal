@@ -5,6 +5,7 @@ import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
+import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'library_screen.dart';
 
@@ -20,21 +21,30 @@ class AniLocalApp extends StatelessWidget {
     required this.fixMatch,
     required this.watchState,
     required this.sourceSelection,
+    required this.watchOrder,
     required this.onScan,
     required this.onAddFolder,
     required this.accessIssues,
     required this.onOpenAccessSettings,
     required this.loadContinueCollapsed,
     required this.setContinueCollapsed,
+    required this.loadAutoPlayNext,
+    required this.setAutoPlayNext,
   });
 
   final LibraryRepository repository;
   final FixMatchRepository fixMatch;
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
+  final WatchOrderRepository watchOrder;
   final Future<SyncSummary> Function() onScan;
   final Future<bool> Function() loadContinueCollapsed;
   final Future<void> Function(bool collapsed) setContinueCollapsed;
+
+  /// Auto-play-next setting (persisted); read by the player on episode end.
+  final Future<bool> Function() loadAutoPlayNext;
+  final Future<void> Function(bool enabled) setAutoPlayNext;
+
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 
   /// Denied TCC category labels — shared by the add-dialog and the banner.
@@ -58,12 +68,15 @@ class AniLocalApp extends StatelessWidget {
         fixMatch: fixMatch,
         watchState: watchState,
         sourceSelection: sourceSelection,
+        watchOrder: watchOrder,
         onScan: onScan,
         onAddFolder: onAddFolder,
         accessIssues: accessIssues,
         onOpenAccessSettings: onOpenAccessSettings,
         loadContinueCollapsed: loadContinueCollapsed,
         setContinueCollapsed: setContinueCollapsed,
+        loadAutoPlayNext: loadAutoPlayNext,
+        setAutoPlayNext: setAutoPlayNext,
       ),
     );
   }

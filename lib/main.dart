@@ -94,15 +94,18 @@ void main() {
   }
 
   const continueCollapsedKey = 'continue_watching_collapsed';
+  const autoPlayNextKey = 'autoplay_next';
 
   runApp(
     AniLocalApp(
       repository: repository,
       fixMatch: fixMatch,
       // DriftLibraryRepository implements WatchStateRepository +
-      // SourceSelectionRepository too (read + per-episode-identity writes).
+      // SourceSelectionRepository + WatchOrderRepository too (read + the
+      // per-episode-identity writes).
       watchState: repository,
       sourceSelection: repository,
+      watchOrder: repository,
       onScan: scan,
       onAddFolder: addFolder,
       accessIssues: accessIssues,
@@ -111,6 +114,11 @@ void main() {
           await database.getSetting(continueCollapsedKey) == 'true',
       setContinueCollapsed: (collapsed) =>
           database.setSetting(continueCollapsedKey, '$collapsed'),
+      // Auto-play next defaults ON: only an explicit 'false' disables it.
+      loadAutoPlayNext: () async =>
+          await database.getSetting(autoPlayNextKey) != 'false',
+      setAutoPlayNext: (enabled) =>
+          database.setSetting(autoPlayNextKey, '$enabled'),
     ),
   );
 }

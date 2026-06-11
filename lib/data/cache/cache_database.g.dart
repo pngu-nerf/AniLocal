@@ -1183,10 +1183,9 @@ class LibraryFolderRow extends DataClass
   final String path;
   final int addedAtMs;
 
-  /// User-controllable rank (lower = higher priority). Stored so the order is
-  /// stable across relaunch and expresses "A ranks above B" — a near-future
-  /// feature (multi-source episodes) makes this order semantically meaningful
-  /// (top = default playback source). No reorder UI / priority meaning yet.
+  /// User-controllable rank (lower = higher priority). Drives multi-source
+  /// priority: top = preferred default playback source. Set by drag-to-reorder
+  /// in the folders screen (see [reorderFolders]); stable across relaunch.
   final int sortOrder;
   const LibraryFolderRow({
     required this.path,

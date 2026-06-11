@@ -2,11 +2,13 @@ import '../../domain/models/continue_watching.dart';
 import '../../domain/models/episode.dart';
 import '../../domain/models/episode_source.dart';
 import '../../domain/models/identified_episode.dart';
+import '../../domain/models/next_result.dart';
 import '../../domain/models/library_folder.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/titles.dart';
 import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/source_selection_repository.dart';
+import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
 import 'cache_database.dart';
 
@@ -61,7 +63,8 @@ class DriftLibraryRepository
     implements
         LibraryRepository,
         WatchStateRepository,
-        SourceSelectionRepository {
+        SourceSelectionRepository,
+        WatchOrderRepository {
   DriftLibraryRepository(this._db);
 
   final CacheDatabase _db;
@@ -332,6 +335,67 @@ class DriftLibraryRepository
   @override
   Future<void> clearSource(Episode episode) =>
       _db.deleteSourceOverride(episode.seriesAnilistId, episode.anchoredNumber);
+
+  // --- Watch order ("Up Next"). The SINGLE source of "what's next" — every
+  //     caller (player auto-advance, library "Next: Ep N") routes through here.
+  //
+  //     WITHIN-SEASON only today: the next anchored episode in the same series,
+  //     else [NoNextEpisode]. That NoNextEpisode at a season boundary is the
+  //     correct end-of-season answer now AND the deliberate seam where
+  //     cross-season slots in later (follow the AniList SEQUEL relation at
+  //     exactly this point) — one function changes, no caller does. ---
+
+  @override
+  Future<NextResult> nextEpisode(Episode current) async {
+    final logical = await _logicalEpisodes();
+    final next = _resolveNext(
+      current.seriesAnilistId,
+      current.anchoredNumber,
+      logical,
+    );
+    if (next == null) return const NoNextEpisode();
+    final w = await _db.watchStateFor(next.anilistId, next.anchored);
+    return NextEpisode(_toEpisode(next, w));
+  }
+
+  @override
+  Future<Map<int, Episode>> upNextBySeries() async {
+    final logical = await _logicalEpisodes();
+    final watch = {
+      for (final w in await _db.allWatchStateRows())
+        (w.anilistId, w.episode): w,
+    };
+
+    // Furthest WATCHED anchored position per series the user has started.
+    final latestWatched = <int, int>{};
+    for (final w in watch.values) {
+      if (!w.watched) continue;
+      final cur = latestWatched[w.anilistId];
+      if (cur == null || w.episode > cur) {
+        latestWatched[w.anilistId] = w.episode;
+      }
+    }
+
+    final result = <int, Episode>{};
+    latestWatched.forEach((anilistId, anchored) {
+      // Same resolver as nextEpisode — within-season next.
+      final next = _resolveNext(anilistId, anchored, logical);
+      if (next == null) return; // NoNextEpisode -> caught up, show nothing
+      final w = watch[(next.anilistId, next.anchored)];
+      if (w?.watched ?? false) return; // already watched -> nothing "next"
+      result[anilistId] = _toEpisode(next, w);
+    });
+    return result;
+  }
+
+  /// The logical episode after (anilistId, anchored) WITHIN the same series, or
+  /// null at the season boundary (the series' last in-library episode). The
+  /// null is the seam where cross-season will later follow the SEQUEL relation.
+  _Logical? _resolveNext(
+    int anilistId,
+    int anchored,
+    Map<(int, int), _Logical> logical,
+  ) => logical[(anilistId, anchored + 1)];
 
   Episode _toEpisode(_Logical l, WatchStateRow? w) => Episode(
     number: l.displayNumber ?? 0,
