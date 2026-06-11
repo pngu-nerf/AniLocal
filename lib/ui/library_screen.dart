@@ -20,6 +20,13 @@ import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import 'unmatched_screen.dart';
 
+/// A show is "unavailable" iff it has source folders AND every one of them is
+/// currently missing — a single connected source keeps a multi-source show
+/// playable, so it stays un-greyed. Pure (UI-layer) so it's unit-testable.
+@visibleForTesting
+bool seriesUnavailable(Set<String> sourceFolders, Set<String> missingFolders) =>
+    sourceFolders.isNotEmpty && sourceFolders.every(missingFolders.contains);
+
 /// Stage 4/5 home: browse the cached library. Reads ONLY from the repository
 /// (cache) — instant and offline. Scan (fill path) and add-folder (native
 /// picker) are injected callbacks; the UI never imports sync/cache/picker types.
@@ -36,6 +43,7 @@ class LibraryScreen extends StatefulWidget {
     required this.onAddFolder,
     required this.accessIssues,
     required this.missingFolders,
+    required this.missingFolderPaths,
     required this.onOpenAccessSettings,
     required this.loadContinueCollapsed,
     required this.setContinueCollapsed,
@@ -81,6 +89,10 @@ class LibraryScreen extends StatefulWidget {
   /// reconnect banner, distinct from the permission [accessIssues].
   final ValueListenable<List<String>> missingFolders;
 
+  /// Paths of those missing folders — used to grey out shows whose only
+  /// sources live there.
+  final ValueListenable<Set<String>> missingFolderPaths;
+
   final Future<bool> Function() onOpenAccessSettings;
 
   @override
@@ -93,6 +105,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   // anilistId -> the next episode to watch (relations-aware). Loaded async;
   // cards show their "Next" affordance once it arrives.
   Map<int, Episode> _upNext = {};
+  // anilistId -> the set of library folders its sources live under. Greying is
+  // a pure function of this + the live missing-folder set (recomputed in the
+  // grid's ValueListenableBuilder, so toggling missing state needs no re-fetch).
+  Map<int, Set<String>> _sourceFoldersBySeries = {};
   bool _scanning = false;
   bool _continueCollapsed = false;
 
@@ -124,6 +140,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
     widget.watchOrder.upNextBySeries().then((m) {
       if (mounted) setState(() => _upNext = m);
     });
+    _loadSourceFolders();
+  }
+
+  /// Map each series to the library folders its sources occupy (for greying).
+  /// Reads existing domain state only (episodesFor → sources); a show is later
+  /// "unavailable" iff every one of these folders is currently missing.
+  Future<void> _loadSourceFolders() async {
+    final series = await _series;
+    final map = <int, Set<String>>{};
+    for (final s in series) {
+      final eps = await widget.repository.episodesFor(s.anilistId);
+      map[s.anilistId] = {
+        for (final e in eps)
+          for (final src in e.sources) src.folderPath,
+      };
+    }
+    if (mounted) setState(() => _sourceFoldersBySeries = map);
   }
 
   Future<void> _play(Episode episode) async {
@@ -422,27 +455,40 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     onAddFolder: _addFolder,
                   );
                 }
-                return GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 200,
-                    childAspectRatio: 0.62,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: series.length,
-                  itemBuilder: (_, i) => _SeriesCard(
-                    series: series[i],
-                    repository: widget.repository,
-                    fixMatch: widget.fixMatch,
-                    watchState: widget.watchState,
-                    sourceSelection: widget.sourceSelection,
-                    watchOrder: widget.watchOrder,
-                    nextEpisode: _upNext[series[i].anilistId],
-                    onPlay: _play,
-                    loadAutoPlayNext: widget.loadAutoPlayNext,
-                    loadSkipMode: widget.loadSkipMode,
-                    onReturn: _reload,
+                // Greying re-evaluates live with the missing-folder set, using
+                // the cached per-series folder map (no re-fetch on toggle).
+                return ValueListenableBuilder<Set<String>>(
+                  valueListenable: widget.missingFolderPaths,
+                  builder: (context, missing, _) => GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 200,
+                          childAspectRatio: 0.62,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                    itemCount: series.length,
+                    itemBuilder: (_, i) {
+                      final folders =
+                          _sourceFoldersBySeries[series[i].anilistId] ??
+                          const <String>{};
+                      final unavailable = seriesUnavailable(folders, missing);
+                      return _SeriesCard(
+                        series: series[i],
+                        repository: widget.repository,
+                        fixMatch: widget.fixMatch,
+                        watchState: widget.watchState,
+                        sourceSelection: widget.sourceSelection,
+                        watchOrder: widget.watchOrder,
+                        nextEpisode: _upNext[series[i].anilistId],
+                        unavailable: unavailable,
+                        onPlay: _play,
+                        loadAutoPlayNext: widget.loadAutoPlayNext,
+                        loadSkipMode: widget.loadSkipMode,
+                        onReturn: _reload,
+                      );
+                    },
                   ),
                 );
               },
@@ -493,6 +539,7 @@ class _SeriesCard extends StatelessWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.nextEpisode,
+    required this.unavailable,
     required this.onPlay,
     required this.loadAutoPlayNext,
     required this.loadSkipMode,
@@ -509,6 +556,11 @@ class _SeriesCard extends StatelessWidget {
   /// The next episode to watch for this series (relations-aware), or null when
   /// the series isn't started / has nothing next. Drives the "Next" button.
   final Episode? nextEpisode;
+
+  /// True when every source folder of this show is currently missing (offline
+  /// drive/NAS): dimmed + marked, and a tap shows a reconnect hint rather than
+  /// opening it. Still listed in place (cached art/metadata shown).
+  final bool unavailable;
   final Future<void> Function(Episode) onPlay;
   final Future<bool> Function() loadAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
@@ -522,79 +574,112 @@ class _SeriesCard extends StatelessWidget {
         series.titles.native ??
         '#${series.anilistId}';
     final art = series.coverImageRef;
-    return InkWell(
-      onTap: () async {
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => SeriesDetailScreen(
-              series: series,
-              repository: repository,
-              fixMatch: fixMatch,
-              watchState: watchState,
-              sourceSelection: sourceSelection,
-              watchOrder: watchOrder,
-              loadAutoPlayNext: loadAutoPlayNext,
-              loadSkipMode: loadSkipMode,
-            ),
-          ),
-        );
-        onReturn(); // continue-watching / up-next may have changed
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: (art != null && File(art).existsSync())
-                  ? Image.file(
-                      File(art),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                    )
-                  : Container(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      child: const Center(
-                        child: Icon(Icons.image_not_supported),
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          Text(
-            [
-              if (series.format != null) series.format,
-              if (series.episodeCount != null) '${series.episodeCount} ep',
-            ].join(' · '),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (nextEpisode != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
+    // Dimmed + marked when the show's only sources are on an offline folder.
+    return Opacity(
+      opacity: unavailable ? 0.5 : 1,
+      child: InkWell(
+        onTap: () async {
+          if (unavailable) {
+            // Fail gracefully with a reconnect hint (consistent with the
+            // banner) — don't open into a screen that can't play anything.
+            ScaffoldMessenger.of(context)
+              ..clearSnackBars()
+              ..showSnackBar(
+                SnackBar(
+                  content: Text(
+                    "$title isn't connected. Reconnect its drive, then rescan.",
+                  ),
                 ),
-                onPressed: () async {
-                  await onPlay(nextEpisode!);
-                  onReturn();
-                },
-                icon: const Icon(Icons.play_circle_outline, size: 16),
-                label: Text('Next: Ep ${nextEpisode!.number}'),
+              );
+            return;
+          }
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => SeriesDetailScreen(
+                series: series,
+                repository: repository,
+                fixMatch: fixMatch,
+                watchState: watchState,
+                sourceSelection: sourceSelection,
+                watchOrder: watchOrder,
+                loadAutoPlayNext: loadAutoPlayNext,
+                loadSkipMode: loadSkipMode,
               ),
             ),
-        ],
+          );
+          onReturn(); // continue-watching / up-next may have changed
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (art != null && File(art).existsSync())
+                      Image.file(File(art), fit: BoxFit.cover)
+                    else
+                      Container(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        child: const Center(
+                          child: Icon(Icons.image_not_supported),
+                        ),
+                      ),
+                    if (unavailable)
+                      Container(
+                        color: Colors.black45,
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.link_off,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              unavailable
+                  ? 'Unavailable — not connected'
+                  : [
+                      if (series.format != null) series.format,
+                      if (series.episodeCount != null)
+                        '${series.episodeCount} ep',
+                    ].join(' · '),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (nextEpisode != null && !unavailable)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: () async {
+                    await onPlay(nextEpisode!);
+                    onReturn();
+                  },
+                  icon: const Icon(Icons.play_circle_outline, size: 16),
+                  label: Text('Next: Ep ${nextEpisode!.number}'),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

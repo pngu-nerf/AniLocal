@@ -28,6 +28,7 @@ class AniLocalApp extends StatelessWidget {
     required this.onAddFolder,
     required this.accessIssues,
     required this.missingFolders,
+    required this.missingFolderPaths,
     required this.onOpenAccessSettings,
     required this.loadContinueCollapsed,
     required this.setContinueCollapsed,
@@ -68,6 +69,10 @@ class AniLocalApp extends StatelessWidget {
   /// offline NAS) — drives the reconnect banner, NOT the Settings flow.
   final ValueListenable<List<String>> missingFolders;
 
+  /// PATHS of those missing folders — lets the grid grey out shows whose only
+  /// sources live there. Same detection as [missingFolders], different shape.
+  final ValueListenable<Set<String>> missingFolderPaths;
+
   /// Opens the privacy settings pane (best-effort); the message always also
   /// shows the written path, so a stale link never strands the user.
   final Future<bool> Function() onOpenAccessSettings;
@@ -92,6 +97,7 @@ class AniLocalApp extends StatelessWidget {
         onAddFolder: onAddFolder,
         accessIssues: accessIssues,
         missingFolders: missingFolders,
+        missingFolderPaths: missingFolderPaths,
         onOpenAccessSettings: onOpenAccessSettings,
         loadContinueCollapsed: loadContinueCollapsed,
         setContinueCollapsed: setContinueCollapsed,

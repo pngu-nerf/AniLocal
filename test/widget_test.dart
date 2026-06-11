@@ -131,6 +131,7 @@ void main() {
         onAddFolder: () async => (added: false, deniedLabel: null),
         accessIssues: ValueNotifier<List<String>>(const []),
         missingFolders: ValueNotifier<List<String>>(const []),
+        missingFolderPaths: ValueNotifier<Set<String>>(const {}),
         onOpenAccessSettings: () async => true,
         loadContinueCollapsed: () async => false,
         setContinueCollapsed: (_) async {},

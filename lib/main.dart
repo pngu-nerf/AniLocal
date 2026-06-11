@@ -67,6 +67,10 @@ void main() {
   // truth so the add-dialog and the ambient banners can't disagree.
   final accessIssues = ValueNotifier<List<String>>(const []);
   final missingFolders = ValueNotifier<List<String>>(const []);
+  // Missing folder PATHS (vs the human labels above): lets the library grey
+  // out shows sourced only from these. Populated by [scan] from the same
+  // ensureAccess results that drive the reconnect banner.
+  final missingFolderPaths = ValueNotifier<Set<String>>(const {});
   void applyAccess(FolderAccessResult r) {
     final label = r.categoryLabel;
     if (label == null) return; // not a TCC category / volume
@@ -99,9 +103,17 @@ void main() {
     final folders = await repository.watchedFolders();
     // Confirm/upgrade folder-wide access per category (additive — does NOT gate
     // the scan; the scanner still reads each folder via whatever grant it has).
+    // Same pass also records which folder PATHS are currently missing, so the
+    // UI can grey out shows whose only sources live there (reuses these results,
+    // not a second check). Replaced wholesale each scan, so replugged folders
+    // clear automatically.
+    final missingPaths = <String>{};
     for (final f in folders) {
-      applyAccess(await folderAccess.ensureAccess(f.path));
+      final result = await folderAccess.ensureAccess(f.path);
+      applyAccess(result);
+      if (result.isMissing) missingPaths.add(f.path);
     }
+    missingFolderPaths.value = missingPaths;
     return sync.sync([for (final f in folders) f.path]);
   }
 
@@ -124,6 +136,7 @@ void main() {
       onAddFolder: addFolder,
       accessIssues: accessIssues,
       missingFolders: missingFolders,
+      missingFolderPaths: missingFolderPaths,
       onOpenAccessSettings: openPrivacyFilesAndFoldersSettings,
       loadContinueCollapsed: () async =>
           await database.getSetting(continueCollapsedKey) == 'true',
