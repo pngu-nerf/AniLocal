@@ -36,6 +36,14 @@ class TccFolderAccess implements FolderAccess {
       _confirmed.add(cat.root);
       return FolderAccessResult.granted(cat.label);
     } on FileSystemException {
+      // The read failed — but WHY matters. A missing mount (unplugged drive,
+      // offline NAS) is "no such directory", NOT a permission denial: the
+      // category root simply doesn't exist. Branch on which actually occurred
+      // rather than treating every failure as access-denied. (A genuine TCC
+      // denial leaves the well-known dir in place, so it still exists.)
+      if (!Directory(cat.root).existsSync()) {
+        return FolderAccessResult.missing(cat.label);
+      }
       return FolderAccessResult.denied(cat.label);
     }
   }

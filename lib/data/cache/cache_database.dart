@@ -8,6 +8,11 @@ part 'cache_database.g.dart';
 @DataClassName('CachedSeriesRow')
 class SeriesCache extends Table {
   IntColumn get anilistId => integer()();
+
+  /// MyAnimeList id (AniList `idMal`) — the key AniSkip needs. Nullable: not
+  /// every entry has a MAL mapping, and pre-v8 rows backfill on re-fetch.
+  IntColumn get idMal => integer().nullable()();
+
   TextColumn get romaji => text().nullable()();
   TextColumn get english => text().nullable()();
   TextColumn get nativeTitle => text().nullable()();
@@ -141,6 +146,29 @@ class SourceOverrides extends Table {
   String get tableName => 'source_overrides';
 }
 
+/// Cached OP/ED skip windows (the auto-skip feature). Fetched from AniSkip at
+/// scan time and read OFFLINE during playback — the player never hits the
+/// network. Keyed by EPISODE IDENTITY ([anilistId] + the anchored [episode]
+/// position), consistent with watch_state / source_overrides. A row exists only
+/// when AniSkip had data; absence = no skip affordance (partial coverage is
+/// normal). Either window may be null (intro-only or outro-only). Times are ms
+/// from the start of the file.
+@DataClassName('SkipSegmentRow')
+class SkipSegments extends Table {
+  IntColumn get anilistId => integer()();
+  IntColumn get episode => integer()();
+  IntColumn get introStartMs => integer().nullable()();
+  IntColumn get introEndMs => integer().nullable()();
+  IntColumn get outroStartMs => integer().nullable()();
+  IntColumn get outroEndMs => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {anilistId, episode};
+
+  @override
+  String get tableName => 'skip_segments';
+}
+
 /// App preferences (key/value). NOT part of the AniList projection — a small
 /// local store for UI choices like the collapsed "Continue watching" section.
 @DataClassName('AppSettingRow')
@@ -163,6 +191,7 @@ class AppSettings extends Table {
     MatchOverrides,
     WatchStates,
     SourceOverrides,
+    SkipSegments,
     AppSettings,
   ],
 )
@@ -170,18 +199,18 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
-  // v5 watch_state; v6 app_settings; v7 source_overrides.
+  // v5 watch_state; v6 app_settings; v7 source_overrides; v8 series_cache.idMal
+  // + skip_segments (auto-skip).
   //
-  // NEXT real migration REUSES v8. v8 was scratch on an unshipped branch
-  // (series_relations, the "Up Next" overshoot) and was reverted; it never
-  // reached main, and drift normalized the one dev cache that touched it back
-  // to user_version 7 — so no DB sits at 8 and the number is free to reclaim.
-  // (If that future migration recreates series_relations, use CREATE TABLE IF
-  // NOT EXISTS, in case a backup-restored cache still carries the orphan table.)
+  // v8 RECLAIMED: it was briefly scratch on an unshipped branch (series_relations,
+  // the "Up Next" overshoot) then reverted — it never reached main and no DB sits
+  // at 8 (drift normalized the one dev cache that touched it back to 7), so the
+  // number was free. This v8 adds idMal + skip_segments, NOT series_relations, so
+  // there's no clash even with a backup-restored cache carrying the orphan table.
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
@@ -207,6 +236,10 @@ class CacheDatabase extends _$CacheDatabase {
       }
       if (from < 7) {
         await m.createTable(sourceOverrides);
+      }
+      if (from < 8) {
+        await m.addColumn(seriesCache, seriesCache.idMal);
+        await m.createTable(skipSegments);
       }
     },
   );
@@ -355,6 +388,22 @@ class CacheDatabase extends _$CacheDatabase {
           ))
           .go();
 
+  // --- Skip segments (auto-skip). Filled at scan time from AniSkip; read
+  //     offline during playback. ---
+
+  Future<List<SkipSegmentRow>> allSkipRows() => select(skipSegments).get();
+
+  Future<SkipSegmentRow?> skipSegmentFor(int anilistId, int episode) =>
+      (select(skipSegments)..where(
+            (s) => s.anilistId.equals(anilistId) & s.episode.equals(episode),
+          ))
+          .getSingleOrNull();
+
+  /// Upsert one skip row directly (the refresh-metadata backfill — no pruning,
+  /// so fix-matches / watch-state are untouched).
+  Future<void> upsertSkipSegment(SkipSegmentRow row) =>
+      into(skipSegments).insertOnConflictUpdate(row);
+
   // --- App settings (key/value preferences) ---
 
   Future<String?> getSetting(String key) => (select(
@@ -370,12 +419,13 @@ class CacheDatabase extends _$CacheDatabase {
   Future<List<CachedFileRow>> allFileRows() => select(fileCache).get();
 
   /// Apply a computed delta atomically: never half-write a record. Upserts
-  /// series + files, deletes removed paths, then prunes series that no longer
-  /// have any files.
+  /// series + files (+ any freshly-fetched skip windows), deletes removed
+  /// paths, then prunes series with no files and now-orphaned skip rows.
   Future<void> applySync({
     required List<CachedSeriesRow> seriesUpserts,
     required List<CachedFileRow> fileUpserts,
     required List<String> removedPaths,
+    List<SkipSegmentRow> skipUpserts = const [],
   }) {
     return transaction(() async {
       for (final s in seriesUpserts) {
@@ -384,6 +434,9 @@ class CacheDatabase extends _$CacheDatabase {
       for (final f in fileUpserts) {
         await into(fileCache).insertOnConflictUpdate(f);
       }
+      for (final s in skipUpserts) {
+        await into(skipSegments).insertOnConflictUpdate(s);
+      }
       if (removedPaths.isNotEmpty) {
         await (delete(fileCache)..where((f) => f.path.isIn(removedPaths))).go();
       }
@@ -391,6 +444,11 @@ class CacheDatabase extends _$CacheDatabase {
         'DELETE FROM series_cache WHERE anilist_id NOT IN ('
         'SELECT anilist_id FROM file_cache WHERE anilist_id IS NOT NULL '
         'UNION SELECT anilist_id FROM match_overrides)',
+      );
+      // Drop skip rows whose series is no longer cached.
+      await customStatement(
+        'DELETE FROM skip_segments WHERE anilist_id NOT IN ('
+        'SELECT anilist_id FROM series_cache)',
       );
     });
   }

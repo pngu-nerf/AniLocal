@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../data/anilist/anilist_client.dart';
+import '../data/aniskip/aniskip_client.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
 import '../data/scanner/filename_parser.dart';
@@ -28,6 +29,7 @@ class LibrarySync {
     required this.matcher,
     required this.cache,
     required this.art,
+    required this.aniSkip,
   });
 
   final FolderScanner scanner;
@@ -35,6 +37,7 @@ class LibrarySync {
   final SeriesMatcher matcher;
   final CacheDatabase cache;
   final ArtCache art;
+  final AniSkipClient aniSkip;
 
   Future<SyncSummary> sync(List<String> folderPaths) async {
     // Scan each folder independently. A folder we can't read (access lapsed or
@@ -176,10 +179,50 @@ class LibrarySync {
       }
     }
 
+    // Fetch OP/ED skip windows for the delta episodes (online, scan-time only).
+    // idMal comes from the freshly-fetched series or the cached row. One fetch
+    // per distinct (entry, episode) — deduped across multi-source files, and
+    // already incremental (fileUpserts are only the deltas). Failures/no-data
+    // are skipped silently; partial AniSkip coverage is normal.
+    final idMalById = <int, int?>{
+      for (final r in cachedSeries.values) r.anilistId: r.idMal,
+    };
+    for (final r in resolved.values) {
+      final fresh = r.freshSeries;
+      if (fresh != null) idMalById[fresh.anilistId] = fresh.idMal;
+    }
+    final skipKeys = <(int, int)>{
+      for (final f in fileUpserts)
+        if (f.anilistId != null && f.episodeNumber != null)
+          (f.anilistId!, f.episodeNumber!),
+    };
+    final skipUpserts = <SkipSegmentRow>[];
+    for (final (anilistId, episode) in skipKeys) {
+      final mal = idMalById[anilistId];
+      if (mal == null) continue;
+      try {
+        final skips = await aniSkip.fetchSkips(mal, episode);
+        if (skips == null) continue; // no data -> no row (graceful)
+        skipUpserts.add(
+          SkipSegmentRow(
+            anilistId: anilistId,
+            episode: episode,
+            introStartMs: skips.intro?.start.inMilliseconds,
+            introEndMs: skips.intro?.end.inMilliseconds,
+            outroStartMs: skips.outro?.start.inMilliseconds,
+            outroEndMs: skips.outro?.end.inMilliseconds,
+          ),
+        );
+      } on AniSkipException {
+        // Transient — leave this episode without skip data (no scan failure).
+      }
+    }
+
     await cache.applySync(
       seriesUpserts: seriesUpserts,
       fileUpserts: fileUpserts,
       removedPaths: removedPaths,
+      skipUpserts: skipUpserts,
     );
 
     return SyncSummary(
@@ -195,6 +238,86 @@ class LibrarySync {
     );
   }
 
+  /// Re-fetch metadata for ALREADY-cached series (the "refresh metadata"
+  /// backfill) WITHOUT scanning files or pruning anything — fix-matches,
+  /// watch-state, and file matches are untouched. Re-fetches each referenced
+  /// entry by AniList id to pick up fields added later (notably `idMal`), then
+  /// fetches AniSkip for episode identities that don't yet have a cached skip
+  /// row. Idempotent and rate-friendly: already-cached skips aren't re-fetched.
+  ///
+  /// Online action; the cache stays the offline read path. Returns counts for
+  /// a confirmation message.
+  Future<({int seriesRefreshed, int skipsFetched})> refreshMetadata() async {
+    final files = await cache.allFileRows();
+    final overrides = {
+      for (final o in await cache.allOverrideRows())
+        (o.fileSize, o.modifiedAtMs): o,
+    };
+
+    // Every AniList entry the library references (auto-matched files + overrides).
+    final ids = <int>{
+      for (final f in files)
+        if (f.anilistId != null) f.anilistId!,
+      for (final o in overrides.values) o.anilistId,
+    };
+
+    // Re-fetch by id and upsert (no prune). idMal becomes available here.
+    final idMalById = <int, int?>{};
+    var seriesRefreshed = 0;
+    try {
+      for (final s in await matcher.anilist.fetchSeriesByIds(ids.toList())) {
+        final artPath = await art.ensureCover(s.anilistId, s.coverImageRef);
+        await cache.upsertSeries(_seriesRow(s, artPath));
+        idMalById[s.anilistId] = s.idMal;
+        seriesRefreshed++;
+      }
+    } on AniListException {
+      // Transient — keep existing metadata; a later refresh retries.
+    }
+
+    // Effective (anilistId, anchored) per matched file — overrides win, so
+    // fix-matched episodes get skips keyed to their corrected identity.
+    final identities = <(int, int)>{};
+    for (final f in files) {
+      final o = overrides[(f.fileSize, f.modifiedAtMs)];
+      if (o != null) {
+        identities.add((o.anilistId, o.anchoredEpisode ?? 0));
+      } else if (f.anilistId != null) {
+        identities.add((f.anilistId!, f.episodeNumber ?? 0));
+      }
+    }
+
+    // Fetch AniSkip only for identities missing a cached skip row.
+    final haveSkips = {
+      for (final s in await cache.allSkipRows()) (s.anilistId, s.episode),
+    };
+    var skipsFetched = 0;
+    for (final (anilistId, episode) in identities) {
+      if (haveSkips.contains((anilistId, episode))) continue;
+      final mal = idMalById[anilistId];
+      if (mal == null) continue;
+      try {
+        final skips = await aniSkip.fetchSkips(mal, episode);
+        if (skips == null) continue;
+        await cache.upsertSkipSegment(
+          SkipSegmentRow(
+            anilistId: anilistId,
+            episode: episode,
+            introStartMs: skips.intro?.start.inMilliseconds,
+            introEndMs: skips.intro?.end.inMilliseconds,
+            outroStartMs: skips.outro?.start.inMilliseconds,
+            outroEndMs: skips.outro?.end.inMilliseconds,
+          ),
+        );
+        skipsFetched++;
+      } on AniSkipException {
+        // Transient — leave this episode for a later refresh.
+      }
+    }
+
+    return (seriesRefreshed: seriesRefreshed, skipsFetched: skipsFetched);
+  }
+
   bool _underAnyFolder(String filePath, List<String> folders) {
     for (final f in folders) {
       if (filePath == f || filePath.startsWith('$f/')) return true;
@@ -204,6 +327,7 @@ class LibrarySync {
 
   CachedSeriesRow _seriesRow(Series s, String? artPath) => CachedSeriesRow(
     anilistId: s.anilistId,
+    idMal: s.idMal,
     romaji: s.titles.romaji,
     english: s.titles.english,
     nativeTitle: s.titles.native,

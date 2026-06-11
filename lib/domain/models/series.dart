@@ -15,10 +15,16 @@ class Series extends Equatable {
     this.format,
     this.coverImageRef,
     this.episodeCount,
+    this.idMal,
     this.relations = const [],
   });
 
   final int anilistId;
+
+  /// MyAnimeList id (AniList's `idMal` cross-reference). Used only to query
+  /// AniSkip (keyed by MAL id); null when AniList has no MAL mapping.
+  final int? idMal;
+
   final Titles titles;
 
   /// AniList format, e.g. `TV`, `MOVIE`, `OVA`. Free-form for now.
@@ -41,6 +47,7 @@ class Series extends Equatable {
     format,
     coverImageRef,
     episodeCount,
+    idMal,
     relations,
   ];
 }

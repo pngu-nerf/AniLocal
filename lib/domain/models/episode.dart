@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import 'episode_source.dart';
+import 'skip_range.dart';
 
 /// One playable episode mapped to a [Series].
 ///
@@ -26,6 +27,8 @@ class Episode extends Equatable {
     this.duration = Duration.zero,
     this.sources = const [],
     this.pinnedSourceFolder,
+    this.introSkip,
+    this.outroSkip,
   });
 
   /// Display number (a presentation choice — continuous or AniList-faithful).
@@ -55,6 +58,11 @@ class Episode extends Equatable {
   /// UI show "Automatic" vs a pinned source without guessing.
   final String? pinnedSourceFolder;
 
+  /// Cached intro (OP) / outro (ED) skip windows, or null when AniSkip has no
+  /// data for this episode (partial coverage is normal). Read offline.
+  final SkipRange? introSkip;
+  final SkipRange? outroSkip;
+
   /// True when the same episode exists in more than one library folder.
   bool get hasMultipleSources => sources.length > 1;
 
@@ -70,5 +78,7 @@ class Episode extends Equatable {
     duration,
     sources,
     pinnedSourceFolder,
+    introSkip,
+    outroSkip,
   ];
 }

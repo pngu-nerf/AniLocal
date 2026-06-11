@@ -6,6 +6,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../domain/models/episode.dart';
 import '../domain/models/next_result.dart';
+import '../domain/models/skip_mode.dart';
+import '../domain/models/skip_range.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import '../playback/playback_controller.dart';
@@ -27,6 +29,7 @@ class PlayerScreen extends StatefulWidget {
     required this.watchState,
     required this.watchOrder,
     required this.autoPlayEnabled,
+    required this.skipMode,
   });
 
   final Episode episode;
@@ -36,6 +39,9 @@ class PlayerScreen extends StatefulWidget {
   /// Reads the current "auto-play next" setting (so toggling it takes effect
   /// without restarting the player). Read per episode.
   final Future<bool> Function() autoPlayEnabled;
+
+  /// Reads the current skip mode (off / button / auto). Read per episode.
+  final Future<SkipMode> Function() skipMode;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -66,6 +72,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _preRollShowing = false;
   int _preRollSeconds = 0;
 
+  // Per-episode skip state (intro/outro windows come from _shown).
+  SkipMode _skipMode = SkipMode.button;
+  bool _showSkipIntro = false;
+  bool _showSkipOutro = false;
+  bool _introSkipped = false; // auto-skip fires once per window
+  bool _outroSkipped = false;
+
   @override
   void initState() {
     super.initState();
@@ -84,13 +97,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Reset per-episode state and (re)load the setting + the resolved next.
   Future<void> _loadEpisodeContext(Episode episode) async {
     final enabled = await widget.autoPlayEnabled();
+    final mode = await widget.skipMode();
     final result = await widget.watchOrder.nextEpisode(episode);
     if (!mounted) return;
     setState(() {
       _autoPlayEnabled = enabled;
+      _skipMode = mode;
       _next = result is NextEpisode ? result.episode : null;
       _preRollCancelled = false;
       _preRollShowing = false;
+      _showSkipIntro = false;
+      _showSkipOutro = false;
+      _introSkipped = false;
+      _outroSkipped = false;
     });
   }
 
@@ -104,13 +123,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       widget.watchState.setWatched(_shown, watched: true);
     }
 
+    _applySkips(pos);
+
     // PRE-roll: surface the countdown during the final [_preRollLead] seconds,
     // counting down in step with playback. (Not a post-roll — it overlaps the
     // tail so the advance at end is instant.)
     if (_autoPlayEnabled && _next != null && !_preRollCancelled && total > 0) {
       final remaining = _duration - pos;
       if (remaining > Duration.zero && remaining <= _preRollLead) {
-        final secs = math.min(_preRollLead.inSeconds, remaining.inSeconds + 1);
+        // Countdown = min(5s, actual time remaining) — a seek to 3s-left starts
+        // at 3, not a fixed 5. (ceil of the seconds left; remaining > 0 here.)
+        final secs = math.min(
+          _preRollLead.inSeconds,
+          (remaining.inMilliseconds + 999) ~/ 1000,
+        );
         if (!_preRollShowing || secs != _preRollSeconds) {
           setState(() {
             _preRollShowing = true;
@@ -121,6 +147,70 @@ class _PlayerScreenState extends State<PlayerScreen> {
         setState(() => _preRollShowing = false);
       }
     }
+  }
+
+  /// Intro/outro handling per the current [_skipMode], driven by cached windows
+  /// on [_shown] (offline — no network). Intro skip seeks to the window end;
+  /// outro skip advances to the next episode (the shared advance path).
+  void _applySkips(Duration pos) {
+    if (_skipMode == SkipMode.off) {
+      if (_showSkipIntro || _showSkipOutro) {
+        setState(() {
+          _showSkipIntro = false;
+          _showSkipOutro = false;
+        });
+      }
+      return;
+    }
+    final intro = _shown.introSkip;
+    final outro = _shown.outroSkip;
+    final inIntro = intro != null && intro.contains(pos);
+    final inOutro = outro != null && outro.contains(pos);
+
+    if (_skipMode == SkipMode.auto) {
+      if (inIntro && !_introSkipped) {
+        _introSkipped = true;
+        _playback.seekTo(intro.end);
+      } else if (inOutro && !_outroSkipped) {
+        _outroSkipped = true;
+        _seekPastOutro(outro); // skip credits WITHIN the episode (not advance)
+      }
+      return;
+    }
+
+    // Button mode: toggle the affordance. Hide the outro button while the
+    // auto-play pre-roll card occupies the same corner.
+    final showIntro = inIntro;
+    final showOutro = inOutro && !_preRollShowing;
+    if (showIntro != _showSkipIntro || showOutro != _showSkipOutro) {
+      setState(() {
+        _showSkipIntro = showIntro;
+        _showSkipOutro = showOutro;
+      });
+    }
+  }
+
+  void _skipIntro() {
+    final intro = _shown.introSkip;
+    if (intro != null) _playback.seekTo(intro.end);
+    setState(() => _showSkipIntro = false);
+  }
+
+  void _skipOutro() {
+    final outro = _shown.outroSkip;
+    if (outro != null) _seekPastOutro(outro);
+    setState(() => _showSkipOutro = false);
+  }
+
+  /// Skip credits by seeking to the END of the outro window — staying in the
+  /// episode so any post-credits scene plays. NOT advanceToNext (advancing is
+  /// only the end-of-episode up-next countdown). If the AniSkip window overhangs
+  /// the file, clamp to the end and the episode just completes naturally.
+  void _seekPastOutro(SkipRange outro) {
+    final target = (_duration > Duration.zero && outro.end > _duration)
+        ? _duration
+        : outro.end;
+    _playback.seekTo(target);
   }
 
   void _persist() {
@@ -190,6 +280,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
       body: Stack(
         children: [
           Positioned.fill(child: Video(controller: _playback.controller)),
+          if (_showSkipIntro)
+            Positioned(
+              right: 16,
+              bottom: 56,
+              child: FilledButton.icon(
+                onPressed: _skipIntro,
+                icon: const Icon(Icons.fast_forward),
+                label: const Text('Skip Intro'),
+              ),
+            ),
+          if (_showSkipOutro)
+            Positioned(
+              right: 16,
+              bottom: 56,
+              child: FilledButton.icon(
+                onPressed: _skipOutro,
+                icon: const Icon(Icons.skip_next),
+                label: const Text('Skip Outro'),
+              ),
+            ),
           if (_preRollShowing && _next != null)
             Positioned(
               right: 16,

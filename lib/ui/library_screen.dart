@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/series.dart';
+import '../domain/models/skip_mode.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
@@ -31,13 +32,17 @@ class LibraryScreen extends StatefulWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.onScan,
+    required this.onRefreshMetadata,
     required this.onAddFolder,
     required this.accessIssues,
+    required this.missingFolders,
     required this.onOpenAccessSettings,
     required this.loadContinueCollapsed,
     required this.setContinueCollapsed,
     required this.loadAutoPlayNext,
     required this.setAutoPlayNext,
+    required this.loadSkipMode,
+    required this.setSkipMode,
   });
 
   final LibraryRepository repository;
@@ -47,6 +52,11 @@ class LibraryScreen extends StatefulWidget {
   final WatchOrderRepository watchOrder;
   final Future<SyncSummary> Function() onScan;
 
+  /// Re-fetch metadata (idMal + skip data) for cached series — no file scan, no
+  /// pruning, preserves overrides/watch-state. Returns counts for a snackbar.
+  final Future<({int seriesRefreshed, int skipsFetched})> Function()
+  onRefreshMetadata;
+
   /// Load/persist the collapsed state of the "Continue watching" section.
   final Future<bool> Function() loadContinueCollapsed;
   final Future<void> Function(bool collapsed) setContinueCollapsed;
@@ -55,6 +65,10 @@ class LibraryScreen extends StatefulWidget {
   final Future<bool> Function() loadAutoPlayNext;
   final Future<void> Function(bool enabled) setAutoPlayNext;
 
+  /// Skip mode (off/button/auto), persisted; read by the player, set here.
+  final Future<SkipMode> Function() loadSkipMode;
+  final Future<void> Function(SkipMode mode) setSkipMode;
+
   /// Opens the native folder picker; reports whether a folder was added and the
   /// denied TCC category label (if the folder's category access was refused).
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
@@ -62,6 +76,11 @@ class LibraryScreen extends StatefulWidget {
   /// Shared denied-state (category labels) — drives the banner; the add-dialog
   /// reads the same source via [onAddFolder]'s result.
   final ValueListenable<List<String>> accessIssues;
+
+  /// Offline drive/mount labels (unplugged drive, offline NAS) — drives the
+  /// reconnect banner, distinct from the permission [accessIssues].
+  final ValueListenable<List<String>> missingFolders;
+
   final Future<bool> Function() onOpenAccessSettings;
 
   @override
@@ -115,6 +134,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           watchState: widget.watchState,
           watchOrder: widget.watchOrder,
           autoPlayEnabled: widget.loadAutoPlayNext,
+          skipMode: widget.loadSkipMode,
         ),
       ),
     );
@@ -124,25 +144,61 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _playFromContinue(ContinueWatching entry) =>
       _play(entry.episode);
 
-  Future<void> _openAutoPlaySetting() async {
+  Future<void> _openSettings() async {
     var enabled = await widget.loadAutoPlayNext();
+    var skipMode = await widget.loadSkipMode();
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Settings'),
         content: StatefulBuilder(
-          builder: (context, setLocal) => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Auto-play next episode'),
-            subtitle: const Text(
-              'When an episode ends, play the next one (crosses seasons).',
-            ),
-            value: enabled,
-            onChanged: (v) {
-              setLocal(() => enabled = v);
-              widget.setAutoPlayNext(v);
-            },
+          builder: (context, setLocal) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Auto-play next episode'),
+                subtitle: const Text(
+                  'When an episode ends, play the next one.',
+                ),
+                value: enabled,
+                onChanged: (v) {
+                  setLocal(() => enabled = v);
+                  widget.setAutoPlayNext(v);
+                },
+              ),
+              const Divider(),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Text('Skip intro / outro'),
+              ),
+              for (final mode in SkipMode.values)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(
+                    mode == skipMode
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                  ),
+                  title: Text(_skipModeLabel(mode)),
+                  onTap: () {
+                    setLocal(() => skipMode = mode);
+                    widget.setSkipMode(mode);
+                  },
+                ),
+              const Divider(),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => _refreshMetadata(dialogContext),
+                  icon: const Icon(Icons.cloud_sync_outlined),
+                  label: const Text('Refresh metadata (idMal + skip data)'),
+                ),
+              ),
+            ],
           ),
         ),
         actions: [
@@ -153,6 +209,41 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ],
       ),
     );
+  }
+
+  static String _skipModeLabel(SkipMode mode) => switch (mode) {
+    SkipMode.off => 'No skip',
+    SkipMode.button => 'Skip button',
+    SkipMode.auto => 'Auto skip',
+  };
+
+  /// Re-fetch metadata + skip data for cached series (no scan, no data loss).
+  Future<void> _refreshMetadata(BuildContext dialogContext) async {
+    Navigator.of(dialogContext).pop();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Refreshing metadata…')));
+    try {
+      final r = await widget.onRefreshMetadata();
+      if (!mounted) return;
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'Refreshed ${r.seriesRefreshed} series · '
+              '${r.skipsFetched} skip sets fetched',
+            ),
+          ),
+        );
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text('Refresh failed: $e')));
+    }
   }
 
   Future<Set<String>> _folderPaths() async =>
@@ -275,13 +366,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
-            onPressed: _openAutoPlaySetting,
+            onPressed: _openSettings,
           ),
         ],
       ),
       body: Column(
         children: [
-          // Ambient access-recovery banner (shared denied-state).
+          // Permission-denied banner (Settings recovery).
           ValueListenableBuilder<List<String>>(
             valueListenable: widget.accessIssues,
             builder: (context, labels, _) => labels.isEmpty
@@ -289,6 +380,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 : AccessBanner(
                     labels: labels,
                     onOpenSettings: widget.onOpenAccessSettings,
+                    onRescan: _scanning ? () {} : _scan,
+                  ),
+          ),
+          // Offline drive/mount banner (reconnect — NOT a permission problem).
+          ValueListenableBuilder<List<String>>(
+            valueListenable: widget.missingFolders,
+            builder: (context, labels, _) => labels.isEmpty
+                ? const SizedBox.shrink()
+                : ReconnectBanner(
+                    labels: labels,
                     onRescan: _scanning ? () {} : _scan,
                   ),
           ),
@@ -340,6 +441,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     nextEpisode: _upNext[series[i].anilistId],
                     onPlay: _play,
                     loadAutoPlayNext: widget.loadAutoPlayNext,
+                    loadSkipMode: widget.loadSkipMode,
                     onReturn: _reload,
                   ),
                 );
@@ -393,6 +495,7 @@ class _SeriesCard extends StatelessWidget {
     required this.nextEpisode,
     required this.onPlay,
     required this.loadAutoPlayNext,
+    required this.loadSkipMode,
     required this.onReturn,
   });
 
@@ -408,6 +511,7 @@ class _SeriesCard extends StatelessWidget {
   final Episode? nextEpisode;
   final Future<void> Function(Episode) onPlay;
   final Future<bool> Function() loadAutoPlayNext;
+  final Future<SkipMode> Function() loadSkipMode;
   final VoidCallback onReturn;
 
   @override
@@ -430,6 +534,7 @@ class _SeriesCard extends StatelessWidget {
               sourceSelection: sourceSelection,
               watchOrder: watchOrder,
               loadAutoPlayNext: loadAutoPlayNext,
+              loadSkipMode: loadSkipMode,
             ),
           ),
         );

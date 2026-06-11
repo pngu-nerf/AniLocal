@@ -42,6 +42,9 @@ class PlaybackController {
   /// Emits `true` when the current media finishes.
   Stream<bool> get completedStream => player.stream.completed;
 
+  /// Seek within the current media — used to skip an intro to its end.
+  Future<void> seekTo(Duration position) => player.seek(position);
+
   /// THE advance-to-next action — one entry point, callable by any trigger
   /// (the auto-play countdown today; a future "seek past the end" handler).
   /// Asks the resolver what follows [current]: if there's a next episode it

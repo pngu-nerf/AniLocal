@@ -7,6 +7,7 @@ library;
 /// as watch-order later). Shared by the filtered/unfiltered search queries.
 const String _mediaFields = r'''
     id
+    idMal
     format
     episodes
     title {
@@ -58,6 +59,20 @@ const String mediaSearchQueryFiltered =
 query (\$search: String, \$format: [MediaFormat]) {
   Media(search: \$search, type: ANIME, format_in: \$format) {
 $_mediaFields
+  }
+}
+''';
+
+/// Re-fetch known entries BY id (the "refresh metadata" backfill) — a page of
+/// `Media` filtered by `id_in`, so cached series get fresh fields (notably
+/// `idMal`) without re-searching by title.
+const String mediaByIdsQuery =
+    '''
+query (\$ids: [Int], \$perPage: Int) {
+  Page(page: 1, perPage: \$perPage) {
+    media(id_in: \$ids, type: ANIME) {
+$_mediaFields
+    }
   }
 }
 ''';

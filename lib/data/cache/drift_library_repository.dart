@@ -5,6 +5,7 @@ import '../../domain/models/identified_episode.dart';
 import '../../domain/models/next_result.dart';
 import '../../domain/models/library_folder.dart';
 import '../../domain/models/series.dart';
+import '../../domain/models/skip_range.dart';
 import '../../domain/models/titles.dart';
 import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/source_selection_repository.dart';
@@ -209,12 +210,20 @@ class DriftLibraryRepository
       for (final w in await _db.allWatchStateRows())
         (w.anilistId, w.episode): w,
     };
+    final skips = {
+      for (final s in await _db.allSkipRows()) (s.anilistId, s.episode): s,
+    };
     final mine = [
       for (final l in logical.values)
         if (l.anilistId == anilistId) l,
     ]..sort((a, b) => (a.displayNumber ?? 0).compareTo(b.displayNumber ?? 0));
     return [
-      for (final l in mine) _toEpisode(l, watch[(anilistId, l.anchored)]),
+      for (final l in mine)
+        _toEpisode(
+          l,
+          watch[(anilistId, l.anchored)],
+          skips[(anilistId, l.anchored)],
+        ),
     ];
   }
 
@@ -285,6 +294,9 @@ class DriftLibraryRepository
     final seriesById = {
       for (final r in await _db.allSeriesRows()) r.anilistId: r,
     };
+    final skips = {
+      for (final s in await _db.allSkipRows()) (s.anilistId, s.episode): s,
+    };
 
     final result = <ContinueWatching>[];
     for (final w in inProgress) {
@@ -294,7 +306,7 @@ class DriftLibraryRepository
       result.add(
         ContinueWatching(
           series: _toSeries(series),
-          episode: _toEpisode(match, w),
+          episode: _toEpisode(match, w, skips[(w.anilistId, w.episode)]),
         ),
       );
     }
@@ -355,7 +367,8 @@ class DriftLibraryRepository
     );
     if (next == null) return const NoNextEpisode();
     final w = await _db.watchStateFor(next.anilistId, next.anchored);
-    return NextEpisode(_toEpisode(next, w));
+    final skip = await _db.skipSegmentFor(next.anilistId, next.anchored);
+    return NextEpisode(_toEpisode(next, w, skip));
   }
 
   @override
@@ -364,6 +377,9 @@ class DriftLibraryRepository
     final watch = {
       for (final w in await _db.allWatchStateRows())
         (w.anilistId, w.episode): w,
+    };
+    final skips = {
+      for (final s in await _db.allSkipRows()) (s.anilistId, s.episode): s,
     };
 
     // Furthest WATCHED anchored position per series the user has started.
@@ -383,7 +399,11 @@ class DriftLibraryRepository
       if (next == null) return; // NoNextEpisode -> caught up, show nothing
       final w = watch[(next.anilistId, next.anchored)];
       if (w?.watched ?? false) return; // already watched -> nothing "next"
-      result[anilistId] = _toEpisode(next, w);
+      result[anilistId] = _toEpisode(
+        next,
+        w,
+        skips[(next.anilistId, next.anchored)],
+      );
     });
     return result;
   }
@@ -397,18 +417,30 @@ class DriftLibraryRepository
     Map<(int, int), _Logical> logical,
   ) => logical[(anilistId, anchored + 1)];
 
-  Episode _toEpisode(_Logical l, WatchStateRow? w) => Episode(
-    number: l.displayNumber ?? 0,
-    fileRef: l.activeFileRef,
-    title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
-    seriesAnilistId: l.anilistId,
-    anchoredNumber: l.anchored,
-    watched: w?.watched ?? false,
-    resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
-    duration: Duration(milliseconds: w?.durationMs ?? 0),
-    sources: l.sources,
-    pinnedSourceFolder: l.pinnedFolder,
-  );
+  Episode _toEpisode(_Logical l, WatchStateRow? w, SkipSegmentRow? skip) =>
+      Episode(
+        number: l.displayNumber ?? 0,
+        fileRef: l.activeFileRef,
+        title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
+        seriesAnilistId: l.anilistId,
+        anchoredNumber: l.anchored,
+        watched: w?.watched ?? false,
+        resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
+        duration: Duration(milliseconds: w?.durationMs ?? 0),
+        sources: l.sources,
+        pinnedSourceFolder: l.pinnedFolder,
+        introSkip: _range(skip?.introStartMs, skip?.introEndMs),
+        outroSkip: _range(skip?.outroStartMs, skip?.outroEndMs),
+      );
+
+  /// Build a [SkipRange] when both bounds are present, else null.
+  SkipRange? _range(int? startMs, int? endMs) =>
+      (startMs != null && endMs != null)
+      ? SkipRange(
+          start: Duration(milliseconds: startMs),
+          end: Duration(milliseconds: endMs),
+        )
+      : null;
 
   Series _toSeries(CachedSeriesRow r) => Series(
     anilistId: r.anilistId,

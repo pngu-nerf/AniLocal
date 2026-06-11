@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../domain/models/skip_mode.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
@@ -23,13 +24,17 @@ class AniLocalApp extends StatelessWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.onScan,
+    required this.onRefreshMetadata,
     required this.onAddFolder,
     required this.accessIssues,
+    required this.missingFolders,
     required this.onOpenAccessSettings,
     required this.loadContinueCollapsed,
     required this.setContinueCollapsed,
     required this.loadAutoPlayNext,
     required this.setAutoPlayNext,
+    required this.loadSkipMode,
+    required this.setSkipMode,
   });
 
   final LibraryRepository repository;
@@ -38,6 +43,11 @@ class AniLocalApp extends StatelessWidget {
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
   final Future<SyncSummary> Function() onScan;
+
+  /// Re-fetch metadata (idMal + skip data) for already-cached series, without
+  /// scanning files or touching overrides/watch-state. Returns counts.
+  final Future<({int seriesRefreshed, int skipsFetched})> Function()
+  onRefreshMetadata;
   final Future<bool> Function() loadContinueCollapsed;
   final Future<void> Function(bool collapsed) setContinueCollapsed;
 
@@ -45,10 +55,18 @@ class AniLocalApp extends StatelessWidget {
   final Future<bool> Function() loadAutoPlayNext;
   final Future<void> Function(bool enabled) setAutoPlayNext;
 
+  /// Skip mode (off/button/auto), persisted; read by the player per episode.
+  final Future<SkipMode> Function() loadSkipMode;
+  final Future<void> Function(SkipMode mode) setSkipMode;
+
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 
   /// Denied TCC category labels — shared by the add-dialog and the banner.
   final ValueListenable<List<String>> accessIssues;
+
+  /// Labels of library folders whose drive/mount is offline (unplugged drive,
+  /// offline NAS) — drives the reconnect banner, NOT the Settings flow.
+  final ValueListenable<List<String>> missingFolders;
 
   /// Opens the privacy settings pane (best-effort); the message always also
   /// shows the written path, so a stale link never strands the user.
@@ -70,13 +88,17 @@ class AniLocalApp extends StatelessWidget {
         sourceSelection: sourceSelection,
         watchOrder: watchOrder,
         onScan: onScan,
+        onRefreshMetadata: onRefreshMetadata,
         onAddFolder: onAddFolder,
         accessIssues: accessIssues,
+        missingFolders: missingFolders,
         onOpenAccessSettings: onOpenAccessSettings,
         loadContinueCollapsed: loadContinueCollapsed,
         setContinueCollapsed: setContinueCollapsed,
         loadAutoPlayNext: loadAutoPlayNext,
         setAutoPlayNext: setAutoPlayNext,
+        loadSkipMode: loadSkipMode,
+        setSkipMode: setSkipMode,
       ),
     );
   }

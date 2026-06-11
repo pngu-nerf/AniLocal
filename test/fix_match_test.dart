@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
+import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
@@ -78,6 +79,9 @@ void main() {
       matcher: SeriesMatcher(anilist: anilist),
       cache: db,
       art: ArtCache(httpClient: mock, directory: () async => artDir),
+      aniSkip: AniSkipClient(
+        httpClient: MockClient((_) async => http.Response('', 404)),
+      ),
     );
     fixMatch = FixMatchService(
       anilist: anilist,

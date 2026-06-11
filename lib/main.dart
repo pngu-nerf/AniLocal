@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'data/anilist/anilist_client.dart';
+import 'data/aniskip/aniskip_client.dart';
 import 'data/cache/art_cache.dart';
 import 'data/cache/cache_connection.dart';
 import 'data/cache/cache_database.dart';
@@ -12,6 +13,7 @@ import 'data/folders/tcc_folder_access.dart';
 import 'data/scanner/folder_scanner.dart';
 import 'data/scanner/heuristic_filename_parser.dart';
 import 'data/scanner/series_matcher.dart';
+import 'domain/models/skip_mode.dart';
 import 'domain/models/sync_summary.dart';
 import 'sync/fix_match_service.dart';
 import 'sync/library_sync.dart';
@@ -45,6 +47,8 @@ void main() {
     ),
     cache: database,
     art: ArtCache(directory: coverArtDirectory),
+    // AniSkip fetched at scan time only; playback reads skips from the cache.
+    aniSkip: AniSkipClient(),
   );
   // Fix-match: the ONLY writer of overrides (LibrarySync can't reach it).
   final fixMatch = FixMatchService(
@@ -56,14 +60,22 @@ void main() {
   const FolderPicker picker = FileSelectorFolderPicker();
   final FolderAccess folderAccess = TccFolderAccess();
 
-  // Shared denied-state: one source of truth for both the add-dialog and the
-  // ambient banner, so they can't disagree. Holds the denied category labels.
+  // Shared not-readable state, split by KIND so each surfaces the right
+  // recovery: denied -> Settings/Files-and-Folders banner; missing (unplugged
+  // drive / offline NAS) -> "reconnect" banner, no Settings. A label lives in
+  // at most one set; becoming accessible clears it from both. One source of
+  // truth so the add-dialog and the ambient banners can't disagree.
   final accessIssues = ValueNotifier<List<String>>(const []);
+  final missingFolders = ValueNotifier<List<String>>(const []);
   void applyAccess(FolderAccessResult r) {
-    if (r.categoryLabel == null) return; // not a TCC category
-    final set = {...accessIssues.value};
-    r.isDenied ? set.add(r.categoryLabel!) : set.remove(r.categoryLabel!);
-    accessIssues.value = set.toList()..sort();
+    final label = r.categoryLabel;
+    if (label == null) return; // not a TCC category / volume
+    final denied = {...accessIssues.value}..remove(label);
+    final missing = {...missingFolders.value}..remove(label);
+    if (r.isDenied) denied.add(label);
+    if (r.isMissing) missing.add(label);
+    accessIssues.value = denied.toList()..sort();
+    missingFolders.value = missing.toList()..sort();
   }
 
   // Folders are user-picked via the native panel — there is NO hardcoded path.
@@ -95,6 +107,7 @@ void main() {
 
   const continueCollapsedKey = 'continue_watching_collapsed';
   const autoPlayNextKey = 'autoplay_next';
+  const skipModeKey = 'skip_mode';
 
   runApp(
     AniLocalApp(
@@ -107,8 +120,10 @@ void main() {
       sourceSelection: repository,
       watchOrder: repository,
       onScan: scan,
+      onRefreshMetadata: sync.refreshMetadata,
       onAddFolder: addFolder,
       accessIssues: accessIssues,
+      missingFolders: missingFolders,
       onOpenAccessSettings: openPrivacyFilesAndFoldersSettings,
       loadContinueCollapsed: () async =>
           await database.getSetting(continueCollapsedKey) == 'true',
@@ -119,6 +134,10 @@ void main() {
           await database.getSetting(autoPlayNextKey) != 'false',
       setAutoPlayNext: (enabled) =>
           database.setSetting(autoPlayNextKey, '$enabled'),
+      // Skip mode defaults to "button" (SkipMode.fromToken maps null -> button).
+      loadSkipMode: () async =>
+          SkipMode.fromToken(await database.getSetting(skipModeKey)),
+      setSkipMode: (mode) => database.setSetting(skipModeKey, mode.token),
     ),
   );
 }

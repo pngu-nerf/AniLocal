@@ -93,6 +93,27 @@ class AniListClient {
     return seriesListFromMediaList(media);
   }
 
+  /// Re-fetch known entries BY AniList id (the "refresh metadata" backfill),
+  /// batched ≤50 per request (AniList page cap). Returns the mapped [Series];
+  /// throws [AniListException] on transport/GraphQL errors.
+  Future<List<Series>> fetchSeriesByIds(List<int> ids) async {
+    final result = <Series>[];
+    for (var i = 0; i < ids.length; i += 50) {
+      final end = i + 50 < ids.length ? i + 50 : ids.length;
+      final chunk = ids.sublist(i, end);
+      final decoded = await _post({
+        'query': mediaByIdsQuery,
+        'variables': {'ids': chunk, 'perPage': chunk.length},
+      });
+      final page =
+          (decoded['data'] as Map<String, dynamic>?)?['Page']
+              as Map<String, dynamic>?;
+      final media = page?['media'] as List<dynamic>?;
+      if (media != null) result.addAll(seriesListFromMediaList(media));
+    }
+    return result;
+  }
+
   /// Shared POST + error handling. Returns the decoded JSON body.
   Future<Map<String, dynamic>> _post(Map<String, dynamic> body) async {
     final http.Response response;

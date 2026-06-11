@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/episode_source.dart';
 import '../domain/models/series.dart';
+import '../domain/models/skip_mode.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
@@ -25,6 +26,7 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.loadAutoPlayNext,
+    required this.loadSkipMode,
   });
 
   final Series series;
@@ -34,6 +36,7 @@ class SeriesDetailScreen extends StatefulWidget {
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
   final Future<bool> Function() loadAutoPlayNext;
+  final Future<SkipMode> Function() loadSkipMode;
 
   @override
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
@@ -72,6 +75,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           watchState: widget.watchState,
           watchOrder: widget.watchOrder,
           autoPlayEnabled: widget.loadAutoPlayNext,
+          skipMode: widget.loadSkipMode,
         ),
       ),
     );

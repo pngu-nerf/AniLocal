@@ -20,6 +20,15 @@ class $SeriesCacheTable extends SeriesCache
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _idMalMeta = const VerificationMeta('idMal');
+  @override
+  late final GeneratedColumn<int> idMal = GeneratedColumn<int>(
+    'id_mal',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _romajiMeta = const VerificationMeta('romaji');
   @override
   late final GeneratedColumn<String> romaji = GeneratedColumn<String>(
@@ -96,6 +105,7 @@ class $SeriesCacheTable extends SeriesCache
   @override
   List<GeneratedColumn> get $columns => [
     anilistId,
+    idMal,
     romaji,
     english,
     nativeTitle,
@@ -120,6 +130,12 @@ class $SeriesCacheTable extends SeriesCache
       context.handle(
         _anilistIdMeta,
         anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+      );
+    }
+    if (data.containsKey('id_mal')) {
+      context.handle(
+        _idMalMeta,
+        idMal.isAcceptableOrUnknown(data['id_mal']!, _idMalMeta),
       );
     }
     if (data.containsKey('romaji')) {
@@ -189,6 +205,10 @@ class $SeriesCacheTable extends SeriesCache
         DriftSqlType.int,
         data['${effectivePrefix}anilist_id'],
       )!,
+      idMal: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_mal'],
+      ),
       romaji: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}romaji'],
@@ -228,6 +248,10 @@ class $SeriesCacheTable extends SeriesCache
 
 class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   final int anilistId;
+
+  /// MyAnimeList id (AniList `idMal`) — the key AniSkip needs. Nullable: not
+  /// every entry has a MAL mapping, and pre-v8 rows backfill on re-fetch.
+  final int? idMal;
   final String? romaji;
   final String? english;
   final String? nativeTitle;
@@ -237,6 +261,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   final String? coverImagePath;
   const CachedSeriesRow({
     required this.anilistId,
+    this.idMal,
     this.romaji,
     this.english,
     this.nativeTitle,
@@ -249,6 +274,9 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['anilist_id'] = Variable<int>(anilistId);
+    if (!nullToAbsent || idMal != null) {
+      map['id_mal'] = Variable<int>(idMal);
+    }
     if (!nullToAbsent || romaji != null) {
       map['romaji'] = Variable<String>(romaji);
     }
@@ -276,6 +304,9 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   SeriesCacheCompanion toCompanion(bool nullToAbsent) {
     return SeriesCacheCompanion(
       anilistId: Value(anilistId),
+      idMal: idMal == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idMal),
       romaji: romaji == null && nullToAbsent
           ? const Value.absent()
           : Value(romaji),
@@ -307,6 +338,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return CachedSeriesRow(
       anilistId: serializer.fromJson<int>(json['anilistId']),
+      idMal: serializer.fromJson<int?>(json['idMal']),
       romaji: serializer.fromJson<String?>(json['romaji']),
       english: serializer.fromJson<String?>(json['english']),
       nativeTitle: serializer.fromJson<String?>(json['nativeTitle']),
@@ -321,6 +353,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'anilistId': serializer.toJson<int>(anilistId),
+      'idMal': serializer.toJson<int?>(idMal),
       'romaji': serializer.toJson<String?>(romaji),
       'english': serializer.toJson<String?>(english),
       'nativeTitle': serializer.toJson<String?>(nativeTitle),
@@ -333,6 +366,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
 
   CachedSeriesRow copyWith({
     int? anilistId,
+    Value<int?> idMal = const Value.absent(),
     Value<String?> romaji = const Value.absent(),
     Value<String?> english = const Value.absent(),
     Value<String?> nativeTitle = const Value.absent(),
@@ -342,6 +376,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     Value<String?> coverImagePath = const Value.absent(),
   }) => CachedSeriesRow(
     anilistId: anilistId ?? this.anilistId,
+    idMal: idMal.present ? idMal.value : this.idMal,
     romaji: romaji.present ? romaji.value : this.romaji,
     english: english.present ? english.value : this.english,
     nativeTitle: nativeTitle.present ? nativeTitle.value : this.nativeTitle,
@@ -357,6 +392,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   CachedSeriesRow copyWithCompanion(SeriesCacheCompanion data) {
     return CachedSeriesRow(
       anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      idMal: data.idMal.present ? data.idMal.value : this.idMal,
       romaji: data.romaji.present ? data.romaji.value : this.romaji,
       english: data.english.present ? data.english.value : this.english,
       nativeTitle: data.nativeTitle.present
@@ -379,6 +415,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   String toString() {
     return (StringBuffer('CachedSeriesRow(')
           ..write('anilistId: $anilistId, ')
+          ..write('idMal: $idMal, ')
           ..write('romaji: $romaji, ')
           ..write('english: $english, ')
           ..write('nativeTitle: $nativeTitle, ')
@@ -393,6 +430,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   @override
   int get hashCode => Object.hash(
     anilistId,
+    idMal,
     romaji,
     english,
     nativeTitle,
@@ -406,6 +444,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
       identical(this, other) ||
       (other is CachedSeriesRow &&
           other.anilistId == this.anilistId &&
+          other.idMal == this.idMal &&
           other.romaji == this.romaji &&
           other.english == this.english &&
           other.nativeTitle == this.nativeTitle &&
@@ -417,6 +456,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
 
 class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   final Value<int> anilistId;
+  final Value<int?> idMal;
   final Value<String?> romaji;
   final Value<String?> english;
   final Value<String?> nativeTitle;
@@ -426,6 +466,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   final Value<String?> coverImagePath;
   const SeriesCacheCompanion({
     this.anilistId = const Value.absent(),
+    this.idMal = const Value.absent(),
     this.romaji = const Value.absent(),
     this.english = const Value.absent(),
     this.nativeTitle = const Value.absent(),
@@ -436,6 +477,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   });
   SeriesCacheCompanion.insert({
     this.anilistId = const Value.absent(),
+    this.idMal = const Value.absent(),
     this.romaji = const Value.absent(),
     this.english = const Value.absent(),
     this.nativeTitle = const Value.absent(),
@@ -446,6 +488,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   });
   static Insertable<CachedSeriesRow> custom({
     Expression<int>? anilistId,
+    Expression<int>? idMal,
     Expression<String>? romaji,
     Expression<String>? english,
     Expression<String>? nativeTitle,
@@ -456,6 +499,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   }) {
     return RawValuesInsertable({
       if (anilistId != null) 'anilist_id': anilistId,
+      if (idMal != null) 'id_mal': idMal,
       if (romaji != null) 'romaji': romaji,
       if (english != null) 'english': english,
       if (nativeTitle != null) 'native_title': nativeTitle,
@@ -468,6 +512,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
 
   SeriesCacheCompanion copyWith({
     Value<int>? anilistId,
+    Value<int?>? idMal,
     Value<String?>? romaji,
     Value<String?>? english,
     Value<String?>? nativeTitle,
@@ -478,6 +523,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   }) {
     return SeriesCacheCompanion(
       anilistId: anilistId ?? this.anilistId,
+      idMal: idMal ?? this.idMal,
       romaji: romaji ?? this.romaji,
       english: english ?? this.english,
       nativeTitle: nativeTitle ?? this.nativeTitle,
@@ -493,6 +539,9 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     final map = <String, Expression>{};
     if (anilistId.present) {
       map['anilist_id'] = Variable<int>(anilistId.value);
+    }
+    if (idMal.present) {
+      map['id_mal'] = Variable<int>(idMal.value);
     }
     if (romaji.present) {
       map['romaji'] = Variable<String>(romaji.value);
@@ -522,6 +571,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   String toString() {
     return (StringBuffer('SeriesCacheCompanion(')
           ..write('anilistId: $anilistId, ')
+          ..write('idMal: $idMal, ')
           ..write('romaji: $romaji, ')
           ..write('english: $english, ')
           ..write('nativeTitle: $nativeTitle, ')
@@ -2539,6 +2589,451 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
   }
 }
 
+class $SkipSegmentsTable extends SkipSegments
+    with TableInfo<$SkipSegmentsTable, SkipSegmentRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SkipSegmentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
+    'anilistId',
+  );
+  @override
+  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
+    'anilist_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _episodeMeta = const VerificationMeta(
+    'episode',
+  );
+  @override
+  late final GeneratedColumn<int> episode = GeneratedColumn<int>(
+    'episode',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _introStartMsMeta = const VerificationMeta(
+    'introStartMs',
+  );
+  @override
+  late final GeneratedColumn<int> introStartMs = GeneratedColumn<int>(
+    'intro_start_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _introEndMsMeta = const VerificationMeta(
+    'introEndMs',
+  );
+  @override
+  late final GeneratedColumn<int> introEndMs = GeneratedColumn<int>(
+    'intro_end_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _outroStartMsMeta = const VerificationMeta(
+    'outroStartMs',
+  );
+  @override
+  late final GeneratedColumn<int> outroStartMs = GeneratedColumn<int>(
+    'outro_start_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _outroEndMsMeta = const VerificationMeta(
+    'outroEndMs',
+  );
+  @override
+  late final GeneratedColumn<int> outroEndMs = GeneratedColumn<int>(
+    'outro_end_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    anilistId,
+    episode,
+    introStartMs,
+    introEndMs,
+    outroStartMs,
+    outroEndMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'skip_segments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SkipSegmentRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('anilist_id')) {
+      context.handle(
+        _anilistIdMeta,
+        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_anilistIdMeta);
+    }
+    if (data.containsKey('episode')) {
+      context.handle(
+        _episodeMeta,
+        episode.isAcceptableOrUnknown(data['episode']!, _episodeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_episodeMeta);
+    }
+    if (data.containsKey('intro_start_ms')) {
+      context.handle(
+        _introStartMsMeta,
+        introStartMs.isAcceptableOrUnknown(
+          data['intro_start_ms']!,
+          _introStartMsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('intro_end_ms')) {
+      context.handle(
+        _introEndMsMeta,
+        introEndMs.isAcceptableOrUnknown(
+          data['intro_end_ms']!,
+          _introEndMsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('outro_start_ms')) {
+      context.handle(
+        _outroStartMsMeta,
+        outroStartMs.isAcceptableOrUnknown(
+          data['outro_start_ms']!,
+          _outroStartMsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('outro_end_ms')) {
+      context.handle(
+        _outroEndMsMeta,
+        outroEndMs.isAcceptableOrUnknown(
+          data['outro_end_ms']!,
+          _outroEndMsMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {anilistId, episode};
+  @override
+  SkipSegmentRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SkipSegmentRow(
+      anilistId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}anilist_id'],
+      )!,
+      episode: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode'],
+      )!,
+      introStartMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}intro_start_ms'],
+      ),
+      introEndMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}intro_end_ms'],
+      ),
+      outroStartMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}outro_start_ms'],
+      ),
+      outroEndMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}outro_end_ms'],
+      ),
+    );
+  }
+
+  @override
+  $SkipSegmentsTable createAlias(String alias) {
+    return $SkipSegmentsTable(attachedDatabase, alias);
+  }
+}
+
+class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
+  final int anilistId;
+  final int episode;
+  final int? introStartMs;
+  final int? introEndMs;
+  final int? outroStartMs;
+  final int? outroEndMs;
+  const SkipSegmentRow({
+    required this.anilistId,
+    required this.episode,
+    this.introStartMs,
+    this.introEndMs,
+    this.outroStartMs,
+    this.outroEndMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['anilist_id'] = Variable<int>(anilistId);
+    map['episode'] = Variable<int>(episode);
+    if (!nullToAbsent || introStartMs != null) {
+      map['intro_start_ms'] = Variable<int>(introStartMs);
+    }
+    if (!nullToAbsent || introEndMs != null) {
+      map['intro_end_ms'] = Variable<int>(introEndMs);
+    }
+    if (!nullToAbsent || outroStartMs != null) {
+      map['outro_start_ms'] = Variable<int>(outroStartMs);
+    }
+    if (!nullToAbsent || outroEndMs != null) {
+      map['outro_end_ms'] = Variable<int>(outroEndMs);
+    }
+    return map;
+  }
+
+  SkipSegmentsCompanion toCompanion(bool nullToAbsent) {
+    return SkipSegmentsCompanion(
+      anilistId: Value(anilistId),
+      episode: Value(episode),
+      introStartMs: introStartMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(introStartMs),
+      introEndMs: introEndMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(introEndMs),
+      outroStartMs: outroStartMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(outroStartMs),
+      outroEndMs: outroEndMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(outroEndMs),
+    );
+  }
+
+  factory SkipSegmentRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SkipSegmentRow(
+      anilistId: serializer.fromJson<int>(json['anilistId']),
+      episode: serializer.fromJson<int>(json['episode']),
+      introStartMs: serializer.fromJson<int?>(json['introStartMs']),
+      introEndMs: serializer.fromJson<int?>(json['introEndMs']),
+      outroStartMs: serializer.fromJson<int?>(json['outroStartMs']),
+      outroEndMs: serializer.fromJson<int?>(json['outroEndMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'anilistId': serializer.toJson<int>(anilistId),
+      'episode': serializer.toJson<int>(episode),
+      'introStartMs': serializer.toJson<int?>(introStartMs),
+      'introEndMs': serializer.toJson<int?>(introEndMs),
+      'outroStartMs': serializer.toJson<int?>(outroStartMs),
+      'outroEndMs': serializer.toJson<int?>(outroEndMs),
+    };
+  }
+
+  SkipSegmentRow copyWith({
+    int? anilistId,
+    int? episode,
+    Value<int?> introStartMs = const Value.absent(),
+    Value<int?> introEndMs = const Value.absent(),
+    Value<int?> outroStartMs = const Value.absent(),
+    Value<int?> outroEndMs = const Value.absent(),
+  }) => SkipSegmentRow(
+    anilistId: anilistId ?? this.anilistId,
+    episode: episode ?? this.episode,
+    introStartMs: introStartMs.present ? introStartMs.value : this.introStartMs,
+    introEndMs: introEndMs.present ? introEndMs.value : this.introEndMs,
+    outroStartMs: outroStartMs.present ? outroStartMs.value : this.outroStartMs,
+    outroEndMs: outroEndMs.present ? outroEndMs.value : this.outroEndMs,
+  );
+  SkipSegmentRow copyWithCompanion(SkipSegmentsCompanion data) {
+    return SkipSegmentRow(
+      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      episode: data.episode.present ? data.episode.value : this.episode,
+      introStartMs: data.introStartMs.present
+          ? data.introStartMs.value
+          : this.introStartMs,
+      introEndMs: data.introEndMs.present
+          ? data.introEndMs.value
+          : this.introEndMs,
+      outroStartMs: data.outroStartMs.present
+          ? data.outroStartMs.value
+          : this.outroStartMs,
+      outroEndMs: data.outroEndMs.present
+          ? data.outroEndMs.value
+          : this.outroEndMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SkipSegmentRow(')
+          ..write('anilistId: $anilistId, ')
+          ..write('episode: $episode, ')
+          ..write('introStartMs: $introStartMs, ')
+          ..write('introEndMs: $introEndMs, ')
+          ..write('outroStartMs: $outroStartMs, ')
+          ..write('outroEndMs: $outroEndMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    anilistId,
+    episode,
+    introStartMs,
+    introEndMs,
+    outroStartMs,
+    outroEndMs,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SkipSegmentRow &&
+          other.anilistId == this.anilistId &&
+          other.episode == this.episode &&
+          other.introStartMs == this.introStartMs &&
+          other.introEndMs == this.introEndMs &&
+          other.outroStartMs == this.outroStartMs &&
+          other.outroEndMs == this.outroEndMs);
+}
+
+class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
+  final Value<int> anilistId;
+  final Value<int> episode;
+  final Value<int?> introStartMs;
+  final Value<int?> introEndMs;
+  final Value<int?> outroStartMs;
+  final Value<int?> outroEndMs;
+  final Value<int> rowid;
+  const SkipSegmentsCompanion({
+    this.anilistId = const Value.absent(),
+    this.episode = const Value.absent(),
+    this.introStartMs = const Value.absent(),
+    this.introEndMs = const Value.absent(),
+    this.outroStartMs = const Value.absent(),
+    this.outroEndMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SkipSegmentsCompanion.insert({
+    required int anilistId,
+    required int episode,
+    this.introStartMs = const Value.absent(),
+    this.introEndMs = const Value.absent(),
+    this.outroStartMs = const Value.absent(),
+    this.outroEndMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : anilistId = Value(anilistId),
+       episode = Value(episode);
+  static Insertable<SkipSegmentRow> custom({
+    Expression<int>? anilistId,
+    Expression<int>? episode,
+    Expression<int>? introStartMs,
+    Expression<int>? introEndMs,
+    Expression<int>? outroStartMs,
+    Expression<int>? outroEndMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (anilistId != null) 'anilist_id': anilistId,
+      if (episode != null) 'episode': episode,
+      if (introStartMs != null) 'intro_start_ms': introStartMs,
+      if (introEndMs != null) 'intro_end_ms': introEndMs,
+      if (outroStartMs != null) 'outro_start_ms': outroStartMs,
+      if (outroEndMs != null) 'outro_end_ms': outroEndMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SkipSegmentsCompanion copyWith({
+    Value<int>? anilistId,
+    Value<int>? episode,
+    Value<int?>? introStartMs,
+    Value<int?>? introEndMs,
+    Value<int?>? outroStartMs,
+    Value<int?>? outroEndMs,
+    Value<int>? rowid,
+  }) {
+    return SkipSegmentsCompanion(
+      anilistId: anilistId ?? this.anilistId,
+      episode: episode ?? this.episode,
+      introStartMs: introStartMs ?? this.introStartMs,
+      introEndMs: introEndMs ?? this.introEndMs,
+      outroStartMs: outroStartMs ?? this.outroStartMs,
+      outroEndMs: outroEndMs ?? this.outroEndMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (anilistId.present) {
+      map['anilist_id'] = Variable<int>(anilistId.value);
+    }
+    if (episode.present) {
+      map['episode'] = Variable<int>(episode.value);
+    }
+    if (introStartMs.present) {
+      map['intro_start_ms'] = Variable<int>(introStartMs.value);
+    }
+    if (introEndMs.present) {
+      map['intro_end_ms'] = Variable<int>(introEndMs.value);
+    }
+    if (outroStartMs.present) {
+      map['outro_start_ms'] = Variable<int>(outroStartMs.value);
+    }
+    if (outroEndMs.present) {
+      map['outro_end_ms'] = Variable<int>(outroEndMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SkipSegmentsCompanion(')
+          ..write('anilistId: $anilistId, ')
+          ..write('episode: $episode, ')
+          ..write('introStartMs: $introStartMs, ')
+          ..write('introEndMs: $introEndMs, ')
+          ..write('outroStartMs: $outroStartMs, ')
+          ..write('outroEndMs: $outroEndMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AppSettingsTable extends AppSettings
     with TableInfo<$AppSettingsTable, AppSettingRow> {
   @override
@@ -2758,6 +3253,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
   late final $SourceOverridesTable sourceOverrides = $SourceOverridesTable(
     this,
   );
+  late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -2770,6 +3266,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     matchOverrides,
     watchStates,
     sourceOverrides,
+    skipSegments,
     appSettings,
   ];
 }
@@ -2777,6 +3274,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
 typedef $$SeriesCacheTableCreateCompanionBuilder =
     SeriesCacheCompanion Function({
       Value<int> anilistId,
+      Value<int?> idMal,
       Value<String?> romaji,
       Value<String?> english,
       Value<String?> nativeTitle,
@@ -2788,6 +3286,7 @@ typedef $$SeriesCacheTableCreateCompanionBuilder =
 typedef $$SeriesCacheTableUpdateCompanionBuilder =
     SeriesCacheCompanion Function({
       Value<int> anilistId,
+      Value<int?> idMal,
       Value<String?> romaji,
       Value<String?> english,
       Value<String?> nativeTitle,
@@ -2808,6 +3307,11 @@ class $$SeriesCacheTableFilterComposer
   });
   ColumnFilters<int> get anilistId => $composableBuilder(
     column: $table.anilistId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idMal => $composableBuilder(
+    column: $table.idMal,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2861,6 +3365,11 @@ class $$SeriesCacheTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get idMal => $composableBuilder(
+    column: $table.idMal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get romaji => $composableBuilder(
     column: $table.romaji,
     builder: (column) => ColumnOrderings(column),
@@ -2908,6 +3417,9 @@ class $$SeriesCacheTableAnnotationComposer
   });
   GeneratedColumn<int> get anilistId =>
       $composableBuilder(column: $table.anilistId, builder: (column) => column);
+
+  GeneratedColumn<int> get idMal =>
+      $composableBuilder(column: $table.idMal, builder: (column) => column);
 
   GeneratedColumn<String> get romaji =>
       $composableBuilder(column: $table.romaji, builder: (column) => column);
@@ -2971,6 +3483,7 @@ class $$SeriesCacheTableTableManager
           updateCompanionCallback:
               ({
                 Value<int> anilistId = const Value.absent(),
+                Value<int?> idMal = const Value.absent(),
                 Value<String?> romaji = const Value.absent(),
                 Value<String?> english = const Value.absent(),
                 Value<String?> nativeTitle = const Value.absent(),
@@ -2980,6 +3493,7 @@ class $$SeriesCacheTableTableManager
                 Value<String?> coverImagePath = const Value.absent(),
               }) => SeriesCacheCompanion(
                 anilistId: anilistId,
+                idMal: idMal,
                 romaji: romaji,
                 english: english,
                 nativeTitle: nativeTitle,
@@ -2991,6 +3505,7 @@ class $$SeriesCacheTableTableManager
           createCompanionCallback:
               ({
                 Value<int> anilistId = const Value.absent(),
+                Value<int?> idMal = const Value.absent(),
                 Value<String?> romaji = const Value.absent(),
                 Value<String?> english = const Value.absent(),
                 Value<String?> nativeTitle = const Value.absent(),
@@ -3000,6 +3515,7 @@ class $$SeriesCacheTableTableManager
                 Value<String?> coverImagePath = const Value.absent(),
               }) => SeriesCacheCompanion.insert(
                 anilistId: anilistId,
+                idMal: idMal,
                 romaji: romaji,
                 english: english,
                 nativeTitle: nativeTitle,
@@ -4121,6 +4637,233 @@ typedef $$SourceOverridesTableProcessedTableManager =
       SourceOverrideRow,
       PrefetchHooks Function()
     >;
+typedef $$SkipSegmentsTableCreateCompanionBuilder =
+    SkipSegmentsCompanion Function({
+      required int anilistId,
+      required int episode,
+      Value<int?> introStartMs,
+      Value<int?> introEndMs,
+      Value<int?> outroStartMs,
+      Value<int?> outroEndMs,
+      Value<int> rowid,
+    });
+typedef $$SkipSegmentsTableUpdateCompanionBuilder =
+    SkipSegmentsCompanion Function({
+      Value<int> anilistId,
+      Value<int> episode,
+      Value<int?> introStartMs,
+      Value<int?> introEndMs,
+      Value<int?> outroStartMs,
+      Value<int?> outroEndMs,
+      Value<int> rowid,
+    });
+
+class $$SkipSegmentsTableFilterComposer
+    extends Composer<_$CacheDatabase, $SkipSegmentsTable> {
+  $$SkipSegmentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get episode => $composableBuilder(
+    column: $table.episode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get introStartMs => $composableBuilder(
+    column: $table.introStartMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get introEndMs => $composableBuilder(
+    column: $table.introEndMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get outroStartMs => $composableBuilder(
+    column: $table.outroStartMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get outroEndMs => $composableBuilder(
+    column: $table.outroEndMs,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SkipSegmentsTableOrderingComposer
+    extends Composer<_$CacheDatabase, $SkipSegmentsTable> {
+  $$SkipSegmentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get episode => $composableBuilder(
+    column: $table.episode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get introStartMs => $composableBuilder(
+    column: $table.introStartMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get introEndMs => $composableBuilder(
+    column: $table.introEndMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get outroStartMs => $composableBuilder(
+    column: $table.outroStartMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get outroEndMs => $composableBuilder(
+    column: $table.outroEndMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SkipSegmentsTableAnnotationComposer
+    extends Composer<_$CacheDatabase, $SkipSegmentsTable> {
+  $$SkipSegmentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get anilistId =>
+      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+
+  GeneratedColumn<int> get episode =>
+      $composableBuilder(column: $table.episode, builder: (column) => column);
+
+  GeneratedColumn<int> get introStartMs => $composableBuilder(
+    column: $table.introStartMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get introEndMs => $composableBuilder(
+    column: $table.introEndMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get outroStartMs => $composableBuilder(
+    column: $table.outroStartMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get outroEndMs => $composableBuilder(
+    column: $table.outroEndMs,
+    builder: (column) => column,
+  );
+}
+
+class $$SkipSegmentsTableTableManager
+    extends
+        RootTableManager<
+          _$CacheDatabase,
+          $SkipSegmentsTable,
+          SkipSegmentRow,
+          $$SkipSegmentsTableFilterComposer,
+          $$SkipSegmentsTableOrderingComposer,
+          $$SkipSegmentsTableAnnotationComposer,
+          $$SkipSegmentsTableCreateCompanionBuilder,
+          $$SkipSegmentsTableUpdateCompanionBuilder,
+          (
+            SkipSegmentRow,
+            BaseReferences<_$CacheDatabase, $SkipSegmentsTable, SkipSegmentRow>,
+          ),
+          SkipSegmentRow,
+          PrefetchHooks Function()
+        > {
+  $$SkipSegmentsTableTableManager(_$CacheDatabase db, $SkipSegmentsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SkipSegmentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SkipSegmentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SkipSegmentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> anilistId = const Value.absent(),
+                Value<int> episode = const Value.absent(),
+                Value<int?> introStartMs = const Value.absent(),
+                Value<int?> introEndMs = const Value.absent(),
+                Value<int?> outroStartMs = const Value.absent(),
+                Value<int?> outroEndMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SkipSegmentsCompanion(
+                anilistId: anilistId,
+                episode: episode,
+                introStartMs: introStartMs,
+                introEndMs: introEndMs,
+                outroStartMs: outroStartMs,
+                outroEndMs: outroEndMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int anilistId,
+                required int episode,
+                Value<int?> introStartMs = const Value.absent(),
+                Value<int?> introEndMs = const Value.absent(),
+                Value<int?> outroStartMs = const Value.absent(),
+                Value<int?> outroEndMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SkipSegmentsCompanion.insert(
+                anilistId: anilistId,
+                episode: episode,
+                introStartMs: introStartMs,
+                introEndMs: introEndMs,
+                outroStartMs: outroStartMs,
+                outroEndMs: outroEndMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SkipSegmentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$CacheDatabase,
+      $SkipSegmentsTable,
+      SkipSegmentRow,
+      $$SkipSegmentsTableFilterComposer,
+      $$SkipSegmentsTableOrderingComposer,
+      $$SkipSegmentsTableAnnotationComposer,
+      $$SkipSegmentsTableCreateCompanionBuilder,
+      $$SkipSegmentsTableUpdateCompanionBuilder,
+      (
+        SkipSegmentRow,
+        BaseReferences<_$CacheDatabase, $SkipSegmentsTable, SkipSegmentRow>,
+      ),
+      SkipSegmentRow,
+      PrefetchHooks Function()
+    >;
 typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
       required String key,
@@ -4276,6 +5019,8 @@ class $CacheDatabaseManager {
       $$WatchStatesTableTableManager(_db, _db.watchStates);
   $$SourceOverridesTableTableManager get sourceOverrides =>
       $$SourceOverridesTableTableManager(_db, _db.sourceOverrides);
+  $$SkipSegmentsTableTableManager get skipSegments =>
+      $$SkipSegmentsTableTableManager(_db, _db.skipSegments);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
 }

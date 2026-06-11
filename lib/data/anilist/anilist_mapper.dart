@@ -11,6 +11,7 @@ import '../../domain/models/titles.dart';
 Series seriesFromMediaJson(Map<String, dynamic> media) {
   return Series(
     anilistId: media['id'] as int,
+    idMal: media['idMal'] as int?,
     titles: _titlesFrom(media['title'] as Map<String, dynamic>?),
     format: media['format'] as String?,
     episodeCount: media['episodes'] as int?,

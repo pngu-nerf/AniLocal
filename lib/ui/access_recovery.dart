@@ -71,3 +71,33 @@ class AccessBanner extends StatelessWidget {
     );
   }
 }
+
+/// Ambient recovery for a library folder whose drive/mount is OFFLINE — a
+/// connectivity problem, not a permission one. No Settings link (nothing is
+/// broken there); reconnecting the drive + rescanning restores it, and the
+/// folder is kept meanwhile (never forgotten).
+class ReconnectBanner extends StatelessWidget {
+  const ReconnectBanner({
+    super.key,
+    required this.labels,
+    required this.onRescan,
+  });
+
+  final List<String> labels;
+  final VoidCallback onRescan;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return MaterialBanner(
+      backgroundColor: scheme.secondaryContainer,
+      leading: Icon(Icons.link_off, color: scheme.onSecondaryContainer),
+      content: Text(
+        "${labels.join(', ')} isn't connected. Reconnect it to access this "
+        'library, then rescan.',
+        style: TextStyle(color: scheme.onSecondaryContainer),
+      ),
+      actions: [TextButton(onPressed: onRescan, child: const Text('Rescan'))],
+    );
+  }
+}

@@ -6,6 +6,7 @@ import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/sync_summary.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/domain/models/next_result.dart';
+import 'package:anilocal/domain/models/skip_mode.dart';
 import 'package:anilocal/domain/repositories/fix_match_repository.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
 import 'package:anilocal/domain/repositories/source_selection_repository.dart';
@@ -126,13 +127,17 @@ void main() {
           errored: 0,
           anilistLookups: 0,
         ),
+        onRefreshMetadata: () async => (seriesRefreshed: 0, skipsFetched: 0),
         onAddFolder: () async => (added: false, deniedLabel: null),
         accessIssues: ValueNotifier<List<String>>(const []),
+        missingFolders: ValueNotifier<List<String>>(const []),
         onOpenAccessSettings: () async => true,
         loadContinueCollapsed: () async => false,
         setContinueCollapsed: (_) async {},
         loadAutoPlayNext: () async => true,
         setAutoPlayNext: (_) async {},
+        loadSkipMode: () async => SkipMode.button,
+        setSkipMode: (_) async {},
       ),
     );
     await tester.pumpAndSettle();

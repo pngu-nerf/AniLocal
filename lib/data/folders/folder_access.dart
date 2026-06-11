@@ -24,24 +24,49 @@ abstract interface class FolderPicker {
   Future<FolderAccessToken?> pickFolder();
 }
 
-/// Outcome of ensuring folder-wide access to a TCC-protected category.
+/// The three distinct readability conditions a library folder can be in. A
+/// failed read is NOT automatically a permission problem — an unplugged drive
+/// or offline NAS is a different condition with a different fix.
+enum FolderAccessState {
+  /// Readable — freely, or folder-wide access is held.
+  accessible,
+
+  /// The path/mount doesn't exist: an unplugged external drive or offline NAS.
+  /// Recoverable by reconnecting (no Settings interaction); the folder is a
+  /// valid library that's merely offline right now — never forget it.
+  missing,
+
+  /// The path exists but reading is blocked (TCC / EPERM / EACCES) — the
+  /// Settings → Files-and-Folders recovery flow.
+  denied,
+}
+
+/// Outcome of ensuring folder-wide access to a (possibly TCC-protected) folder.
 class FolderAccessResult {
-  const FolderAccessResult._(this.categoryLabel, this.isDenied);
+  const FolderAccessResult._(this.categoryLabel, this.state);
 
   /// The folder isn't under a TCC-protected category (freely readable).
-  const FolderAccessResult.notApplicable() : this._(null, false);
+  const FolderAccessResult.notApplicable()
+    : this._(null, FolderAccessState.accessible);
 
   /// Folder-wide access to [categoryLabel] is held (clears any prior issue).
   const FolderAccessResult.granted(String categoryLabel)
-    : this._(categoryLabel, false);
+    : this._(categoryLabel, FolderAccessState.accessible);
 
-  /// Access to [categoryLabel] was denied (drives the recovery UX).
+  /// [categoryLabel]'s mount/path doesn't exist — reconnect to recover.
+  const FolderAccessResult.missing(String categoryLabel)
+    : this._(categoryLabel, FolderAccessState.missing);
+
+  /// Access to [categoryLabel] was denied (drives the Settings recovery UX).
   const FolderAccessResult.denied(String categoryLabel)
-    : this._(categoryLabel, true);
+    : this._(categoryLabel, FolderAccessState.denied);
 
-  /// Human label of the category, or null when not category-protected.
+  /// Human label of the category/volume, or null when not category-protected.
   final String? categoryLabel;
-  final bool isDenied;
+  final FolderAccessState state;
+
+  bool get isDenied => state == FolderAccessState.denied;
+  bool get isMissing => state == FolderAccessState.missing;
 }
 
 /// Ensures the app has folder-wide read access to a (possibly TCC-protected)
