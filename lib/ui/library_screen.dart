@@ -301,6 +301,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         );
       }
+      if (summary.apiUnreachable) {
+        messenger.showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            content: const Text(
+              "⚠ Couldn't reach AniList — your library was kept as-is "
+              '(nothing removed). Check your connection and rescan.',
+            ),
+          ),
+        );
+      }
       _reload();
     } catch (e) {
       if (!mounted) return;

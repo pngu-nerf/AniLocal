@@ -13,6 +13,7 @@ class SyncSummary extends Equatable {
     required this.errored,
     required this.anilistLookups,
     this.unreadableFolders = const [],
+    this.apiUnreachable = false,
   });
 
   /// Total video files found on disk.
@@ -43,6 +44,12 @@ class SyncSummary extends Equatable {
   /// silently dropped.
   final List<String> unreadableFolders;
 
+  /// Every AniList lookup this scan failed (403 / transport / timeout) — the
+  /// API is unreachable, not "the content is gone". Like an unreadable folder,
+  /// the cache is PRESERVED (no removals/prune) so a transient outage can't
+  /// empty a populated library. Surfaced so the user knows to retry.
+  final bool apiUnreachable;
+
   @override
   List<Object?> get props => [
     filesScanned,
@@ -54,5 +61,6 @@ class SyncSummary extends Equatable {
     errored,
     anilistLookups,
     unreadableFolders,
+    apiUnreachable,
   ];
 }

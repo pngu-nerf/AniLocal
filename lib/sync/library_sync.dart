@@ -133,6 +133,18 @@ class LibrarySync {
       }
     }
 
+    // RESILIENCE: if every lookup we attempted failed (403 / transport /
+    // timeout), AniList is unreachable — NOT "the content is gone". Treat it
+    // like an unreadable folder and PRESERVE the cache: skip all removals (which
+    // also makes the prune a no-op, since every cached series keeps its files).
+    // A transient API outage must never empty a populated library; the next
+    // healthy scan reconciles real moves/deletions.
+    final apiUnreachable =
+        anilistLookups > 0 && erroredTitles.length == anilistLookups;
+    final effectiveRemovedPaths = apiUnreachable
+        ? const <String>[]
+        : removedPaths;
+
     // Download art only for newly-fetched series (incremental).
     final seriesUpserts = <CachedSeriesRow>[];
     for (final r in resolved.values) {
@@ -221,7 +233,7 @@ class LibrarySync {
     await cache.applySync(
       seriesUpserts: seriesUpserts,
       fileUpserts: fileUpserts,
-      removedPaths: removedPaths,
+      removedPaths: effectiveRemovedPaths,
       skipUpserts: skipUpserts,
     );
 
@@ -229,12 +241,13 @@ class LibrarySync {
       filesScanned: scannedSet.length,
       unchanged: unchanged,
       processed: matched + unmatched,
-      removed: removedPaths.length,
+      removed: effectiveRemovedPaths.length,
       matched: matched,
       unmatched: unmatched,
       errored: errored,
       anilistLookups: anilistLookups,
       unreadableFolders: unreadableFolders,
+      apiUnreachable: apiUnreachable,
     );
   }
 

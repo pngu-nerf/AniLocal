@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/skip_range.dart';
+import '../anilist/anilist_client.dart' show kAniLocalUserAgent;
 
 /// Thrown for an AniSkip request that failed transport-side (network / non-404
 /// HTTP). "No data" is NOT an exception — it returns null.
@@ -47,7 +48,11 @@ class AniSkipClient {
     try {
       response = await _http.get(
         uri,
-        headers: const {'Accept': 'application/json'},
+        headers: const {
+          'Accept': 'application/json',
+          // A named UA — same reason as AniList: avoid edge/WAF blocks.
+          'User-Agent': kAniLocalUserAgent,
+        },
       );
     } on Exception catch (e) {
       throw AniSkipException('Network error contacting AniSkip: $e');

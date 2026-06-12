@@ -15,6 +15,11 @@ class AniListException implements Exception {
   String toString() => 'AniListException: $message';
 }
 
+/// Identifies the app to AniList. REQUIRED: AniList sits behind Cloudflare,
+/// which 403s requests sending the `http` package's default user agent. A
+/// stable, named UA gets through (and is good public-API citizenship).
+const String kAniLocalUserAgent = 'AniLocal/1.0';
+
 /// Read-only client for AniList's public GraphQL API.
 ///
 /// Seam #3: all AniList access lives behind this class, and every public method
@@ -123,6 +128,8 @@ class AniListClient {
         headers: const {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          // Without this, AniList's Cloudflare returns HTTP 403.
+          'User-Agent': kAniLocalUserAgent,
         },
         body: jsonEncode(body),
       );
