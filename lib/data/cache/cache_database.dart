@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 
+import '../folders/volume_resolver.dart' show rebaseToFolderRelative;
+
 part 'cache_database.g.dart';
 
 /// AniList metadata projection, keyed by AniList ID. ONLY fields the UI renders
@@ -28,13 +30,19 @@ class SeriesCache extends Table {
   String get tableName => 'series_cache';
 }
 
-/// One scanned video file. Identity is [path]. [fileSize] + [modifiedAtMs] are
-/// the "unchanged" key for incremental rescans. A null [anilistId] means a
-/// known-unmatched file — it persists across rescans (Stage 5 fixes it), it
-/// does not vanish.
+/// One scanned video file. Identity is its LOCATION — [folderPath] (the owning
+/// library folder's stable identity) + [relativePath] (the path within that
+/// folder) — NOT an absolute mount path. This is what keeps identity stable when
+/// a removable/network volume remounts under a different `/Volumes` name: the
+/// folder is re-found by its volume UUID (see [LibraryFolders.volumeId]) and the
+/// relative paths still resolve, so a remount does NOT churn the cache (no
+/// re-identify, no AniList refetch). [fileSize] + [modifiedAtMs] remain the
+/// "unchanged" key for incremental rescans. A null [anilistId] is a
+/// known-unmatched file — it persists across rescans (Stage 5 fixes it).
 @DataClassName('CachedFileRow')
 class FileCache extends Table {
-  TextColumn get path => text()();
+  TextColumn get folderPath => text()();
+  TextColumn get relativePath => text()();
   IntColumn get fileSize => integer()();
   IntColumn get modifiedAtMs => integer()();
   IntColumn get anilistId => integer().nullable()();
@@ -44,7 +52,7 @@ class FileCache extends Table {
   TextColumn get releaseGroup => text().nullable()();
 
   @override
-  Set<Column> get primaryKey => {path};
+  Set<Column> get primaryKey => {folderPath, relativePath};
 
   @override
   String get tableName => 'file_cache';
@@ -62,6 +70,18 @@ class LibraryFolders extends Table {
   /// priority: top = preferred default playback source. Set by drag-to-reorder
   /// in the folders screen (see [reorderFolders]); stable across relaunch.
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Stable volume identity (a volume UUID) for a folder on a removable/network
+  /// volume, so the folder is re-found after its volume remounts under a
+  /// different `/Volumes` name. Null for internal-disk folders (their absolute
+  /// path is already stable) and for not-yet-bound folders (backfilled on the
+  /// next scan while the volume is mounted). Used WITH [volumeSubpath].
+  TextColumn get volumeId => text().nullable()();
+
+  /// The folder's path WITHIN its volume (e.g. `shows/anime`; `''` = the volume
+  /// root). Joined onto the volume's current mount point to reconstruct the
+  /// folder's current absolute path after a remount. Null when [volumeId] is.
+  TextColumn get volumeSubpath => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {path};
@@ -199,12 +219,14 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
   // v5 watch_state; v6 app_settings; v7 source_overrides; v8 series_cache.idMal
-  // + skip_segments (auto-skip).
+  // + skip_segments (auto-skip); v9 stable volume identity — file_cache keyed by
+  // (folder_path, relative_path) instead of an absolute path, + library_folders
+  // volume binding (see [_migrateFileCacheToRelativeV9]).
   //
   // v8 RECLAIMED: it was briefly scratch on an unshipped branch (series_relations,
   // the "Up Next" overshoot) then reverted — it never reached main and no DB sits
@@ -241,8 +263,55 @@ class CacheDatabase extends _$CacheDatabase {
         await m.addColumn(seriesCache, seriesCache.idMal);
         await m.createTable(skipSegments);
       }
+      if (from < 9) {
+        await m.addColumn(libraryFolders, libraryFolders.volumeId);
+        await m.addColumn(libraryFolders, libraryFolders.volumeSubpath);
+        await _migrateFileCacheToRelativeV9(m);
+      }
     },
   );
+
+  /// v9: move file_cache identity from an absolute `path` to (folder_path,
+  /// relative_path). Rebase every existing row IN PLACE by stripping its owning
+  /// library folder's prefix — PURE STRING work (folder paths == file prefixes
+  /// at migration time, before anything has remounted), so identity is
+  /// PRESERVED and the first post-migration rescan sees every file unchanged (no
+  /// re-identify, no AniList refetch). Watch-state / overrides aren't touched
+  /// (they're fingerprint/identity keyed). Volume UUIDs are NOT resolved here
+  /// (that needs diskutil + a mounted volume) — they backfill on the next scan.
+  Future<void> _migrateFileCacheToRelativeV9(Migrator m) async {
+    final folderRows = await customSelect(
+      'SELECT path FROM library_folders',
+    ).get();
+    final folderPaths = [for (final r in folderRows) r.read<String>('path')];
+    final oldFiles = await customSelect('SELECT * FROM file_cache').get();
+
+    // Rebuild the table under the new (folder_path, relative_path) PK, copying
+    // each row rebased. Rename-create-copy-drop is the SQLite idiom for a PK
+    // change; the whole onUpgrade runs in drift's migration transaction.
+    await customStatement('ALTER TABLE file_cache RENAME TO _file_cache_v8');
+    await m.createTable(fileCache);
+    for (final r in oldFiles) {
+      final loc = rebaseToFolderRelative(r.read<String>('path'), folderPaths);
+      await customStatement(
+        'INSERT INTO file_cache (folder_path, relative_path, file_size, '
+        'modified_at_ms, anilist_id, episode_number, parsed_title, '
+        'match_score, release_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          loc.folderPath,
+          loc.relativePath,
+          r.read<int>('file_size'),
+          r.read<int>('modified_at_ms'),
+          r.readNullable<int>('anilist_id'),
+          r.readNullable<int>('episode_number'),
+          r.read<String>('parsed_title'),
+          r.read<double>('match_score'),
+          r.readNullable<String>('release_group'),
+        ],
+      );
+    }
+    await customStatement('DROP TABLE _file_cache_v8');
+  }
 
   // --- Read path (used by DriftLibraryRepository) ---
 
@@ -295,12 +364,12 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// Remove a folder and the files under it, then prune orphaned series — all
   /// atomically (so the cache stays consistent immediately, without a rescan).
+  /// Files are keyed by their owning folder, so removal is an exact match on
+  /// [folderPath] (no path-prefix scan).
   Future<void> removeFolderAndFiles(String path) {
     return transaction(() async {
       await (delete(libraryFolders)..where((f) => f.path.equals(path))).go();
-      await (delete(
-        fileCache,
-      )..where((f) => f.path.equals(path) | f.path.like('$path/%'))).go();
+      await (delete(fileCache)..where((f) => f.folderPath.equals(path))).go();
       await customStatement(
         'DELETE FROM series_cache WHERE anilist_id NOT IN ('
         'SELECT anilist_id FROM file_cache WHERE anilist_id IS NOT NULL '
@@ -309,14 +378,40 @@ class CacheDatabase extends _$CacheDatabase {
     });
   }
 
+  /// Record a folder's volume binding (UUID + within-volume subpath), discovered
+  /// at scan/add time while the volume is mounted. Touches only these columns,
+  /// so it never disturbs sortOrder or any other folder state.
+  Future<void> bindFolderVolume(
+    String path,
+    String volumeId,
+    String volumeSubpath,
+  ) => (update(libraryFolders)..where((f) => f.path.equals(path))).write(
+    LibraryFoldersCompanion(
+      volumeId: Value(volumeId),
+      volumeSubpath: Value(volumeSubpath),
+    ),
+  );
+
   // --- Match overrides (Stage 5 fix-match). Written ONLY by FixMatchService;
   //     LibrarySync has no reference to these methods (seam #5 by structure). ---
 
   Future<List<MatchOverrideRow>> allOverrideRows() =>
       select(matchOverrides).get();
 
-  Future<CachedFileRow?> fileByPath(String path) =>
-      (select(fileCache)..where((f) => f.path.equals(path))).getSingleOrNull();
+  /// Find a cached file by its content fingerprint (size + mtime). Used by
+  /// fix-match, which stats the present file — so it needs no path scheme at all
+  /// and works unchanged across moves/remounts. (Distinct real media don't share
+  /// a byte-exact size + mtime; multi-source copies of one episode that happen
+  /// to collide resolve to the same episode anyway.)
+  Future<CachedFileRow?> fileByFingerprint(int fileSize, int modifiedAtMs) =>
+      (select(fileCache)
+            ..where(
+              (f) =>
+                  f.fileSize.equals(fileSize) &
+                  f.modifiedAtMs.equals(modifiedAtMs),
+            )
+            ..limit(1))
+          .getSingleOrNull();
 
   /// Cache a series without pruning (used by fix-match before its override
   /// row exists — applySync's prune would otherwise drop the new series).
@@ -420,11 +515,12 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// Apply a computed delta atomically: never half-write a record. Upserts
   /// series + files (+ any freshly-fetched skip windows), deletes removed
-  /// paths, then prunes series with no files and now-orphaned skip rows.
+  /// files (by their (folderPath, relativePath) identity), then prunes series
+  /// with no files and now-orphaned skip rows.
   Future<void> applySync({
     required List<CachedSeriesRow> seriesUpserts,
     required List<CachedFileRow> fileUpserts,
-    required List<String> removedPaths,
+    required List<(String folderPath, String relativePath)> removedKeys,
     List<SkipSegmentRow> skipUpserts = const [],
   }) {
     return transaction(() async {
@@ -437,8 +533,11 @@ class CacheDatabase extends _$CacheDatabase {
       for (final s in skipUpserts) {
         await into(skipSegments).insertOnConflictUpdate(s);
       }
-      if (removedPaths.isNotEmpty) {
-        await (delete(fileCache)..where((f) => f.path.isIn(removedPaths))).go();
+      for (final k in removedKeys) {
+        await (delete(fileCache)..where(
+              (f) => f.folderPath.equals(k.$1) & f.relativePath.equals(k.$2),
+            ))
+            .go();
       }
       await customStatement(
         'DELETE FROM series_cache WHERE anilist_id NOT IN ('

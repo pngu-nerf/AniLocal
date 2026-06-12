@@ -11,6 +11,7 @@ import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/source_selection_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
+import '../folders/volume_resolver.dart';
 import 'cache_database.dart';
 
 /// Sort rank for a file not under any known library folder (orphan from a
@@ -66,9 +67,41 @@ class DriftLibraryRepository
         WatchStateRepository,
         SourceSelectionRepository,
         WatchOrderRepository {
-  DriftLibraryRepository(this._db);
+  DriftLibraryRepository(this._db, {VolumeResolver? resolver})
+    : _resolver = resolver ?? DiskutilVolumeResolver();
 
   final CacheDatabase _db;
+
+  /// Resolves a file's CURRENT absolute path by following its owning folder's
+  /// volume across remounts (defaults to the macOS diskutil resolver; injectable
+  /// for tests). The fast path (stored folder path still exists) calls nothing.
+  final VolumeResolver _resolver;
+
+  /// Map each library folder's stable identity to its CURRENT absolute path
+  /// (null when its volume isn't mounted). Resolved once per read.
+  Future<Map<String, String?>> _currentFolderPaths(
+    List<LibraryFolderRow> folders,
+  ) async {
+    final result = <String, String?>{};
+    for (final f in folders) {
+      result[f.path] = await resolveFolderPath(
+        storedPath: f.path,
+        volumeId: f.volumeId,
+        volumeSubpath: f.volumeSubpath,
+        resolver: _resolver,
+      );
+    }
+    return result;
+  }
+
+  /// The current absolute path the player should open for [f]: its owning
+  /// folder's current mount joined with the file's relative path. Falls back to
+  /// the stable folder path when the volume is missing (the show is greyed
+  /// offline anyway), so a fileRef is always a non-empty string.
+  String _fileRef(CachedFileRow f, Map<String, String?> currentByFolder) {
+    final current = currentByFolder[f.folderPath] ?? f.folderPath;
+    return f.relativePath.isEmpty ? current : '$current/${f.relativePath}';
+  }
 
   /// Build the effective (override-or-auto) match for every cached file.
   Future<List<_Effective>> _effectiveMatches() async {
@@ -113,6 +146,8 @@ class DriftLibraryRepository
   Future<Map<(int, int), _Logical>> _logicalEpisodes() async {
     final effective = await _effectiveMatches();
     final folders = await _db.allFolderRows(); // sorted by sortOrder asc
+    final folderByPath = {for (final f in folders) f.path: f};
+    final currentByFolder = await _currentFolderPaths(folders);
     final overrides = {
       for (final o in await _db.allSourceOverrideRows())
         (o.anilistId, o.episode): o,
@@ -126,66 +161,58 @@ class DriftLibraryRepository
 
     final result = <(int, int), _Logical>{};
     groups.forEach((key, files) {
-      final sources =
+      // Build (source, effective) per file. The owning folder is STORED on the
+      // row (file.folderPath, the folder's stable identity), so there's no
+      // path-prefix matching; fileRef is resolved to the volume's current mount.
+      final entries =
           [
             for (final e in files)
-              () {
-                final owner = _owningFolder(e.file.path, folders);
-                return EpisodeSource(
-                  fileRef: e.file.path,
-                  folderPath: owner?.path ?? _parentDir(e.file.path),
-                  folderSortOrder: owner?.sortOrder ?? _unfiledSortOrder,
-                );
-              }(),
+              (
+                source: EpisodeSource(
+                  fileRef: _fileRef(e.file, currentByFolder),
+                  folderPath: e.file.folderPath,
+                  folderSortOrder:
+                      folderByPath[e.file.folderPath]?.sortOrder ??
+                      _unfiledSortOrder,
+                ),
+                eff: e,
+              ),
           ]..sort((a, b) {
-            final c = a.folderSortOrder.compareTo(b.folderSortOrder);
-            return c != 0 ? c : a.fileRef.compareTo(b.fileRef);
+            final c = a.source.folderSortOrder.compareTo(
+              b.source.folderSortOrder,
+            );
+            return c != 0 ? c : a.source.fileRef.compareTo(b.source.fileRef);
           });
+      final sources = [for (final e in entries) e.source];
 
       // Resolve the active source: a manual override wins, but only while its
       // folder still holds the episode; otherwise fall back to priority. The
       // pin is "in effect" only when it actually selects a present source.
-      var active = sources.first;
+      var activeIdx = 0;
       String? pinnedFolder;
       final ov = overrides[key];
       if (ov != null) {
-        final pinned = sources.where((s) => s.folderPath == ov.folderPath);
-        if (pinned.isNotEmpty) {
-          active = pinned.first;
+        final i = entries.indexWhere(
+          (e) => e.source.folderPath == ov.folderPath,
+        );
+        if (i >= 0) {
+          activeIdx = i;
           pinnedFolder = ov.folderPath;
         }
       }
 
       // Display number comes from the active source's effective match (all
       // sources are the same episode; normally identical).
-      final activeEff = files.firstWhere((e) => e.file.path == active.fileRef);
       result[key] = _Logical(
         anilistId: key.$1,
         anchored: key.$2,
-        displayNumber: activeEff.displayNumber,
+        displayNumber: entries[activeIdx].eff.displayNumber,
         sources: sources,
-        activeFileRef: active.fileRef,
+        activeFileRef: entries[activeIdx].source.fileRef,
         pinnedFolder: pinnedFolder,
       );
     });
     return result;
-  }
-
-  /// The library folder that owns [path] — the longest matching path prefix
-  /// (most specific folder when folders nest). Null if none (orphan file).
-  LibraryFolderRow? _owningFolder(String path, List<LibraryFolderRow> folders) {
-    LibraryFolderRow? best;
-    for (final f in folders) {
-      if (path == f.path || path.startsWith('${f.path}/')) {
-        if (best == null || f.path.length > best.path.length) best = f;
-      }
-    }
-    return best;
-  }
-
-  String _parentDir(String path) {
-    final i = path.lastIndexOf('/');
-    return i <= 0 ? path : path.substring(0, i);
   }
 
   @override
@@ -230,11 +257,14 @@ class DriftLibraryRepository
   @override
   Future<List<IdentifiedEpisode>> unmatchedFiles() async {
     final effective = await _effectiveMatches();
+    final currentByFolder = await _currentFolderPaths(
+      await _db.allFolderRows(),
+    );
     return [
       for (final e in effective)
         if (e.anilistId == null)
           IdentifiedEpisode(
-            filePath: e.file.path,
+            filePath: _fileRef(e.file, currentByFolder),
             parsedTitle: e.file.parsedTitle,
             parsedEpisodeNumber: e.file.episodeNumber,
             releaseGroup: e.file.releaseGroup,

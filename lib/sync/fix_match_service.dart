@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../data/anilist/anilist_client.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
@@ -30,6 +32,10 @@ class FixMatchService implements FixMatchRepository {
       anilist.searchSeriesCandidates(query, formatsIn: formatsIn, perPage: 15);
 
   /// Assign (unmatched → match) or reassign a single file to [chosen].
+  ///
+  /// Identifies the file by STATTING it (it's a present file the user is
+  /// correcting) for its content fingerprint — no path scheme, so this is
+  /// unaffected by the relative-path/volume identity change and by moves.
   @override
   Future<void> assignFile({
     required String filePath,
@@ -38,15 +44,20 @@ class FixMatchService implements FixMatchRepository {
     int continuousOffset = 0,
     bool displayContinuous = false,
   }) async {
-    final file = await cache.fileByPath(filePath);
+    final stat = await _statOrNull(filePath);
+    if (stat == null) {
+      throw StateError('File not found (scan first): $filePath');
+    }
+    final modifiedAtMs = stat.modified.millisecondsSinceEpoch;
+    final file = await cache.fileByFingerprint(stat.size, modifiedAtMs);
     if (file == null) {
       throw StateError('File not in cache (scan first): $filePath');
     }
     await _cacheSeries(chosen);
     await cache.upsertOverride(
       MatchOverrideRow(
-        fileSize: file.fileSize,
-        modifiedAtMs: file.modifiedAtMs,
+        fileSize: stat.size,
+        modifiedAtMs: modifiedAtMs,
         anilistId: chosen.anilistId,
         anchoredEpisode: anchoredEpisode ?? file.episodeNumber,
         continuousOffset: continuousOffset,
@@ -72,12 +83,12 @@ class FixMatchService implements FixMatchRepository {
   }) async {
     await _cacheSeries(chosen);
     for (var i = 0; i < filePaths.length; i++) {
-      final file = await cache.fileByPath(filePaths[i]);
-      if (file == null) continue;
+      final stat = await _statOrNull(filePaths[i]);
+      if (stat == null) continue;
       await cache.upsertOverride(
         MatchOverrideRow(
-          fileSize: file.fileSize,
-          modifiedAtMs: file.modifiedAtMs,
+          fileSize: stat.size,
+          modifiedAtMs: stat.modified.millisecondsSinceEpoch,
           anilistId: chosen.anilistId,
           anchoredEpisode: anchorStart + i,
           continuousOffset: continuousOffset,
@@ -90,9 +101,15 @@ class FixMatchService implements FixMatchRepository {
   /// Remove a file's override, reverting it to whatever the auto-matcher says.
   @override
   Future<void> clearOverride(String filePath) async {
-    final file = await cache.fileByPath(filePath);
-    if (file == null) return;
-    await cache.deleteOverride(file.fileSize, file.modifiedAtMs);
+    final stat = await _statOrNull(filePath);
+    if (stat == null) return; // file gone -> nothing to key the delete on
+    await cache.deleteOverride(stat.size, stat.modified.millisecondsSinceEpoch);
+  }
+
+  /// Stat [path], or null if it isn't a present file (so callers can guard).
+  Future<FileStat?> _statOrNull(String path) async {
+    if (!await File(path).exists()) return null;
+    return File(path).stat();
   }
 
   Future<void> _cacheSeries(Series s) async {

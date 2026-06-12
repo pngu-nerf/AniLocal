@@ -4,6 +4,7 @@ import '../data/anilist/anilist_client.dart';
 import '../data/aniskip/aniskip_client.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
+import '../data/folders/volume_resolver.dart';
 import '../data/scanner/filename_parser.dart';
 import '../data/scanner/folder_scanner.dart';
 import '../data/scanner/series_matcher.dart';
@@ -30,7 +31,8 @@ class LibrarySync {
     required this.cache,
     required this.art,
     required this.aniSkip,
-  });
+    VolumeResolver? resolver,
+  }) : resolver = resolver ?? DiskutilVolumeResolver();
 
   final FolderScanner scanner;
   final FilenameParser parser;
@@ -39,24 +41,66 @@ class LibrarySync {
   final ArtCache art;
   final AniSkipClient aniSkip;
 
+  /// Resolves a folder's CURRENT mount when its volume remounted under a new
+  /// name (defaults to the macOS diskutil-backed resolver; injectable for tests).
+  final VolumeResolver resolver;
+
   Future<SyncSummary> sync(List<String> folderPaths) async {
-    // Scan each folder independently. A folder we can't read (access lapsed or
-    // moved) is surfaced loudly and its cached files are PRESERVED — never
-    // treated as removed (no silent data loss).
-    final stats = <String, FileStat>{};
-    final unreadableFolders = <String>[];
-    for (final folder in folderPaths) {
+    // Folder rows carry each folder's volume binding (UUID + subpath); used to
+    // FOLLOW a volume that remounted under a different /Volumes name, and to
+    // BACKFILL the binding the first time we resolve an unbound /Volumes folder.
+    final folderRows = {for (final r in await cache.allFolderRows()) r.path: r};
+
+    // Scan each folder independently, keyed by IDENTITY (folderPath = the
+    // folder's stable identity from [folderPaths]; relativePath = the file's
+    // path within it) — NOT an absolute mount path. So a remount under a new
+    // mount name doesn't change any key. A folder whose volume isn't mounted
+    // (or that we can't read) is surfaced and its cached files are PRESERVED.
+    final stats = <(String folderPath, String relativePath), FileStat>{};
+    final unreadableFolders = <String>{}; // stable folder identities
+    for (final folderPath in folderPaths) {
+      final row = folderRows[folderPath];
+      final current = await resolveFolderPath(
+        storedPath: folderPath,
+        volumeId: row?.volumeId,
+        volumeSubpath: row?.volumeSubpath,
+        resolver: resolver,
+      );
+      if (current == null) {
+        unreadableFolders.add(folderPath); // volume not mounted -> missing
+        continue;
+      }
+      // Backfill the volume UUID once we can resolve an as-yet-unbound folder
+      // (migrated folders + freshly added ones). The resolver returns null for
+      // internal-disk paths, so only removable/network volumes get bound — they
+      // are the ones whose mount name can change. Best-effort.
+      if (row != null && row.volumeId == null) {
+        final info = await resolver.infoForPath(current);
+        if (info != null) {
+          await cache.bindFolderVolume(
+            folderPath,
+            info.volumeId,
+            volumeSubpathOf(current, info.mountPoint),
+          );
+        }
+      }
       try {
-        for (final p in await scanner.findVideoFiles(folder)) {
-          stats[p] = await File(p).stat();
+        for (final abs in await scanner.findVideoFiles(current)) {
+          final relative = abs.length > current.length
+              ? abs.substring(current.length + 1)
+              : abs;
+          stats[(folderPath, relative)] = await File(abs).stat();
         }
       } on FileSystemException {
-        unreadableFolders.add(folder);
+        unreadableFolders.add(folderPath);
       }
     }
     final scannedSet = stats.keys.toSet();
 
-    final cachedFiles = {for (final r in await cache.allFileRows()) r.path: r};
+    final cachedFiles = {
+      for (final r in await cache.allFileRows())
+        (r.folderPath, r.relativePath): r,
+    };
     final cachedSeries = {
       for (final r in await cache.allSeriesRows()) r.anilistId: r,
     };
@@ -73,30 +117,34 @@ class LibrarySync {
       }
     }
 
-    // Classify scanned files against the cache.
-    final toIdentify = <String>[];
+    // Classify scanned files against the cache (by identity).
+    final toIdentify = <(String, String)>[];
     var unchanged = 0;
-    for (final p in scannedSet) {
-      final c = cachedFiles[p];
-      final s = stats[p]!;
+    for (final key in scannedSet) {
+      final c = cachedFiles[key];
+      final s = stats[key]!;
       if (c != null &&
           c.fileSize == s.size &&
           c.modifiedAtMs == s.modified.millisecondsSinceEpoch) {
         unchanged++;
       } else {
-        toIdentify.add(p);
+        toIdentify.add(key);
       }
     }
     // Removed = cached files not found this scan, EXCEPT those under a folder
-    // we couldn't read (preserve those — access lapsed, not deleted).
-    final removedPaths = [
-      for (final p in cachedFiles.keys)
-        if (!scannedSet.contains(p) && !_underAnyFolder(p, unreadableFolders))
-          p,
+    // we couldn't read/resolve (preserve those — access lapsed or volume
+    // unplugged, not deleted).
+    final removedKeys = [
+      for (final key in cachedFiles.keys)
+        if (!scannedSet.contains(key) && !unreadableFolders.contains(key.$1))
+          key,
     ];
 
-    // Parse the deltas and collect distinct titles.
-    final parsed = {for (final p in toIdentify) p: parser.parse(_basename(p))};
+    // Parse the deltas and collect distinct titles (parse the file's basename,
+    // the last segment of its relative path).
+    final parsed = {
+      for (final key in toIdentify) key: parser.parse(_basename(key.$2)),
+    };
     final deltaTitles = <String, String>{};
     for (final pf in parsed.values) {
       if (pf.title.isNotEmpty) {
@@ -141,9 +189,9 @@ class LibrarySync {
     // healthy scan reconciles real moves/deletions.
     final apiUnreachable =
         anilistLookups > 0 && erroredTitles.length == anilistLookups;
-    final effectiveRemovedPaths = apiUnreachable
-        ? const <String>[]
-        : removedPaths;
+    final effectiveRemovedKeys = apiUnreachable
+        ? const <(String, String)>[]
+        : removedKeys;
 
     // Download art only for newly-fetched series (incremental).
     final seriesUpserts = <CachedSeriesRow>[];
@@ -162,8 +210,8 @@ class LibrarySync {
     var matched = 0;
     var unmatched = 0;
     var errored = 0;
-    for (final p in toIdentify) {
-      final pf = parsed[p]!;
+    for (final key in toIdentify) {
+      final pf = parsed[key]!;
       final norm = pf.title.isEmpty ? null : normalizeTitle(pf.title);
       if (norm != null && erroredTitles.contains(norm)) {
         errored++;
@@ -171,10 +219,11 @@ class LibrarySync {
       }
       final res = norm == null ? null : resolved[norm];
       final anilistId = res?.anilistId;
-      final s = stats[p]!;
+      final s = stats[key]!;
       fileUpserts.add(
         CachedFileRow(
-          path: p,
+          folderPath: key.$1,
+          relativePath: key.$2,
           fileSize: s.size,
           modifiedAtMs: s.modified.millisecondsSinceEpoch,
           anilistId: anilistId,
@@ -233,7 +282,7 @@ class LibrarySync {
     await cache.applySync(
       seriesUpserts: seriesUpserts,
       fileUpserts: fileUpserts,
-      removedPaths: effectiveRemovedPaths,
+      removedKeys: effectiveRemovedKeys,
       skipUpserts: skipUpserts,
     );
 
@@ -241,12 +290,12 @@ class LibrarySync {
       filesScanned: scannedSet.length,
       unchanged: unchanged,
       processed: matched + unmatched,
-      removed: effectiveRemovedPaths.length,
+      removed: effectiveRemovedKeys.length,
       matched: matched,
       unmatched: unmatched,
       errored: errored,
       anilistLookups: anilistLookups,
-      unreadableFolders: unreadableFolders,
+      unreadableFolders: unreadableFolders.toList(),
       apiUnreachable: apiUnreachable,
     );
   }
@@ -329,13 +378,6 @@ class LibrarySync {
     }
 
     return (seriesRefreshed: seriesRefreshed, skipsFetched: skipsFetched);
-  }
-
-  bool _underAnyFolder(String filePath, List<String> folders) {
-    for (final f in folders) {
-      if (filePath == f || filePath.startsWith('$f/')) return true;
-    }
-    return false;
   }
 
   CachedSeriesRow _seriesRow(Series s, String? artPath) => CachedSeriesRow(

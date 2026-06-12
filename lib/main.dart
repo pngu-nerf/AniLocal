@@ -10,6 +10,7 @@ import 'data/cache/drift_library_repository.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
 import 'data/folders/tcc_folder_access.dart';
+import 'data/folders/volume_resolver.dart';
 import 'data/scanner/folder_scanner.dart';
 import 'data/scanner/heuristic_filename_parser.dart';
 import 'data/scanner/series_matcher.dart';
@@ -37,7 +38,12 @@ void main() {
   // Composition root. Read path (cache) and fill path (sync) are built
   // separately; the UI gets the repository + scan/add-folder callbacks only.
   final database = CacheDatabase(openCacheDatabase());
-  final repository = DriftLibraryRepository(database);
+  // One resolver, shared by the read path and the fill path: it follows a
+  // library volume across remounts (different /Volumes name) by its UUID, so
+  // file identity stays stable. Sharing the instance also shares its mount
+  // memoization. Internal-disk folders never touch it (their path is stable).
+  final VolumeResolver volumeResolver = DiskutilVolumeResolver();
+  final repository = DriftLibraryRepository(database, resolver: volumeResolver);
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
     parser: const HeuristicFilenameParser(),
@@ -49,6 +55,7 @@ void main() {
     art: ArtCache(directory: coverArtDirectory),
     // AniSkip fetched at scan time only; playback reads skips from the cache.
     aniSkip: AniSkipClient(),
+    resolver: volumeResolver,
   );
   // Fix-match: the ONLY writer of overrides (LibrarySync can't reach it).
   final fixMatch = FixMatchService(
@@ -100,18 +107,27 @@ void main() {
   }
 
   Future<SyncSummary> scan() async {
-    final folders = await repository.watchedFolders();
+    // Folder ROWS (not just paths) carry each folder's volume binding, so we can
+    // resolve its CURRENT mount before checking access.
+    final folders = await database.allFolderRows();
     // Confirm/upgrade folder-wide access per category (additive — does NOT gate
     // the scan; the scanner still reads each folder via whatever grant it has).
-    // Same pass also records which folder PATHS are currently missing, so the
-    // UI can grey out shows whose only sources live there (reuses these results,
-    // not a second check). Replaced wholesale each scan, so replugged folders
-    // clear automatically.
+    // Check on the CURRENT mount so a volume that remounted under a NEW name is
+    // not mistaken for missing; a truly-unmounted volume (resolves to null)
+    // reports missing via its stable path. Same pass records which folder PATHS
+    // are currently missing so the UI can grey out shows sourced only there —
+    // replaced wholesale each scan, so a replugged folder clears automatically.
     final missingPaths = <String>{};
     for (final f in folders) {
-      final result = await folderAccess.ensureAccess(f.path);
+      final current = await resolveFolderPath(
+        storedPath: f.path,
+        volumeId: f.volumeId,
+        volumeSubpath: f.volumeSubpath,
+        resolver: volumeResolver,
+      );
+      final result = await folderAccess.ensureAccess(current ?? f.path);
       applyAccess(result);
-      if (result.isMissing) missingPaths.add(f.path);
+      if (current == null || result.isMissing) missingPaths.add(f.path);
     }
     missingFolderPaths.value = missingPaths;
     return sync.sync([for (final f in folders) f.path]);

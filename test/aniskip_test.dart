@@ -210,7 +210,8 @@ void main() {
         ],
         fileUpserts: [
           CachedFileRow(
-            path: '/lib/cb-03.mkv',
+            folderPath: '/lib',
+            relativePath: 'cb-03.mkv',
             fileSize: 1,
             modifiedAtMs: 1,
             anilistId: 1,
@@ -220,7 +221,7 @@ void main() {
             releaseGroup: null,
           ),
         ],
-        removedPaths: const [],
+        removedKeys: const [],
       );
       await db.upsertWatchState(
         WatchStateRow(

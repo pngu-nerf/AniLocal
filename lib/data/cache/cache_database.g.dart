@@ -590,10 +590,23 @@ class $FileCacheTable extends FileCache
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $FileCacheTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _pathMeta = const VerificationMeta('path');
+  static const VerificationMeta _folderPathMeta = const VerificationMeta(
+    'folderPath',
+  );
   @override
-  late final GeneratedColumn<String> path = GeneratedColumn<String>(
-    'path',
+  late final GeneratedColumn<String> folderPath = GeneratedColumn<String>(
+    'folder_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _relativePathMeta = const VerificationMeta(
+    'relativePath',
+  );
+  @override
+  late final GeneratedColumn<String> relativePath = GeneratedColumn<String>(
+    'relative_path',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -679,7 +692,8 @@ class $FileCacheTable extends FileCache
   );
   @override
   List<GeneratedColumn> get $columns => [
-    path,
+    folderPath,
+    relativePath,
     fileSize,
     modifiedAtMs,
     anilistId,
@@ -700,13 +714,24 @@ class $FileCacheTable extends FileCache
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('path')) {
+    if (data.containsKey('folder_path')) {
       context.handle(
-        _pathMeta,
-        path.isAcceptableOrUnknown(data['path']!, _pathMeta),
+        _folderPathMeta,
+        folderPath.isAcceptableOrUnknown(data['folder_path']!, _folderPathMeta),
       );
     } else if (isInserting) {
-      context.missing(_pathMeta);
+      context.missing(_folderPathMeta);
+    }
+    if (data.containsKey('relative_path')) {
+      context.handle(
+        _relativePathMeta,
+        relativePath.isAcceptableOrUnknown(
+          data['relative_path']!,
+          _relativePathMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_relativePathMeta);
     }
     if (data.containsKey('file_size')) {
       context.handle(
@@ -772,14 +797,18 @@ class $FileCacheTable extends FileCache
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {path};
+  Set<GeneratedColumn> get $primaryKey => {folderPath, relativePath};
   @override
   CachedFileRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return CachedFileRow(
-      path: attachedDatabase.typeMapping.read(
+      folderPath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}path'],
+        data['${effectivePrefix}folder_path'],
+      )!,
+      relativePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}relative_path'],
       )!,
       fileSize: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -819,7 +848,8 @@ class $FileCacheTable extends FileCache
 }
 
 class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
-  final String path;
+  final String folderPath;
+  final String relativePath;
   final int fileSize;
   final int modifiedAtMs;
   final int? anilistId;
@@ -828,7 +858,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   final double matchScore;
   final String? releaseGroup;
   const CachedFileRow({
-    required this.path,
+    required this.folderPath,
+    required this.relativePath,
     required this.fileSize,
     required this.modifiedAtMs,
     this.anilistId,
@@ -840,7 +871,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['path'] = Variable<String>(path);
+    map['folder_path'] = Variable<String>(folderPath);
+    map['relative_path'] = Variable<String>(relativePath);
     map['file_size'] = Variable<int>(fileSize);
     map['modified_at_ms'] = Variable<int>(modifiedAtMs);
     if (!nullToAbsent || anilistId != null) {
@@ -859,7 +891,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
 
   FileCacheCompanion toCompanion(bool nullToAbsent) {
     return FileCacheCompanion(
-      path: Value(path),
+      folderPath: Value(folderPath),
+      relativePath: Value(relativePath),
       fileSize: Value(fileSize),
       modifiedAtMs: Value(modifiedAtMs),
       anilistId: anilistId == null && nullToAbsent
@@ -882,7 +915,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return CachedFileRow(
-      path: serializer.fromJson<String>(json['path']),
+      folderPath: serializer.fromJson<String>(json['folderPath']),
+      relativePath: serializer.fromJson<String>(json['relativePath']),
       fileSize: serializer.fromJson<int>(json['fileSize']),
       modifiedAtMs: serializer.fromJson<int>(json['modifiedAtMs']),
       anilistId: serializer.fromJson<int?>(json['anilistId']),
@@ -896,7 +930,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'path': serializer.toJson<String>(path),
+      'folderPath': serializer.toJson<String>(folderPath),
+      'relativePath': serializer.toJson<String>(relativePath),
       'fileSize': serializer.toJson<int>(fileSize),
       'modifiedAtMs': serializer.toJson<int>(modifiedAtMs),
       'anilistId': serializer.toJson<int?>(anilistId),
@@ -908,7 +943,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   }
 
   CachedFileRow copyWith({
-    String? path,
+    String? folderPath,
+    String? relativePath,
     int? fileSize,
     int? modifiedAtMs,
     Value<int?> anilistId = const Value.absent(),
@@ -917,7 +953,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     double? matchScore,
     Value<String?> releaseGroup = const Value.absent(),
   }) => CachedFileRow(
-    path: path ?? this.path,
+    folderPath: folderPath ?? this.folderPath,
+    relativePath: relativePath ?? this.relativePath,
     fileSize: fileSize ?? this.fileSize,
     modifiedAtMs: modifiedAtMs ?? this.modifiedAtMs,
     anilistId: anilistId.present ? anilistId.value : this.anilistId,
@@ -930,7 +967,12 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   );
   CachedFileRow copyWithCompanion(FileCacheCompanion data) {
     return CachedFileRow(
-      path: data.path.present ? data.path.value : this.path,
+      folderPath: data.folderPath.present
+          ? data.folderPath.value
+          : this.folderPath,
+      relativePath: data.relativePath.present
+          ? data.relativePath.value
+          : this.relativePath,
       fileSize: data.fileSize.present ? data.fileSize.value : this.fileSize,
       modifiedAtMs: data.modifiedAtMs.present
           ? data.modifiedAtMs.value
@@ -954,7 +996,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   @override
   String toString() {
     return (StringBuffer('CachedFileRow(')
-          ..write('path: $path, ')
+          ..write('folderPath: $folderPath, ')
+          ..write('relativePath: $relativePath, ')
           ..write('fileSize: $fileSize, ')
           ..write('modifiedAtMs: $modifiedAtMs, ')
           ..write('anilistId: $anilistId, ')
@@ -968,7 +1011,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
 
   @override
   int get hashCode => Object.hash(
-    path,
+    folderPath,
+    relativePath,
     fileSize,
     modifiedAtMs,
     anilistId,
@@ -981,7 +1025,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is CachedFileRow &&
-          other.path == this.path &&
+          other.folderPath == this.folderPath &&
+          other.relativePath == this.relativePath &&
           other.fileSize == this.fileSize &&
           other.modifiedAtMs == this.modifiedAtMs &&
           other.anilistId == this.anilistId &&
@@ -992,7 +1037,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
 }
 
 class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
-  final Value<String> path;
+  final Value<String> folderPath;
+  final Value<String> relativePath;
   final Value<int> fileSize;
   final Value<int> modifiedAtMs;
   final Value<int?> anilistId;
@@ -1002,7 +1048,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
   final Value<String?> releaseGroup;
   final Value<int> rowid;
   const FileCacheCompanion({
-    this.path = const Value.absent(),
+    this.folderPath = const Value.absent(),
+    this.relativePath = const Value.absent(),
     this.fileSize = const Value.absent(),
     this.modifiedAtMs = const Value.absent(),
     this.anilistId = const Value.absent(),
@@ -1013,7 +1060,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     this.rowid = const Value.absent(),
   });
   FileCacheCompanion.insert({
-    required String path,
+    required String folderPath,
+    required String relativePath,
     required int fileSize,
     required int modifiedAtMs,
     this.anilistId = const Value.absent(),
@@ -1022,12 +1070,14 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     this.matchScore = const Value.absent(),
     this.releaseGroup = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : path = Value(path),
+  }) : folderPath = Value(folderPath),
+       relativePath = Value(relativePath),
        fileSize = Value(fileSize),
        modifiedAtMs = Value(modifiedAtMs),
        parsedTitle = Value(parsedTitle);
   static Insertable<CachedFileRow> custom({
-    Expression<String>? path,
+    Expression<String>? folderPath,
+    Expression<String>? relativePath,
     Expression<int>? fileSize,
     Expression<int>? modifiedAtMs,
     Expression<int>? anilistId,
@@ -1038,7 +1088,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (path != null) 'path': path,
+      if (folderPath != null) 'folder_path': folderPath,
+      if (relativePath != null) 'relative_path': relativePath,
       if (fileSize != null) 'file_size': fileSize,
       if (modifiedAtMs != null) 'modified_at_ms': modifiedAtMs,
       if (anilistId != null) 'anilist_id': anilistId,
@@ -1051,7 +1102,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
   }
 
   FileCacheCompanion copyWith({
-    Value<String>? path,
+    Value<String>? folderPath,
+    Value<String>? relativePath,
     Value<int>? fileSize,
     Value<int>? modifiedAtMs,
     Value<int?>? anilistId,
@@ -1062,7 +1114,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     Value<int>? rowid,
   }) {
     return FileCacheCompanion(
-      path: path ?? this.path,
+      folderPath: folderPath ?? this.folderPath,
+      relativePath: relativePath ?? this.relativePath,
       fileSize: fileSize ?? this.fileSize,
       modifiedAtMs: modifiedAtMs ?? this.modifiedAtMs,
       anilistId: anilistId ?? this.anilistId,
@@ -1077,8 +1130,11 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (path.present) {
-      map['path'] = Variable<String>(path.value);
+    if (folderPath.present) {
+      map['folder_path'] = Variable<String>(folderPath.value);
+    }
+    if (relativePath.present) {
+      map['relative_path'] = Variable<String>(relativePath.value);
     }
     if (fileSize.present) {
       map['file_size'] = Variable<int>(fileSize.value);
@@ -1110,7 +1166,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
   @override
   String toString() {
     return (StringBuffer('FileCacheCompanion(')
-          ..write('path: $path, ')
+          ..write('folderPath: $folderPath, ')
+          ..write('relativePath: $relativePath, ')
           ..write('fileSize: $fileSize, ')
           ..write('modifiedAtMs: $modifiedAtMs, ')
           ..write('anilistId: $anilistId, ')
@@ -1162,8 +1219,36 @@ class $LibraryFoldersTable extends LibraryFolders
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _volumeIdMeta = const VerificationMeta(
+    'volumeId',
+  );
   @override
-  List<GeneratedColumn> get $columns => [path, addedAtMs, sortOrder];
+  late final GeneratedColumn<String> volumeId = GeneratedColumn<String>(
+    'volume_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _volumeSubpathMeta = const VerificationMeta(
+    'volumeSubpath',
+  );
+  @override
+  late final GeneratedColumn<String> volumeSubpath = GeneratedColumn<String>(
+    'volume_subpath',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    path,
+    addedAtMs,
+    sortOrder,
+    volumeId,
+    volumeSubpath,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1198,6 +1283,21 @@ class $LibraryFoldersTable extends LibraryFolders
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
       );
     }
+    if (data.containsKey('volume_id')) {
+      context.handle(
+        _volumeIdMeta,
+        volumeId.isAcceptableOrUnknown(data['volume_id']!, _volumeIdMeta),
+      );
+    }
+    if (data.containsKey('volume_subpath')) {
+      context.handle(
+        _volumeSubpathMeta,
+        volumeSubpath.isAcceptableOrUnknown(
+          data['volume_subpath']!,
+          _volumeSubpathMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1219,6 +1319,14 @@ class $LibraryFoldersTable extends LibraryFolders
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      volumeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}volume_id'],
+      ),
+      volumeSubpath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}volume_subpath'],
+      ),
     );
   }
 
@@ -1237,10 +1345,24 @@ class LibraryFolderRow extends DataClass
   /// priority: top = preferred default playback source. Set by drag-to-reorder
   /// in the folders screen (see [reorderFolders]); stable across relaunch.
   final int sortOrder;
+
+  /// Stable volume identity (a volume UUID) for a folder on a removable/network
+  /// volume, so the folder is re-found after its volume remounts under a
+  /// different `/Volumes` name. Null for internal-disk folders (their absolute
+  /// path is already stable) and for not-yet-bound folders (backfilled on the
+  /// next scan while the volume is mounted). Used WITH [volumeSubpath].
+  final String? volumeId;
+
+  /// The folder's path WITHIN its volume (e.g. `shows/anime`; `''` = the volume
+  /// root). Joined onto the volume's current mount point to reconstruct the
+  /// folder's current absolute path after a remount. Null when [volumeId] is.
+  final String? volumeSubpath;
   const LibraryFolderRow({
     required this.path,
     required this.addedAtMs,
     required this.sortOrder,
+    this.volumeId,
+    this.volumeSubpath,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1248,6 +1370,12 @@ class LibraryFolderRow extends DataClass
     map['path'] = Variable<String>(path);
     map['added_at_ms'] = Variable<int>(addedAtMs);
     map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || volumeId != null) {
+      map['volume_id'] = Variable<String>(volumeId);
+    }
+    if (!nullToAbsent || volumeSubpath != null) {
+      map['volume_subpath'] = Variable<String>(volumeSubpath);
+    }
     return map;
   }
 
@@ -1256,6 +1384,12 @@ class LibraryFolderRow extends DataClass
       path: Value(path),
       addedAtMs: Value(addedAtMs),
       sortOrder: Value(sortOrder),
+      volumeId: volumeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(volumeId),
+      volumeSubpath: volumeSubpath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(volumeSubpath),
     );
   }
 
@@ -1268,6 +1402,8 @@ class LibraryFolderRow extends DataClass
       path: serializer.fromJson<String>(json['path']),
       addedAtMs: serializer.fromJson<int>(json['addedAtMs']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      volumeId: serializer.fromJson<String?>(json['volumeId']),
+      volumeSubpath: serializer.fromJson<String?>(json['volumeSubpath']),
     );
   }
   @override
@@ -1277,20 +1413,35 @@ class LibraryFolderRow extends DataClass
       'path': serializer.toJson<String>(path),
       'addedAtMs': serializer.toJson<int>(addedAtMs),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'volumeId': serializer.toJson<String?>(volumeId),
+      'volumeSubpath': serializer.toJson<String?>(volumeSubpath),
     };
   }
 
-  LibraryFolderRow copyWith({String? path, int? addedAtMs, int? sortOrder}) =>
-      LibraryFolderRow(
-        path: path ?? this.path,
-        addedAtMs: addedAtMs ?? this.addedAtMs,
-        sortOrder: sortOrder ?? this.sortOrder,
-      );
+  LibraryFolderRow copyWith({
+    String? path,
+    int? addedAtMs,
+    int? sortOrder,
+    Value<String?> volumeId = const Value.absent(),
+    Value<String?> volumeSubpath = const Value.absent(),
+  }) => LibraryFolderRow(
+    path: path ?? this.path,
+    addedAtMs: addedAtMs ?? this.addedAtMs,
+    sortOrder: sortOrder ?? this.sortOrder,
+    volumeId: volumeId.present ? volumeId.value : this.volumeId,
+    volumeSubpath: volumeSubpath.present
+        ? volumeSubpath.value
+        : this.volumeSubpath,
+  );
   LibraryFolderRow copyWithCompanion(LibraryFoldersCompanion data) {
     return LibraryFolderRow(
       path: data.path.present ? data.path.value : this.path,
       addedAtMs: data.addedAtMs.present ? data.addedAtMs.value : this.addedAtMs,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      volumeId: data.volumeId.present ? data.volumeId.value : this.volumeId,
+      volumeSubpath: data.volumeSubpath.present
+          ? data.volumeSubpath.value
+          : this.volumeSubpath,
     );
   }
 
@@ -1299,37 +1450,48 @@ class LibraryFolderRow extends DataClass
     return (StringBuffer('LibraryFolderRow(')
           ..write('path: $path, ')
           ..write('addedAtMs: $addedAtMs, ')
-          ..write('sortOrder: $sortOrder')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('volumeId: $volumeId, ')
+          ..write('volumeSubpath: $volumeSubpath')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(path, addedAtMs, sortOrder);
+  int get hashCode =>
+      Object.hash(path, addedAtMs, sortOrder, volumeId, volumeSubpath);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is LibraryFolderRow &&
           other.path == this.path &&
           other.addedAtMs == this.addedAtMs &&
-          other.sortOrder == this.sortOrder);
+          other.sortOrder == this.sortOrder &&
+          other.volumeId == this.volumeId &&
+          other.volumeSubpath == this.volumeSubpath);
 }
 
 class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolderRow> {
   final Value<String> path;
   final Value<int> addedAtMs;
   final Value<int> sortOrder;
+  final Value<String?> volumeId;
+  final Value<String?> volumeSubpath;
   final Value<int> rowid;
   const LibraryFoldersCompanion({
     this.path = const Value.absent(),
     this.addedAtMs = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.volumeId = const Value.absent(),
+    this.volumeSubpath = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LibraryFoldersCompanion.insert({
     required String path,
     required int addedAtMs,
     this.sortOrder = const Value.absent(),
+    this.volumeId = const Value.absent(),
+    this.volumeSubpath = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : path = Value(path),
        addedAtMs = Value(addedAtMs);
@@ -1337,12 +1499,16 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolderRow> {
     Expression<String>? path,
     Expression<int>? addedAtMs,
     Expression<int>? sortOrder,
+    Expression<String>? volumeId,
+    Expression<String>? volumeSubpath,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (path != null) 'path': path,
       if (addedAtMs != null) 'added_at_ms': addedAtMs,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (volumeId != null) 'volume_id': volumeId,
+      if (volumeSubpath != null) 'volume_subpath': volumeSubpath,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1351,12 +1517,16 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolderRow> {
     Value<String>? path,
     Value<int>? addedAtMs,
     Value<int>? sortOrder,
+    Value<String?>? volumeId,
+    Value<String?>? volumeSubpath,
     Value<int>? rowid,
   }) {
     return LibraryFoldersCompanion(
       path: path ?? this.path,
       addedAtMs: addedAtMs ?? this.addedAtMs,
       sortOrder: sortOrder ?? this.sortOrder,
+      volumeId: volumeId ?? this.volumeId,
+      volumeSubpath: volumeSubpath ?? this.volumeSubpath,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1373,6 +1543,12 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolderRow> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (volumeId.present) {
+      map['volume_id'] = Variable<String>(volumeId.value);
+    }
+    if (volumeSubpath.present) {
+      map['volume_subpath'] = Variable<String>(volumeSubpath.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1385,6 +1561,8 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolderRow> {
           ..write('path: $path, ')
           ..write('addedAtMs: $addedAtMs, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('volumeId: $volumeId, ')
+          ..write('volumeSubpath: $volumeSubpath, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3551,7 +3729,8 @@ typedef $$SeriesCacheTableProcessedTableManager =
     >;
 typedef $$FileCacheTableCreateCompanionBuilder =
     FileCacheCompanion Function({
-      required String path,
+      required String folderPath,
+      required String relativePath,
       required int fileSize,
       required int modifiedAtMs,
       Value<int?> anilistId,
@@ -3563,7 +3742,8 @@ typedef $$FileCacheTableCreateCompanionBuilder =
     });
 typedef $$FileCacheTableUpdateCompanionBuilder =
     FileCacheCompanion Function({
-      Value<String> path,
+      Value<String> folderPath,
+      Value<String> relativePath,
       Value<int> fileSize,
       Value<int> modifiedAtMs,
       Value<int?> anilistId,
@@ -3583,8 +3763,13 @@ class $$FileCacheTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get path => $composableBuilder(
-    column: $table.path,
+  ColumnFilters<String> get folderPath => $composableBuilder(
+    column: $table.folderPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3633,8 +3818,13 @@ class $$FileCacheTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get path => $composableBuilder(
-    column: $table.path,
+  ColumnOrderings<String> get folderPath => $composableBuilder(
+    column: $table.folderPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -3683,8 +3873,15 @@ class $$FileCacheTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get path =>
-      $composableBuilder(column: $table.path, builder: (column) => column);
+  GeneratedColumn<String> get folderPath => $composableBuilder(
+    column: $table.folderPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get fileSize =>
       $composableBuilder(column: $table.fileSize, builder: (column) => column);
@@ -3749,7 +3946,8 @@ class $$FileCacheTableTableManager
               $$FileCacheTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<String> path = const Value.absent(),
+                Value<String> folderPath = const Value.absent(),
+                Value<String> relativePath = const Value.absent(),
                 Value<int> fileSize = const Value.absent(),
                 Value<int> modifiedAtMs = const Value.absent(),
                 Value<int?> anilistId = const Value.absent(),
@@ -3759,7 +3957,8 @@ class $$FileCacheTableTableManager
                 Value<String?> releaseGroup = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FileCacheCompanion(
-                path: path,
+                folderPath: folderPath,
+                relativePath: relativePath,
                 fileSize: fileSize,
                 modifiedAtMs: modifiedAtMs,
                 anilistId: anilistId,
@@ -3771,7 +3970,8 @@ class $$FileCacheTableTableManager
               ),
           createCompanionCallback:
               ({
-                required String path,
+                required String folderPath,
+                required String relativePath,
                 required int fileSize,
                 required int modifiedAtMs,
                 Value<int?> anilistId = const Value.absent(),
@@ -3781,7 +3981,8 @@ class $$FileCacheTableTableManager
                 Value<String?> releaseGroup = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FileCacheCompanion.insert(
-                path: path,
+                folderPath: folderPath,
+                relativePath: relativePath,
                 fileSize: fileSize,
                 modifiedAtMs: modifiedAtMs,
                 anilistId: anilistId,
@@ -3821,6 +4022,8 @@ typedef $$LibraryFoldersTableCreateCompanionBuilder =
       required String path,
       required int addedAtMs,
       Value<int> sortOrder,
+      Value<String?> volumeId,
+      Value<String?> volumeSubpath,
       Value<int> rowid,
     });
 typedef $$LibraryFoldersTableUpdateCompanionBuilder =
@@ -3828,6 +4031,8 @@ typedef $$LibraryFoldersTableUpdateCompanionBuilder =
       Value<String> path,
       Value<int> addedAtMs,
       Value<int> sortOrder,
+      Value<String?> volumeId,
+      Value<String?> volumeSubpath,
       Value<int> rowid,
     });
 
@@ -3852,6 +4057,16 @@ class $$LibraryFoldersTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get volumeId => $composableBuilder(
+    column: $table.volumeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get volumeSubpath => $composableBuilder(
+    column: $table.volumeSubpath,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3879,6 +4094,16 @@ class $$LibraryFoldersTableOrderingComposer
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get volumeId => $composableBuilder(
+    column: $table.volumeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get volumeSubpath => $composableBuilder(
+    column: $table.volumeSubpath,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LibraryFoldersTableAnnotationComposer
@@ -3898,6 +4123,14 @@ class $$LibraryFoldersTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get volumeId =>
+      $composableBuilder(column: $table.volumeId, builder: (column) => column);
+
+  GeneratedColumn<String> get volumeSubpath => $composableBuilder(
+    column: $table.volumeSubpath,
+    builder: (column) => column,
+  );
 }
 
 class $$LibraryFoldersTableTableManager
@@ -3940,11 +4173,15 @@ class $$LibraryFoldersTableTableManager
                 Value<String> path = const Value.absent(),
                 Value<int> addedAtMs = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String?> volumeId = const Value.absent(),
+                Value<String?> volumeSubpath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LibraryFoldersCompanion(
                 path: path,
                 addedAtMs: addedAtMs,
                 sortOrder: sortOrder,
+                volumeId: volumeId,
+                volumeSubpath: volumeSubpath,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3952,11 +4189,15 @@ class $$LibraryFoldersTableTableManager
                 required String path,
                 required int addedAtMs,
                 Value<int> sortOrder = const Value.absent(),
+                Value<String?> volumeId = const Value.absent(),
+                Value<String?> volumeSubpath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LibraryFoldersCompanion.insert(
                 path: path,
                 addedAtMs: addedAtMs,
                 sortOrder: sortOrder,
+                volumeId: volumeId,
+                volumeSubpath: volumeSubpath,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -17,7 +17,8 @@ CachedSeriesRow _series(int id, {int? episodeCount}) => CachedSeriesRow(
 );
 
 CachedFileRow _file(int anilistId, int ep) => CachedFileRow(
-  path: '/lib/s$anilistId/ep$ep.mkv',
+  folderPath: '/lib/s$anilistId',
+  relativePath: 'ep$ep.mkv',
   fileSize: 1,
   modifiedAtMs: ep,
   anilistId: anilistId,
@@ -35,7 +36,7 @@ void main() {
       db.applySync(
         seriesUpserts: series,
         fileUpserts: files,
-        removedPaths: const [],
+        removedKeys: const [],
       );
 
   Future<void> markWatched(int anilistId, int ep) => db.upsertWatchState(
