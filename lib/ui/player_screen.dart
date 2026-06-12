@@ -86,7 +86,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _playback = PlaybackController(resolver: widget.watchOrder);
     _playback.open(_shown, startAt: _shown.resumePosition);
     _loadEpisodeContext(_shown);
-    _durSub = _playback.durationStream.listen((d) => _duration = d);
+    // setState on duration so the skip-markers bar can lay out once it's known.
+    _durSub = _playback.durationStream.listen((d) {
+      if (mounted && d != _duration) setState(() => _duration = d);
+    });
     _posSub = _playback.positionStream.listen(_onPosition);
     _completedSub = _playback.completedStream.listen((done) {
       if (done) _onCompleted();
@@ -280,6 +283,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       body: Stack(
         children: [
           Positioned.fill(child: Video(controller: _playback.controller)),
+          // Skip-region timeline: shaded OP/ED spans over the episode duration.
+          // Reads the cached windows on the current episode (no fetch); missing
+          // windows simply draw nothing; spans clamp to the file end.
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 8,
+            child: _SkipMarkersBar(
+              duration: _duration,
+              intro: _shown.introSkip,
+              outro: _shown.outroSkip,
+            ),
+          ),
           if (_showSkipIntro)
             Positioned(
               right: 16,
@@ -371,6 +387,84 @@ class _UpNextCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Fractional `[start, end]` of a skip window across a [totalMs]-long episode,
+/// CLAMPED to `[0, 1]` — so an outro window that overhangs the file end never
+/// draws past the bar. Null when there's nothing to draw: no window, unknown
+/// duration, or a degenerate span. Pure, so it's unit-testable.
+@visibleForTesting
+({double start, double end})? skipSpanFraction(SkipRange? r, int totalMs) {
+  if (r == null || totalMs <= 0) return null;
+  final start = (r.start.inMilliseconds / totalMs).clamp(0.0, 1.0);
+  final end = (r.end.inMilliseconds / totalMs).clamp(0.0, 1.0);
+  if (end <= start) return null;
+  return (start: start, end: end);
+}
+
+/// A thin timeline strip shading the cached intro (OP) and outro (ED) skip
+/// windows over the episode's duration, so the user can see where they are.
+/// Purely informational — reads the windows the player already holds, no fetch.
+/// Each span is positioned by its fraction of the duration and CLAMPED to
+/// [0, 1], so an outro window that overhangs the file end never draws past the
+/// bar; a null window draws nothing (partial AniSkip coverage is normal).
+class _SkipMarkersBar extends StatelessWidget {
+  const _SkipMarkersBar({
+    required this.duration,
+    required this.intro,
+    required this.outro,
+  });
+
+  final Duration duration;
+  final SkipRange? intro;
+  final SkipRange? outro;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = duration.inMilliseconds;
+    if (total <= 0) return const SizedBox.shrink(); // duration not known yet
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 6,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final w = constraints.maxWidth;
+          final children = <Widget>[
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ];
+          void addRegion(SkipRange? r, Color color) {
+            final span = skipSpanFraction(r, total);
+            if (span == null) return;
+            children.add(
+              Positioned(
+                top: 0,
+                bottom: 0,
+                left: w * span.start,
+                width: w * (span.end - span.start),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          addRegion(intro, scheme.primary.withValues(alpha: 0.85));
+          addRegion(outro, scheme.tertiary.withValues(alpha: 0.85));
+          return Stack(children: children);
+        },
       ),
     );
   }
