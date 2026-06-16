@@ -219,6 +219,7 @@ void main() {
             parsedTitle: 'Cowboy Bebop',
             matchScore: 1,
             releaseGroup: null,
+            pendingIdentification: false,
           ),
         ],
         removedKeys: const [],

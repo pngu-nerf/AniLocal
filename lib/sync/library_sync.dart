@@ -4,6 +4,7 @@ import '../data/anilist/anilist_client.dart';
 import '../data/aniskip/aniskip_client.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
+import '../data/cache/placeholder_identity.dart';
 import '../data/folders/volume_resolver.dart';
 import '../data/scanner/filename_parser.dart';
 import '../data/scanner/folder_scanner.dart';
@@ -20,9 +21,14 @@ import '../domain/models/titles.dart';
 /// - Incremental: a file unchanged by (path, size, mtime) is skipped entirely.
 /// - Never refetch unchanged: a delta whose title already maps to a cached
 ///   series reuses it (no AniList call).
-/// - Partial-failure safe: a transient AniList error skips those files (not
-///   cached → retried next scan); a genuine no-match is recorded (null
-///   anilistId) and persists across rescans. The write is one transaction.
+/// - Immediate population: a newly-seen, titled file is written as a PENDING
+///   placeholder up front (phase 1, no network) and surfaced via [onDiscovered]
+///   BEFORE identification runs — so the library shows it (named, blank art)
+///   instantly, even offline. Identification (phase 2) then upgrades the row
+///   in place: a match sets its anilistId; a genuine no-match flips it to
+///   confirmed-unmatched; a transient lookup error LEAVES it pending (retried
+///   next scan). A failed/absent AniList never drops a file — at worst it
+///   stays a named placeholder.
 class LibrarySync {
   LibrarySync({
     required this.scanner,
@@ -45,7 +51,14 @@ class LibrarySync {
   /// name (defaults to the macOS diskutil-backed resolver; injectable for tests).
   final VolumeResolver resolver;
 
-  Future<SyncSummary> sync(List<String> folderPaths) async {
+  /// [onDiscovered] fires once, right after phase 1 has written the newly-seen
+  /// files as pending placeholders (before any network). The UI wires it to a
+  /// reload so the library paints placeholders immediately; identification then
+  /// upgrades them on the same scan when AniList is reachable.
+  Future<SyncSummary> sync(
+    List<String> folderPaths, {
+    void Function()? onDiscovered,
+  }) async {
     // Folder rows carry each folder's volume binding (UUID + subpath); used to
     // FOLLOW a volume that remounted under a different /Volumes name, and to
     // BACKFILL the binding the first time we resolve an unbound /Volumes folder.
@@ -117,15 +130,24 @@ class LibrarySync {
       }
     }
 
-    // Classify scanned files against the cache (by identity).
+    // Classify scanned files against the cache (by identity). A file is only
+    // "unchanged" (skipped) when its bytes match AND it isn't a PENDING
+    // placeholder — a pending row is unidentified, so it's re-attempted every
+    // scan (this is how it auto-resolves once back online) even though the file
+    // on disk hasn't changed. A confirmed-unmatched row (anilistId null,
+    // pending false) is NOT retried — it stays put until fix-match, as before.
     final toIdentify = <(String, String)>[];
     var unchanged = 0;
     for (final key in scannedSet) {
       final c = cachedFiles[key];
       final s = stats[key]!;
-      if (c != null &&
+      final bytesUnchanged =
+          c != null &&
           c.fileSize == s.size &&
-          c.modifiedAtMs == s.modified.millisecondsSinceEpoch) {
+          c.modifiedAtMs == s.modified.millisecondsSinceEpoch;
+      final isPending =
+          c != null && c.anilistId == null && c.pendingIdentification;
+      if (bytesUnchanged && !isPending) {
         unchanged++;
       } else {
         toIdentify.add(key);
@@ -152,7 +174,42 @@ class LibrarySync {
       }
     }
 
-    // Resolve each distinct delta title: reuse a cached series, or search.
+    // PHASE 1 (no network): write every NEWLY-SEEN, titled file as a pending
+    // placeholder, then surface it. "New" = not already in the cache, so an
+    // already-matched file whose bytes changed is NOT briefly demoted to a
+    // placeholder — it keeps its match until phase 2 re-resolves it. Files with
+    // no parseable title are left for phase 2 (they become confirmed-unmatched;
+    // re-scanning can't help a name the parser can't read). Phase 2's upserts
+    // overwrite these rows in place (a match clears the pending flag); rows
+    // whose lookup later errors simply remain as the pending placeholders
+    // written here.
+    final pendingPlaceholders = [
+      for (final key in toIdentify)
+        if (cachedFiles[key] == null && parsed[key]!.title.isNotEmpty)
+          () {
+            final pf = parsed[key]!;
+            final s = stats[key]!;
+            return CachedFileRow(
+              folderPath: key.$1,
+              relativePath: key.$2,
+              fileSize: s.size,
+              modifiedAtMs: s.modified.millisecondsSinceEpoch,
+              anilistId: null,
+              episodeNumber: pf.episodeNumber,
+              parsedTitle: pf.title,
+              matchScore: 0,
+              releaseGroup: pf.releaseGroup,
+              pendingIdentification: true,
+            );
+          }(),
+    ];
+    if (pendingPlaceholders.isNotEmpty) {
+      await cache.upsertFiles(pendingPlaceholders);
+    }
+    onDiscovered?.call();
+
+    // PHASE 2 (network): resolve each distinct delta title — reuse a cached
+    // series, or search.
     final resolved = <String, _Resolved>{};
     final erroredTitles = <String>{};
     var anilistLookups = 0;
@@ -205,7 +262,12 @@ class LibrarySync {
       seriesUpserts.add(_seriesRow(fresh, artPath));
     }
 
-    // Build file rows, skipping files whose title errored.
+    // Build the final (identified) file rows. A file whose title errored this
+    // scan is NOT written here, so it KEEPS whatever it already is — a new file
+    // stays the pending placeholder from phase 1 (retried next scan), an
+    // already-matched changed file keeps its match. Everything else is written
+    // with pendingIdentification=false: a match (anilistId set) or a genuine
+    // no-match (anilistId null = confirmed-unmatched, the fix-match screen).
     final fileUpserts = <CachedFileRow>[];
     var matched = 0;
     var unmatched = 0;
@@ -231,6 +293,7 @@ class LibrarySync {
           parsedTitle: pf.title,
           matchScore: res?.score ?? 0,
           releaseGroup: pf.releaseGroup,
+          pendingIdentification: false,
         ),
       );
       if (anilistId != null) {
@@ -279,11 +342,23 @@ class LibrarySync {
       }
     }
 
+    // For every title that resolved to a real AniList id this scan, carry any
+    // watch progress recorded while it was a pending placeholder over to the
+    // real id (rekeyed atomically in applySync). The placeholder id is the same
+    // pure function the read path uses, so the keys line up; this is a no-op
+    // for titles that never had a placeholder watched.
+    final promotions = <(int, int)>[
+      for (final entry in resolved.entries)
+        if (entry.value.anilistId != null)
+          (placeholderSeriesId(entry.key), entry.value.anilistId!),
+    ];
+
     await cache.applySync(
       seriesUpserts: seriesUpserts,
       fileUpserts: fileUpserts,
       removedKeys: effectiveRemovedKeys,
       skipUpserts: skipUpserts,
+      promotions: promotions,
     );
 
     return SyncSummary(

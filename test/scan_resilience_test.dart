@@ -103,16 +103,22 @@ void main() {
 
       expect(summary.apiUnreachable, isTrue);
       expect(summary.removed, 0, reason: 'an outage must remove nothing');
-      expect(
-        (await repo.allSeries()).length,
-        1,
-        reason: 'series preserved through the outage, not pruned',
-      );
+
+      // The already-matched series is preserved through the outage, not pruned.
+      final series = await repo.allSeries();
+      final cowboy = series.firstWhere((s) => s.anilistId == 1);
+      expect(cowboy.pending, isFalse);
       expect(
         (await repo.episodesFor(1)).length,
         2,
         reason: 'cached episodes preserved, not emptied',
       );
+
+      // And the new file isn't dropped because AniList was down — it's kept as
+      // a NAMED placeholder (retried once the API recovers), not lost.
+      final trigun = series.firstWhere((s) => s.pending);
+      expect(trigun.titles.romaji, 'Trigun');
+      expect(await repo.unmatchedFiles(), isEmpty);
     },
   );
 

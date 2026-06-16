@@ -159,7 +159,7 @@ void main() {
   });
 
   test(
-    'transient AniList error: file skipped, not cached as unmatched',
+    'transient AniList error: file kept as a pending placeholder, retried',
     () async {
       // A matcher whose search always throws (e.g. 429).
       final failing = LibrarySync(
@@ -186,9 +186,23 @@ void main() {
       expect(s.errored, 1);
       expect(s.matched, 0);
       expect(s.unmatched, 0);
-      // Not recorded at all -> will be retried next scan, not stuck as unmatched.
+      // NOT confused with confirmed-unmatched (it's "not yet tried").
       expect(await repo.unmatchedFiles(), isEmpty);
-      expect(await repo.allSeries(), isEmpty);
+      // Kept and shown as a NAMED placeholder (immediate population), not dropped.
+      final placeholder = (await repo.allSeries()).single;
+      expect(placeholder.pending, isTrue);
+      expect(placeholder.titles.romaji, 'Cowboy Bebop');
+      expect(placeholder.coverImageRef, isNull);
+
+      // A later healthy scan (the shared `sync`, AniList up) upgrades it IN
+      // PLACE to the real match — no user action, no re-add.
+      final s2 = await sync.sync([dir.path]);
+      expect(s2.matched, 1, reason: 'pending file re-identified once online');
+      final matched = (await repo.allSeries()).single;
+      expect(matched.pending, isFalse);
+      expect(matched.anilistId, 1);
+      expect(matched.titles.romaji, 'Cowboy Bebop');
+      expect(await repo.unmatchedFiles(), isEmpty);
     },
   );
 

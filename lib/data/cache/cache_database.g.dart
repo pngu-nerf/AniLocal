@@ -690,6 +690,21 @@ class $FileCacheTable extends FileCache
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _pendingIdentificationMeta =
+      const VerificationMeta('pendingIdentification');
+  @override
+  late final GeneratedColumn<bool> pendingIdentification =
+      GeneratedColumn<bool>(
+        'pending_identification',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("pending_identification" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   @override
   List<GeneratedColumn> get $columns => [
     folderPath,
@@ -701,6 +716,7 @@ class $FileCacheTable extends FileCache
     parsedTitle,
     matchScore,
     releaseGroup,
+    pendingIdentification,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -793,6 +809,15 @@ class $FileCacheTable extends FileCache
         ),
       );
     }
+    if (data.containsKey('pending_identification')) {
+      context.handle(
+        _pendingIdentificationMeta,
+        pendingIdentification.isAcceptableOrUnknown(
+          data['pending_identification']!,
+          _pendingIdentificationMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -838,6 +863,10 @@ class $FileCacheTable extends FileCache
         DriftSqlType.string,
         data['${effectivePrefix}release_group'],
       ),
+      pendingIdentification: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pending_identification'],
+      )!,
     );
   }
 
@@ -857,6 +886,21 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   final String parsedTitle;
   final double matchScore;
   final String? releaseGroup;
+
+  /// Identification lifecycle, meaningful ONLY while [anilistId] is null. This
+  /// is the THIRD state (besides matched / confirmed-unmatched): true = PENDING
+  /// — the file was discovered on disk and parsed, but AniList hasn't yet
+  /// resolved it (offline, not-yet-tried, or a transient lookup failure). A
+  /// pending row is shown in the library as a NAMED PLACEHOLDER (parsed title,
+  /// no art), is RETRIED on every scan, and upgrades in place to a match when
+  /// AniList succeeds. false (the default) = CONFIRMED-UNMATCHED — AniList was
+  /// consulted and genuinely found nothing (or the file has no parseable
+  /// title); it goes to the fix-match "unmatched" screen, not the grid.
+  ///
+  /// Defaulting to false makes the v9->v10 migration exact: every pre-v10
+  /// unmatched row keeps its old meaning (confirmed-unmatched), and matched
+  /// rows are unaffected (the flag is ignored when [anilistId] is set).
+  final bool pendingIdentification;
   const CachedFileRow({
     required this.folderPath,
     required this.relativePath,
@@ -867,6 +911,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     required this.parsedTitle,
     required this.matchScore,
     this.releaseGroup,
+    required this.pendingIdentification,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -886,6 +931,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     if (!nullToAbsent || releaseGroup != null) {
       map['release_group'] = Variable<String>(releaseGroup);
     }
+    map['pending_identification'] = Variable<bool>(pendingIdentification);
     return map;
   }
 
@@ -906,6 +952,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
       releaseGroup: releaseGroup == null && nullToAbsent
           ? const Value.absent()
           : Value(releaseGroup),
+      pendingIdentification: Value(pendingIdentification),
     );
   }
 
@@ -924,6 +971,9 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
       parsedTitle: serializer.fromJson<String>(json['parsedTitle']),
       matchScore: serializer.fromJson<double>(json['matchScore']),
       releaseGroup: serializer.fromJson<String?>(json['releaseGroup']),
+      pendingIdentification: serializer.fromJson<bool>(
+        json['pendingIdentification'],
+      ),
     );
   }
   @override
@@ -939,6 +989,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
       'parsedTitle': serializer.toJson<String>(parsedTitle),
       'matchScore': serializer.toJson<double>(matchScore),
       'releaseGroup': serializer.toJson<String?>(releaseGroup),
+      'pendingIdentification': serializer.toJson<bool>(pendingIdentification),
     };
   }
 
@@ -952,6 +1003,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     String? parsedTitle,
     double? matchScore,
     Value<String?> releaseGroup = const Value.absent(),
+    bool? pendingIdentification,
   }) => CachedFileRow(
     folderPath: folderPath ?? this.folderPath,
     relativePath: relativePath ?? this.relativePath,
@@ -964,6 +1016,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     parsedTitle: parsedTitle ?? this.parsedTitle,
     matchScore: matchScore ?? this.matchScore,
     releaseGroup: releaseGroup.present ? releaseGroup.value : this.releaseGroup,
+    pendingIdentification: pendingIdentification ?? this.pendingIdentification,
   );
   CachedFileRow copyWithCompanion(FileCacheCompanion data) {
     return CachedFileRow(
@@ -990,6 +1043,9 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
       releaseGroup: data.releaseGroup.present
           ? data.releaseGroup.value
           : this.releaseGroup,
+      pendingIdentification: data.pendingIdentification.present
+          ? data.pendingIdentification.value
+          : this.pendingIdentification,
     );
   }
 
@@ -1004,7 +1060,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
           ..write('episodeNumber: $episodeNumber, ')
           ..write('parsedTitle: $parsedTitle, ')
           ..write('matchScore: $matchScore, ')
-          ..write('releaseGroup: $releaseGroup')
+          ..write('releaseGroup: $releaseGroup, ')
+          ..write('pendingIdentification: $pendingIdentification')
           ..write(')'))
         .toString();
   }
@@ -1020,6 +1077,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     parsedTitle,
     matchScore,
     releaseGroup,
+    pendingIdentification,
   );
   @override
   bool operator ==(Object other) =>
@@ -1033,7 +1091,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
           other.episodeNumber == this.episodeNumber &&
           other.parsedTitle == this.parsedTitle &&
           other.matchScore == this.matchScore &&
-          other.releaseGroup == this.releaseGroup);
+          other.releaseGroup == this.releaseGroup &&
+          other.pendingIdentification == this.pendingIdentification);
 }
 
 class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
@@ -1046,6 +1105,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
   final Value<String> parsedTitle;
   final Value<double> matchScore;
   final Value<String?> releaseGroup;
+  final Value<bool> pendingIdentification;
   final Value<int> rowid;
   const FileCacheCompanion({
     this.folderPath = const Value.absent(),
@@ -1057,6 +1117,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     this.parsedTitle = const Value.absent(),
     this.matchScore = const Value.absent(),
     this.releaseGroup = const Value.absent(),
+    this.pendingIdentification = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FileCacheCompanion.insert({
@@ -1069,6 +1130,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     required String parsedTitle,
     this.matchScore = const Value.absent(),
     this.releaseGroup = const Value.absent(),
+    this.pendingIdentification = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : folderPath = Value(folderPath),
        relativePath = Value(relativePath),
@@ -1085,6 +1147,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     Expression<String>? parsedTitle,
     Expression<double>? matchScore,
     Expression<String>? releaseGroup,
+    Expression<bool>? pendingIdentification,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1097,6 +1160,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
       if (parsedTitle != null) 'parsed_title': parsedTitle,
       if (matchScore != null) 'match_score': matchScore,
       if (releaseGroup != null) 'release_group': releaseGroup,
+      if (pendingIdentification != null)
+        'pending_identification': pendingIdentification,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1111,6 +1176,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     Value<String>? parsedTitle,
     Value<double>? matchScore,
     Value<String?>? releaseGroup,
+    Value<bool>? pendingIdentification,
     Value<int>? rowid,
   }) {
     return FileCacheCompanion(
@@ -1123,6 +1189,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
       parsedTitle: parsedTitle ?? this.parsedTitle,
       matchScore: matchScore ?? this.matchScore,
       releaseGroup: releaseGroup ?? this.releaseGroup,
+      pendingIdentification:
+          pendingIdentification ?? this.pendingIdentification,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1157,6 +1225,11 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     if (releaseGroup.present) {
       map['release_group'] = Variable<String>(releaseGroup.value);
     }
+    if (pendingIdentification.present) {
+      map['pending_identification'] = Variable<bool>(
+        pendingIdentification.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1175,6 +1248,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
           ..write('parsedTitle: $parsedTitle, ')
           ..write('matchScore: $matchScore, ')
           ..write('releaseGroup: $releaseGroup, ')
+          ..write('pendingIdentification: $pendingIdentification, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3738,6 +3812,7 @@ typedef $$FileCacheTableCreateCompanionBuilder =
       required String parsedTitle,
       Value<double> matchScore,
       Value<String?> releaseGroup,
+      Value<bool> pendingIdentification,
       Value<int> rowid,
     });
 typedef $$FileCacheTableUpdateCompanionBuilder =
@@ -3751,6 +3826,7 @@ typedef $$FileCacheTableUpdateCompanionBuilder =
       Value<String> parsedTitle,
       Value<double> matchScore,
       Value<String?> releaseGroup,
+      Value<bool> pendingIdentification,
       Value<int> rowid,
     });
 
@@ -3805,6 +3881,11 @@ class $$FileCacheTableFilterComposer
 
   ColumnFilters<String> get releaseGroup => $composableBuilder(
     column: $table.releaseGroup,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pendingIdentification => $composableBuilder(
+    column: $table.pendingIdentification,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3862,6 +3943,11 @@ class $$FileCacheTableOrderingComposer
     column: $table.releaseGroup,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get pendingIdentification => $composableBuilder(
+    column: $table.pendingIdentification,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FileCacheTableAnnotationComposer
@@ -3913,6 +3999,11 @@ class $$FileCacheTableAnnotationComposer
     column: $table.releaseGroup,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get pendingIdentification => $composableBuilder(
+    column: $table.pendingIdentification,
+    builder: (column) => column,
+  );
 }
 
 class $$FileCacheTableTableManager
@@ -3955,6 +4046,7 @@ class $$FileCacheTableTableManager
                 Value<String> parsedTitle = const Value.absent(),
                 Value<double> matchScore = const Value.absent(),
                 Value<String?> releaseGroup = const Value.absent(),
+                Value<bool> pendingIdentification = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FileCacheCompanion(
                 folderPath: folderPath,
@@ -3966,6 +4058,7 @@ class $$FileCacheTableTableManager
                 parsedTitle: parsedTitle,
                 matchScore: matchScore,
                 releaseGroup: releaseGroup,
+                pendingIdentification: pendingIdentification,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3979,6 +4072,7 @@ class $$FileCacheTableTableManager
                 required String parsedTitle,
                 Value<double> matchScore = const Value.absent(),
                 Value<String?> releaseGroup = const Value.absent(),
+                Value<bool> pendingIdentification = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FileCacheCompanion.insert(
                 folderPath: folderPath,
@@ -3990,6 +4084,7 @@ class $$FileCacheTableTableManager
                 parsedTitle: parsedTitle,
                 matchScore: matchScore,
                 releaseGroup: releaseGroup,
+                pendingIdentification: pendingIdentification,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

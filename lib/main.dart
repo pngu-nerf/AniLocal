@@ -106,7 +106,7 @@ void main() {
     );
   }
 
-  Future<SyncSummary> scan() async {
+  Future<SyncSummary> scan(void Function() onDiscovered) async {
     // Folder ROWS (not just paths) carry each folder's volume binding, so we can
     // resolve its CURRENT mount before checking access.
     final folders = await database.allFolderRows();
@@ -130,7 +130,9 @@ void main() {
       if (current == null || result.isMissing) missingPaths.add(f.path);
     }
     missingFolderPaths.value = missingPaths;
-    return sync.sync([for (final f in folders) f.path]);
+    return sync.sync([
+      for (final f in folders) f.path,
+    ], onDiscovered: onDiscovered);
   }
 
   const continueCollapsedKey = 'continue_watching_collapsed';

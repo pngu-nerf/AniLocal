@@ -113,7 +113,7 @@ void main() {
         watchState: repo,
         sourceSelection: repo,
         watchOrder: repo,
-        onScan: () async {
+        onScan: (_) async {
           // A scan that adds a new series to the cache.
           repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];
           return _summary;

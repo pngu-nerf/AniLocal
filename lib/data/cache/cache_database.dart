@@ -51,6 +51,22 @@ class FileCache extends Table {
   RealColumn get matchScore => real().withDefault(const Constant(0))();
   TextColumn get releaseGroup => text().nullable()();
 
+  /// Identification lifecycle, meaningful ONLY while [anilistId] is null. This
+  /// is the THIRD state (besides matched / confirmed-unmatched): true = PENDING
+  /// — the file was discovered on disk and parsed, but AniList hasn't yet
+  /// resolved it (offline, not-yet-tried, or a transient lookup failure). A
+  /// pending row is shown in the library as a NAMED PLACEHOLDER (parsed title,
+  /// no art), is RETRIED on every scan, and upgrades in place to a match when
+  /// AniList succeeds. false (the default) = CONFIRMED-UNMATCHED — AniList was
+  /// consulted and genuinely found nothing (or the file has no parseable
+  /// title); it goes to the fix-match "unmatched" screen, not the grid.
+  ///
+  /// Defaulting to false makes the v9->v10 migration exact: every pre-v10
+  /// unmatched row keeps its old meaning (confirmed-unmatched), and matched
+  /// rows are unaffected (the flag is ignored when [anilistId] is set).
+  BoolColumn get pendingIdentification =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {folderPath, relativePath};
 
@@ -219,14 +235,17 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
   // v5 watch_state; v6 app_settings; v7 source_overrides; v8 series_cache.idMal
   // + skip_segments (auto-skip); v9 stable volume identity — file_cache keyed by
   // (folder_path, relative_path) instead of an absolute path, + library_folders
-  // volume binding (see [_migrateFileCacheToRelativeV9]).
+  // volume binding (see [_migrateFileCacheToRelativeV9]); v10 file_cache
+  // .pending_identification — the "discovered but not yet identified" state for
+  // immediate library population (an additive column, default 0 = preserves
+  // every existing row's meaning).
   //
   // v8 RECLAIMED: it was briefly scratch on an unshipped branch (series_relations,
   // the "Up Next" overshoot) then reverted — it never reached main and no DB sits
@@ -267,6 +286,19 @@ class CacheDatabase extends _$CacheDatabase {
         await m.addColumn(libraryFolders, libraryFolders.volumeId);
         await m.addColumn(libraryFolders, libraryFolders.volumeSubpath);
         await _migrateFileCacheToRelativeV9(m);
+      }
+      if (from >= 9 && from < 10) {
+        // Additive: existing rows default to 0 (pending = false), so every
+        // already-cached unmatched file stays "confirmed-unmatched" (its
+        // pre-v10 meaning) and matched files are untouched. New pending rows
+        // are written only by go-forward scans.
+        //
+        // Guarded `from >= 9` deliberately: a from-<9 upgrade RECREATES
+        // file_cache via createTable in the v9 step above, which already builds
+        // the current shape (with pending_identification), so adding it again
+        // here would be a duplicate-column error. Only a cache that was already
+        // at v9 (real column-less file_cache) needs the addColumn.
+        await m.addColumn(fileCache, fileCache.pendingIdentification);
       }
     },
   );
@@ -513,15 +545,36 @@ class CacheDatabase extends _$CacheDatabase {
 
   Future<List<CachedFileRow>> allFileRows() => select(fileCache).get();
 
+  /// Write rows to file_cache up front, in one transaction, with NO pruning or
+  /// series writes. This is the immediate-population "phase 1": newly-seen
+  /// files land as PENDING placeholders so the library shows them before
+  /// identification runs (which may be slow, or fail, or be offline). Upserts,
+  /// so a re-scan that re-discovers the same file is idempotent.
+  Future<void> upsertFiles(List<CachedFileRow> rows) => transaction(() async {
+    for (final r in rows) {
+      await into(fileCache).insertOnConflictUpdate(r);
+    }
+  });
+
   /// Apply a computed delta atomically: never half-write a record. Upserts
   /// series + files (+ any freshly-fetched skip windows), deletes removed
   /// files (by their (folderPath, relativePath) identity), then prunes series
   /// with no files and now-orphaned skip rows.
+  ///
+  /// [promotions] carry `(placeholderId -> realAniListId)` for shows that just
+  /// went from pending to identified this scan. For each, watch_state rows
+  /// recorded against the synthetic placeholder id (you watched the show before
+  /// it was identified) are REKEYED to the real id — so resume progress carries
+  /// over to the real series instead of being stranded. Only real episode
+  /// positions (>= 0) move; any leftover placeholder-keyed rows are then
+  /// deleted, so no synthetic id survives identification. `UPDATE OR IGNORE`
+  /// leaves a pre-existing real row (already-watched-as-matched) untouched.
   Future<void> applySync({
     required List<CachedSeriesRow> seriesUpserts,
     required List<CachedFileRow> fileUpserts,
     required List<(String folderPath, String relativePath)> removedKeys,
     List<SkipSegmentRow> skipUpserts = const [],
+    List<(int placeholderId, int realId)> promotions = const [],
   }) {
     return transaction(() async {
       for (final s in seriesUpserts) {
@@ -532,6 +585,16 @@ class CacheDatabase extends _$CacheDatabase {
       }
       for (final s in skipUpserts) {
         await into(skipSegments).insertOnConflictUpdate(s);
+      }
+      for (final (placeholderId, realId) in promotions) {
+        await customStatement(
+          'UPDATE OR IGNORE watch_state SET anilist_id = ? '
+          'WHERE anilist_id = ? AND episode >= 0',
+          [realId, placeholderId],
+        );
+        await customStatement('DELETE FROM watch_state WHERE anilist_id = ?', [
+          placeholderId,
+        ]);
       }
       for (final k in removedKeys) {
         await (delete(fileCache)..where(

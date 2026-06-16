@@ -121,7 +121,7 @@ void main() {
         watchState: repo,
         sourceSelection: repo,
         watchOrder: repo,
-        onScan: () async {
+        onScan: (_) async {
           scans++;
           return _emptySummary;
         },

@@ -117,7 +117,7 @@ void main() {
         watchState: _FakeRepository(),
         sourceSelection: _FakeRepository(),
         watchOrder: _FakeRepository(),
-        onScan: () async => const SyncSummary(
+        onScan: (_) async => const SyncSummary(
           filesScanned: 0,
           unchanged: 0,
           processed: 0,

@@ -58,7 +58,11 @@ class LibraryScreen extends StatefulWidget {
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
-  final Future<SyncSummary> Function() onScan;
+
+  /// Fill path. [onDiscovered] fires mid-scan, after newly-seen files are
+  /// written as pending placeholders but before identification — the screen
+  /// wires it to a reload so the grid paints placeholders immediately.
+  final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
 
   /// Re-fetch metadata (idMal + skip data) for cached series — no file scan, no
   /// pruning, preserves overrides/watch-state. Returns counts for a snackbar.
@@ -285,7 +289,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _scan() async {
     setState(() => _scanning = true);
     try {
-      final summary = await widget.onScan();
+      // The mid-scan callback paints placeholders the instant they're written
+      // (before identification / network), so an offline add shows its anime
+      // immediately; the post-scan reload below then shows the upgraded matches.
+      final summary = await widget.onScan(() {
+        if (mounted) _reload();
+      });
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
       messenger.showSnackBar(SnackBar(content: Text(_summaryText(summary))));
@@ -637,8 +646,14 @@ class _SeriesCard extends StatelessWidget {
                         color: Theme.of(
                           context,
                         ).colorScheme.surfaceContainerHighest,
-                        child: const Center(
-                          child: Icon(Icons.image_not_supported),
+                        child: Center(
+                          // A pending placeholder reads as "identifying", not a
+                          // broken image (it has no art yet, by design).
+                          child: Icon(
+                            series.pending
+                                ? Icons.hourglass_empty
+                                : Icons.image_not_supported,
+                          ),
                         ),
                       ),
                     if (unavailable)
@@ -665,6 +680,8 @@ class _SeriesCard extends StatelessWidget {
             Text(
               unavailable
                   ? 'Unavailable — not connected'
+                  : series.pending
+                  ? 'Identifying…'
                   : [
                       if (series.format != null) series.format,
                       if (series.episodeCount != null)

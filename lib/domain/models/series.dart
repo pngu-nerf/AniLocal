@@ -17,8 +17,13 @@ class Series extends Equatable {
     this.episodeCount,
     this.idMal,
     this.relations = const [],
+    this.pending = false,
   });
 
+  /// For a real AniList entry this is its positive AniList ID. For a PENDING
+  /// placeholder (a show discovered on disk but not yet identified) it is a
+  /// stable NEGATIVE synthetic id derived from the parsed title — never a real
+  /// AniList id, so it can't collide with one. See [pending].
   final int anilistId;
 
   /// MyAnimeList id (AniList's `idMal` cross-reference). Used only to query
@@ -40,6 +45,15 @@ class Series extends Equatable {
   /// Related entries (sequels, prequels, side stories, adaptations).
   final List<RelatedSeries> relations;
 
+  /// True when this is a PLACEHOLDER for a show that's on disk but not yet
+  /// identified (AniList not yet consulted, offline, or the lookup failed). It
+  /// carries the parsed title as [titles] and no [coverImageRef]; the UI shows
+  /// a named placeholder card. It upgrades in place to a real entry once
+  /// identification succeeds on a later scan/refresh. Distinct from a
+  /// confirmed-unmatched file (which is never surfaced as a series at all —
+  /// it goes to the fix-match screen).
+  final bool pending;
+
   @override
   List<Object?> get props => [
     anilistId,
@@ -49,5 +63,6 @@ class Series extends Equatable {
     episodeCount,
     idMal,
     relations,
+    pending,
   ];
 }

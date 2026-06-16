@@ -12,7 +12,9 @@ import '../../domain/repositories/source_selection_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
 import '../folders/volume_resolver.dart';
+import '../scanner/title_matching.dart' show normalizeTitle;
 import 'cache_database.dart';
+import 'placeholder_identity.dart';
 
 /// Sort rank for a file not under any known library folder (orphan from a
 /// removed folder) — below every real folder, so it's the last-resort source.
@@ -25,12 +27,18 @@ class _Effective {
     required this.anilistId,
     required this.displayNumber,
     required this.anchoredNumber,
+    required this.pending,
   });
 
   final CachedFileRow file;
-  final int? anilistId; // null = unmatched
+  final int? anilistId; // null = unmatched (pending or confirmed)
   final int? displayNumber; // presentation number (continuous or faithful)
   final int anchoredNumber; // AniList-faithful position = watch-state identity
+
+  /// Meaningful only when [anilistId] is null: true = pending (not yet
+  /// identified → shown as a placeholder), false = confirmed-unmatched (→
+  /// fix-match screen). A file resolved via an override is never pending.
+  final bool pending;
 }
 
 /// One LOGICAL episode = the files sharing an identity (anilistId, anchored),
@@ -119,11 +127,14 @@ class DriftLibraryRepository
             final display = o.displayContinuous
                 ? anchored + o.continuousOffset
                 : o.anchoredEpisode;
+            // An override (user fix-match) makes the file matched — never
+            // pending — even if its auto row was still a pending placeholder.
             return _Effective(
               file: f,
               anilistId: o.anilistId,
               displayNumber: display,
               anchoredNumber: anchored,
+              pending: false,
             );
           }
           return _Effective(
@@ -131,6 +142,7 @@ class DriftLibraryRepository
             anilistId: f.anilistId,
             displayNumber: f.episodeNumber,
             anchoredNumber: f.episodeNumber ?? 0,
+            pending: f.anilistId == null && f.pendingIdentification,
           );
         }(),
     ];
@@ -226,12 +238,33 @@ class DriftLibraryRepository
     final list = [
       for (final id in wanted)
         if (byId[id] != null) _toSeries(byId[id]!),
-    ]..sort((a, b) => _sortTitle(a).compareTo(_sortTitle(b)));
+    ];
+    // Pending (not-yet-identified) files surface as NAMED PLACEHOLDERS — one
+    // per distinct parsed-title group — so the library reflects what's on disk
+    // even before/without AniList. They upgrade in place once a scan matches
+    // them (their rows gain an anilistId and re-group under the real series).
+    final placeholderTitle = <int, String>{}; // synthetic id -> sample title
+    for (final e in effective) {
+      if (e.anilistId != null || !e.pending) continue;
+      final raw = e.file.parsedTitle;
+      if (raw.isEmpty) continue;
+      placeholderTitle.putIfAbsent(
+        placeholderSeriesId(normalizeTitle(raw)),
+        () => raw,
+      );
+    }
+    for (final entry in placeholderTitle.entries) {
+      list.add(_placeholderSeries(entry.key, entry.value));
+    }
+    list.sort((a, b) => _sortTitle(a).compareTo(_sortTitle(b)));
     return list;
   }
 
   @override
   Future<List<Episode>> episodesFor(int anilistId) async {
+    // A negative id is a pending placeholder (see [placeholderSeriesId]); its
+    // "episodes" are the pending files of that parsed-title group.
+    if (anilistId < 0) return _placeholderEpisodesFor(anilistId);
     final logical = await _logicalEpisodes();
     final watch = {
       for (final w in await _db.allWatchStateRows())
@@ -262,7 +295,10 @@ class DriftLibraryRepository
     );
     return [
       for (final e in effective)
-        if (e.anilistId == null)
+        // Only CONFIRMED-unmatched (AniList said no) — a pending file is shown
+        // as a library placeholder instead, and must not appear here (it's
+        // "not yet tried", not "couldn't identify").
+        if (e.anilistId == null && !e.pending)
           IdentifiedEpisode(
             filePath: _fileRef(e.file, currentByFolder),
             parsedTitle: e.file.parsedTitle,
@@ -271,6 +307,88 @@ class DriftLibraryRepository
             matchScore: e.file.matchScore,
           ),
     ];
+  }
+
+  /// A placeholder [Series] for a not-yet-identified parsed-title group: the
+  /// parsed title stands in for the name, no art, [Series.pending] set.
+  Series _placeholderSeries(int id, String parsedTitle) => Series(
+    anilistId: id,
+    titles: Titles(romaji: parsedTitle),
+    pending: true,
+  );
+
+  /// Episodes for a pending placeholder: the not-yet-identified files of the
+  /// matching parsed-title group, collapsed by episode number (so multi-source
+  /// copies are one row) and resolved to their playable current path. Watch
+  /// state is keyed by the placeholder's synthetic id, so resume survives until
+  /// the show is identified (then re-keys to the real id on the next scan).
+  Future<List<Episode>> _placeholderEpisodesFor(int placeholderId) async {
+    final effective = await _effectiveMatches();
+    final folders = await _db.allFolderRows();
+    final folderByPath = {for (final f in folders) f.path: f};
+    final currentByFolder = await _currentFolderPaths(folders);
+    final watch = {
+      for (final w in await _db.allWatchStateRows())
+        (w.anilistId, w.episode): w,
+    };
+
+    // Group this title group's pending files by episode position. A numbered
+    // episode keys by its number (multi-source copies merge); an un-numbered
+    // file (movie/special) keys by a stable per-file negative so distinct ones
+    // stay separate rather than merging into one "Episode 0".
+    final groups = <int, List<CachedFileRow>>{};
+    for (final e in effective) {
+      if (e.anilistId != null || !e.pending) continue;
+      final raw = e.file.parsedTitle;
+      if (raw.isEmpty) continue;
+      if (placeholderSeriesId(normalizeTitle(raw)) != placeholderId) continue;
+      final key =
+          e.file.episodeNumber ??
+          (-1 - placeholderStableHash(e.file.relativePath));
+      groups.putIfAbsent(key, () => []).add(e.file);
+    }
+
+    final keys = groups.keys.toList()..sort();
+    return [
+      for (final anchored in keys)
+        () {
+          final sources =
+              [
+                for (final f in groups[anchored]!)
+                  EpisodeSource(
+                    fileRef: _fileRef(f, currentByFolder),
+                    folderPath: f.folderPath,
+                    folderSortOrder:
+                        folderByPath[f.folderPath]?.sortOrder ??
+                        _unfiledSortOrder,
+                  ),
+              ]..sort((a, b) {
+                final c = a.folderSortOrder.compareTo(b.folderSortOrder);
+                return c != 0 ? c : a.fileRef.compareTo(b.fileRef);
+              });
+          final number = anchored >= 0 ? anchored : 0;
+          final w = watch[(placeholderId, anchored)];
+          return Episode(
+            number: number,
+            fileRef: sources.first.fileRef,
+            title: number > 0
+                ? 'Episode $number'
+                : _name(sources.first.fileRef),
+            seriesAnilistId: placeholderId,
+            anchoredNumber: anchored,
+            watched: w?.watched ?? false,
+            resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
+            duration: Duration(milliseconds: w?.durationMs ?? 0),
+            sources: sources,
+          );
+        }(),
+    ];
+  }
+
+  /// Basename of a path (for an un-numbered placeholder episode's label).
+  static String _name(String path) {
+    final i = path.lastIndexOf(RegExp(r'[/\\]'));
+    return i == -1 ? path : path.substring(i + 1);
   }
 
   // --- Watch state (keyed by episode identity, never file path) ---
@@ -364,19 +482,30 @@ class DriftLibraryRepository
   //     keyed by episode identity, never clobbered by a rescan (seam #5). ---
 
   @override
-  Future<void> selectSource(Episode episode, {required String folderPath}) =>
-      _db.upsertSourceOverride(
-        SourceOverrideRow(
-          anilistId: episode.seriesAnilistId,
-          episode: episode.anchoredNumber,
-          folderPath: folderPath,
-          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
+  Future<void> selectSource(Episode episode, {required String folderPath}) {
+    // A pending placeholder (synthetic negative id) is NOT pinnable — pinning a
+    // source for an unidentified show would persist the synthetic id into
+    // source_overrides and strand it on identification. Pending episodes always
+    // play the automatic (highest-priority) source; this is a no-op for them.
+    if (episode.seriesAnilistId < 0) return Future<void>.value();
+    return _db.upsertSourceOverride(
+      SourceOverrideRow(
+        anilistId: episode.seriesAnilistId,
+        episode: episode.anchoredNumber,
+        folderPath: folderPath,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
 
   @override
-  Future<void> clearSource(Episode episode) =>
-      _db.deleteSourceOverride(episode.seriesAnilistId, episode.anchoredNumber);
+  Future<void> clearSource(Episode episode) {
+    if (episode.seriesAnilistId < 0) return Future<void>.value();
+    return _db.deleteSourceOverride(
+      episode.seriesAnilistId,
+      episode.anchoredNumber,
+    );
+  }
 
   // --- Watch order ("Up Next"). The SINGLE source of "what's next" — every
   //     caller (player auto-advance, library "Next: Ep N") routes through here.

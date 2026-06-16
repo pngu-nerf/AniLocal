@@ -32,7 +32,10 @@ class SyncSummary extends Equatable {
   final int matched;
   final int unmatched;
 
-  /// Files skipped due to a transient AniList error (not cached; retried next).
+  /// Delta files whose lookup hit a transient AniList error this scan. They are
+  /// NOT dropped — a new file stays the pending placeholder written in phase 1
+  /// (shown named in the library) and is retried next scan; an already-matched
+  /// changed file keeps its existing match.
   final int errored;
 
   /// AniList title searches actually performed — 0 when every delta reused an

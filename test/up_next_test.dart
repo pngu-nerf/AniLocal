@@ -26,6 +26,7 @@ CachedFileRow _file(int anilistId, int ep) => CachedFileRow(
   parsedTitle: 'Series $anilistId',
   matchScore: 1,
   releaseGroup: null,
+  pendingIdentification: false,
 );
 
 void main() {

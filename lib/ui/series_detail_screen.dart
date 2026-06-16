@@ -191,6 +191,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Widget _episodeTile(List<Episode> episodes, int i) {
     final e = episodes[i];
     final multi = e.hasMultipleSources;
+    // A pending placeholder can't be source-pinned (it has no real identity to
+    // key the pin to) — it always plays the automatic source. Show the source
+    // count, but not the picker.
+    final pinnable = multi && !widget.series.pending;
     return ListTile(
       dense: true,
       onTap: () => _play(e),
@@ -213,7 +217,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               size: 18,
               color: Theme.of(context).colorScheme.primary,
             ),
-          if (multi)
+          if (pinnable)
             IconButton(
               tooltip: '${e.sources.length} sources — choose…',
               icon: Badge(
@@ -237,7 +241,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 value: 'split',
                 child: Text('Split: reassign from here…'),
               ),
-              if (multi)
+              if (pinnable)
                 const PopupMenuItem(
                   value: 'source',
                   child: Text('Choose source…'),
@@ -290,12 +294,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                           Text(series.titles.native!),
                         const SizedBox(height: 8),
                         Text(
-                          [
-                            if (series.format != null) series.format,
-                            if (series.episodeCount != null)
-                              '${series.episodeCount} episodes',
-                            'AniList #${series.anilistId}',
-                          ].join(' · '),
+                          series.pending
+                              // Placeholder: not yet identified, so no AniList
+                              // id/format to show — say so plainly.
+                              ? 'Identifying… (not yet matched to AniList)'
+                              : [
+                                  if (series.format != null) series.format,
+                                  if (series.episodeCount != null)
+                                    '${series.episodeCount} episodes',
+                                  'AniList #${series.anilistId}',
+                                ].join(' · '),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
