@@ -12,7 +12,7 @@ import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
-import 'player_screen.dart';
+import 'theater/theater_screen.dart';
 
 /// Series detail: cover + metadata + the episodes (matched files) for this
 /// series. Each episode can be reassigned, or used as a season-split point.
@@ -70,12 +70,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Future<void> _play(Episode e) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PlayerScreen(
-          episode: e,
+        builder: (_) => TheaterScreen(
+          series: widget.series,
+          initialEpisode: e,
+          repository: widget.repository,
           watchState: widget.watchState,
           watchOrder: widget.watchOrder,
-          autoPlayEnabled: widget.loadAutoPlayNext,
-          skipMode: widget.loadSkipMode,
+          loadAutoPlayNext: widget.loadAutoPlayNext,
+          loadSkipMode: widget.loadSkipMode,
         ),
       ),
     );

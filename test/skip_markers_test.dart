@@ -1,5 +1,5 @@
 import 'package:anilocal/domain/models/skip_range.dart';
-import 'package:anilocal/ui/player_screen.dart';
+import 'package:anilocal/ui/theater/zones/video_zone.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _min = Duration(minutes: 1);

@@ -16,8 +16,8 @@ import '../domain/repositories/watch_state_repository.dart';
 import 'access_recovery.dart';
 import 'continue_watching_row.dart';
 import 'folders_screen.dart';
-import 'player_screen.dart';
 import 'series_detail_screen.dart';
+import 'theater/theater_screen.dart';
 import 'unmatched_screen.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
@@ -163,15 +163,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (mounted) setState(() => _sourceFoldersBySeries = map);
   }
 
-  Future<void> _play(Episode episode) async {
+  Future<void> _play(Episode episode, Series series) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PlayerScreen(
-          episode: episode,
+        builder: (_) => TheaterScreen(
+          series: series,
+          initialEpisode: episode,
+          repository: widget.repository,
           watchState: widget.watchState,
           watchOrder: widget.watchOrder,
-          autoPlayEnabled: widget.loadAutoPlayNext,
-          skipMode: widget.loadSkipMode,
+          loadAutoPlayNext: widget.loadAutoPlayNext,
+          loadSkipMode: widget.loadSkipMode,
         ),
       ),
     );
@@ -179,7 +181,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _playFromContinue(ContinueWatching entry) =>
-      _play(entry.episode);
+      _play(entry.episode, entry.series);
 
   Future<void> _openSettings() async {
     var enabled = await widget.loadAutoPlayNext();
@@ -582,7 +584,7 @@ class _SeriesCard extends StatelessWidget {
   /// drive/NAS): dimmed + marked, and a tap shows a reconnect hint rather than
   /// opening it. Still listed in place (cached art/metadata shown).
   final bool unavailable;
-  final Future<void> Function(Episode) onPlay;
+  final Future<void> Function(Episode, Series) onPlay;
   final Future<bool> Function() loadAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
   final VoidCallback onReturn;
@@ -700,7 +702,7 @@ class _SeriesCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: () async {
-                    await onPlay(nextEpisode!);
+                    await onPlay(nextEpisode!, series);
                     onReturn();
                   },
                   icon: const Icon(Icons.play_circle_outline, size: 16),
