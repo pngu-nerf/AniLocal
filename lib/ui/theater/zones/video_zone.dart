@@ -11,27 +11,24 @@ import '../../../domain/models/skip_range.dart';
 import '../../../domain/repositories/watch_order_repository.dart';
 import '../../../domain/repositories/watch_state_repository.dart';
 import '../../../playback/playback_controller.dart';
+import '../controls/player_control_bar.dart';
+import '../controls/player_controls_state.dart';
 
-/// The VIDEO zone: the embedded libmpv (media_kit) playback frame — styled ASS
-/// subtitles, seeking, no external window — with the skip affordances, skip
-/// timeline strip, and the auto-play "Up next" pre-roll. It resumes from the
-/// saved position, saves progress as it plays, and marks watched past a
-/// threshold.
+/// The VIDEO zone: the embedded libmpv (media_kit) playback frame, now driven by
+/// our OWN custom control bar ([PlayerControls]) instead of media_kit's default
+/// controls. The same bar renders in windowed mode (here) and in media_kit's
+/// fullscreen route (it reuses this `controls` builder + the same controller),
+/// so the two modes can't drift and the skip affordances show in both.
 ///
-/// Position-agnostic: it FILLS whatever box the layout hands it (a `Stack`
-/// with `Positioned.fill` video). It holds no width/position opinion — the
-/// theater layout decides where it sits and how large it is.
+/// Engine state (position/playing/volume/tracks) the bar reads straight from the
+/// player streams. The DOMAIN bits the streams don't carry — current episode,
+/// live skip affordances, the up-next pre-roll — this zone computes and publishes
+/// to a shared `ValueNotifier<PlayerControlsState>` that the bar listens to in
+/// BOTH modes. All the playback behavior (resume, watched threshold, skip
+/// detection, auto-advance, persistence) lives here, unchanged.
 ///
-/// Swap-in-place: when [episode] changes (the user picked another episode in
-/// the list, or auto-play advanced), it re-opens that episode in the SAME
-/// frame — no navigation, same controller. When it auto-advances itself, it
-/// reports the new episode via [onEpisodeChanged] so the surrounding screen
-/// (e.g. the episode list's "now playing" mark) can follow along.
-///
-/// Auto-play next (when enabled) is a PRE-roll countdown: it appears during the
-/// final seconds and advances the instant playback ends. Advancing always goes
-/// through [PlaybackController.advanceToNext], the one shared entry point.
-/// "Next" is the within-season resolver; at a season boundary it stops cleanly.
+/// Swap-in-place: when [episode] changes (list tap, or auto-advance) it re-opens
+/// in the same frame on the same controller — no navigation, no duplicate player.
 class VideoZone extends StatefulWidget {
   const VideoZone({
     super.key,
@@ -43,21 +40,11 @@ class VideoZone extends StatefulWidget {
     this.onEpisodeChanged,
   });
 
-  /// The episode to play. Changing it re-opens that episode in place.
   final Episode episode;
   final WatchStateRepository watchState;
   final WatchOrderRepository watchOrder;
-
-  /// Reads the current "auto-play next" setting (so toggling it takes effect
-  /// without restarting the player). Read per episode.
   final Future<bool> Function() autoPlayEnabled;
-
-  /// Reads the current skip mode (off / button / auto). Read per episode.
   final Future<SkipMode> Function() skipMode;
-
-  /// Called when the zone advances itself (auto-play) to a new episode, so the
-  /// host can keep its own "current episode" in sync. NOT called when the host
-  /// drives the change via [episode].
   final ValueChanged<Episode>? onEpisodeChanged;
 
   @override
@@ -65,54 +52,68 @@ class VideoZone extends StatefulWidget {
 }
 
 class _VideoZoneState extends State<VideoZone> {
-  // Count an episode "watched" at 90%: enough to skip the ED/next-episode
-  // preview and still have it count.
   static const double _watchedThreshold = 0.90;
-  // The pre-roll countdown overlaps this much of the episode's tail.
   static const Duration _preRollLead = Duration(seconds: 5);
 
   late final PlaybackController _playback;
+  late final ValueNotifier<PlayerControlsState> _controls;
+  late final PlayerControlsActions _actions;
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<Duration>? _durSub;
   StreamSubscription<bool>? _completedSub;
   Timer? _saveTimer;
 
-  late Episode _shown; // the episode currently playing (mirrors controller)
+  late Episode _shown;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _markedWatched = false;
 
-  // Per-episode auto-play state.
-  Episode? _next; // resolved next for the overlay (null = season boundary)
-  bool _autoPlayEnabled = false; // the persisted setting, loaded per episode
-  bool _preRollCancelled = false; // user dismissed the countdown this episode
+  Episode? _next;
+  bool _autoPlayEnabled = false;
+  bool _preRollCancelled = false;
   bool _preRollShowing = false;
   int _preRollSeconds = 0;
 
-  // Per-episode skip state (intro/outro windows come from _shown).
   SkipMode _skipMode = SkipMode.button;
   bool _showSkipIntro = false;
   bool _showSkipOutro = false;
-  bool _introSkipped = false; // auto-skip fires once per window
+  bool _introSkipped = false;
   bool _outroSkipped = false;
 
-  /// Episode IDENTITY (entry + anchored position) — the swap trigger compares
-  /// on this, not the whole object, so a resume-position delta doesn't re-open.
   static bool _sameEpisode(Episode a, Episode b) =>
       a.seriesAnilistId == b.seriesAnilistId &&
       a.anchoredNumber == b.anchoredNumber;
+
+  /// Publish current domain state to the shared notifier (engine state goes via
+  /// player streams, not here). Replaces the old per-widget setState — so the
+  /// windowed AND fullscreen bars both see every change.
+  void _pushControls() {
+    _controls.value = PlayerControlsState(
+      episode: _shown,
+      skipMode: _skipMode,
+      showSkipIntro: _showSkipIntro,
+      showSkipOutro: _showSkipOutro,
+      upNext: _next,
+      preRollShowing: _preRollShowing,
+      preRollSeconds: _preRollSeconds,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _shown = widget.episode;
     _playback = PlaybackController(resolver: widget.watchOrder);
+    _controls = ValueNotifier(PlayerControlsState(episode: _shown));
+    _actions = PlayerControlsActions(
+      skipIntro: _skipIntro,
+      skipOutro: _skipOutro,
+      playNext: _goToNext,
+      cancelPreRoll: _cancelPreRoll,
+    );
     _playback.open(_shown, startAt: _shown.resumePosition);
     _loadEpisodeContext(_shown);
-    // setState on duration so the skip-markers bar can lay out once it's known.
-    _durSub = _playback.durationStream.listen((d) {
-      if (mounted && d != _duration) setState(() => _duration = d);
-    });
+    _durSub = _playback.durationStream.listen((d) => _duration = d);
     _posSub = _playback.positionStream.listen(_onPosition);
     _completedSub = _playback.completedStream.listen((done) {
       if (done) _onCompleted();
@@ -123,47 +124,39 @@ class _VideoZoneState extends State<VideoZone> {
   @override
   void didUpdateWidget(VideoZone oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // The host asked for a different episode (list tap). Swap in place. (When
-    // WE advanced, the host echoes the same episode back via [episode] — same
-    // identity as _shown — so this is a no-op and we don't re-open.)
     if (!_sameEpisode(widget.episode, _shown)) {
       _switchTo(widget.episode);
     }
   }
 
-  /// Open [episode] in the existing frame and reset per-episode state. Used for
-  /// host-driven swaps; the auto-advance path uses [_goToNext] instead (which
-  /// opens via the resolver).
+  /// Host-driven swap (list tap). Save the outgoing episode, then open the new
+  /// one in place and reset per-episode state.
   void _switchTo(Episode episode) {
-    _persist(); // save the outgoing episode's progress before leaving it
+    _persist();
     _playback.open(episode, startAt: episode.resumePosition);
-    setState(() {
-      _shown = episode;
-      _markedWatched = false;
-      _position = Duration.zero;
-      _duration = Duration.zero;
-      _preRollShowing = false;
-    });
+    _shown = episode;
+    _markedWatched = false;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+    _preRollShowing = false;
     _loadEpisodeContext(episode);
   }
 
-  /// Reset per-episode state and (re)load the setting + the resolved next.
   Future<void> _loadEpisodeContext(Episode episode) async {
     final enabled = await widget.autoPlayEnabled();
     final mode = await widget.skipMode();
     final result = await widget.watchOrder.nextEpisode(episode);
     if (!mounted) return;
-    setState(() {
-      _autoPlayEnabled = enabled;
-      _skipMode = mode;
-      _next = result is NextEpisode ? result.episode : null;
-      _preRollCancelled = false;
-      _preRollShowing = false;
-      _showSkipIntro = false;
-      _showSkipOutro = false;
-      _introSkipped = false;
-      _outroSkipped = false;
-    });
+    _autoPlayEnabled = enabled;
+    _skipMode = mode;
+    _next = result is NextEpisode ? result.episode : null;
+    _preRollCancelled = false;
+    _preRollShowing = false;
+    _showSkipIntro = false;
+    _showSkipOutro = false;
+    _introSkipped = false;
+    _outroSkipped = false;
+    _pushControls();
   }
 
   void _onPosition(Duration pos) {
@@ -178,40 +171,34 @@ class _VideoZoneState extends State<VideoZone> {
 
     _applySkips(pos);
 
-    // PRE-roll: surface the countdown during the final [_preRollLead] seconds,
-    // counting down in step with playback. (Not a post-roll — it overlaps the
-    // tail so the advance at end is instant.)
     if (_autoPlayEnabled && _next != null && !_preRollCancelled && total > 0) {
       final remaining = _duration - pos;
       if (remaining > Duration.zero && remaining <= _preRollLead) {
-        // Countdown = min(5s, actual time remaining) — a seek to 3s-left starts
-        // at 3, not a fixed 5. (ceil of the seconds left; remaining > 0 here.)
         final secs = math.min(
           _preRollLead.inSeconds,
           (remaining.inMilliseconds + 999) ~/ 1000,
         );
         if (!_preRollShowing || secs != _preRollSeconds) {
-          setState(() {
-            _preRollShowing = true;
-            _preRollSeconds = secs;
-          });
+          _preRollShowing = true;
+          _preRollSeconds = secs;
+          _pushControls();
         }
       } else if (_preRollShowing) {
-        setState(() => _preRollShowing = false);
+        _preRollShowing = false;
+        _pushControls();
       }
     }
   }
 
-  /// Intro/outro handling per the current [_skipMode], driven by cached windows
-  /// on [_shown] (offline — no network). Intro skip seeks to the window end;
-  /// outro skip seeks past the credits WITHIN the episode (never advances).
+  /// Intro/outro per [_skipMode], driven by the cached windows on [_shown]
+  /// (offline). Intro skip seeks to the window end; outro skip seeks past the
+  /// credits WITHIN the episode (never advances).
   void _applySkips(Duration pos) {
     if (_skipMode == SkipMode.off) {
       if (_showSkipIntro || _showSkipOutro) {
-        setState(() {
-          _showSkipIntro = false;
-          _showSkipOutro = false;
-        });
+        _showSkipIntro = false;
+        _showSkipOutro = false;
+        _pushControls();
       }
       return;
     }
@@ -226,39 +213,38 @@ class _VideoZoneState extends State<VideoZone> {
         _playback.seekTo(intro.end);
       } else if (inOutro && !_outroSkipped) {
         _outroSkipped = true;
-        _seekPastOutro(outro); // skip credits WITHIN the episode (not advance)
+        _seekPastOutro(outro);
       }
       return;
     }
 
-    // Button mode: toggle the affordance. Hide the outro button while the
-    // auto-play pre-roll card occupies the same corner.
+    // Button mode: toggle the affordances. Hide the outro button while the
+    // up-next pre-roll occupies the bar.
     final showIntro = inIntro;
     final showOutro = inOutro && !_preRollShowing;
     if (showIntro != _showSkipIntro || showOutro != _showSkipOutro) {
-      setState(() {
-        _showSkipIntro = showIntro;
-        _showSkipOutro = showOutro;
-      });
+      _showSkipIntro = showIntro;
+      _showSkipOutro = showOutro;
+      _pushControls();
     }
   }
 
   void _skipIntro() {
     final intro = _shown.introSkip;
     if (intro != null) _playback.seekTo(intro.end);
-    setState(() => _showSkipIntro = false);
+    _showSkipIntro = false;
+    _pushControls();
   }
 
   void _skipOutro() {
     final outro = _shown.outroSkip;
     if (outro != null) _seekPastOutro(outro);
-    setState(() => _showSkipOutro = false);
+    _showSkipOutro = false;
+    _pushControls();
   }
 
-  /// Skip credits by seeking to the END of the outro window — staying in the
-  /// episode so any post-credits scene plays. NOT advanceToNext (advancing is
-  /// only the end-of-episode up-next countdown). If the AniSkip window overhangs
-  /// the file, clamp to the end and the episode just completes naturally.
+  /// Seek to the END of the outro window — staying in the episode so any
+  /// post-credits scene plays. Clamp to the file end if the window overhangs.
   void _seekPastOutro(SkipRange outro) {
     final target = (_duration > Duration.zero && outro.end > _duration)
         ? _duration
@@ -267,7 +253,7 @@ class _VideoZoneState extends State<VideoZone> {
   }
 
   void _persist() {
-    if (_markedWatched) return; // already finished; resume was cleared
+    if (_markedWatched) return;
     if (_duration.inMilliseconds <= 0 || _position.inMilliseconds <= 0) return;
     widget.watchState.saveProgress(
       _shown,
@@ -276,8 +262,6 @@ class _VideoZoneState extends State<VideoZone> {
     );
   }
 
-  /// Episode finished: mark watched, then advance immediately if the pre-roll
-  /// is live (enabled, has a next, not cancelled). Otherwise stop cleanly.
   Future<void> _onCompleted() async {
     if (!_markedWatched) {
       _markedWatched = true;
@@ -288,32 +272,29 @@ class _VideoZoneState extends State<VideoZone> {
     }
   }
 
-  /// The one advance path. Both triggers — the pre-roll reaching the end and
-  /// "Play now" — go through here. On success it updates the frame and tells
-  /// the host (so the list follows); at a season boundary it stops cleanly.
+  /// The one advance path. On success it updates the frame + tells the host (so
+  /// the episode list follows); at a season boundary it stops cleanly.
   Future<void> _goToNext() async {
     final next = await _playback.advanceToNext();
     if (!mounted) return;
     if (next == null) {
-      setState(() => _preRollShowing = false); // season boundary -> stop
+      _preRollShowing = false;
+      _pushControls();
       return;
     }
-    setState(() {
-      _shown = next;
-      _markedWatched = false;
-      _position = Duration.zero;
-      _duration = Duration.zero;
-      _preRollShowing = false;
-    });
+    _shown = next;
+    _markedWatched = false;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+    _preRollShowing = false;
     await _loadEpisodeContext(next);
     widget.onEpisodeChanged?.call(next);
   }
 
   void _cancelPreRoll() {
-    setState(() {
-      _preRollCancelled = true;
-      _preRollShowing = false;
-    });
+    _preRollCancelled = true;
+    _preRollShowing = false;
+    _pushControls();
   }
 
   @override
@@ -322,200 +303,26 @@ class _VideoZoneState extends State<VideoZone> {
     _posSub?.cancel();
     _durSub?.cancel();
     _completedSub?.cancel();
-    _persist(); // best-effort final save (fire-and-forget)
+    _persist();
+    _controls.dispose();
     _playback.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // A true-black "stage" so letterboxing reads as theater, not a gap.
+    // A true-black "stage" so letterboxing reads as theater, not a gap. The
+    // control bar is rendered by media_kit over the texture via `controls:`,
+    // so it overlays the video here AND in the fullscreen route automatically.
     return ColoredBox(
       color: const Color(0xFF0A0A0B),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned.fill(child: Video(controller: _playback.controller)),
-          // Skip-region timeline: shaded OP/ED spans over the episode duration.
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 8,
-            child: _SkipMarkersBar(
-              duration: _duration,
-              intro: _shown.introSkip,
-              outro: _shown.outroSkip,
-            ),
-          ),
-          if (_showSkipIntro)
-            Positioned(
-              right: 16,
-              bottom: 56,
-              child: FilledButton.icon(
-                onPressed: _skipIntro,
-                icon: const Icon(Icons.fast_forward),
-                label: const Text('Skip Intro'),
-              ),
-            ),
-          if (_showSkipOutro)
-            Positioned(
-              right: 16,
-              bottom: 56,
-              child: FilledButton.icon(
-                onPressed: _skipOutro,
-                icon: const Icon(Icons.skip_next),
-                label: const Text('Skip Outro'),
-              ),
-            ),
-          if (_preRollShowing && _next != null)
-            Positioned(
-              right: 16,
-              bottom: 56,
-              child: _UpNextCard(
-                next: _next!,
-                seconds: _preRollSeconds,
-                onCancel: _cancelPreRoll,
-                onPlayNow: _goToNext,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Floating, cancelable "Up next" pre-roll card shown over the final seconds.
-class _UpNextCard extends StatelessWidget {
-  const _UpNextCard({
-    required this.next,
-    required this.seconds,
-    required this.onCancel,
-    required this.onPlayNow,
-  });
-
-  final Episode next;
-  final int seconds;
-  final VoidCallback onCancel;
-  final VoidCallback onPlayNow;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.black.withValues(alpha: 0.85),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Up next',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              next.title ?? 'Episode ${next.number}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Text(
-              'Playing in $seconds…',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextButton(onPressed: onCancel, child: const Text('Cancel')),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: onPlayNow,
-                  child: const Text('Play now'),
-                ),
-              ],
-            ),
-          ],
+      child: Video(
+        controller: _playback.controller,
+        controls: (_) => PlayerControls(
+          player: _playback.player,
+          state: _controls,
+          actions: _actions,
         ),
-      ),
-    );
-  }
-}
-
-/// Fractional `[start, end]` of a skip window across a [totalMs]-long episode,
-/// CLAMPED to `[0, 1]` — so an outro window that overhangs the file end never
-/// draws past the bar. Null when there's nothing to draw: no window, unknown
-/// duration, or a degenerate span. Pure, so it's unit-testable.
-@visibleForTesting
-({double start, double end})? skipSpanFraction(SkipRange? r, int totalMs) {
-  if (r == null || totalMs <= 0) return null;
-  final start = (r.start.inMilliseconds / totalMs).clamp(0.0, 1.0);
-  final end = (r.end.inMilliseconds / totalMs).clamp(0.0, 1.0);
-  if (end <= start) return null;
-  return (start: start, end: end);
-}
-
-/// A thin timeline strip shading the cached intro (OP) and outro (ED) skip
-/// windows over the episode's duration, so the user can see where they are.
-/// Purely informational — reads the windows the player already holds, no fetch.
-/// Each span is positioned by its fraction of the duration and CLAMPED to
-/// [0, 1], so an outro window that overhangs the file end never draws past the
-/// bar; a null window draws nothing (partial AniSkip coverage is normal).
-class _SkipMarkersBar extends StatelessWidget {
-  const _SkipMarkersBar({
-    required this.duration,
-    required this.intro,
-    required this.outro,
-  });
-
-  final Duration duration;
-  final SkipRange? intro;
-  final SkipRange? outro;
-
-  @override
-  Widget build(BuildContext context) {
-    final total = duration.inMilliseconds;
-    if (total <= 0) return const SizedBox.shrink(); // duration not known yet
-    final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      height: 6,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          final children = <Widget>[
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            ),
-          ];
-          void addRegion(SkipRange? r, Color color) {
-            final span = skipSpanFraction(r, total);
-            if (span == null) return;
-            children.add(
-              Positioned(
-                top: 0,
-                bottom: 0,
-                left: w * span.start,
-                width: w * (span.end - span.start),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-            );
-          }
-
-          addRegion(intro, scheme.primary.withValues(alpha: 0.85));
-          addRegion(outro, scheme.tertiary.withValues(alpha: 0.85));
-          return Stack(children: children);
-        },
       ),
     );
   }
