@@ -56,6 +56,24 @@ dev_dependencies:
   drift_dev: ^2.33.0
   build_runner: ^2.15.0
 
+# Build-hook config for package:sqlite3 (Drift's native SQLite).
+# By DEFAULT sqlite3 3.x downloads a precompiled SQLite .dylib from GitHub at
+# build time (its `PrecompiledFromGithubAssets` source) — which fails with no
+# network and makes release builds depend on a third-party GitHub asset being
+# reachable. Instead, compile SQLite from a VENDORED amalgamation
+# (`third_party/sqlite3/sqlite3.c`, public domain) via the hook's `source: source`
+# mode, so the build is fully offline and self-contained. `defines:` is omitted
+# on purpose: that keeps package:sqlite3's default compile-time options (FTS5,
+# RTREE, math functions, session/preupdate hooks, …) — i.e. feature parity with
+# the precompiled binary, so the app's SQLite/Drift behavior is unchanged.
+# See the sqlite3 package's `doc/hook.md` ("Custom SQLite builds").
+# To refresh: drop a newer sqlite-amalgamation's sqlite3.c/.h into third_party/.
+hooks:
+  user_defines:
+    sqlite3:
+      source: source
+      path: third_party/sqlite3/sqlite3.c
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
