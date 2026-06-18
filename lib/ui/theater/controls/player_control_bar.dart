@@ -100,10 +100,14 @@ class PlayerControlBar extends StatelessWidget {
               final compact = constraints.maxWidth < 520;
               return Row(
                 children: [
+                  // The time label is a PLAIN child (no Flexible): a flex child
+                  // here would split the row's free space with the Expanded
+                  // center and leave the right controls short of the edge. To
+                  // stay clean when narrow it's simply dropped in compact mode,
+                  // so the Expanded center is the only flex child and the right
+                  // slot always reaches the right edge.
                   for (final c in config.controlsIn(ControlSlot.left))
-                    if (c == PlayerControl.timeLabel)
-                      Flexible(child: _control(c))
-                    else
+                    if (c != PlayerControl.timeLabel || !compact)
                       _control(c, compact: compact),
                   Expanded(
                     child: Row(
@@ -150,6 +154,13 @@ class _PlayerControlsState extends State<PlayerControls> {
   bool _visible = true;
   Timer? _idle;
 
+  /// The player's own keyboard-focus node. We OWN it (not a one-shot autofocus)
+  /// and reclaim it on any interaction, so shortcuts survive every focus-stealing
+  /// path: clicking a control, hovering back over the video, returning from
+  /// fullscreen. (Clicking the sibling episode rail can't steal it either — the
+  /// rail's items are canRequestFocus:false.)
+  final FocusNode _focus = FocusNode(debugLabel: 'AniLocal player');
+
   void _show() {
     if (!_visible) setState(() => _visible = true);
     _idle?.cancel();
@@ -164,6 +175,7 @@ class _PlayerControlsState extends State<PlayerControls> {
   @override
   void dispose() {
     _idle?.cancel();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -216,42 +228,62 @@ class _PlayerControlsState extends State<PlayerControls> {
   @override
   Widget build(BuildContext context) {
     return Focus(
+      focusNode: _focus,
       autofocus: true,
       onKeyEvent: _onKey,
-      child: MouseRegion(
-        onEnter: (_) => _show(),
-        onHover: (_) => _show(),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: AnimatedOpacity(
-                opacity: _visible ? 1 : 0,
-                duration: const Duration(milliseconds: 200),
-                child: IgnorePointer(
-                  ignoring: !_visible,
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, Colors.black87],
+      // Any pointer-down inside the player reclaims keyboard focus (clicking the
+      // video, the scrim, or a control) — so shortcuts keep working after any
+      // in-player interaction.
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _focus.requestFocus(),
+        child: MouseRegion(
+          onEnter: (_) {
+            _show();
+            _focus
+                .requestFocus(); // reclaim e.g. after returning from fullscreen
+          },
+          onHover: (_) => _show(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: AnimatedOpacity(
+                  opacity: _visible ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: IgnorePointer(
+                    ignoring: !_visible,
+                    child: DecoratedBox(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, Colors.black87],
+                        ),
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 24),
-                      child: PlayerControlBar(
-                        player: widget.player,
-                        state: widget.state,
-                        actions: widget.actions,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 24),
+                        // The bar's controls must NEVER hold keyboard focus, so a
+                        // focused slider/button can't swallow space/←/→ — the
+                        // player's shortcuts always win. They stay fully
+                        // mouse-operable (focus ≠ pointer input).
+                        child: Focus(
+                          canRequestFocus: false,
+                          descendantsAreFocusable: false,
+                          child: PlayerControlBar(
+                            player: widget.player,
+                            state: widget.state,
+                            actions: widget.actions,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

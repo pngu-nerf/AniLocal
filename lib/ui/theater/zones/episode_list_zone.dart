@@ -127,6 +127,9 @@ class _EpisodeTile extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      // Mouse-driven list: don't grab keyboard focus on tap, or selecting an
+      // episode would steal the player's shortcut focus (it's a sibling zone).
+      canRequestFocus: false,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
