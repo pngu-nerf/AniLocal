@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart' show toggleFullscreen;
 
 import 'control_bar_config.dart';
 import 'player_controls.dart';
@@ -191,8 +192,18 @@ class _PlayerControlsState extends State<PlayerControls> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final p = widget.player;
     final key = event.logicalKey;
+    // Escape exits OS fullscreen back to the theater layout — via the SAME
+    // toggleFullscreen the ⛶ button uses (so it rides the hardened exit
+    // transition), guarded to only exit. No-op when not in fullscreen.
+    if (key == LogicalKeyboardKey.escape) {
+      if (playerIsFullscreen(context)) {
+        toggleFullscreen(context);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    final p = widget.player;
     if (key == LogicalKeyboardKey.space) {
       p.playOrPause();
     } else if (key == LogicalKeyboardKey.arrowRight) {
@@ -226,6 +237,13 @@ class _PlayerControlsState extends State<PlayerControls> {
     p.seek(clamped); // the same seek the seek bar + skip buttons use
   }
 
+  /// Click on the video area (not on a control) → toggle playback. Also wakes
+  /// the controls via the shared [_show] (reveal bar + cursor, reset idle).
+  void _togglePlay() {
+    widget.player.playOrPause();
+    _show();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Focus(
@@ -238,16 +256,40 @@ class _PlayerControlsState extends State<PlayerControls> {
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: (_) => _focus.requestFocus(),
+        // Wake-on-move lives HERE, not on the MouseRegion's onHover: a
+        // MouseRegion whose cursor is SystemMouseCursors.none stops delivering
+        // its own onHover (that's what broke reveal-on-move when the cursor
+        // hide was added — recovery degraded to a click). This Listener does no
+        // cursor manipulation, so onPointerHover keeps firing on every mouse
+        // move over the video and is the reliable recovery — bar + cursor come
+        // back together via the shared [_show], no click needed.
+        onPointerHover: (_) => _show(),
         child: MouseRegion(
+          // Cursor shares the ONE idle state with the bar: hidden when the bar
+          // auto-hides (idle while playing), back with it on movement. This
+          // region is the VIDEO overlay only (media_kit renders it Positioned-
+          // .fill over the texture), so the hide is confined to the video — the
+          // episode rail and series-info zones are separate widgets and keep
+          // their cursor regardless. `defer` lets controls show their own
+          // cursors when visible.
+          cursor: _visible ? MouseCursor.defer : SystemMouseCursors.none,
           onEnter: (_) {
             _show();
             _focus
                 .requestFocus(); // reclaim e.g. after returning from fullscreen
           },
-          onHover: (_) => _show(),
           child: Stack(
             fit: StackFit.expand,
             children: [
+              // Click-to-pause on the video area. It's the BOTTOM Stack child,
+              // so Stack hit-testing routes taps on actual controls (the bar
+              // above) to those controls — only taps on empty video reach here.
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _togglePlay,
+                ),
+              ),
               Align(
                 alignment: Alignment.bottomCenter,
                 child: AnimatedOpacity(
