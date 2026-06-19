@@ -27,32 +27,52 @@ class TheaterLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // DEFENSIVE: a transient UNBOUNDED height/width can reach us during the
+        // fullscreen-exit route pop. Sizing the video to `maxHeight *
+        // videoFraction` would then be infinite and overflow (~100k "BOTTOM
+        // OVERFLOWED"). Clamp to a bounded size (falling back to the view size)
+        // and pin the whole arrangement to it, so NO descendant — the video
+        // SizedBox, the info Expanded, the rail — can ever be handed an
+        // unbounded dimension, whatever the transition timing. A no-op under
+        // normal bounded layout (the clamp equals the incoming max).
+        final view = MediaQuery.maybeOf(context)?.size;
+        final maxWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : (view?.width ?? 0);
+        final maxHeight = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : (view?.height ?? 0);
+        if (maxWidth <= 0 || maxHeight <= 0) return const SizedBox.shrink();
+
         final showRail =
             config.shows(TheaterZone.episodeList) &&
             zones[TheaterZone.episodeList] != null;
 
-        final main = _mainColumn(constraints.maxHeight);
-        if (!showRail) return main;
+        final Widget content;
+        if (!showRail) {
+          content = _mainColumn(maxHeight);
+        } else {
+          // Pixel widths from the fraction, so a future drag-to-resize just maps
+          // a drag position back into [railFraction] — no structural change.
+          final railWidth = maxWidth * config.railFraction;
+          final rail = SizedBox(
+            width: railWidth,
+            child: zones[TheaterZone.episodeList],
+          );
+          final mainBox = SizedBox(
+            width: maxWidth - railWidth,
+            child: _mainColumn(maxHeight),
+          );
+          final ordered = config.railSide == TheaterSide.left
+              ? [rail, mainBox]
+              : [mainBox, rail];
+          content = Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: ordered,
+          );
+        }
 
-        // Pixel widths from the fraction, so a future drag-to-resize just maps
-        // a drag position back into [railFraction] — no structural change.
-        final railWidth = constraints.maxWidth * config.railFraction;
-        final rail = SizedBox(
-          width: railWidth,
-          child: zones[TheaterZone.episodeList],
-        );
-        final mainBox = SizedBox(
-          width: constraints.maxWidth - railWidth,
-          child: main,
-        );
-
-        final ordered = config.railSide == TheaterSide.left
-            ? [rail, mainBox]
-            : [mainBox, rail];
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: ordered,
-        );
+        return SizedBox(width: maxWidth, height: maxHeight, child: content);
       },
     );
   }

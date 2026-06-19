@@ -57,6 +57,32 @@ void main() {
     }
   });
 
+  testWidgets('does not overflow when handed an UNBOUNDED height', (
+    tester,
+  ) async {
+    // Reproduces the fullscreen-exit transient: a Column parent hands its
+    // non-flex child maxHeight=Infinity. Pre-fix this made the video zone
+    // SizedBox infinite -> ~100k "BOTTOM OVERFLOWED". Must clamp instead.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TheaterLayout(
+                config: TheaterLayoutConfig.theaterDefault,
+                zones: _zones(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    // It clamped to the view height and still laid the zones out.
+    expect(find.byKey(_videoKey), findsOneWidget);
+    expect(tester.getSize(find.byKey(_videoKey)).height, greaterThan(0));
+  });
+
   testWidgets('video zone gets the bulk of the main column height', (
     tester,
   ) async {
