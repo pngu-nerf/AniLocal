@@ -17,8 +17,7 @@ enum TheaterSide { left, right }
 /// not a magic number scattered in the widget tree. The consequences are by
 /// construction:
 ///  - **Move a zone** (rail left instead of right): set [railSide].
-///  - **Resize a zone** (drag-to-resize / Settings later): set [railFraction]
-///    or [videoFraction] — a future drag handle just writes these.
+///  - **Resize a zone** (drag-to-resize / Settings later): set [railFraction].
 ///  - **Hide / add a zone**: change [visibleZones].
 ///
 /// None of those touch the zone widgets. For this pass the config is a fixed
@@ -29,24 +28,18 @@ class TheaterLayoutConfig {
   const TheaterLayoutConfig({
     this.railSide = TheaterSide.right,
     this.railFraction = 0.30,
-    this.videoFraction = 0.64,
     this.visibleZones = const {
       TheaterZone.video,
       TheaterZone.seriesInfo,
       TheaterZone.episodeList,
     },
-  }) : assert(railFraction > 0 && railFraction < 1),
-       assert(videoFraction > 0 && videoFraction <= 1);
+  }) : assert(railFraction > 0 && railFraction < 1);
 
   /// The side the episode-list rail sits on.
   final TheaterSide railSide;
 
   /// Episode-list rail width as a fraction of the total width (0–1).
   final double railFraction;
-
-  /// Video height as a fraction of the main (video + info) column height
-  /// (0–1). The series-info zone takes the remainder.
-  final double videoFraction;
 
   /// The zones currently displayed. Hiding one is a config change.
   final Set<TheaterZone> visibleZones;
@@ -56,12 +49,10 @@ class TheaterLayoutConfig {
   TheaterLayoutConfig copyWith({
     TheaterSide? railSide,
     double? railFraction,
-    double? videoFraction,
     Set<TheaterZone>? visibleZones,
   }) => TheaterLayoutConfig(
     railSide: railSide ?? this.railSide,
     railFraction: railFraction ?? this.railFraction,
-    videoFraction: videoFraction ?? this.videoFraction,
     visibleZones: visibleZones ?? this.visibleZones,
   );
 

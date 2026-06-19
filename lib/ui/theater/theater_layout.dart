@@ -10,9 +10,10 @@ import 'theater_layout_config.dart';
 /// video fractions), or hiding one is a change to the config, handled here —
 /// never a change to a zone widget. This is the repositioning seam.
 ///
-/// Arrangement: a main column (video on top, series info below, split by
-/// [TheaterLayoutConfig.videoFraction]) beside the episode-list rail (width
-/// [TheaterLayoutConfig.railFraction], on [TheaterLayoutConfig.railSide]).
+/// Arrangement: a main column (video filling the space, series info directly
+/// below it sized to its CONTENT — no flex-filler gap, no scroll) beside the
+/// episode-list rail (width [TheaterLayoutConfig.railFraction], on
+/// [TheaterLayoutConfig.railSide]).
 class TheaterLayout extends StatelessWidget {
   const TheaterLayout({super.key, required this.config, required this.zones});
 
@@ -77,8 +78,22 @@ class TheaterLayout extends StatelessWidget {
     );
   }
 
-  /// Video over series info, split by [TheaterLayoutConfig.videoFraction].
-  /// Either may be hidden via the config; whichever remains takes the space.
+  /// Video fills the space above; series info sits directly below, sized to its
+  /// CONTENT. The video is [Expanded] (it absorbs whatever height the info
+  /// leaves — black bars are fine), and the info is a plain, inflexible child so
+  /// it shrink-wraps its content: no flex filler, hence no dead whitespace below
+  /// it (the actual fix), and no scroll.
+  ///
+  /// Why this can't overflow like the old fraction version: nothing here is
+  /// sized by a constraint multiply that could go infinite. A Column measures
+  /// its non-flex child (the info) with an UNBOUNDED main axis, so the info
+  /// would take its full content height even if that exceeds the column — which
+  /// would overflow on a very short window. So the info is wrapped in a
+  /// `ConstrainedBox(maxHeight: height)`: in the normal case (content < height)
+  /// it's a no-op and the info shrink-wraps to its content (the fix — no
+  /// whitespace); on a too-short window it caps at the column height (the info
+  /// zone clips its own content via its ClipRect) and the video gets whatever's
+  /// left, down to zero — bounded, never overflowing. Either zone may be hidden.
   Widget _mainColumn(double height) {
     final showVideo =
         config.shows(TheaterZone.video) && zones[TheaterZone.video] != null;
@@ -86,18 +101,16 @@ class TheaterLayout extends StatelessWidget {
         config.shows(TheaterZone.seriesInfo) &&
         zones[TheaterZone.seriesInfo] != null;
 
-    final children = <Widget>[
-      if (showVideo)
-        SizedBox(
-          height: showInfo ? height * config.videoFraction : height,
-          child: zones[TheaterZone.video],
-        ),
-      if (showInfo) Expanded(child: zones[TheaterZone.seriesInfo]!),
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
+      children: [
+        if (showVideo) Expanded(child: zones[TheaterZone.video]!),
+        if (showInfo)
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: height),
+            child: zones[TheaterZone.seriesInfo]!,
+          ),
+      ],
     );
   }
 }

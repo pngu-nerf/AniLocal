@@ -9,9 +9,10 @@ import '../theater_widgets.dart';
 /// The SERIES-INFO zone: cover, title, episode count, and the existing
 /// metadata, plus the episode currently playing. Sits below the video.
 ///
-/// Position-agnostic: fills the box it's given and scrolls if the box is short,
-/// so it never overflows when the layout shrinks its share. No width/position
-/// is hardcoded here.
+/// Position-agnostic and sizes to its CONTENT (it does NOT fill or scroll), so
+/// the left column has no dead whitespace beneath it. If its box is ever shorter
+/// than the content (a very short window) it clips/caps rather than overflowing.
+/// No width/position is hardcoded here.
 class SeriesInfoZone extends StatelessWidget {
   const SeriesInfoZone({
     super.key,
@@ -46,57 +47,65 @@ class SeriesInfoZone extends StatelessWidget {
       if (!series.pending) 'AniList #${series.anilistId}',
     ];
 
+    // Sizes to its CONTENT (mainAxisSize.min) — no greedy scroll view, so the
+    // left column has no dead whitespace below the info. No scroll. ClipRect is
+    // the graceful-degradation guard: if a window is so short that the content
+    // can't fit the column, it's clipped (capped) instead of overflowing —
+    // never the case at normal sizes (this content is short).
     return Material(
       color: scheme.surfaceContainerLow,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const ZoneEyebrow(label: 'Now playing'),
-            Text(
-              nowPlaying.title ?? 'Episode ${nowPlaying.number}',
-              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Cover(art: art, pending: series.pending),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: text.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          height: 1.1,
-                        ),
-                      ),
-                      if (series.titles.native != null) ...[
-                        const SizedBox(height: 2),
+      child: ClipRect(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const ZoneEyebrow(label: 'Now playing'),
+              Text(
+                nowPlaying.title ?? 'Episode ${nowPlaying.number}',
+                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Cover(art: art, pending: series.pending),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          series.titles.native!,
-                          style: text.bodySmall?.copyWith(
+                          title,
+                          style: text.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            height: 1.1,
+                          ),
+                        ),
+                        if (series.titles.native != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            series.titles.native!,
+                            style: text.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        Text(
+                          series.pending ? 'Identifying…' : meta.join('  ·  '),
+                          style: text.bodyMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
                         ),
                       ],
-                      const SizedBox(height: 10),
-                      Text(
-                        series.pending ? 'Identifying…' : meta.join('  ·  '),
-                        style: text.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

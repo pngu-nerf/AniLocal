@@ -10,21 +10,23 @@ const _videoKey = Key('VIDEO');
 const _infoKey = Key('INFO');
 const _listKey = Key('LIST');
 
+// Info has FINITE content height (120) so we can assert it sizes to content
+// (no flex filler). Video/list are greedy (video is Expanded; list fills its
+// rail box).
+const double _infoContent = 120;
+
 Map<TheaterZone, Widget> _zones() => {
-  TheaterZone.video: const ColoredBox(
-    key: _videoKey,
-    color: Color(0xFF112233),
-    child: SizedBox.expand(child: Text('VIDEO')),
-  ),
+  // Childless so they tolerate any size (incl. 0 in a tiny window) without
+  // their own overflow — like the real media_kit Video / rail.
+  TheaterZone.video: const ColoredBox(key: _videoKey, color: Color(0xFF112233)),
   TheaterZone.seriesInfo: const ColoredBox(
     key: _infoKey,
     color: Color(0xFF223344),
-    child: SizedBox.expand(child: Text('INFO')),
+    child: SizedBox(height: _infoContent, width: double.infinity),
   ),
   TheaterZone.episodeList: const ColoredBox(
     key: _listKey,
     color: Color(0xFF334455),
-    child: SizedBox.expand(child: Text('LIST')),
   ),
 };
 
@@ -83,19 +85,42 @@ void main() {
     expect(tester.getSize(find.byKey(_videoKey)).height, greaterThan(0));
   });
 
-  testWidgets('video zone gets the bulk of the main column height', (
+  testWidgets('info sizes to content; video fills the rest; no gap', (
     tester,
   ) async {
     await _pump(tester, TheaterLayoutConfig.theaterDefault);
     final video = tester.getSize(find.byKey(_videoKey));
     final info = tester.getSize(find.byKey(_infoKey));
-    expect(video.height, greaterThan(info.height));
+    // Info hugs its content height (not a fraction, not filling) — the fix.
+    expect(info.height, _infoContent);
+    // Video absorbs the remainder.
+    expect(video.height, closeTo(800 - _infoContent, 0.5));
+    // No flex-filler gap: video sits directly above info, info ends at the
+    // column bottom (no dead whitespace below it).
+    expect(
+      tester.getBottomLeft(find.byKey(_videoKey)).dy,
+      closeTo(tester.getTopLeft(find.byKey(_infoKey)).dy, 0.5),
+    );
+    expect(tester.getBottomLeft(find.byKey(_infoKey)).dy, closeTo(800, 0.5));
     // Default rail on the right => video's left edge is at x=0.
     expect(tester.getTopLeft(find.byKey(_videoKey)).dx, 0);
-    // Video + info stack vertically and fill the 800px height.
-    expect(video.height + info.height, closeTo(800, 0.5));
     // Main column width = total - rail (30%) = 70% of 1200.
     expect(video.width, closeTo(1200 * 0.70, 0.5));
+  });
+
+  testWidgets('short window: info content > height degrades, no overflow', (
+    tester,
+  ) async {
+    // A window shorter than the info content (120) — the graceful-degradation
+    // edge. Must clip/cap, never overflow (the bug we keep killing).
+    await _pump(
+      tester,
+      TheaterLayoutConfig.theaterDefault,
+      size: const Size(600, 80),
+    );
+    expect(tester.takeException(), isNull);
+    // Info is clipped to the column rather than pushing past it.
+    expect(tester.getSize(find.byKey(_infoKey)).height, lessThanOrEqualTo(80));
   });
 
   testWidgets('rail-left config moves the list to the left edge', (
