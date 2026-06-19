@@ -2,9 +2,30 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart'
-    show isFullscreen, toggleFullscreen;
+    show FullscreenInheritedWidget, toggleFullscreen;
 
 import 'player_controls_state.dart';
+
+/// True if an inherited widget of type [T] exists above [context], read WITHOUT
+/// subscribing — [getElementForInheritedWidgetOfExactType] is a one-time lookup
+/// that registers NO dependency (unlike `dependOnInheritedWidgetOfExactType`).
+///
+/// The player must never SUBSCRIBE to a route-scoped inherited widget: media_kit
+/// reuses the windowed VideoState (and this same controls builder) across the
+/// fullscreen route, so a control registered as a dependent of the fullscreen
+/// route's inherited widget can outlive it and trip `_dependents.isEmpty`
+/// (InheritedElement.debugDeactivated) on back-navigation. A non-subscribing
+/// read makes that cross-route dependent-survival structurally impossible.
+bool hasInheritedAncestorWithoutSubscribing<T extends InheritedWidget>(
+  BuildContext context,
+) => context.getElementForInheritedWidgetOfExactType<T>() != null;
+
+/// Whether the player is in media_kit's fullscreen route — read non-subscribing
+/// (see [hasInheritedAncestorWithoutSubscribing]). Fullscreen only changes via a
+/// route push/pop, which rebuilds the controls anyway, so a reactive dependency
+/// on [FullscreenInheritedWidget] is both unnecessary and the cause of the crash.
+bool playerIsFullscreen(BuildContext context) =>
+    hasInheritedAncestorWithoutSubscribing<FullscreenInheritedWidget>(context);
 
 /// The individual, position-agnostic player controls. Each takes only what it
 /// needs (the player for engine state/actions; the shared state notifier for
@@ -219,7 +240,7 @@ class FullscreenButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final full = isFullscreen(context);
+    final full = playerIsFullscreen(context);
     return IconButton(
       color: _iconColor,
       tooltip: full ? 'Exit fullscreen' : 'Fullscreen',

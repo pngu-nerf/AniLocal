@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart' show isFullscreen;
 
 import 'control_bar_config.dart';
 import 'player_controls.dart';
@@ -68,7 +67,9 @@ class PlayerControlBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final config = isFullscreen(context) ? fullscreen : windowed;
+    // Non-subscribing read (see playerIsFullscreen): picks the config without
+    // registering this bar as a dependent of FullscreenInheritedWidget.
+    final config = playerIsFullscreen(context) ? fullscreen : windowed;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
