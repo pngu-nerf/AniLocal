@@ -51,6 +51,8 @@ class LibraryScreen extends StatefulWidget {
     required this.setAutoPlayNext,
     required this.loadSkipMode,
     required this.setSkipMode,
+    required this.loadRailFraction,
+    required this.setRailFraction,
   });
 
   final LibraryRepository repository;
@@ -80,6 +82,10 @@ class LibraryScreen extends StatefulWidget {
   /// Skip mode (off/button/auto), persisted; read by the player, set here.
   final Future<SkipMode> Function() loadSkipMode;
   final Future<void> Function(SkipMode mode) setSkipMode;
+
+  /// Theater rail width (fraction), persisted; the rail divider reads/writes it.
+  final Future<double> Function() loadRailFraction;
+  final Future<void> Function(double fraction) setRailFraction;
 
   /// Opens the native folder picker; reports whether a folder was added and the
   /// denied TCC category label (if the folder's category access was refused).
@@ -174,6 +180,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
           watchOrder: widget.watchOrder,
           loadAutoPlayNext: widget.loadAutoPlayNext,
           loadSkipMode: widget.loadSkipMode,
+          loadRailFraction: widget.loadRailFraction,
+          setRailFraction: widget.setRailFraction,
         ),
       ),
     );
@@ -509,6 +517,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         onPlay: _play,
                         loadAutoPlayNext: widget.loadAutoPlayNext,
                         loadSkipMode: widget.loadSkipMode,
+                        loadRailFraction: widget.loadRailFraction,
+                        setRailFraction: widget.setRailFraction,
                         onReturn: _reload,
                       );
                     },
@@ -566,6 +576,8 @@ class _SeriesCard extends StatelessWidget {
     required this.onPlay,
     required this.loadAutoPlayNext,
     required this.loadSkipMode,
+    required this.loadRailFraction,
+    required this.setRailFraction,
     required this.onReturn,
   });
 
@@ -587,6 +599,8 @@ class _SeriesCard extends StatelessWidget {
   final Future<void> Function(Episode, Series) onPlay;
   final Future<bool> Function() loadAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
+  final Future<double> Function() loadRailFraction;
+  final Future<void> Function(double fraction) setRailFraction;
   final VoidCallback onReturn;
 
   @override
@@ -627,6 +641,8 @@ class _SeriesCard extends StatelessWidget {
                 watchOrder: watchOrder,
                 loadAutoPlayNext: loadAutoPlayNext,
                 loadSkipMode: loadSkipMode,
+                loadRailFraction: loadRailFraction,
+                setRailFraction: setRailFraction,
               ),
             ),
           );

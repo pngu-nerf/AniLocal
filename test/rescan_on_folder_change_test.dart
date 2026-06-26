@@ -137,6 +137,8 @@ void main() {
         setAutoPlayNext: (_) async {},
         loadSkipMode: () async => SkipMode.button,
         setSkipMode: (_) async {},
+        loadRailFraction: () async => 0.30,
+        setRailFraction: (_) async {},
       ),
     );
     await tester.pumpAndSettle();

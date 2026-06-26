@@ -150,4 +150,91 @@ void main() {
     expect(find.byKey(_listKey), findsNothing);
     expect(tester.getSize(find.byKey(_videoKey)).width, 1200);
   });
+
+  testWidgets('no rail divider unless onRailResize is supplied', (
+    tester,
+  ) async {
+    await _pump(tester, TheaterLayoutConfig.theaterDefault);
+    expect(find.byKey(kRailDividerKey), findsNothing);
+  });
+
+  testWidgets('dragging the divider grows the rail (clamped to max)', (
+    tester,
+  ) async {
+    double? last;
+    var ended = false;
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TheaterLayout(
+            config: TheaterLayoutConfig.theaterDefault,
+            zones: _zones(),
+            onRailResize: (f) => last = f,
+            onRailResizeEnd: () => ended = true,
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(kRailDividerKey), findsOneWidget);
+
+    // Rail on the right (fraction 0.30 => boundary at x=840). Drag the divider
+    // LEFT to grow the rail. A big drag overshoots and must clamp to the max.
+    await tester.drag(find.byKey(kRailDividerKey), const Offset(-400, 0));
+    await tester.pump();
+    expect(last, TheaterLayoutConfig.railFractionMax);
+    expect(ended, isTrue);
+  });
+
+  testWidgets('dragging the divider shrinks the rail (clamped to min)', (
+    tester,
+  ) async {
+    double? last;
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TheaterLayout(
+            config: TheaterLayoutConfig.theaterDefault,
+            zones: _zones(),
+            onRailResize: (f) => last = f,
+          ),
+        ),
+      ),
+    );
+    // Drag RIGHT (rail on the right) shrinks it; a big drag clamps to the min.
+    await tester.drag(find.byKey(kRailDividerKey), const Offset(400, 0));
+    await tester.pump();
+    expect(last, TheaterLayoutConfig.railFractionMin);
+  });
+
+  testWidgets('rail-left: drag direction is mirrored', (tester) async {
+    double? last;
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TheaterLayout(
+            config: TheaterLayoutConfig.theaterDefault.copyWith(
+              railSide: TheaterSide.left,
+            ),
+            zones: _zones(),
+            onRailResize: (f) => last = f,
+          ),
+        ),
+      ),
+    );
+    // Rail on the LEFT: dragging RIGHT GROWS it (mirror of rail-on-right, where
+    // the same rightward drag shrinks it — see the clamp tests above). Assert
+    // the direction, not an exact value: the gesture recognizer eats ~20px of
+    // touch-slop before reporting, so the magnitude isn't pixel-exact.
+    await tester.drag(find.byKey(kRailDividerKey), const Offset(60, 0));
+    await tester.pump();
+    expect(last, isNotNull);
+    expect(last, greaterThan(0.30));
+    expect(last, lessThanOrEqualTo(TheaterLayoutConfig.railFractionMax));
+  });
 }

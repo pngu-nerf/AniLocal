@@ -27,6 +27,8 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.watchOrder,
     required this.loadAutoPlayNext,
     required this.loadSkipMode,
+    required this.loadRailFraction,
+    required this.setRailFraction,
   });
 
   final Series series;
@@ -37,6 +39,8 @@ class SeriesDetailScreen extends StatefulWidget {
   final WatchOrderRepository watchOrder;
   final Future<bool> Function() loadAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
+  final Future<double> Function() loadRailFraction;
+  final Future<void> Function(double fraction) setRailFraction;
 
   @override
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
@@ -78,6 +82,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           watchOrder: widget.watchOrder,
           loadAutoPlayNext: widget.loadAutoPlayNext,
           loadSkipMode: widget.loadSkipMode,
+          loadRailFraction: widget.loadRailFraction,
+          setRailFraction: widget.setRailFraction,
         ),
       ),
     );

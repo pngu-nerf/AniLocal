@@ -30,6 +30,8 @@ class TheaterScreen extends StatefulWidget {
     required this.watchOrder,
     required this.loadAutoPlayNext,
     required this.loadSkipMode,
+    this.loadRailFraction,
+    this.setRailFraction,
     this.config = TheaterLayoutConfig.theaterDefault,
   });
 
@@ -40,6 +42,12 @@ class TheaterScreen extends StatefulWidget {
   final WatchOrderRepository watchOrder;
   final Future<bool> Function() loadAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
+
+  /// Persisted rail width (fraction of total). When [loadRailFraction] is
+  /// supplied the rail gets a draggable divider and remembers its width across
+  /// launches; null → a fixed rail at [config]'s fraction (no divider).
+  final Future<double> Function()? loadRailFraction;
+  final Future<void> Function(double fraction)? setRailFraction;
 
   /// The arrangement. Defaults to the YouTube-style theater; a future Settings
   /// or drag-to-resize just supplies a different config — the zones are unchanged.
@@ -53,11 +61,28 @@ class _TheaterScreenState extends State<TheaterScreen> {
   late Episode _current;
   List<Episode>? _episodes; // null while first loading
 
+  /// Live rail width. Seeded from the config so the first frame is correct,
+  /// then overwritten by the persisted value (clamped) once it loads.
+  late double _railFraction;
+
   @override
   void initState() {
     super.initState();
     _current = widget.initialEpisode;
+    _railFraction = widget.config.railFraction;
+    _loadRailFraction();
     _loadEpisodes();
+  }
+
+  Future<void> _loadRailFraction() async {
+    final load = widget.loadRailFraction;
+    if (load == null) return;
+    final stored = await load();
+    final clamped = stored.clamp(
+      TheaterLayoutConfig.railFractionMin,
+      TheaterLayoutConfig.railFractionMax,
+    );
+    if (mounted) setState(() => _railFraction = clamped);
   }
 
   Future<void> _loadEpisodes() async {
@@ -113,9 +138,23 @@ class _TheaterScreenState extends State<TheaterScreen> {
       ),
     };
 
+    // Resizing is enabled only when a persistence hook is wired; without it the
+    // rail stays a fixed fraction (no divider).
+    final resizable = widget.loadRailFraction != null;
+    final config = widget.config.copyWith(railFraction: _railFraction);
+
     return Scaffold(
       appBar: AppBar(title: Text(title)),
-      body: TheaterLayout(config: widget.config, zones: zones),
+      body: TheaterLayout(
+        config: config,
+        zones: zones,
+        onRailResize: resizable
+            ? (f) => setState(() => _railFraction = f)
+            : null,
+        onRailResizeEnd: resizable
+            ? () => widget.setRailFraction?.call(_railFraction)
+            : null,
+      ),
     );
   }
 }

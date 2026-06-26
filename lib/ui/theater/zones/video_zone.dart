@@ -10,6 +10,7 @@ import '../../../domain/models/skip_mode.dart';
 import '../../../domain/models/skip_range.dart';
 import '../../../domain/repositories/watch_order_repository.dart';
 import '../../../domain/repositories/watch_state_repository.dart';
+import '../../../playback/media_remote.dart';
 import '../../../playback/playback_controller.dart';
 import '../controls/player_control_bar.dart';
 import '../controls/player_controls_state.dart';
@@ -58,9 +59,11 @@ class _VideoZoneState extends State<VideoZone> {
   late final PlaybackController _playback;
   late final ValueNotifier<PlayerControlsState> _controls;
   late final PlayerControlsActions _actions;
+  late final MediaRemote _remote;
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<Duration>? _durSub;
   StreamSubscription<bool>? _completedSub;
+  StreamSubscription<bool>? _playingSub;
   Timer? _saveTimer;
 
   late Episode _shown;
@@ -111,14 +114,48 @@ class _VideoZoneState extends State<VideoZone> {
       playNext: _goToNext,
       cancelPreRoll: _cancelPreRoll,
     );
+    // System media-remote (AirPods pinch / media keys / Bluetooth). Commands
+    // route to the SAME paths the on-screen controls use — never a parallel
+    // play/pause: toggle → Player.playOrPause, next → the one advance path.
+    _remote = MediaRemote(
+      onPlay: _playback.player.play,
+      onPause: _playback.player.pause,
+      onTogglePlayPause: _playback.player.playOrPause,
+      onNext: _goToNext,
+    );
     _playback.open(_shown, startAt: _shown.resumePosition);
     _loadEpisodeContext(_shown);
-    _durSub = _playback.durationStream.listen((d) => _duration = d);
+    _durSub = _playback.durationStream.listen((d) {
+      _duration = d;
+      _pushNowPlaying(); // duration just became known
+    });
     _posSub = _playback.positionStream.listen(_onPosition);
     _completedSub = _playback.completedStream.listen((done) {
       if (done) _onCompleted();
     });
-    _saveTimer = Timer.periodic(const Duration(seconds: 5), (_) => _persist());
+    // Reflect play/pause to the OS immediately so the now-playing widget and
+    // command routing stay in sync the moment state flips.
+    _playingSub = _playback.player.stream.playing.listen(
+      (_) => _pushNowPlaying(),
+    );
+    // The save tick doubles as a low-rate now-playing refresh so the system's
+    // elapsed-time scrubber stays roughly current (incl. after a seek) without
+    // a method call on every position frame.
+    _saveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _persist();
+      _pushNowPlaying();
+    });
+  }
+
+  /// Publish the current episode + engine state to the OS now-playing center.
+  /// The title reuses the same fallback the info zone shows.
+  void _pushNowPlaying() {
+    _remote.updateNowPlaying(
+      title: _shown.title ?? 'Episode ${_shown.number}',
+      duration: _duration,
+      position: _position,
+      playing: _playback.player.state.playing,
+    );
   }
 
   @override
@@ -140,6 +177,7 @@ class _VideoZoneState extends State<VideoZone> {
     _duration = Duration.zero;
     _preRollShowing = false;
     _loadEpisodeContext(episode);
+    _pushNowPlaying(); // new title to the OS now-playing center
   }
 
   Future<void> _loadEpisodeContext(Episode episode) async {
@@ -287,6 +325,7 @@ class _VideoZoneState extends State<VideoZone> {
     _position = Duration.zero;
     _duration = Duration.zero;
     _preRollShowing = false;
+    _pushNowPlaying(); // new title to the OS now-playing center
     await _loadEpisodeContext(next);
     widget.onEpisodeChanged?.call(next);
   }
@@ -303,7 +342,9 @@ class _VideoZoneState extends State<VideoZone> {
     _posSub?.cancel();
     _durSub?.cancel();
     _completedSub?.cancel();
+    _playingSub?.cancel();
     _persist();
+    _remote.dispose(); // relinquish now-playing + stop receiving commands
     _controls.dispose();
     _playback.dispose();
     super.dispose();

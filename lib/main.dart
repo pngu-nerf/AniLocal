@@ -138,6 +138,10 @@ void main() {
   const continueCollapsedKey = 'continue_watching_collapsed';
   const autoPlayNextKey = 'autoplay_next';
   const skipModeKey = 'skip_mode';
+  const railFractionKey = 'theater_rail_fraction';
+  // The default rail width (matches TheaterLayoutConfig.theaterDefault); the
+  // theater clamps the loaded value to the drag bounds.
+  const railFractionDefault = 0.30;
 
   runApp(
     AniLocalApp(
@@ -169,6 +173,12 @@ void main() {
       loadSkipMode: () async =>
           SkipMode.fromToken(await database.getSetting(skipModeKey)),
       setSkipMode: (mode) => database.setSetting(skipModeKey, mode.token),
+      // Theater rail width (fraction). Unset/unparseable -> the default.
+      loadRailFraction: () async =>
+          double.tryParse(await database.getSetting(railFractionKey) ?? '') ??
+          railFractionDefault,
+      setRailFraction: (fraction) =>
+          database.setSetting(railFractionKey, '$fraction'),
     ),
   );
 }

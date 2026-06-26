@@ -41,6 +41,12 @@ class TheaterLayoutConfig {
   /// Episode-list rail width as a fraction of the total width (0–1).
   final double railFraction;
 
+  /// Drag bounds for the rail. The draggable divider clamps [railFraction] to
+  /// this range so the rail can neither shrink to nothing nor grow wide enough
+  /// to crowd out the video. Persisted values are clamped here on load too.
+  static const double railFractionMin = 0.18;
+  static const double railFractionMax = 0.45;
+
   /// The zones currently displayed. Hiding one is a config change.
   final Set<TheaterZone> visibleZones;
 

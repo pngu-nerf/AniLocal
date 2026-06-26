@@ -36,6 +36,8 @@ class AniLocalApp extends StatelessWidget {
     required this.setAutoPlayNext,
     required this.loadSkipMode,
     required this.setSkipMode,
+    required this.loadRailFraction,
+    required this.setRailFraction,
   });
 
   final LibraryRepository repository;
@@ -63,6 +65,11 @@ class AniLocalApp extends StatelessWidget {
   /// Skip mode (off/button/auto), persisted; read by the player per episode.
   final Future<SkipMode> Function() loadSkipMode;
   final Future<void> Function(SkipMode mode) setSkipMode;
+
+  /// Theater rail width (fraction of total), persisted; the rail divider in the
+  /// theater reads it on open and writes it when a drag ends.
+  final Future<double> Function() loadRailFraction;
+  final Future<void> Function(double fraction) setRailFraction;
 
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 
@@ -109,6 +116,8 @@ class AniLocalApp extends StatelessWidget {
         setAutoPlayNext: setAutoPlayNext,
         loadSkipMode: loadSkipMode,
         setSkipMode: setSkipMode,
+        loadRailFraction: loadRailFraction,
+        setRailFraction: setRailFraction,
       ),
     );
   }
