@@ -14,8 +14,11 @@ import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'access_recovery.dart';
-import 'continue_watching_row.dart';
 import 'folders_screen.dart';
+import 'library/continue_watching_panel.dart';
+import 'library/library_layout.dart';
+import 'library/library_layout_config.dart';
+import 'library/library_search_bar.dart';
 import 'series_detail_screen.dart';
 import 'theater/theater_screen.dart';
 import 'unmatched_screen.dart';
@@ -26,6 +29,23 @@ import 'unmatched_screen.dart';
 @visibleForTesting
 bool seriesUnavailable(Set<String> sourceFolders, Set<String> missingFolders) =>
     sourceFolders.isNotEmpty && sourceFolders.every(missingFolders.contains);
+
+/// Whether a series matches the live library search [query] — a case-insensitive
+/// substring of any cached title (English, romaji, or native). A pending
+/// placeholder carries its parsed filename/title in [Titles.romaji], so it's
+/// searchable too. A blank query matches everything (clearing restores the full
+/// library). Pure (UI-layer, filters the already-cached list — no network) so
+/// it's unit-testable.
+@visibleForTesting
+bool seriesMatchesQuery(Series series, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return true;
+  final t = series.titles;
+  for (final name in [t.english, t.romaji, t.native]) {
+    if (name != null && name.toLowerCase().contains(q)) return true;
+  }
+  return false;
+}
 
 /// Stage 4/5 home: browse the cached library. Reads ONLY from the repository
 /// (cache) — instant and offline. Scan (fill path) and add-folder (native
@@ -111,7 +131,14 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   late Future<List<Series>> _series;
-  late Future<List<ContinueWatching>> _continue;
+  // Continue-watching entries held in state (not a Future) so the layout knows
+  // synchronously whether to allocate the side panel (no entries → no panel).
+  List<ContinueWatching> _continueEntries = const [];
+  // Live library search. Filtering is in-memory over the already-cached series
+  // list — instant, offline, no per-keystroke query (consistent with
+  // offline-first). Empty query shows everything.
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
   // anilistId -> the next episode to watch (relations-aware). Loaded async;
   // cards show their "Next" affordance once it arrives.
   Map<int, Episode> _upNext = {};
@@ -131,6 +158,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   void _toggleContinueCollapsed() {
     setState(() => _continueCollapsed = !_continueCollapsed);
     widget.setContinueCollapsed(_continueCollapsed);
@@ -144,7 +177,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void _reload() {
     setState(() {
       _series = widget.repository.allSeries();
-      _continue = widget.watchState.continueWatching();
+    });
+    // Continue-watching: resolved off the cache into state so the panel's
+    // presence (and thus the layout) is known without a FutureBuilder.
+    widget.watchState.continueWatching().then((e) {
+      if (mounted) setState(() => _continueEntries = e);
     });
     // "Up Next" per series — resolved off the cache; updates the grid when ready.
     widget.watchOrder.upNextBySeries().then((m) {
@@ -457,21 +494,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     onRescan: _scanning ? () {} : _scan,
                   ),
           ),
-          // "Continue watching" — in-progress episodes, most recent first.
-          FutureBuilder<List<ContinueWatching>>(
-            future: _continue,
-            builder: (context, snapshot) {
-              final entries = snapshot.data ?? const <ContinueWatching>[];
-              if (entries.isEmpty) return const SizedBox.shrink();
-              return ContinueWatchingRow(
-                entries: entries,
-                onPlay: _playFromContinue,
-                onDismiss: _dismissFromContinue,
-                collapsed: _continueCollapsed,
-                onToggleCollapsed: _toggleContinueCollapsed,
-              );
-            },
-          ),
+          // Search + continue-watching panel + grid share the page via the
+          // composable landing layout (the seam analogous to the theater zones):
+          // search pinned full-width on top, panel on the left, grid filling
+          // the rest. The one FutureBuilder resolves the cached library once;
+          // search filters that in-memory list (instant, offline).
           Expanded(
             child: FutureBuilder<List<Series>>(
               future: _series,
@@ -479,55 +506,109 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 if (snapshot.connectionState != ConnectionState.done) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final series = snapshot.data ?? const [];
-                if (series.isEmpty) {
+                final all = snapshot.data ?? const <Series>[];
+                if (all.isEmpty) {
+                  // Truly empty library — no search/panel, just onboarding.
                   return _EmptyState(
                     scanning: _scanning,
                     onAddFolder: _addFolder,
                   );
                 }
-                // Greying re-evaluates live with the missing-folder set, using
-                // the cached per-series folder map (no re-fetch on toggle).
-                return ValueListenableBuilder<Set<String>>(
-                  valueListenable: widget.missingFolderPaths,
-                  builder: (context, missing, _) => GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 200,
-                          childAspectRatio: 0.62,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                    itemCount: series.length,
-                    itemBuilder: (_, i) {
-                      final folders =
-                          _sourceFoldersBySeries[series[i].anilistId] ??
-                          const <String>{};
-                      final unavailable = seriesUnavailable(folders, missing);
-                      return _SeriesCard(
-                        series: series[i],
-                        repository: widget.repository,
-                        fixMatch: widget.fixMatch,
-                        watchState: widget.watchState,
-                        sourceSelection: widget.sourceSelection,
-                        watchOrder: widget.watchOrder,
-                        nextEpisode: _upNext[series[i].anilistId],
-                        unavailable: unavailable,
-                        onPlay: _play,
-                        loadAutoPlayNext: widget.loadAutoPlayNext,
-                        loadSkipMode: widget.loadSkipMode,
-                        loadRailFraction: widget.loadRailFraction,
-                        setRailFraction: widget.setRailFraction,
-                        onReturn: _reload,
-                      );
-                    },
+                final filtered = [
+                  for (final s in all)
+                    if (seriesMatchesQuery(s, _query)) s,
+                ];
+                return LibraryLayout(
+                  config: LibraryLayoutConfig(
+                    panelCollapsed: _continueCollapsed,
                   ),
+                  zones: {
+                    LibraryZone.search: LibrarySearchBar(
+                      controller: _searchController,
+                      onChanged: (v) => setState(() => _query = v),
+                      onClear: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                    ),
+                    if (_continueEntries.isNotEmpty)
+                      LibraryZone.continueWatching: ContinueWatchingPanel(
+                        entries: _continueEntries,
+                        onPlay: _playFromContinue,
+                        onDismiss: _dismissFromContinue,
+                        collapsed: _continueCollapsed,
+                        onToggleCollapsed: _toggleContinueCollapsed,
+                      ),
+                    LibraryZone.grid: _buildGrid(filtered),
+                  },
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// The library grid for the given (already search-filtered) series. Greying
+  /// re-evaluates live with the missing-folder set, using the cached per-series
+  /// folder map (no re-fetch on toggle). A non-empty library that filters to
+  /// nothing shows a "no matches" hint rather than the onboarding empty state.
+  Widget _buildGrid(List<Series> series) {
+    if (series.isEmpty) return _NoSearchResults(query: _query);
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: widget.missingFolderPaths,
+      builder: (context, missing, _) => GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 200,
+          childAspectRatio: 0.62,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: series.length,
+        itemBuilder: (_, i) {
+          final folders =
+              _sourceFoldersBySeries[series[i].anilistId] ?? const <String>{};
+          final unavailable = seriesUnavailable(folders, missing);
+          return _SeriesCard(
+            series: series[i],
+            repository: widget.repository,
+            fixMatch: widget.fixMatch,
+            watchState: widget.watchState,
+            sourceSelection: widget.sourceSelection,
+            watchOrder: widget.watchOrder,
+            nextEpisode: _upNext[series[i].anilistId],
+            unavailable: unavailable,
+            onPlay: _play,
+            loadAutoPlayNext: widget.loadAutoPlayNext,
+            loadSkipMode: widget.loadSkipMode,
+            loadRailFraction: widget.loadRailFraction,
+            setRailFraction: widget.setRailFraction,
+            onReturn: _reload,
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Shown when the library has shows but the live search matched none.
+class _NoSearchResults extends StatelessWidget {
+  const _NoSearchResults({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          'No shows match “${query.trim()}”.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
       ),
     );
   }
