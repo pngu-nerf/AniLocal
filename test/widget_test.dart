@@ -141,11 +141,13 @@ void main() {
         setSkipMode: (_) async {},
         loadRailFraction: () async => 0.30,
         setRailFraction: (_) async {},
+        loadPanelFraction: () async => 0.22,
+        setPanelFraction: (_) async {},
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('AniLocal'), findsOneWidget);
+    expect(find.textContaining('AniLocal'), findsOneWidget);
     expect(find.text('Frieren'), findsOneWidget);
     expect(find.textContaining('TV'), findsOneWidget);
   });

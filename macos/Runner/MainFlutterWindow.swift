@@ -5,12 +5,50 @@ import MediaPlayer
 class MainFlutterWindow: NSWindow {
   // Strong ref so the media-remote bridge lives as long as the window.
   private var mediaRemote: MediaRemoteHandler?
+  // Strong ref so the window-chrome channel keeps handling while the window lives.
+  private var windowChannel: FlutterMethodChannel?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+
+    // Spotify-style integrated title bar: hide the standard macOS title bar and
+    // let the Flutter content span the FULL window height (into the former
+    // title-bar region), so our own top bar becomes the real top of the window.
+    // The traffic-light buttons stay in their DEFAULT top-left position and now
+    // overlap our content — the Dart top bar indents its leading content past
+    // them (see kTrafficLightInset). This is a static config set once (no button
+    // repositioning, no observers), so native fullscreen enter/exit is unaffected.
+    self.titlebarAppearsTransparent = true
+    self.titleVisibility = .hidden
+    self.styleMask.insert(.fullSizeContentView)
+
+    // We removed the system title bar, so a click-drag on the system title bar
+    // can no longer move the window. Restore move + zoom for a Dart-designated
+    // drag region via NSWindow's own APIs — a system framework, so NO new
+    // dependency and NO build-time download (same rationale as MediaRemote).
+    let channel = FlutterMethodChannel(
+      name: "anilocal/window",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "startDrag":
+        // performDrag runs its own modal move-loop from the in-flight mouse
+        // event until mouse-up — the same technique window-manager plugins use.
+        if let event = NSApp.currentEvent {
+          self?.performDrag(with: event)
+        }
+        result(nil)
+      case "toggleMaximize":
+        self?.zoom(nil)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    windowChannel = channel
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 

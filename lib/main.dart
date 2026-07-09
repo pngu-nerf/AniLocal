@@ -142,6 +142,10 @@ void main() {
   // The default rail width (matches TheaterLayoutConfig.theaterDefault); the
   // theater clamps the loaded value to the drag bounds.
   const railFractionDefault = 0.30;
+  const panelFractionKey = 'continue_panel_fraction';
+  // Default continue-watching panel width (matches LibraryLayoutConfig); the
+  // library clamps the loaded value to its own drag bounds.
+  const panelFractionDefault = 0.22;
 
   runApp(
     AniLocalApp(
@@ -179,6 +183,12 @@ void main() {
           railFractionDefault,
       setRailFraction: (fraction) =>
           database.setSetting(railFractionKey, '$fraction'),
+      // Continue-watching panel width (fraction). Unset/unparseable -> default.
+      loadPanelFraction: () async =>
+          double.tryParse(await database.getSetting(panelFractionKey) ?? '') ??
+          panelFractionDefault,
+      setPanelFraction: (fraction) =>
+          database.setSetting(panelFractionKey, '$fraction'),
     ),
   );
 }

@@ -3,15 +3,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../domain/models/continue_watching.dart';
+import '../theme/xp_tokens.dart';
+import '../theme/xp_widgets.dart';
 
 /// Vertical "Continue watching" side panel: in-progress episodes with a resume
 /// progress bar, newest first. Tapping an entry resumes playback; the per-card
 /// dismiss clears that entry. Collapsing shrinks it to a thin strip with an
 /// expand affordance (the persisted toggle relocated from the old top row).
 ///
-/// Geometry-agnostic: it fills whatever box `LibraryLayout` hands it (the
-/// layout owns the width — full panel when expanded, a thin strip when
-/// collapsed). It only renders header-vs-list based on [collapsed].
+/// Styled as an XP group box (a little window-within-the-window). It fills
+/// whatever box `LibraryLayout` hands it — the layout owns the width (full when
+/// expanded, a thin strip when collapsed); this only swaps header-vs-list.
 class ContinueWatchingPanel extends StatelessWidget {
   const ContinueWatchingPanel({
     super.key,
@@ -31,76 +33,68 @@ class ContinueWatchingPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (collapsed) return _collapsed(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: onToggleCollapsed,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Continue watching',
-                    style: Theme.of(context).textTheme.titleMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Icon(Icons.chevron_left, size: 20),
-              ],
-            ),
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: entries.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 4),
-            itemBuilder: (_, i) =>
-                _Card(entry: entries[i], onPlay: onPlay, onDismiss: onDismiss),
-          ),
-        ),
-      ],
+    return XpGroupBox(
+      title: 'Continue watching',
+      trailing: XpButton(
+        dense: true,
+        icon: Icons.chevron_left,
+        tooltip: 'Collapse',
+        onPressed: onToggleCollapsed,
+      ),
+      child: ListView.separated(
+        padding: const EdgeInsets.all(6),
+        itemCount: entries.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 6),
+        itemBuilder: (_, i) =>
+            _Card(entry: entries[i], onPlay: onPlay, onDismiss: onDismiss),
+      ),
     );
   }
 
   /// Collapsed strip: just the expand affordance, with a vertical label so the
   /// panel is still discoverable when narrowed.
   Widget _collapsed(BuildContext context) {
-    return InkWell(
-      onTap: onToggleCollapsed,
-      child: Column(
-        children: [
-          const SizedBox(height: 4),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            tooltip: 'Show continue watching',
-            onPressed: onToggleCollapsed,
-          ),
-          Expanded(
-            child: RotatedBox(
-              quarterTurns: 3,
-              child: Center(
-                child: Text(
-                  'Continue watching',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
+    return XpPanel(
+      color: Xp.surface,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: GestureDetector(
+        onTap: onToggleCollapsed,
+        child: Column(
+          children: [
+            XpButton(
+              dense: true,
+              icon: Icons.chevron_right,
+              tooltip: 'Show continue watching',
+              onPressed: onToggleCollapsed,
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: RotatedBox(
+                quarterTurns: 3,
+                child: Center(
+                  child: Text(
+                    'Continue watching',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: Xp.fontFamily,
+                      fontFamilyFallback: Xp.fontFallback,
+                      fontSize: 12,
+                      color: Xp.textDim,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-/// One in-progress entry as a compact horizontal card (poster thumbnail + title
-/// + episode + resume bar), sized for the narrow vertical panel.
+/// One in-progress entry as a compact raised tile (sunken poster thumbnail +
+/// title + episode + resume bar), sized for the narrow vertical panel.
 class _Card extends StatelessWidget {
   const _Card({
     required this.entry,
@@ -124,67 +118,86 @@ class _Card extends StatelessWidget {
         entry.series.titles.native ??
         '#${entry.series.anilistId}';
 
-    return InkWell(
+    return GestureDetector(
       onTap: () => onPlay(entry),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: SizedBox(
-                width: 48,
-                height: 68,
-                child: (art != null && File(art).existsSync())
-                    ? Image.file(File(art), fit: BoxFit.cover)
-                    : Container(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        child: const Center(child: Icon(Icons.play_arrow)),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+      child: XpPanel(
+        color: Xp.surfaceAlt,
+        padding: const EdgeInsets.all(6),
+        // The panel width is user-draggable (a fraction of the page), so a card
+        // can get narrow. Below a threshold, drop the poster thumbnail so the
+        // text + dismiss button always fit — no overflow at any panel width.
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final showThumb = constraints.maxWidth >= 120;
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (showThumb) ...[
+                  XpBevel(
+                    raised: false,
+                    color: Xp.well,
+                    child: SizedBox(
+                      width: 42,
+                      height: 60,
+                      child: (art != null && File(art).existsSync())
+                          ? Image.file(File(art), fit: BoxFit.cover)
+                          : const Center(
+                              child: Icon(
+                                Icons.play_arrow,
+                                color: Xp.textFaint,
+                                size: 18,
+                              ),
+                            ),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Episode ${ep.number}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: progress.clamp(0.0, 1.0),
-                      minHeight: 3,
-                    ),
-                  ),
+                  const SizedBox(width: 8),
                 ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, size: 16),
-              tooltip: 'Remove from continue watching',
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(),
-              padding: const EdgeInsets.all(4),
-              onPressed: () => onDismiss(entry),
-            ),
-          ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: Xp.fontFamily,
+                          fontFamilyFallback: Xp.fontFallback,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Xp.text,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Episode ${ep.number}',
+                        style: const TextStyle(color: Xp.textDim, fontSize: 11),
+                      ),
+                      const SizedBox(height: 6),
+                      XpBevel(
+                        raised: false,
+                        color: Xp.well,
+                        child: SizedBox(
+                          height: 8,
+                          child: LinearProgressIndicator(
+                            value: progress.clamp(0.0, 1.0),
+                            backgroundColor: Xp.well,
+                            color: Xp.accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                XpButton(
+                  dense: true,
+                  icon: Icons.close,
+                  tooltip: 'Remove from continue watching',
+                  onPressed: () => onDismiss(entry),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

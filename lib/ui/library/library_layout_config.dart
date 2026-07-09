@@ -29,7 +29,9 @@ enum LibrarySide { left, right }
 ///  - **Collapse / expand the panel**: set [panelCollapsed] (the layout swaps to
 ///    [collapsedPanelWidth]); the panel widget reads the same flag to render a
 ///    header-only strip. Persisted across launches (reuses the old row's toggle).
-///  - **Resize the panel**: set [panelWidth] / [collapsedPanelWidth].
+///  - **Resize the panel**: set [panelFraction] — the expanded panel is a
+///    fraction of the total width, dragged by the same [ResizeDivider] the
+///    theater rail uses and clamped to [panelFractionMin]/[panelFractionMax].
 ///  - **Hide / add a zone** (e.g. no continue-watching entries): change
 ///    [visibleZones] / omit the zone from the layout's zone map.
 ///
@@ -40,14 +42,14 @@ class LibraryLayoutConfig {
   const LibraryLayoutConfig({
     this.panelSide = LibrarySide.left,
     this.panelCollapsed = false,
-    this.panelWidth = 248,
+    this.panelFraction = 0.22,
     this.collapsedPanelWidth = 44,
     this.visibleZones = const {
       LibraryZone.search,
       LibraryZone.continueWatching,
       LibraryZone.grid,
     },
-  });
+  }) : assert(panelFraction > 0 && panelFraction < 1);
 
   /// The side the continue-watching panel sits on (left by default).
   final LibrarySide panelSide;
@@ -56,8 +58,16 @@ class LibraryLayoutConfig {
   /// the persisted toggle relocated from the old "Continue watching" row.
   final bool panelCollapsed;
 
-  /// Panel width (logical px) when expanded.
-  final double panelWidth;
+  /// Expanded panel width as a fraction of the total landing width (0–1) — the
+  /// same knob shape as [TheaterLayoutConfig.railFraction], turned by the same
+  /// draggable [ResizeDivider].
+  final double panelFraction;
+
+  /// Drag bounds for the panel. The divider clamps [panelFraction] to this range
+  /// so the panel can neither shrink to nothing nor crowd out the grid; a
+  /// persisted value is clamped to this on load too.
+  static const double panelFractionMin = 0.15;
+  static const double panelFractionMax = 0.4;
 
   /// Panel width (logical px) when collapsed (just the expand affordance).
   final double collapsedPanelWidth;
@@ -72,13 +82,13 @@ class LibraryLayoutConfig {
   LibraryLayoutConfig copyWith({
     LibrarySide? panelSide,
     bool? panelCollapsed,
-    double? panelWidth,
+    double? panelFraction,
     double? collapsedPanelWidth,
     Set<LibraryZone>? visibleZones,
   }) => LibraryLayoutConfig(
     panelSide: panelSide ?? this.panelSide,
     panelCollapsed: panelCollapsed ?? this.panelCollapsed,
-    panelWidth: panelWidth ?? this.panelWidth,
+    panelFraction: panelFraction ?? this.panelFraction,
     collapsedPanelWidth: collapsedPanelWidth ?? this.collapsedPanelWidth,
     visibleZones: visibleZones ?? this.visibleZones,
   );

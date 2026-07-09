@@ -139,19 +139,21 @@ void main() {
         setSkipMode: (_) async {},
         loadRailFraction: () async => 0.30,
         setRailFraction: (_) async {},
+        loadPanelFraction: () async => 0.22,
+        setPanelFraction: (_) async {},
       ),
     );
     await tester.pumpAndSettle();
 
     // 1) Open the folders screen and close it WITHOUT changing the set.
-    await tester.tap(find.byTooltip('Library folders'));
+    await tester.tap(find.byTooltip('Media sources'));
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(scans, 0, reason: 'no-op dismissal must not scan');
 
     // 2) Open it, change the set (simulate an add), then close.
-    await tester.tap(find.byTooltip('Library folders'));
+    await tester.tap(find.byTooltip('Media sources'));
     await tester.pumpAndSettle();
     repo.folders = ['/a', '/b'];
     await tester.pageBack();

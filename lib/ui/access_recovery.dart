@@ -17,7 +17,7 @@ Future<void> showAccessDeniedDialog(
       title: const Text('Folder access needed'),
       content: Text(
         "AniLocal can't access $label.\n\n"
-        'Enable AniLocal in $kFilesAndFoldersPath, then rescan.',
+        'Enable AniLocal in $kFilesAndFoldersPath, then sync metadata.',
       ),
       actions: [
         TextButton(
@@ -62,7 +62,7 @@ class AccessBanner extends StatelessWidget {
         style: TextStyle(color: scheme.onErrorContainer),
       ),
       actions: [
-        TextButton(onPressed: onRescan, child: const Text('Rescan')),
+        TextButton(onPressed: onRescan, child: const Text('Sync metadata')),
         TextButton(
           onPressed: () => onOpenSettings(),
           child: const Text('Open Settings'),
@@ -94,10 +94,12 @@ class ReconnectBanner extends StatelessWidget {
       leading: Icon(Icons.link_off, color: scheme.onSecondaryContainer),
       content: Text(
         "${labels.join(', ')} isn't connected. Reconnect it to access this "
-        'library, then rescan.',
+        'library, then sync metadata.',
         style: TextStyle(color: scheme.onSecondaryContainer),
       ),
-      actions: [TextButton(onPressed: onRescan, child: const Text('Rescan'))],
+      actions: [
+        TextButton(onPressed: onRescan, child: const Text('Sync metadata')),
+      ],
     );
   }
 }

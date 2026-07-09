@@ -6,6 +6,7 @@ import '../../domain/models/skip_mode.dart';
 import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
+import '../window_chrome.dart';
 import 'theater_layout.dart';
 import 'theater_layout_config.dart';
 import 'zones/episode_list_zone.dart';
@@ -144,7 +145,12 @@ class _TheaterScreenState extends State<TheaterScreen> {
     final config = widget.config.copyWith(railFraction: _railFraction);
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        // Inset the back button clear of the traffic lights (hidden title bar).
+        leadingWidth: kAppBarLeadingWidth,
+        leading: trafficLightBackButton(),
+        title: Text(title),
+      ),
       body: TheaterLayout(
         config: config,
         zones: zones,

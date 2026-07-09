@@ -13,6 +13,7 @@ import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
 import 'theater/theater_screen.dart';
+import 'window_chrome.dart';
 
 /// Series detail: cover + metadata + the episodes (matched files) for this
 /// series. Each episode can be reassigned, or used as a season-split point.
@@ -271,7 +272,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         '#${series.anilistId}';
     final art = series.coverImageRef;
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        // Inset the back button clear of the traffic lights (hidden title bar).
+        leadingWidth: kAppBarLeadingWidth,
+        leading: trafficLightBackButton(),
+        title: Text(title),
+      ),
       body: FutureBuilder<List<Episode>>(
         future: _episodes,
         builder: (context, snapshot) {

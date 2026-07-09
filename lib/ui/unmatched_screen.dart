@@ -4,6 +4,7 @@ import '../domain/models/identified_episode.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import 'fix_match_screen.dart';
+import 'window_chrome.dart';
 
 /// Lists files that matched no AniList entry (kept on record across rescans).
 /// Tapping one opens fix-match to assign it (the OPM Specials case).
@@ -52,7 +53,12 @@ class _UnmatchedScreenState extends State<UnmatchedScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Unmatched files')),
+      appBar: AppBar(
+        // Inset the back button clear of the traffic lights (hidden title bar).
+        leadingWidth: kAppBarLeadingWidth,
+        leading: trafficLightBackButton(),
+        title: const Text('Unmatched files'),
+      ),
       body: FutureBuilder<List<IdentifiedEpisode>>(
         future: _files,
         builder: (context, snapshot) {

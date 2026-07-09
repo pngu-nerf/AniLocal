@@ -38,6 +38,8 @@ class AniLocalApp extends StatelessWidget {
     required this.setSkipMode,
     required this.loadRailFraction,
     required this.setRailFraction,
+    required this.loadPanelFraction,
+    required this.setPanelFraction,
   });
 
   final LibraryRepository repository;
@@ -70,6 +72,11 @@ class AniLocalApp extends StatelessWidget {
   /// theater reads it on open and writes it when a drag ends.
   final Future<double> Function() loadRailFraction;
   final Future<void> Function(double fraction) setRailFraction;
+
+  /// Continue-watching panel width (fraction), persisted; the landing-page
+  /// analogue of the theater rail fraction.
+  final Future<double> Function() loadPanelFraction;
+  final Future<void> Function(double fraction) setPanelFraction;
 
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 
@@ -118,6 +125,8 @@ class AniLocalApp extends StatelessWidget {
         setSkipMode: setSkipMode,
         loadRailFraction: loadRailFraction,
         setRailFraction: setRailFraction,
+        loadPanelFraction: loadPanelFraction,
+        setPanelFraction: setPanelFraction,
       ),
     );
   }

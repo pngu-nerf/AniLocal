@@ -132,6 +132,8 @@ void main() {
         setSkipMode: (_) async {},
         loadRailFraction: () async => 0.30,
         setRailFraction: (_) async {},
+        loadPanelFraction: () async => 0.22,
+        setPanelFraction: (_) async {},
       ),
     );
     await tester.pumpAndSettle();
@@ -139,7 +141,7 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Bravo'), findsNothing);
 
-    await tester.tap(find.byTooltip('Scan / refresh'));
+    await tester.tap(find.byTooltip('Sync metadata'));
     await tester.pumpAndSettle();
 
     expect(

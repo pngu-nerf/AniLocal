@@ -21,6 +21,9 @@ import 'library/library_layout_config.dart';
 import 'library/library_search_bar.dart';
 import 'series_detail_screen.dart';
 import 'theater/theater_screen.dart';
+import 'theme/xp_theme.dart';
+import 'theme/xp_tokens.dart';
+import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
@@ -73,6 +76,8 @@ class LibraryScreen extends StatefulWidget {
     required this.setSkipMode,
     required this.loadRailFraction,
     required this.setRailFraction,
+    required this.loadPanelFraction,
+    required this.setPanelFraction,
   });
 
   final LibraryRepository repository;
@@ -107,6 +112,11 @@ class LibraryScreen extends StatefulWidget {
   final Future<double> Function() loadRailFraction;
   final Future<void> Function(double fraction) setRailFraction;
 
+  /// Continue-watching panel width (fraction), persisted; the panel divider
+  /// reads/writes it — the landing-page analogue of the rail fraction above.
+  final Future<double> Function() loadPanelFraction;
+  final Future<void> Function(double fraction) setPanelFraction;
+
   /// Opens the native folder picker; reports whether a folder was added and the
   /// denied TCC category label (if the folder's category access was refused).
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
@@ -139,6 +149,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   // offline-first). Empty query shows everything.
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  // Drives the chunky XP scrollbar over the grid.
+  final ScrollController _gridScroll = ScrollController();
   // anilistId -> the next episode to watch (relations-aware). Loaded async;
   // cards show their "Next" affordance once it arrives.
   Map<int, Episode> _upNext = {};
@@ -148,6 +160,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Map<int, Set<String>> _sourceFoldersBySeries = {};
   bool _scanning = false;
   bool _continueCollapsed = false;
+  // Count of CONFIRMED-unmatched files (AniList said no) — NOT pending
+  // placeholders, which auto-resolve. Gates the top-bar Unmatched button; the
+  // Settings → Metadata entry is always shown regardless.
+  int _unmatchedCount = 0;
+  // Live continue-watching panel width. Seeded from the config so the first
+  // frame is correct, then overwritten by the persisted (clamped) value.
+  double _panelFraction = LibraryLayoutConfig.landingDefault.panelFraction;
 
   @override
   void initState() {
@@ -156,11 +175,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
     widget.loadContinueCollapsed().then((c) {
       if (mounted) setState(() => _continueCollapsed = c);
     });
+    widget.loadPanelFraction().then((f) {
+      final clamped = f.clamp(
+        LibraryLayoutConfig.panelFractionMin,
+        LibraryLayoutConfig.panelFractionMax,
+      );
+      if (mounted) setState(() => _panelFraction = clamped);
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _gridScroll.dispose();
     super.dispose();
   }
 
@@ -186,6 +213,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // "Up Next" per series — resolved off the cache; updates the grid when ready.
     widget.watchOrder.upNextBySeries().then((m) {
       if (mounted) setState(() => _upNext = m);
+    });
+    // Confirmed-unmatched count — gates the top-bar Unmatched button.
+    widget.repository.unmatchedFiles().then((u) {
+      if (mounted) setState(() => _unmatchedCount = u.length);
     });
     _loadSourceFolders();
   }
@@ -241,6 +272,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // --- Playback ---------------------------------------------
+              const _SettingsSection('Playback'),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Auto-play next episode'),
@@ -253,9 +286,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   widget.setAutoPlayNext(v);
                 },
               ),
-              const Divider(),
               const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
+                padding: EdgeInsets.only(top: 4, bottom: 2),
                 child: Text('Skip intro / outro'),
               ),
               for (final mode in SkipMode.values)
@@ -273,14 +305,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     widget.setSkipMode(mode);
                   },
                 ),
-              const Divider(),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => _refreshMetadata(dialogContext),
-                  icon: const Icon(Icons.cloud_sync_outlined),
-                  label: const Text('Refresh metadata (idMal + skip data)'),
+              // --- Metadata ---------------------------------------------
+              const _SettingsSection('Metadata'),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.cloud_sync_outlined),
+                title: const Text('Refresh metadata'),
+                subtitle: const Text('Re-fetch idMal + skip data'),
+                onTap: () => _refreshMetadata(dialogContext),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.help_outline),
+                title: const Text('Unmatched files'),
+                subtitle: Text(
+                  _unmatchedCount == 0
+                      ? 'Nothing needs fixing'
+                      : '$_unmatchedCount file(s) we could not identify',
                 ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(dialogContext).pop();
+                  _openUnmatched();
+                },
               ),
             ],
           ),
@@ -374,7 +423,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Scan failed: $e')));
+      ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
@@ -401,151 +450,154 @@ class _LibraryScreenState extends State<LibraryScreen> {
       '${s.unchanged} unchanged · ${s.removed} removed · '
       '${s.anilistLookups} AniList lookups';
 
+  /// Open the folders manager, then rescan iff the folder SET changed (a pure
+  /// reorder just reloads to re-resolve default sources — no scan, no network).
+  Future<void> _openFolders() async {
+    final before = await _folderPaths();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FoldersScreen(
+          repository: widget.repository,
+          onAddFolder: widget.onAddFolder,
+          onOpenAccessSettings: widget.onOpenAccessSettings,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    final after = await _folderPaths();
+    if (!setEquals(before, after)) {
+      await _scan();
+    } else {
+      _reload();
+    }
+  }
+
+  void _openUnmatched() => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => UnmatchedScreen(
+        repository: widget.repository,
+        fixMatch: widget.fixMatch,
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AniLocal'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.folder_outlined),
-            tooltip: 'Library folders',
-            onPressed: () async {
-              // If the folder SET actually changed while managing folders,
-              // trigger an incremental rescan (existing scan path); a no-op
-              // dismissal scans nothing. Compare before/after so it's robust to
-              // however the screen was closed. (A pure REORDER leaves the set
-              // unchanged — no rescan, but reload below so re-resolved default
-              // sources show immediately.)
-              final before = await _folderPaths();
-              if (!context.mounted) return;
-              await Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => FoldersScreen(
-                    repository: widget.repository,
-                    onAddFolder: widget.onAddFolder,
-                    onOpenAccessSettings: widget.onOpenAccessSettings,
-                  ),
-                ),
-              );
-              if (!mounted) return;
-              final after = await _folderPaths();
-              if (!setEquals(before, after)) {
-                await _scan();
-              } else {
-                _reload(); // order may have changed — re-resolve sources, no scan
-              }
-            },
+    // The blackout-XP look is scoped to this screen's subtree: pushed routes
+    // (detail, theater, folders) sit above this Theme on the app's Navigator,
+    // so they keep the current theme until we style them in a later pass.
+    return Theme(
+      data: XpTheme.data(),
+      child: Scaffold(
+        backgroundColor: Xp.desktop,
+        // No desktop "margin": the XP window now fills the OS window (we hid the
+        // native title bar), so our blue title bar reaches the window's top edge
+        // and the traffic lights sit centered within it.
+        body: XpWindow(
+          caption: 'AniLocal — Library',
+          // The app actions live at the title bar's TOP-RIGHT — the traffic
+          // lights are top-left, so the right edge is free and the two coexist.
+          titleTrailing: _TitleActions(
+            scanning: _scanning,
+            unmatchedCount: _unmatchedCount,
+            onFolders: _openFolders,
+            onUnmatched: _openUnmatched,
+            onScan: _scan,
+            onSettings: _openSettings,
           ),
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            tooltip: 'Unmatched files',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => UnmatchedScreen(
-                  repository: widget.repository,
-                  fixMatch: widget.fixMatch,
-                ),
-              ),
-            ),
-          ),
-          if (_scanning)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Scan / refresh',
-              onPressed: _scan,
-            ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: _openSettings,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Permission-denied banner (Settings recovery).
-          ValueListenableBuilder<List<String>>(
-            valueListenable: widget.accessIssues,
-            builder: (context, labels, _) => labels.isEmpty
-                ? const SizedBox.shrink()
-                : AccessBanner(
-                    labels: labels,
-                    onOpenSettings: widget.onOpenAccessSettings,
-                    onRescan: _scanning ? () {} : _scan,
-                  ),
-          ),
-          // Offline drive/mount banner (reconnect — NOT a permission problem).
-          ValueListenableBuilder<List<String>>(
-            valueListenable: widget.missingFolders,
-            builder: (context, labels, _) => labels.isEmpty
-                ? const SizedBox.shrink()
-                : ReconnectBanner(
-                    labels: labels,
-                    onRescan: _scanning ? () {} : _scan,
-                  ),
-          ),
-          // Search + continue-watching panel + grid share the page via the
-          // composable landing layout (the seam analogous to the theater zones):
-          // search pinned full-width on top, panel on the left, grid filling
-          // the rest. The one FutureBuilder resolves the cached library once;
-          // search filters that in-memory list (instant, offline).
-          Expanded(
-            child: FutureBuilder<List<Series>>(
-              future: _series,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final all = snapshot.data ?? const <Series>[];
-                if (all.isEmpty) {
-                  // Truly empty library — no search/panel, just onboarding.
-                  return _EmptyState(
-                    scanning: _scanning,
-                    onAddFolder: _addFolder,
-                  );
-                }
-                final filtered = [
-                  for (final s in all)
-                    if (seriesMatchesQuery(s, _query)) s,
-                ];
-                return LibraryLayout(
-                  config: LibraryLayoutConfig(
-                    panelCollapsed: _continueCollapsed,
-                  ),
-                  zones: {
-                    LibraryZone.search: LibrarySearchBar(
-                      controller: _searchController,
-                      onChanged: (v) => setState(() => _query = v),
-                      onClear: () {
-                        _searchController.clear();
-                        setState(() => _query = '');
-                      },
-                    ),
-                    if (_continueEntries.isNotEmpty)
-                      LibraryZone.continueWatching: ContinueWatchingPanel(
-                        entries: _continueEntries,
-                        onPlay: _playFromContinue,
-                        onDismiss: _dismissFromContinue,
-                        collapsed: _continueCollapsed,
-                        onToggleCollapsed: _toggleContinueCollapsed,
+          child: Column(
+            children: [
+              // Permission-denied banner (Settings recovery).
+              ValueListenableBuilder<List<String>>(
+                valueListenable: widget.accessIssues,
+                builder: (context, labels, _) => labels.isEmpty
+                    ? const SizedBox.shrink()
+                    : AccessBanner(
+                        labels: labels,
+                        onOpenSettings: widget.onOpenAccessSettings,
+                        onRescan: _scanning ? () {} : _scan,
                       ),
-                    LibraryZone.grid: _buildGrid(filtered),
+              ),
+              // Offline drive/mount banner (reconnect — NOT a permission issue).
+              ValueListenableBuilder<List<String>>(
+                valueListenable: widget.missingFolders,
+                builder: (context, labels, _) => labels.isEmpty
+                    ? const SizedBox.shrink()
+                    : ReconnectBanner(
+                        labels: labels,
+                        onRescan: _scanning ? () {} : _scan,
+                      ),
+              ),
+              // Search + continue-watching panel + grid share the page via the
+              // composable landing layout (the seam analogous to the theater
+              // zones): search pinned full-width on top, panel on the left,
+              // grid filling the rest. The one FutureBuilder resolves the
+              // cached library once; search filters that in-memory list.
+              Expanded(
+                child: FutureBuilder<List<Series>>(
+                  future: _series,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final all = snapshot.data ?? const <Series>[];
+                    if (all.isEmpty) {
+                      // Truly empty library — no search/panel, just onboarding.
+                      return _EmptyState(
+                        scanning: _scanning,
+                        onAddFolder: _addFolder,
+                      );
+                    }
+                    final filtered = [
+                      for (final s in all)
+                        if (seriesMatchesQuery(s, _query)) s,
+                    ];
+                    return LibraryLayout(
+                      config: LibraryLayoutConfig(
+                        panelCollapsed: _continueCollapsed,
+                        panelFraction: _panelFraction,
+                      ),
+                      // Same divider mechanism as the theater rail: live-resize
+                      // updates the fraction; drag-end persists it.
+                      onPanelResize: (f) => setState(() => _panelFraction = f),
+                      onPanelResizeEnd: () =>
+                          widget.setPanelFraction(_panelFraction),
+                      zones: {
+                        LibraryZone.search: Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                          child: LibrarySearchBar(
+                            controller: _searchController,
+                            onChanged: (v) => setState(() => _query = v),
+                            onClear: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
+                        ),
+                        if (_continueEntries.isNotEmpty)
+                          LibraryZone.continueWatching: Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 4, 4, 8),
+                            child: ContinueWatchingPanel(
+                              entries: _continueEntries,
+                              onPlay: _playFromContinue,
+                              onDismiss: _dismissFromContinue,
+                              collapsed: _continueCollapsed,
+                              onToggleCollapsed: _toggleContinueCollapsed,
+                            ),
+                          ),
+                        LibraryZone.grid: Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
+                          child: _buildGrid(filtered),
+                        ),
+                      },
+                    );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -555,39 +607,241 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// folder map (no re-fetch on toggle). A non-empty library that filters to
   /// nothing shows a "no matches" hint rather than the onboarding empty state.
   Widget _buildGrid(List<Series> series) {
-    if (series.isEmpty) return _NoSearchResults(query: _query);
-    return ValueListenableBuilder<Set<String>>(
-      valueListenable: widget.missingFolderPaths,
-      builder: (context, missing, _) => GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 200,
-          childAspectRatio: 0.62,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
+    // The grid lives in a sunken content well (the classic XP inset pane).
+    return XpPanel(
+      inset: true,
+      child: series.isEmpty
+          ? _NoSearchResults(query: _query)
+          : ValueListenableBuilder<Set<String>>(
+              valueListenable: widget.missingFolderPaths,
+              builder: (context, missing, _) => XpScrollbar(
+                controller: _gridScroll,
+                child: GridView.builder(
+                  controller: _gridScroll,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 24, 16),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200,
+                    childAspectRatio: 0.62,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: series.length,
+                  itemBuilder: (_, i) {
+                    final folders =
+                        _sourceFoldersBySeries[series[i].anilistId] ??
+                        const <String>{};
+                    final unavailable = seriesUnavailable(folders, missing);
+                    return _SeriesCard(
+                      series: series[i],
+                      repository: widget.repository,
+                      fixMatch: widget.fixMatch,
+                      watchState: widget.watchState,
+                      sourceSelection: widget.sourceSelection,
+                      watchOrder: widget.watchOrder,
+                      nextEpisode: _upNext[series[i].anilistId],
+                      unavailable: unavailable,
+                      onPlay: _play,
+                      loadAutoPlayNext: widget.loadAutoPlayNext,
+                      loadSkipMode: widget.loadSkipMode,
+                      loadRailFraction: widget.loadRailFraction,
+                      setRailFraction: widget.setRailFraction,
+                      onReturn: _reload,
+                    );
+                  },
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// The app actions, rendered at the TOP-RIGHT of the title bar as labelled
+/// tabs (icon + title) that hang from the bar down to its bottom edge — like
+/// tabs in a binder. The traffic lights sit top-left, so the right side is free.
+/// "Unmatched" appears ONLY when confirmed-unmatched files exist
+/// ([unmatchedCount] > 0); it's always reachable from Settings → Metadata.
+class _TitleActions extends StatelessWidget {
+  const _TitleActions({
+    required this.scanning,
+    required this.unmatchedCount,
+    required this.onFolders,
+    required this.onUnmatched,
+    required this.onScan,
+    required this.onSettings,
+  });
+
+  final bool scanning;
+  final int unmatchedCount;
+  final Future<void> Function() onFolders;
+  final VoidCallback onUnmatched;
+  final Future<void> Function() onScan;
+  final Future<void> Function() onSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    // Show tab titles at normal/zoomed widths (the default launch state);
+    // collapse to icon-only when the window is dragged very narrow, so the
+    // strip never crowds the caption off the bar.
+    final showLabel = MediaQuery.sizeOf(context).width >= 640;
+    // Stretched so each tab fills the bar's height and reaches its bottom edge.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (scanning) ...[
+          const Center(
+            child: SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        _TitleTab(
+          icon: Icons.folder_open,
+          label: 'Sources',
+          tooltip: 'Media sources',
+          showLabel: showLabel,
+          onPressed: onFolders,
         ),
-        itemCount: series.length,
-        itemBuilder: (_, i) {
-          final folders =
-              _sourceFoldersBySeries[series[i].anilistId] ?? const <String>{};
-          final unavailable = seriesUnavailable(folders, missing);
-          return _SeriesCard(
-            series: series[i],
-            repository: widget.repository,
-            fixMatch: widget.fixMatch,
-            watchState: widget.watchState,
-            sourceSelection: widget.sourceSelection,
-            watchOrder: widget.watchOrder,
-            nextEpisode: _upNext[series[i].anilistId],
-            unavailable: unavailable,
-            onPlay: _play,
-            loadAutoPlayNext: widget.loadAutoPlayNext,
-            loadSkipMode: widget.loadSkipMode,
-            loadRailFraction: widget.loadRailFraction,
-            setRailFraction: widget.setRailFraction,
-            onReturn: _reload,
-          );
-        },
+        _TitleTab(
+          icon: Icons.sync,
+          label: 'Sync',
+          tooltip: scanning ? 'Syncing…' : 'Sync metadata',
+          showLabel: showLabel,
+          onPressed: scanning ? null : onScan,
+        ),
+        if (unmatchedCount > 0)
+          _TitleTab(
+            icon: Icons.help_outline,
+            label: 'Unmatched',
+            tooltip: 'Unmatched files ($unmatchedCount)',
+            showLabel: showLabel,
+            onPressed: onUnmatched,
+          ),
+        _TitleTab(
+          icon: Icons.settings,
+          label: 'Settings',
+          tooltip: 'Settings',
+          showLabel: showLabel,
+          onPressed: onSettings,
+        ),
+      ],
+    );
+  }
+}
+
+/// One binder-style tab in the title bar: an icon + title on a raised XP bevel
+/// that hangs from just below the top sheen down to the bar's bottom edge, so
+/// the strip reads as folder tabs. Reuses [XpBevel] + [Xp.controlGradient], so
+/// it warms on hover and depresses on press exactly like every other control.
+class _TitleTab extends StatefulWidget {
+  const _TitleTab({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.showLabel,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+
+  /// Whether to show the title beside the icon. Collapses to icon-only on a
+  /// very narrow window (see [_TitleActions]).
+  final bool showLabel;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_TitleTab> createState() => _TitleTabState();
+}
+
+class _TitleTabState extends State<_TitleTab> {
+  bool _hover = false;
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+    final pressed = _down && enabled;
+    final color = enabled ? Xp.text : Xp.textFaint;
+
+    final tab = XpBevel(
+      raised: !pressed,
+      gradient: enabled
+          ? Xp.controlGradient(hover: _hover)
+          : const LinearGradient(colors: [Xp.surface, Xp.surface]),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(widget.icon, size: 14, color: color),
+            if (widget.showLabel) ...[
+              const SizedBox(width: 5),
+              Text(
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: Xp.fontFamily,
+                  fontFamilyFallback: Xp.fontFallback,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    return Padding(
+      // Hang from just below the sheen; flush at the bottom so it meets the
+      // content. A 2px left gap separates adjacent tabs.
+      padding: const EdgeInsets.only(top: 3, left: 2),
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+          onTapCancel: enabled ? () => setState(() => _down = false) : null,
+          onTap: widget.onPressed,
+          child: Tooltip(message: widget.tooltip, child: tab),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small caption that groups the Settings dialog into labelled subsections
+/// (Playback, Metadata). A hairline above it separates it from what precedes,
+/// except the first, which needs no rule.
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 2),
+      child: Text(
+        title.toUpperCase(),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: scheme.primary,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }
@@ -607,7 +861,7 @@ class _NoSearchResults extends StatelessWidget {
         child: Text(
           'No shows match “${query.trim()}”.',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium,
+          style: const TextStyle(color: Xp.textDim, fontSize: 14),
         ),
       ),
     );
@@ -626,17 +880,20 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Your library is empty.'),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: scanning ? null : onAddFolder,
-            icon: const Icon(Icons.create_new_folder_outlined),
-            label: const Text('Add your first folder'),
+          const Text(
+            'Your library is empty.',
+            style: TextStyle(color: Xp.text, fontSize: 15),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Pick a folder of anime — it scans automatically.',
-            style: Theme.of(context).textTheme.bodySmall,
+          const SizedBox(height: 16),
+          XpButton(
+            icon: Icons.create_new_folder_outlined,
+            label: 'Add your first source',
+            onPressed: scanning ? null : onAddFolder,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Point AniLocal at a folder of anime — it syncs automatically.',
+            style: TextStyle(color: Xp.textDim, fontSize: 12),
           ),
         ],
       ),
@@ -644,7 +901,7 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _SeriesCard extends StatelessWidget {
+class _SeriesCard extends StatefulWidget {
   const _SeriesCard({
     required this.series,
     required this.repository,
@@ -685,128 +942,149 @@ class _SeriesCard extends StatelessWidget {
   final VoidCallback onReturn;
 
   @override
+  State<_SeriesCard> createState() => _SeriesCardState();
+}
+
+class _SeriesCardState extends State<_SeriesCard> {
+  bool _hover = false;
+
+  Future<void> _open(BuildContext context, String title) async {
+    if (widget.unavailable) {
+      // Fail gracefully with a reconnect hint (consistent with the banner) —
+      // don't open into a screen that can't play anything.
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              "$title isn't connected. Reconnect its drive, then rescan.",
+            ),
+          ),
+        );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SeriesDetailScreen(
+          series: widget.series,
+          repository: widget.repository,
+          fixMatch: widget.fixMatch,
+          watchState: widget.watchState,
+          sourceSelection: widget.sourceSelection,
+          watchOrder: widget.watchOrder,
+          loadAutoPlayNext: widget.loadAutoPlayNext,
+          loadSkipMode: widget.loadSkipMode,
+          loadRailFraction: widget.loadRailFraction,
+          setRailFraction: widget.setRailFraction,
+        ),
+      ),
+    );
+    widget.onReturn(); // continue-watching / up-next may have changed
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final series = widget.series;
+    final unavailable = widget.unavailable;
+    final next = widget.nextEpisode;
     final title =
         series.titles.english ??
         series.titles.romaji ??
         series.titles.native ??
         '#${series.anilistId}';
     final art = series.coverImageRef;
-    // Dimmed + marked when the show's only sources are on an offline folder.
+    // The cover sits in a sunken bevel frame at rest and pops out (raised) on
+    // hover — the tactile XP cue that it's a button.
     return Opacity(
       opacity: unavailable ? 0.5 : 1,
-      child: InkWell(
-        onTap: () async {
-          if (unavailable) {
-            // Fail gracefully with a reconnect hint (consistent with the
-            // banner) — don't open into a screen that can't play anything.
-            ScaffoldMessenger.of(context)
-              ..clearSnackBars()
-              ..showSnackBar(
-                SnackBar(
-                  content: Text(
-                    "$title isn't connected. Reconnect its drive, then rescan.",
-                  ),
-                ),
-              );
-            return;
-          }
-          await Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => SeriesDetailScreen(
-                series: series,
-                repository: repository,
-                fixMatch: fixMatch,
-                watchState: watchState,
-                sourceSelection: sourceSelection,
-                watchOrder: watchOrder,
-                loadAutoPlayNext: loadAutoPlayNext,
-                loadSkipMode: loadSkipMode,
-                loadRailFraction: loadRailFraction,
-                setRailFraction: setRailFraction,
-              ),
-            ),
-          );
-          onReturn(); // continue-watching / up-next may have changed
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (art != null && File(art).existsSync())
-                      Image.file(File(art), fit: BoxFit.cover)
-                    else
-                      Container(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        child: Center(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          onTap: () => _open(context, title),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: XpBevel(
+                  raised: _hover && !unavailable,
+                  color: Xp.well,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (art != null && File(art).existsSync())
+                        Image.file(File(art), fit: BoxFit.cover)
+                      else
+                        Center(
                           // A pending placeholder reads as "identifying", not a
                           // broken image (it has no art yet, by design).
                           child: Icon(
                             series.pending
                                 ? Icons.hourglass_empty
                                 : Icons.image_not_supported,
+                            color: Xp.textFaint,
                           ),
                         ),
-                      ),
-                    if (unavailable)
-                      Container(
-                        color: Colors.black45,
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.link_off,
-                          color: Colors.white,
-                          size: 32,
+                      if (unavailable)
+                        Container(
+                          color: Colors.black54,
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.link_off,
+                            color: Colors.white,
+                            size: 32,
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            Text(
-              unavailable
-                  ? 'Unavailable — not connected'
-                  : series.pending
-                  ? 'Identifying…'
-                  : [
-                      if (series.format != null) series.format,
-                      if (series.episodeCount != null)
-                        '${series.episodeCount} ep',
-                    ].join(' · '),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (nextEpisode != null && !unavailable)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
+                    ],
                   ),
-                  onPressed: () async {
-                    await onPlay(nextEpisode!, series);
-                    onReturn();
-                  },
-                  icon: const Icon(Icons.play_circle_outline, size: 16),
-                  label: Text('Next: Ep ${nextEpisode!.number}'),
                 ),
               ),
-          ],
+              const SizedBox(height: 6),
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: _hover && !unavailable ? Xp.accentBright : Xp.text,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                unavailable
+                    ? 'Unavailable — not connected'
+                    : series.pending
+                    ? 'Identifying…'
+                    : [
+                        if (series.format != null) series.format,
+                        if (series.episodeCount != null)
+                          '${series.episodeCount} ep',
+                      ].join(' · '),
+                // One line + ellipsis so it can't wrap and overflow a short card
+                // on a narrow window.
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Xp.textDim, fontSize: 11),
+              ),
+              if (next != null && !unavailable) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: XpButton(
+                    dense: true,
+                    icon: Icons.play_arrow,
+                    label: 'Next: Ep ${next.number}',
+                    onPressed: () async {
+                      await widget.onPlay(next, series);
+                      widget.onReturn();
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

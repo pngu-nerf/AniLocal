@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/models/library_folder.dart';
 import '../domain/repositories/library_repository.dart';
 import 'access_recovery.dart';
+import 'window_chrome.dart';
 
 /// Manage the watched library folders. Adding goes through [onAddFolder] (the
 /// native open-panel, supplied by the composition root — the UI never imports
@@ -77,11 +78,15 @@ class _FoldersScreenState extends State<FoldersScreen> {
     final folders = _folders;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Library folders'),
+        // Hidden native title bar → traffic lights float over the top-left;
+        // inset the back button clear of them.
+        leadingWidth: kAppBarLeadingWidth,
+        leading: trafficLightBackButton(),
+        title: const Text('Sources'),
         actions: [
           IconButton(
             icon: const Icon(Icons.create_new_folder_outlined),
-            tooltip: 'Add folder',
+            tooltip: 'Add source',
             onPressed: _add,
           ),
         ],
@@ -93,7 +98,7 @@ class _FoldersScreenState extends State<FoldersScreen> {
               child: FilledButton.icon(
                 onPressed: _add,
                 icon: const Icon(Icons.add),
-                label: const Text('Add a folder'),
+                label: const Text('Add a source'),
               ),
             )
           : Column(
@@ -110,8 +115,8 @@ class _FoldersScreenState extends State<FoldersScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Drag to set priority — the top folder is the '
-                          'preferred source for episodes in more than one folder.',
+                          'Drag to set priority — the top source is preferred '
+                          'for episodes found in more than one source.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),

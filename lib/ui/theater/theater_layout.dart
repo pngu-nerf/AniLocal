@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../resize_divider.dart';
 import 'theater_layout_config.dart';
-
-/// Pointer hit-width of the rail divider (wider than the painted line so it's
-/// easy to grab). The visible line is thinner; this is just the grab target.
-const double _dividerHitWidth = 10;
 
 /// Locates the draggable rail divider (when [TheaterLayout.onRailResize] is set).
 @visibleForTesting
@@ -115,11 +112,11 @@ class TheaterLayout extends StatelessWidget {
               children: [
                 Positioned.fill(child: row),
                 Positioned(
-                  left: boundaryX - _dividerHitWidth / 2,
+                  left: boundaryX - kResizeDividerHitWidth / 2,
                   top: 0,
                   bottom: 0,
-                  width: _dividerHitWidth,
-                  child: _RailDivider(
+                  width: kResizeDividerHitWidth,
+                  child: ResizeDivider(
                     key: kRailDividerKey,
                     onDragDelta: (dx) {
                       // Dragging toward the rail's outer edge shrinks it;
@@ -178,73 +175,6 @@ class TheaterLayout extends StatelessWidget {
             child: zones[TheaterZone.seriesInfo]!,
           ),
       ],
-    );
-  }
-}
-
-/// The draggable seam between the main column and the episode rail. A thin
-/// hover-aware line with a centered grab handle and a horizontal-resize cursor;
-/// it reports drag deltas (the layout turns them into a clamped railFraction)
-/// and signals when the drag ends (the cue to persist).
-class _RailDivider extends StatefulWidget {
-  const _RailDivider({super.key, required this.onDragDelta, this.onDragEnd});
-
-  /// Incremental horizontal drag distance (logical px) since the last event.
-  final ValueChanged<double> onDragDelta;
-  final VoidCallback? onDragEnd;
-
-  @override
-  State<_RailDivider> createState() => _RailDividerState();
-}
-
-class _RailDividerState extends State<_RailDivider> {
-  bool _hovering = false;
-  bool _dragging = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final active = _hovering || _dragging;
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeLeftRight,
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragStart: (_) => setState(() => _dragging = true),
-        onHorizontalDragUpdate: (d) => widget.onDragDelta(d.delta.dx),
-        onHorizontalDragEnd: (_) {
-          setState(() => _dragging = false);
-          widget.onDragEnd?.call();
-        },
-        child: Center(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            width: active ? 4 : 1.5,
-            decoration: BoxDecoration(
-              color: active
-                  ? scheme.primary
-                  : scheme.outlineVariant.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            // A short centered grab handle, visible only when active, so the
-            // seam reads as draggable without clutter at rest.
-            child: active
-                ? Align(
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 4,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  )
-                : null,
-          ),
-        ),
-      ),
     );
   }
 }
