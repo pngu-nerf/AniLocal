@@ -106,12 +106,28 @@ class _Card extends StatelessWidget {
   final Future<void> Function(ContinueWatching) onPlay;
   final Future<void> Function(ContinueWatching) onDismiss;
 
+  /// Clock string for [d], rounded to the nearest second: `m:ss`, widening to
+  /// `h:mm:ss` once it's an hour or more (so 90 min reads `1:30:00`, not
+  /// `90:00`). Each value is formatted by its own magnitude, media-player style.
+  static String _clock(Duration d) {
+    final totalSeconds = (d.inMilliseconds / 1000).round();
+    final h = totalSeconds ~/ 3600;
+    final m = (totalSeconds % 3600) ~/ 60;
+    final s = totalSeconds % 60;
+    final ss = s.toString().padLeft(2, '0');
+    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$ss';
+    return '$m:$ss';
+  }
+
   @override
   Widget build(BuildContext context) {
     final ep = entry.episode;
     final art = entry.series.coverImageRef;
     final total = ep.duration.inMilliseconds;
     final progress = total > 0 ? ep.resumePosition.inMilliseconds / total : 0.0;
+    // Text mirrors the SAME two values the bar above reads — no re-fetch, no
+    // recompute — so the label and the bar can never disagree.
+    final percent = (progress * 100).round();
     final title =
         entry.series.titles.english ??
         entry.series.titles.romaji ??
@@ -184,6 +200,19 @@ class _Card extends StatelessWidget {
                             backgroundColor: Xp.well,
                             color: Xp.accent,
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${_clock(ep.resumePosition)} / '
+                        '${_clock(ep.duration)} ~ $percent%',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: Xp.fontFamily,
+                          fontFamilyFallback: Xp.fontFallback,
+                          fontSize: 10,
+                          color: Xp.textDim,
                         ),
                       ),
                     ],
