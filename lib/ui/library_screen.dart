@@ -158,6 +158,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   // a pure function of this + the live missing-folder set (recomputed in the
   // grid's ValueListenableBuilder, so toggling missing state needs no re-fetch).
   Map<int, Set<String>> _sourceFoldersBySeries = {};
+  // anilistId -> downloaded-episode tally for the card's "⬇N of M +X" line:
+  // inRange = downloaded eps whose anchored position is within 1..episodeCount;
+  // outOfRange = the rest (position > count, or unanchored). Loaded async
+  // alongside the source folders (same episodesFor read).
+  Map<int, ({int inRange, int outOfRange})> _downloadCounts = {};
   bool _scanning = false;
   bool _continueCollapsed = false;
   // Count of CONFIRMED-unmatched files (AniList said no) — NOT pending
@@ -218,23 +223,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
     widget.repository.unmatchedFiles().then((u) {
       if (mounted) setState(() => _unmatchedCount = u.length);
     });
-    _loadSourceFolders();
+    _loadSeriesStats();
   }
 
-  /// Map each series to the library folders its sources occupy (for greying).
-  /// Reads existing domain state only (episodesFor → sources); a show is later
-  /// "unavailable" iff every one of these folders is currently missing.
-  Future<void> _loadSourceFolders() async {
+  /// Per-series stats derived from one `episodesFor` read each: the library
+  /// folders each show's sources occupy (for greying), and the downloaded-
+  /// episode tally (in-range vs out-of-range) for the card's "⬇N of M +X" line.
+  /// Reads existing cached domain state only — pure display, no schema change.
+  Future<void> _loadSeriesStats() async {
     final series = await _series;
-    final map = <int, Set<String>>{};
+    final folders = <int, Set<String>>{};
+    final counts = <int, ({int inRange, int outOfRange})>{};
     for (final s in series) {
       final eps = await widget.repository.episodesFor(s.anilistId);
-      map[s.anilistId] = {
+      folders[s.anilistId] = {
         for (final e in eps)
           for (final src in e.sources) src.folderPath,
       };
+      // In-range = anchored position within 1..episodeCount; out-of-range =
+      // everything else (position > count, or unanchored/0). One logical
+      // episode per entry (episodesFor is de-duplicated), so the two partition
+      // the download count. When the AniList total is unknown we can't judge
+      // range, so treat all as in-range (the card then shows just "⬇N").
+      final m = s.episodeCount;
+      var inRange = 0;
+      var outOfRange = 0;
+      for (final e in eps) {
+        if (m == null) {
+          inRange++;
+        } else if (e.anchoredNumber >= 1 && e.anchoredNumber <= m) {
+          inRange++;
+        } else {
+          outOfRange++;
+        }
+      }
+      counts[s.anilistId] = (inRange: inRange, outOfRange: outOfRange);
     }
-    if (mounted) setState(() => _sourceFoldersBySeries = map);
+    if (mounted) {
+      setState(() {
+        _sourceFoldersBySeries = folders;
+        _downloadCounts = counts;
+      });
+    }
   }
 
   Future<void> _play(Episode episode, Series series) async {
@@ -639,6 +669,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       sourceSelection: widget.sourceSelection,
                       watchOrder: widget.watchOrder,
                       nextEpisode: _upNext[series[i].anilistId],
+                      downloaded: _downloadCounts[series[i].anilistId],
                       unavailable: unavailable,
                       onPlay: _play,
                       loadAutoPlayNext: widget.loadAutoPlayNext,
@@ -911,6 +942,7 @@ class _SeriesCard extends StatefulWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.nextEpisode,
+    required this.downloaded,
     required this.unavailable,
     required this.onPlay,
     required this.loadAutoPlayNext,
@@ -930,6 +962,11 @@ class _SeriesCard extends StatefulWidget {
   /// The next episode to watch for this series (relations-aware), or null when
   /// the series isn't started / has nothing next. Drives the "Next" button.
   final Episode? nextEpisode;
+
+  /// Downloaded-episode tally for the "⬇N of M +X" metadata line: in-range vs
+  /// out-of-range counts. Null while the async stats load (the line then shows
+  /// just the show-type until it arrives — no wrong numbers flashed).
+  final ({int inRange, int outOfRange})? downloaded;
 
   /// True when every source folder of this show is currently missing (offline
   /// drive/NAS): dimmed + marked, and a tap shows a reconnect hint rather than
@@ -981,6 +1018,70 @@ class _SeriesCardState extends State<_SeriesCard> {
       ),
     );
     widget.onReturn(); // continue-watching / up-next may have changed
+  }
+
+  /// The metadata line: "ShowType · ⬇N of M +X". Keeps the show-type + middot;
+  /// replaces the old scraped-count segment with the downloaded-episodes tally.
+  /// Only the "+X" (extra out-of-range downloads) is coloured (amber attention);
+  /// the "⬇N of M" is neutral. `maxLines: 1` + ellipsis degrades gracefully on a
+  /// cramped card — the tail (the +X) drops first, never overflowing. The
+  /// unavailable / pending states keep their plain copy.
+  Widget _metaLine(Series series, bool unavailable) {
+    const style = TextStyle(color: Xp.textDim, fontSize: 11);
+    const one = TextOverflow.ellipsis;
+    if (unavailable) {
+      return const Text(
+        'Unavailable — not connected',
+        maxLines: 1,
+        overflow: one,
+        style: style,
+      );
+    }
+    if (series.pending) {
+      return const Text(
+        'Identifying…',
+        maxLines: 1,
+        overflow: one,
+        style: style,
+      );
+    }
+    final spans = <InlineSpan>[];
+    if (series.format != null) spans.add(TextSpan(text: series.format));
+    final dl = widget.downloaded;
+    if (dl != null) {
+      final m = series.episodeCount;
+      if (spans.isNotEmpty) spans.add(const TextSpan(text: ' · '));
+      // A flat, single-color Material icon (not the ⬇ emoji, which the OS draws
+      // full-color with a box). Rendered inline via a WidgetSpan, sized to the
+      // text and explicitly given the line's neutral color (a WidgetSpan child
+      // doesn't inherit the surrounding TextSpan style) so it stays consistent.
+      spans.add(
+        const WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(
+            padding: EdgeInsets.only(right: 2),
+            child: Icon(Icons.download, size: 13, color: Xp.textDim),
+          ),
+        ),
+      );
+      // "N of M" — the AniList total M is dropped when unknown (rare) → just "N".
+      spans.add(
+        TextSpan(text: m != null ? '${dl.inRange} of $m' : '${dl.inRange}'),
+      );
+      if (dl.outOfRange > 0) {
+        spans.add(
+          TextSpan(
+            text: ' +${dl.outOfRange}',
+            style: const TextStyle(color: Xp.warning),
+          ),
+        );
+      }
+    }
+    return Text.rich(
+      TextSpan(style: style, children: spans),
+      maxLines: 1,
+      overflow: one,
+    );
   }
 
   @override
@@ -1053,22 +1154,7 @@ class _SeriesCardState extends State<_SeriesCard> {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                unavailable
-                    ? 'Unavailable — not connected'
-                    : series.pending
-                    ? 'Identifying…'
-                    : [
-                        if (series.format != null) series.format,
-                        if (series.episodeCount != null)
-                          '${series.episodeCount} ep',
-                      ].join(' · '),
-                // One line + ellipsis so it can't wrap and overflow a short card
-                // on a narrow window.
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Xp.textDim, fontSize: 11),
-              ),
+              _metaLine(series, unavailable),
               if (next != null && !unavailable) ...[
                 const SizedBox(height: 6),
                 Align(

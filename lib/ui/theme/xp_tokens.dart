@@ -51,6 +51,11 @@ abstract final class Xp {
   static const Color accentBright = Color(0xFF5FA0FF);
   static const Color accentDeep = Color(0xFF0E2C6B);
 
+  /// Attention (not error): amber-yellow for "noteworthy, not wrong" states —
+  /// e.g. the "+X" extra-downloaded-episodes hint on a library card. Readable
+  /// on the blacked-out surfaces without the alarm of the red error color.
+  static const Color warning = Color(0xFFE6B84D);
+
   // --- Title bar / window frame (the signature) ---------------------------
   static const Color titleGloss = Color(0xFF6E9CEB); // 1px top highlight
   static const Color titleA = Color(0xFF2A63CC);
