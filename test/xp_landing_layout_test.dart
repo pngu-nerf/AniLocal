@@ -207,6 +207,22 @@ void main() {
     expect(find.text('Continue watching'), findsOneWidget);
   });
 
+  testWidgets('XP landing fits at the minimum window size (600x400)', (
+    tester,
+  ) async {
+    // The native window can't be resized below 600x400 logical points
+    // (MainFlutterWindow.contentMinSize). A clean pump here (no RenderFlex
+    // overflow) proves the home screen — title bar with labelled tabs, search,
+    // continue-watching sidebar, grid — stays usable at that minimum. It's the
+    // tightest size the app can actually reach.
+    await pumpAt(tester, const Size(600, 400));
+    expect(find.textContaining('AniLocal'), findsOneWidget);
+    expect(find.text('Continue watching'), findsOneWidget);
+    expect(find.text('Search your library'), findsOneWidget);
+    // A grid card still renders (grid remains present beside the sidebar).
+    expect(find.text('Bocchi the Rock!'), findsOneWidget);
+  });
+
   testWidgets('search filters the grid live and clearing restores it', (
     tester,
   ) async {

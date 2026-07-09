@@ -25,6 +25,14 @@ class MainFlutterWindow: NSWindow {
     self.titleVisibility = .hidden
     self.styleMask.insert(.fullSizeContentView)
 
+    // Minimum window size in LOGICAL POINTS (AppKit's coordinate space is
+    // points, scaled by the display's backing factor — so this is identical on
+    // Retina and non-Retina, unlike raw pixels). contentMinSize bounds the
+    // content view; with the title bar hidden + fullSizeContentView the content
+    // is the whole window, so the window can't be dragged smaller than this. The
+    // layout is verified to stay usable (no overflow) at this size.
+    self.contentMinSize = NSSize(width: 600, height: 400)
+
     // We removed the system title bar, so a click-drag on the system title bar
     // can no longer move the window. Restore move + zoom for a Dart-designated
     // drag region via NSWindow's own APIs — a system framework, so NO new

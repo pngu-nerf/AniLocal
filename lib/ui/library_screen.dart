@@ -679,10 +679,11 @@ class _TitleActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Show tab titles at normal/zoomed widths (the default launch state);
-    // collapse to icon-only when the window is dragged very narrow, so the
-    // strip never crowds the caption off the bar.
-    final showLabel = MediaQuery.sizeOf(context).width >= 640;
+    // Show tab titles at every allowed window size — the 600pt minimum width
+    // (see MainFlutterWindow.contentMinSize) sits above this threshold, so
+    // labels are always visible in practice; the icon-only fallback only trips
+    // below it (defensive, still exercised by the narrow-window test).
+    final showLabel = MediaQuery.sizeOf(context).width >= 560;
     // Stretched so each tab fills the bar's height and reaches its bottom edge.
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,

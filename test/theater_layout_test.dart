@@ -59,6 +59,34 @@ void main() {
     }
   });
 
+  testWidgets('holds at the minimum window size (600x400) with an app bar', (
+    tester,
+  ) async {
+    // The native minimum is 600x400 logical points
+    // (MainFlutterWindow.contentMinSize). The real theater screen has a Material
+    // AppBar, so at that window size TheaterLayout gets ~344pt of height — the
+    // tightest it can reach. A clean pump (no overflow) with every zone still
+    // non-empty proves it degrades gracefully rather than breaking.
+    await tester.binding.setSurfaceSize(const Size(600, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(title: const Text('Theater')),
+          body: TheaterLayout(
+            config: TheaterLayoutConfig.theaterDefault,
+            zones: _zones(),
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    for (final k in [_videoKey, _infoKey, _listKey]) {
+      expect(find.byKey(k), findsOneWidget);
+      expect(tester.getSize(find.byKey(k)).isEmpty, isFalse, reason: '$k');
+    }
+  });
+
   testWidgets('does not overflow when handed an UNBOUNDED height', (
     tester,
   ) async {
