@@ -250,9 +250,19 @@ class XpGroupBox extends StatelessWidget {
 /// the double-tap-to-zoom recognizer would otherwise defer their single clicks
 /// (~300ms), so only the caption/background is draggable, not the buttons.
 class XpTitleBar extends StatelessWidget {
-  const XpTitleBar({super.key, required this.caption, this.trailing});
+  const XpTitleBar({
+    super.key,
+    required this.caption,
+    this.leading,
+    this.trailing,
+  });
 
   final String caption;
+
+  /// Optional leading control (e.g. a back button on a pushed screen), placed
+  /// AFTER the traffic-light inset and BEFORE the caption. Rendered outside the
+  /// [WindowDragArea] so its taps aren't deferred by the drag recognizer.
+  final Widget? leading;
 
   /// Optional actions/status shown at the trailing edge (app buttons, a scan
   /// spinner). Rendered outside the [WindowDragArea] so taps aren't deferred.
@@ -277,6 +287,9 @@ class XpTitleBar extends StatelessWidget {
                 // caption, so it never gets squeezed (and so can never overflow)
                 // when wide trailing tabs shrink the caption slot.
                 const SizedBox(width: kTrafficLightInset),
+                // Optional leading control (back button), past the traffic
+                // lights and outside the drag area so its taps aren't deferred.
+                ?leading,
                 // The caption is the draggable region and the ONLY thing that
                 // yields when space is tight: its text ellipsizes, and on an
                 // extremely narrow slot even the glyph drops — so the bar fits
@@ -336,11 +349,13 @@ class XpWindow extends StatelessWidget {
     super.key,
     required this.caption,
     required this.child,
+    this.titleLeading,
     this.titleTrailing,
   });
 
   final String caption;
   final Widget child;
+  final Widget? titleLeading;
   final Widget? titleTrailing;
 
   @override
@@ -364,12 +379,106 @@ class XpWindow extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(top: topRadius),
           child: Column(
             children: [
-              XpTitleBar(caption: caption, trailing: titleTrailing),
+              XpTitleBar(
+                caption: caption,
+                leading: titleLeading,
+                trailing: titleTrailing,
+              ),
               Expanded(
                 child: ColoredBox(color: Xp.frame, child: child),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One binder-style tab for the title bar: an icon + optional title on a raised
+/// XP bevel that hangs from just below the top sheen down to the bar's bottom
+/// edge, so a row of them reads as folder tabs. Built from [XpBevel] +
+/// [Xp.controlGradient], so it warms on hover and depresses on press exactly
+/// like every other control. Used for the homepage's title actions AND a pushed
+/// screen's back / settings controls, so both title bars match.
+class XpTitleTab extends StatefulWidget {
+  const XpTitleTab({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.showLabel,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+
+  /// Whether to show the title beside the icon. Collapses to icon-only on a
+  /// very narrow window.
+  final bool showLabel;
+  final VoidCallback? onPressed;
+
+  @override
+  State<XpTitleTab> createState() => _XpTitleTabState();
+}
+
+class _XpTitleTabState extends State<XpTitleTab> {
+  bool _hover = false;
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+    final pressed = _down && enabled;
+    final color = enabled ? Xp.text : Xp.textFaint;
+
+    final tab = XpBevel(
+      raised: !pressed,
+      gradient: enabled
+          ? Xp.controlGradient(hover: _hover)
+          : const LinearGradient(colors: [Xp.surface, Xp.surface]),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(widget.icon, size: 14, color: color),
+            if (widget.showLabel) ...[
+              const SizedBox(width: 5),
+              Text(
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: Xp.fontFamily,
+                  fontFamilyFallback: Xp.fontFallback,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    return Padding(
+      // Hang from just below the sheen; flush at the bottom so it meets the
+      // content. A 2px left gap separates adjacent tabs.
+      padding: const EdgeInsets.only(top: 3, left: 2),
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+          onTapCancel: enabled ? () => setState(() => _down = false) : null,
+          onTap: widget.onPressed,
+          child: Tooltip(message: widget.tooltip, child: tab),
         ),
       ),
     );

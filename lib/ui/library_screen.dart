@@ -22,6 +22,7 @@ import 'library/library_layout.dart';
 import 'library/library_layout_config.dart';
 import 'library/library_search_bar.dart';
 import 'series_detail_screen.dart';
+import 'settings_dialog.dart';
 import 'theater/theater_screen.dart';
 import 'theme/xp_theme.dart';
 import 'theme/xp_tokens.dart';
@@ -325,139 +326,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _playFromContinue(ContinueWatching entry) =>
       _play(entry.episode, entry.series);
 
-  Future<void> _openSettings() async {
-    var enabled = await widget.loadAutoPlayNext();
-    var skipMode = await widget.loadSkipMode();
-    var missingEnabled = await widget.loadMissingEnabled();
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Settings'),
-        content: StatefulBuilder(
-          builder: (context, setLocal) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // --- Playback ---------------------------------------------
-              const _SettingsSection('Playback'),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Auto-play next episode'),
-                subtitle: const Text(
-                  'When an episode ends, play the next one.',
-                ),
-                value: enabled,
-                onChanged: (v) {
-                  setLocal(() => enabled = v);
-                  widget.setAutoPlayNext(v);
-                },
-              ),
-              const Padding(
-                padding: EdgeInsets.only(top: 4, bottom: 2),
-                child: Text('Skip intro / outro'),
-              ),
-              for (final mode in SkipMode.values)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  leading: Icon(
-                    mode == skipMode
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                  ),
-                  title: Text(_skipModeLabel(mode)),
-                  onTap: () {
-                    setLocal(() => skipMode = mode);
-                    widget.setSkipMode(mode);
-                  },
-                ),
-              // --- Metadata ---------------------------------------------
-              const _SettingsSection('Metadata'),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Show missing episodes'),
-                subtitle: const Text(
-                  'Ghost tiles for gaps in a series; hide ones you don’t '
-                  'want.',
-                ),
-                value: missingEnabled,
-                onChanged: (v) {
-                  setLocal(() => missingEnabled = v);
-                  widget.setMissingEnabled(v);
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                leading: const Icon(Icons.cloud_sync_outlined),
-                title: const Text('Refresh metadata'),
-                subtitle: const Text('Re-fetch idMal + skip data'),
-                onTap: () => _refreshMetadata(dialogContext),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                leading: const Icon(Icons.help_outline),
-                title: const Text('Unmatched files'),
-                subtitle: Text(
-                  _unmatchedCount == 0
-                      ? 'Nothing needs fixing'
-                      : '$_unmatchedCount file(s) we could not identify',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(dialogContext).pop();
-                  _openUnmatched();
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _skipModeLabel(SkipMode mode) => switch (mode) {
-    SkipMode.off => 'No skip',
-    SkipMode.button => 'Skip button',
-    SkipMode.auto => 'Auto skip',
-  };
-
-  /// Re-fetch metadata + skip data for cached series (no scan, no data loss).
-  Future<void> _refreshMetadata(BuildContext dialogContext) async {
-    Navigator.of(dialogContext).pop();
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..clearSnackBars()
-      ..showSnackBar(const SnackBar(content: Text('Refreshing metadata…')));
-    try {
-      final r = await widget.onRefreshMetadata();
-      if (!mounted) return;
-      messenger
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Refreshed ${r.seriesRefreshed} series · '
-              '${r.skipsFetched} skip sets fetched',
-            ),
-          ),
-        );
-      _reload();
-    } catch (e) {
-      if (!mounted) return;
-      messenger
-        ..clearSnackBars()
-        ..showSnackBar(SnackBar(content: Text('Refresh failed: $e')));
-    }
-  }
+  /// The homepage entry to the shared app Settings dialog (identical to the one
+  /// the detail page opens from its title bar).
+  Future<void> _openSettings() => showAppSettingsDialog(
+    context,
+    SettingsActions(
+      loadAutoPlayNext: widget.loadAutoPlayNext,
+      setAutoPlayNext: widget.setAutoPlayNext,
+      loadSkipMode: widget.loadSkipMode,
+      setSkipMode: widget.setSkipMode,
+      loadMissingEnabled: widget.loadMissingEnabled,
+      setMissingEnabled: widget.setMissingEnabled,
+      onRefreshMetadata: widget.onRefreshMetadata,
+      onRefreshed: _reload,
+      loadUnmatchedCount: () async => _unmatchedCount,
+      onOpenUnmatched: _openUnmatched,
+    ),
+  );
 
   Future<Set<String>> _folderPaths() async =>
       (await widget.repository.watchedFolders()).map((f) => f.path).toSet();
@@ -725,12 +610,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         // the repository is `widget.missing`.
                         missingRepo: widget.missing,
                         loadMissingEnabled: widget.loadMissingEnabled,
+                        setMissingEnabled: widget.setMissingEnabled,
+                        onRefreshMetadata: widget.onRefreshMetadata,
                         nextEpisode: _upNext[series[i].anilistId],
                         downloaded: _downloadCounts[series[i].anilistId],
                         unavailable: unavailable,
                         onPlay: _play,
                         loadAutoPlayNext: widget.loadAutoPlayNext,
+                        setAutoPlayNext: widget.setAutoPlayNext,
                         loadSkipMode: widget.loadSkipMode,
+                        setSkipMode: widget.setSkipMode,
                         loadRailFraction: widget.loadRailFraction,
                         setRailFraction: widget.setRailFraction,
                         onReturn: _reload,
@@ -791,14 +680,14 @@ class _TitleActions extends StatelessWidget {
           ),
           const SizedBox(width: 8),
         ],
-        _TitleTab(
+        XpTitleTab(
           icon: Icons.folder_open,
           label: 'Sources',
           tooltip: 'Media sources',
           showLabel: showLabel,
           onPressed: onFolders,
         ),
-        _TitleTab(
+        XpTitleTab(
           icon: Icons.sync,
           label: 'Sync',
           tooltip: scanning ? 'Syncing…' : 'Sync metadata',
@@ -806,14 +695,14 @@ class _TitleActions extends StatelessWidget {
           onPressed: scanning ? null : onScan,
         ),
         if (unmatchedCount > 0)
-          _TitleTab(
+          XpTitleTab(
             icon: Icons.help_outline,
             label: 'Unmatched',
             tooltip: 'Unmatched files ($unmatchedCount)',
             showLabel: showLabel,
             onPressed: onUnmatched,
           ),
-        _TitleTab(
+        XpTitleTab(
           icon: Icons.settings,
           label: 'Settings',
           tooltip: 'Settings',
@@ -821,118 +710,6 @@ class _TitleActions extends StatelessWidget {
           onPressed: onSettings,
         ),
       ],
-    );
-  }
-}
-
-/// One binder-style tab in the title bar: an icon + title on a raised XP bevel
-/// that hangs from just below the top sheen down to the bar's bottom edge, so
-/// the strip reads as folder tabs. Reuses [XpBevel] + [Xp.controlGradient], so
-/// it warms on hover and depresses on press exactly like every other control.
-class _TitleTab extends StatefulWidget {
-  const _TitleTab({
-    required this.icon,
-    required this.label,
-    required this.tooltip,
-    required this.showLabel,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final String tooltip;
-
-  /// Whether to show the title beside the icon. Collapses to icon-only on a
-  /// very narrow window (see [_TitleActions]).
-  final bool showLabel;
-  final VoidCallback? onPressed;
-
-  @override
-  State<_TitleTab> createState() => _TitleTabState();
-}
-
-class _TitleTabState extends State<_TitleTab> {
-  bool _hover = false;
-  bool _down = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = widget.onPressed != null;
-    final pressed = _down && enabled;
-    final color = enabled ? Xp.text : Xp.textFaint;
-
-    final tab = XpBevel(
-      raised: !pressed,
-      gradient: enabled
-          ? Xp.controlGradient(hover: _hover)
-          : const LinearGradient(colors: [Xp.surface, Xp.surface]),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(widget.icon, size: 14, color: color),
-            if (widget.showLabel) ...[
-              const SizedBox(width: 5),
-              Text(
-                widget.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: Xp.fontFamily,
-                  fontFamilyFallback: Xp.fontFallback,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-
-    return Padding(
-      // Hang from just below the sheen; flush at the bottom so it meets the
-      // content. A 2px left gap separates adjacent tabs.
-      padding: const EdgeInsets.only(top: 3, left: 2),
-      child: MouseRegion(
-        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-        onEnter: (_) => setState(() => _hover = true),
-        onExit: (_) => setState(() => _hover = false),
-        child: GestureDetector(
-          onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-          onTapUp: enabled ? (_) => setState(() => _down = false) : null,
-          onTapCancel: enabled ? () => setState(() => _down = false) : null,
-          onTap: widget.onPressed,
-          child: Tooltip(message: widget.tooltip, child: tab),
-        ),
-      ),
-    );
-  }
-}
-
-/// A small caption that groups the Settings dialog into labelled subsections
-/// (Playback, Metadata). A hairline above it separates it from what precedes,
-/// except the first, which needs no rule.
-class _SettingsSection extends StatelessWidget {
-  const _SettingsSection(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 2),
-      child: Text(
-        title.toUpperCase(),
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: scheme.primary,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.8,
-        ),
-      ),
     );
   }
 }
@@ -1054,12 +831,16 @@ class _SeriesCard extends StatefulWidget {
     required this.watchOrder,
     required this.missingRepo,
     required this.loadMissingEnabled,
+    required this.setMissingEnabled,
+    required this.onRefreshMetadata,
     required this.nextEpisode,
     required this.downloaded,
     required this.unavailable,
     required this.onPlay,
     required this.loadAutoPlayNext,
+    required this.setAutoPlayNext,
     required this.loadSkipMode,
+    required this.setSkipMode,
     required this.loadRailFraction,
     required this.setRailFraction,
     required this.onReturn,
@@ -1073,6 +854,9 @@ class _SeriesCard extends StatefulWidget {
   final WatchOrderRepository watchOrder;
   final MissingEpisodesRepository missingRepo;
   final Future<bool> Function() loadMissingEnabled;
+  final Future<void> Function(bool enabled) setMissingEnabled;
+  final Future<({int seriesRefreshed, int skipsFetched})> Function()
+  onRefreshMetadata;
 
   /// The next episode to watch for this series (relations-aware), or null when
   /// the series isn't started / has nothing next. Drives the "Next" button.
@@ -1090,7 +874,9 @@ class _SeriesCard extends StatefulWidget {
   final bool unavailable;
   final Future<void> Function(Episode, Series) onPlay;
   final Future<bool> Function() loadAutoPlayNext;
+  final Future<void> Function(bool enabled) setAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
+  final Future<void> Function(SkipMode mode) setSkipMode;
   final Future<double> Function() loadRailFraction;
   final Future<void> Function(double fraction) setRailFraction;
   final VoidCallback onReturn;
@@ -1128,8 +914,12 @@ class _SeriesCardState extends State<_SeriesCard> {
           watchOrder: widget.watchOrder,
           missing: widget.missingRepo,
           loadMissingEnabled: widget.loadMissingEnabled,
+          setMissingEnabled: widget.setMissingEnabled,
+          onRefreshMetadata: widget.onRefreshMetadata,
           loadAutoPlayNext: widget.loadAutoPlayNext,
+          setAutoPlayNext: widget.setAutoPlayNext,
           loadSkipMode: widget.loadSkipMode,
+          setSkipMode: widget.setSkipMode,
           loadRailFraction: widget.loadRailFraction,
           setRailFraction: widget.setRailFraction,
         ),

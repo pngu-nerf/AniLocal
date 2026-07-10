@@ -15,14 +15,20 @@ import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
+import 'settings_dialog.dart';
 import 'theater/theater_screen.dart';
+import 'theme/xp_theme.dart';
+import 'theme/xp_tokens.dart';
+import 'theme/xp_widgets.dart';
+import 'unmatched_screen.dart';
 import 'widgets/multi_select_list.dart';
-import 'window_chrome.dart';
 
-/// Series detail: cover + metadata + the episodes for this series. With the
+/// Series detail: cover + metadata + the episodes for this series, in the
+/// homepage's blackout-XP look (its title bar, tokens, and components). With the
 /// missing-episodes feature on, absent episodes appear as ghost tiles (single)
 /// or bundles (consecutive runs), and hidden episodes move to a "Hidden" tab.
-/// Each present episode can be reassigned or used as a season-split point.
+/// Each present episode can be played, reassigned, source-switched, or used as a
+/// season-split point.
 class SeriesDetailScreen extends StatefulWidget {
   const SeriesDetailScreen({
     super.key,
@@ -34,8 +40,12 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.watchOrder,
     required this.missing,
     required this.loadMissingEnabled,
+    required this.setMissingEnabled,
+    required this.onRefreshMetadata,
     required this.loadAutoPlayNext,
+    required this.setAutoPlayNext,
     required this.loadSkipMode,
+    required this.setSkipMode,
     required this.loadRailFraction,
     required this.setRailFraction,
   });
@@ -54,8 +64,15 @@ class SeriesDetailScreen extends StatefulWidget {
   /// false: no ghost tiles, no Hidden tab, counts ignore hidden state.
   final Future<bool> Function() loadMissingEnabled;
 
+  // Settings-dialog wiring (the title-bar Settings button opens the SAME shared
+  // dialog as the homepage).
+  final Future<void> Function(bool enabled) setMissingEnabled;
+  final Future<({int seriesRefreshed, int skipsFetched})> Function()
+  onRefreshMetadata;
   final Future<bool> Function() loadAutoPlayNext;
+  final Future<void> Function(bool enabled) setAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
+  final Future<void> Function(SkipMode mode) setSkipMode;
   final Future<double> Function() loadRailFraction;
   final Future<void> Function(double fraction) setRailFraction;
 
@@ -68,6 +85,15 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Set<int> _hidden = {};
   bool _missingEnabled = true;
   bool _loading = true;
+
+  /// True when the initial load failed (episodes couldn't be read) — shows the
+  /// error state with a retry instead of hanging on the spinner.
+  bool _error = false;
+
+  /// True when NONE of the show's source files are currently reachable (e.g. the
+  /// drive/mount holding them was unplugged while viewing) — shows a reconnect
+  /// banner and gates playback; cached metadata + the list stay visible.
+  bool _sourcesUnavailable = false;
 
   /// Which tab of the episode area is showing (false = Episodes, true = Hidden).
   bool _viewingHidden = false;
@@ -83,34 +109,59 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   final Map<int, Set<int>> _bundleSelection = {};
   Set<int> _hiddenSelection = {};
 
+  final ScrollController _scroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _reload();
   }
 
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   Future<void> _reload() async {
-    final enabled = await widget.loadMissingEnabled();
-    final eps = await widget.repository.episodesFor(widget.series.anilistId);
-    // The feature never applies to a not-yet-identified placeholder (no AniList
-    // count, synthetic negative id) — treat it as having nothing hidden.
-    final hidden = (!enabled || widget.series.pending)
-        ? <int>{}
-        : await widget.missing.hiddenEpisodes(widget.series.anilistId);
-    if (!mounted) return;
-    setState(() {
-      _episodes = eps;
-      _hidden = hidden;
-      _missingEnabled = enabled;
-      _loading = false;
-      _expandedBundles.clear();
-      _bundleSelection.clear();
-      _hiddenSelection = {};
-      if (hidden.isEmpty) _viewingHidden = false;
-    });
-    widget.watchOrder.upNextBySeries().then((m) {
-      if (mounted) setState(() => _next = m[widget.series.anilistId]);
-    });
+    try {
+      final enabled = await widget.loadMissingEnabled();
+      final eps = await widget.repository.episodesFor(widget.series.anilistId);
+      // The feature never applies to a not-yet-identified placeholder (no
+      // AniList count, synthetic negative id) — treat it as nothing hidden.
+      final hidden = (!enabled || widget.series.pending)
+          ? <int>{}
+          : await widget.missing.hiddenEpisodes(widget.series.anilistId);
+      // The show's files are "unavailable" when NO source of any present
+      // episode exists on disk (the drive/mount is gone). `any` short-circuits
+      // on the first reachable file, so the connected case is cheap.
+      final unavailable =
+          eps.isNotEmpty &&
+          !eps.any((e) => e.sources.any((s) => File(s.fileRef).existsSync()));
+      if (!mounted) return;
+      setState(() {
+        _episodes = eps;
+        _hidden = hidden;
+        _missingEnabled = enabled;
+        _sourcesUnavailable = unavailable;
+        _loading = false;
+        _error = false;
+        _expandedBundles.clear();
+        _bundleSelection.clear();
+        _hiddenSelection = {};
+        if (hidden.isEmpty) _viewingHidden = false;
+      });
+      widget.watchOrder.upNextBySeries().then((m) {
+        if (mounted) setState(() => _next = m[widget.series.anilistId]);
+      });
+    } catch (_) {
+      // Don't hang on the spinner — surface an error state with retry.
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = true;
+      });
+    }
   }
 
   Future<void> _hide(List<int> numbers) async {
@@ -123,13 +174,55 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     await _reload();
   }
 
+  void _openSettings() => showAppSettingsDialog(
+    context,
+    SettingsActions(
+      loadAutoPlayNext: widget.loadAutoPlayNext,
+      setAutoPlayNext: widget.setAutoPlayNext,
+      loadSkipMode: widget.loadSkipMode,
+      setSkipMode: widget.setSkipMode,
+      loadMissingEnabled: widget.loadMissingEnabled,
+      setMissingEnabled: widget.setMissingEnabled,
+      onRefreshMetadata: widget.onRefreshMetadata,
+      onRefreshed: _reload,
+      loadUnmatchedCount: () async =>
+          (await widget.repository.unmatchedFiles()).length,
+      onOpenUnmatched: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => UnmatchedScreen(
+            repository: widget.repository,
+            fixMatch: widget.fixMatch,
+          ),
+        ),
+      ),
+    ),
+  );
+
   String get _query =>
       widget.series.titles.romaji ??
       widget.series.titles.english ??
       widget.series.titles.native ??
       '';
 
+  void _showReconnectHint() {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(
+            "This show's drive isn't connected. Reconnect it, then try again.",
+          ),
+        ),
+      );
+  }
+
   Future<void> _play(Episode e) async {
+    // Files-dependent action reflects the disconnected state: don't open the
+    // player onto a missing file — hint to reconnect instead.
+    if (_sourcesUnavailable) {
+      _showReconnectHint();
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => TheaterScreen(
@@ -254,103 +347,170 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     if (done == true) _reload();
   }
 
+  // --- Tiles ----------------------------------------------------------------
+
   /// A present (in-library) episode. [index] is its position in [episodes] (the
   /// present-only list), needed for the season-split action.
   Widget _episodeTile(List<Episode> episodes, int index) {
     final e = episodes[index];
     final multi = e.hasMultipleSources;
-    // A pending placeholder can't be source-pinned (it has no real identity to
-    // key the pin to) — it always plays the automatic source. Show the source
-    // count, but not the picker.
+    // A pending placeholder can't be source-pinned (no real identity to key the
+    // pin to) — it always plays the automatic source. Show the source count,
+    // but not the picker.
     final pinnable = multi && !widget.series.pending;
-    return ListTile(
-      dense: true,
+    final subtitle = [
+      _name(e.fileRef),
+      if (multi) '${e.sources.length} sources · from ${e.fileRef}',
+      if (!e.watched && e.resumePosition > Duration.zero)
+        '▸ resume ${_fmt(e.resumePosition)}',
+    ].join('\n');
+
+    return _Tappable(
       onTap: () => _play(e),
-      leading: CircleAvatar(child: Text('${e.number}')),
-      title: Text(e.title ?? 'Episode ${e.number}'),
-      subtitle: Text(
-        [
-          _name(e.fileRef),
-          if (multi) '${e.sources.length} sources · from ${e.fileRef}',
-          if (!e.watched && e.resumePosition > Duration.zero)
-            '▸ resume ${_fmt(e.resumePosition)}',
-        ].join('\n'),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (e.watched)
-            Icon(
-              Icons.check_circle,
-              size: 18,
-              color: Theme.of(context).colorScheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _numberBadge('${e.number}'),
+            const SizedBox(width: 12),
+            // Flexible so the variable-height subtitle (1–3 lines) never
+            // overflows and the row grows to fit.
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    e.title ?? 'Episode ${e.number}',
+                    style: const TextStyle(
+                      color: Xp.text,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Xp.textDim, fontSize: 11),
+                  ),
+                ],
+              ),
             ),
-          if (pinnable)
-            IconButton(
-              tooltip: '${e.sources.length} sources — choose…',
-              icon: Badge(
-                label: Text('${e.sources.length}'),
-                child: const Icon(Icons.layers_outlined),
+            const SizedBox(width: 8),
+            if (e.watched)
+              const Padding(
+                padding: EdgeInsets.only(top: 2, right: 2),
+                child: Icon(Icons.check_circle, size: 18, color: Xp.accent),
               ),
-              onPressed: () => _chooseSource(e),
-            ),
-          PopupMenuButton<String>(
-            onSelected: (v) {
-              if (v == 'reassign') _reassignOne(e);
-              if (v == 'split') _splitFromHere(episodes, index);
-              if (v == 'source') _chooseSource(e);
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'reassign',
-                child: Text('Reassign this episode…'),
-              ),
-              const PopupMenuItem(
-                value: 'split',
-                child: Text('Split: reassign from here…'),
-              ),
-              if (pinnable)
-                const PopupMenuItem(
-                  value: 'source',
-                  child: Text('Choose source…'),
+            if (pinnable)
+              IconButton(
+                tooltip: '${e.sources.length} sources — choose…',
+                icon: Badge(
+                  label: Text('${e.sources.length}'),
+                  child: const Icon(
+                    Icons.layers_outlined,
+                    color: Xp.text,
+                    size: 20,
+                  ),
                 ),
-            ],
-          ),
-        ],
+                onPressed: () => _chooseSource(e),
+              ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Xp.text),
+              onSelected: (v) {
+                if (v == 'reassign') _reassignOne(e);
+                if (v == 'split') _splitFromHere(episodes, index);
+                if (v == 'source') _chooseSource(e);
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'reassign',
+                  child: Text('Reassign this episode…'),
+                ),
+                const PopupMenuItem(
+                  value: 'split',
+                  child: Text('Split: reassign from here…'),
+                ),
+                if (pinnable)
+                  const PopupMenuItem(
+                    value: 'source',
+                    child: Text('Choose source…'),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// A faded circular badge for a missing episode's number.
-  Widget _ghostBadge(int number) {
-    final dim = Theme.of(context).disabledColor;
-    return Container(
-      width: 34,
-      height: 34,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: dim, width: 1.5),
+  /// A filled number badge for a present episode.
+  Widget _numberBadge(String label) => Container(
+    width: 34,
+    height: 34,
+    alignment: Alignment.center,
+    decoration: const BoxDecoration(
+      shape: BoxShape.circle,
+      color: Xp.accentDeep,
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        color: Xp.text,
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
       ),
-      child: Text('$number', style: TextStyle(color: dim, fontSize: 12)),
-    );
-  }
+    ),
+  );
+
+  /// A faded, outlined circular badge for a missing episode's number.
+  Widget _ghostBadge(int number) => Container(
+    width: 34,
+    height: 34,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: Xp.textFaint, width: 1.5),
+    ),
+    child: Text(
+      '$number',
+      style: const TextStyle(color: Xp.textFaint, fontSize: 12),
+    ),
+  );
 
   /// A single missing episode (a ghost). Three-dots → "Hide missing episode".
   Widget _missingSingleTile(int number) {
-    final dim = Theme.of(context).disabledColor;
-    return ListTile(
-      dense: true,
-      leading: _ghostBadge(number),
-      title: Text('Episode $number', style: TextStyle(color: dim)),
-      subtitle: Text('Missing', style: TextStyle(color: dim)),
-      trailing: PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert),
-        onSelected: (v) {
-          if (v == 'hide') _hide([number]);
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'hide', child: Text('Hide missing episode')),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Row(
+        children: [
+          _ghostBadge(number),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Missing',
+                  style: TextStyle(color: Xp.textFaint, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            'Episode $number',
+            style: const TextStyle(color: Xp.textFaint, fontSize: 13),
+          ),
+          const SizedBox(width: 4),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Xp.textDim),
+            onSelected: (v) {
+              if (v == 'hide') _hide([number]);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'hide', child: Text('Hide missing episode')),
+            ],
+          ),
         ],
       ),
     );
@@ -360,83 +520,84 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   /// joined by a line ("these two and everything between"). Three-dots →
   /// "Hide all" or "Select episodes to hide…" (expands inline).
   Widget _missingBundleTile(MissingBundleRow b) {
-    final theme = Theme.of(context);
-    final dim = theme.disabledColor;
     final expanded = _expandedBundles.contains(b.first);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
           height: 100,
-          child: Row(
-            children: [
-              // The "first —line— last" connector, the height of two entries.
-              SizedBox(
-                width: 56,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    _ghostBadge(b.first),
-                    Expanded(
-                      child: Center(
-                        child: Container(
-                          width: 2,
-                          color: dim.withValues(alpha: 0.4),
-                        ),
-                      ),
-                    ),
-                    _ghostBadge(b.last),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                // The "first —line— last" connector, the height of two entries.
+                SizedBox(
+                  width: 34,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Episode ${b.first}',
-                        style: TextStyle(
-                          color: dim,
-                          fontWeight: FontWeight.w600,
+                      const SizedBox(height: 8),
+                      _ghostBadge(b.first),
+                      Expanded(
+                        child: Center(
+                          child: Container(width: 2, color: Xp.divider),
                         ),
                       ),
-                      Text(
-                        '${b.numbers.length} missing episodes',
-                        style: theme.textTheme.bodySmall?.copyWith(color: dim),
-                      ),
-                      Text(
-                        'Episode ${b.last}',
-                        style: TextStyle(
-                          color: dim,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      _ghostBadge(b.last),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                onSelected: (v) {
-                  if (v == 'hideAll') _hide(b.numbers);
-                  if (v == 'select') {
-                    setState(() => _expandedBundles.add(b.first));
-                  }
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'hideAll', child: Text('Hide all')),
-                  PopupMenuItem(
-                    value: 'select',
-                    child: Text('Select episodes to hide…'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Episode ${b.first}',
+                          style: const TextStyle(
+                            color: Xp.textFaint,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '${b.numbers.length} missing episodes',
+                          style: const TextStyle(
+                            color: Xp.textFaint,
+                            fontSize: 11,
+                          ),
+                        ),
+                        Text(
+                          'Episode ${b.last}',
+                          style: const TextStyle(
+                            color: Xp.textFaint,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ],
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Xp.textDim),
+                  onSelected: (v) {
+                    if (v == 'hideAll') _hide(b.numbers);
+                    if (v == 'select') {
+                      setState(() => _expandedBundles.add(b.first));
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'hideAll', child: Text('Hide all')),
+                    PopupMenuItem(
+                      value: 'select',
+                      child: Text('Select episodes to hide…'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         if (expanded) _bundleExpansion(b),
@@ -449,35 +610,41 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Widget _bundleExpansion(MissingBundleRow b) {
     final selected = _bundleSelection[b.first] ?? const <int>{};
     return Padding(
-      padding: const EdgeInsets.fromLTRB(56, 0, 8, 8),
+      padding: const EdgeInsets.fromLTRB(56, 0, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           MultiSelectList(
             key: ValueKey('bundle-${b.numbers.join('-')}'),
             itemCount: b.numbers.length,
-            labelBuilder: (_, i) => Text('Episode ${b.numbers[i]}'),
+            labelBuilder: (_, i) => Text(
+              'Episode ${b.numbers[i]}',
+              style: const TextStyle(color: Xp.text),
+            ),
             onSelectionChanged: (sel) => setState(() {
               _bundleSelection[b.first] = {for (final i in sel) b.numbers[i]};
             }),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(
+              XpButton(
+                dense: true,
+                label: 'Cancel',
                 onPressed: () => setState(() {
                   _expandedBundles.remove(b.first);
                   _bundleSelection.remove(b.first);
                 }),
-                child: const Text('Cancel'),
               ),
               const SizedBox(width: 8),
-              FilledButton(
+              XpButton(
+                dense: true,
+                icon: Icons.visibility_off,
+                label: 'Hide selected',
                 onPressed: selected.isEmpty
                     ? null
                     : () => _hide(selected.toList()..sort()),
-                child: const Text('Hide selected'),
               ),
             ],
           ),
@@ -490,15 +657,19 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   /// multi-select + an Unhide button. No confirm dialog — select-then-unhide is
   /// the two-step safeguard.
   Widget _hiddenView(List<int> hiddenSorted) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
+    return XpPanel(
+      inset: true,
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           MultiSelectList(
             key: ValueKey('hidden-${hiddenSorted.join('-')}'),
             itemCount: hiddenSorted.length,
-            labelBuilder: (_, i) => Text('Episode ${hiddenSorted[i]}'),
+            labelBuilder: (_, i) => Text(
+              'Episode ${hiddenSorted[i]}',
+              style: const TextStyle(color: Xp.text),
+            ),
             onSelectionChanged: (sel) => setState(() {
               _hiddenSelection = {for (final i in sel) hiddenSorted[i]};
             }),
@@ -506,12 +677,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
-            child: FilledButton.icon(
+            child: XpButton(
+              icon: Icons.visibility,
+              label: 'Unhide',
               onPressed: _hiddenSelection.isEmpty
                   ? null
                   : () => _unhide(_hiddenSelection.toList()..sort()),
-              icon: const Icon(Icons.visibility),
-              label: const Text('Unhide'),
             ),
           ),
         ],
@@ -522,27 +693,59 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   /// The downloaded-episode indicator ("⬇ N of M +X"), consistent with the
   /// library card and reflecting hidden exclusions.
   Widget _downloadIndicator(DownloadTally tally) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Row(
         children: [
-          Icon(Icons.download, size: 16, color: theme.hintColor),
+          const Icon(Icons.download, size: 15, color: Xp.textDim),
           const SizedBox(width: 4),
           Text(
             tally.total != null
                 ? '${tally.inRange} of ${tally.total}'
                 : '${tally.inRange}',
-            style: theme.textTheme.bodySmall,
+            style: const TextStyle(color: Xp.textDim, fontSize: 12),
           ),
           if (tally.outOfRange > 0)
             Text(
               '  +${tally.outOfRange}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.tertiary,
-              ),
+              style: const TextStyle(color: Xp.warning, fontSize: 12),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _banner({
+    required IconData icon,
+    required Color iconColor,
+    required String message,
+    required String actionLabel,
+    required VoidCallback onAction,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: XpPanel(
+        color: Xp.surfaceAlt,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Xp.text, fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: 8),
+            XpButton(
+              dense: true,
+              icon: Icons.refresh,
+              label: actionLabel,
+              onPressed: onAction,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -555,8 +758,37 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         series.titles.romaji ??
         series.titles.native ??
         '#${series.anilistId}';
-    final art = series.coverImageRef;
 
+    final showLabel = MediaQuery.sizeOf(context).width >= 560;
+
+    return Theme(
+      data: XpTheme.data(),
+      child: Scaffold(
+        backgroundColor: Xp.desktop,
+        body: XpWindow(
+          caption: title,
+          titleLeading: XpTitleTab(
+            icon: Icons.arrow_back,
+            label: 'Back',
+            tooltip: 'Back',
+            showLabel: showLabel,
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          titleTrailing: XpTitleTab(
+            icon: Icons.settings,
+            label: 'Settings',
+            tooltip: 'Settings',
+            showLabel: showLabel,
+            onPressed: _openSettings,
+          ),
+          child: _content(series, title),
+        ),
+      ),
+    );
+  }
+
+  Widget _content(Series series, String title) {
+    final art = series.coverImageRef;
     final showMissing = _missingEnabled && !series.pending;
     final effectiveHidden = showMissing ? _hidden : const <int>{};
     final slots = computeEpisodeSlots(
@@ -571,101 +803,187 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final hiddenSorted = _hidden.toList()..sort();
     final hiddenTabAvailable = showMissing && hiddenSorted.isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(
-        // Inset the back button clear of the traffic lights (hidden title bar).
-        leadingWidth: kAppBarLeadingWidth,
-        leading: trafficLightBackButton(),
-        title: Text(title),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (art != null && File(art).existsSync())
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.file(File(art), width: 150, fit: BoxFit.cover),
-                ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Disconnected-drive banner (cached info stays visible below it).
+        if (_sourcesUnavailable && !_loading && !_error)
+          _banner(
+            icon: Icons.link_off,
+            iconColor: Xp.warning,
+            message:
+                "This show's drive isn't connected — reconnect it to play or "
+                'change files.',
+            actionLabel: 'Try again',
+            onAction: _reload,
+          ),
+        Expanded(
+          child: XpScrollbar(
+            controller: _scroll,
+            child: ListView(
+              controller: _scroll,
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Header: cover + titles + metadata + downloaded indicator.
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (series.titles.romaji != null)
-                      Text(series.titles.romaji!),
-                    if (series.titles.native != null)
-                      Text(series.titles.native!),
-                    const SizedBox(height: 8),
-                    Text(
-                      series.pending
-                          // Placeholder: not yet identified, so no AniList
-                          // id/format to show — say so plainly.
-                          ? 'Identifying… (not yet matched to AniList)'
-                          : [
-                              if (series.format != null) series.format,
-                              if (series.episodeCount != null)
-                                '${series.episodeCount} episodes',
-                              'AniList #${series.anilistId}',
-                            ].join(' · '),
-                      style: Theme.of(context).textTheme.bodySmall,
+                    if (art != null && File(art).existsSync())
+                      XpBevel(
+                        raised: false,
+                        color: Xp.well,
+                        child: Image.file(
+                          File(art),
+                          width: 150,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (series.titles.romaji != null)
+                            Text(
+                              series.titles.romaji!,
+                              style: const TextStyle(color: Xp.text),
+                            ),
+                          if (series.titles.native != null)
+                            Text(
+                              series.titles.native!,
+                              style: const TextStyle(color: Xp.textDim),
+                            ),
+                          const SizedBox(height: 8),
+                          Text(
+                            series.pending
+                                ? 'Identifying… (not yet matched to AniList)'
+                                : [
+                                    if (series.format != null) series.format,
+                                    if (series.episodeCount != null)
+                                      '${series.episodeCount} episodes',
+                                    'AniList #${series.anilistId}',
+                                  ].join(' · '),
+                            style: const TextStyle(
+                              color: Xp.textDim,
+                              fontSize: 12,
+                            ),
+                          ),
+                          if (!series.pending && !_loading && !_error)
+                            _downloadIndicator(tally),
+                        ],
+                      ),
                     ),
-                    if (!series.pending) _downloadIndicator(tally),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_next != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton.icon(
-                onPressed: () => _play(_next!),
-                icon: const Icon(Icons.play_arrow),
-                label: Text(
-                  _next!.seriesAnilistId == series.anilistId
-                      ? 'Play next: Episode ${_next!.number}'
-                      : 'Play next: Episode ${_next!.number} (sequel)',
+                const SizedBox(height: 16),
+                if (_next != null && !_loading && !_error)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: XpButton(
+                      icon: Icons.play_arrow,
+                      label: _next!.seriesAnilistId == series.anilistId
+                          ? 'Play next: Episode ${_next!.number}'
+                          : 'Play next: Episode ${_next!.number} (sequel)',
+                      onPressed: () => _play(_next!),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                // Episodes header + Episodes/Hidden tab toggle.
+                Row(
+                  children: [
+                    const Text(
+                      'Episodes',
+                      style: TextStyle(
+                        color: Xp.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (hiddenTabAvailable) ...[
+                      XpButton(
+                        dense: true,
+                        label: 'Episodes',
+                        selected: !_viewingHidden,
+                        onPressed: () => setState(() => _viewingHidden = false),
+                      ),
+                      const SizedBox(width: 4),
+                      XpButton(
+                        dense: true,
+                        label: 'Hidden (${hiddenSorted.length})',
+                        selected: _viewingHidden,
+                        onPressed: () => setState(() => _viewingHidden = true),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
+                const SizedBox(height: 8),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error)
+                  _errorState()
+                else if (_viewingHidden && hiddenTabAvailable)
+                  _hiddenView(hiddenSorted)
+                else
+                  _episodeWell(rows),
+              ],
             ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text('Episodes', style: Theme.of(context).textTheme.titleMedium),
-              const Spacer(),
-              if (hiddenTabAvailable)
-                SegmentedButton<bool>(
-                  showSelectedIcon: false,
-                  segments: [
-                    const ButtonSegment(value: false, label: Text('Episodes')),
-                    ButtonSegment(
-                      value: true,
-                      label: Text('Hidden (${hiddenSorted.length})'),
-                    ),
-                  ],
-                  selected: {_viewingHidden},
-                  onSelectionChanged: (s) =>
-                      setState(() => _viewingHidden = s.first),
-                ),
-            ],
           ),
-          const Divider(),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_viewingHidden && hiddenTabAvailable)
-            _hiddenView(hiddenSorted)
-          else
-            ..._episodeRows(rows),
+        ),
+      ],
+    );
+  }
+
+  /// The error state: a load failure shows this instead of an endless spinner.
+  Widget _errorState() {
+    return XpPanel(
+      inset: true,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const Icon(Icons.error_outline, color: Xp.warning, size: 32),
+          const SizedBox(height: 8),
+          const Text(
+            "Couldn't load this show's episodes.",
+            style: TextStyle(color: Xp.text),
+          ),
+          const SizedBox(height: 12),
+          XpButton(icon: Icons.refresh, label: 'Try again', onPressed: _reload),
         ],
       ),
     );
+  }
+
+  /// The episode list in a sunken XP well, rows separated by hairlines. Dimmed
+  /// when the drive is disconnected (files-dependent affordances read inert).
+  Widget _episodeWell(List<EpisodeListRow> rows) {
+    final tiles = _episodeRows(rows);
+    final children = <Widget>[];
+    for (var i = 0; i < tiles.length; i++) {
+      if (i > 0) {
+        children.add(const Divider(height: 1, color: Xp.divider));
+      }
+      children.add(tiles[i]);
+    }
+    final well = XpPanel(
+      inset: true,
+      child: children.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: Text('No episodes', style: TextStyle(color: Xp.textDim)),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+    );
+    // Cached list stays visible when disconnected, just dimmed to read inert.
+    return Opacity(opacity: _sourcesUnavailable ? 0.5 : 1, child: well);
   }
 
   /// Materialize the grouped rows into tile widgets, tracking each present
@@ -685,5 +1003,38 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       }
     }
     return widgets;
+  }
+}
+
+/// A hover-highlighting, click-cursor wrapper for a tappable list row — the XP
+/// affordance the homepage uses on its interactive tiles.
+class _Tappable extends StatefulWidget {
+  const _Tappable({required this.child, required this.onTap});
+
+  final Widget child;
+  final VoidCallback onTap;
+
+  @override
+  State<_Tappable> createState() => _TappableState();
+}
+
+class _TappableState extends State<_Tappable> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: ColoredBox(
+          color: _hover ? Xp.surfaceAlt : Colors.transparent,
+          child: widget.child,
+        ),
+      ),
+    );
   }
 }
