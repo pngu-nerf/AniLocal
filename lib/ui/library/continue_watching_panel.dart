@@ -134,99 +134,106 @@ class _Card extends StatelessWidget {
         entry.series.titles.native ??
         '#${entry.series.anilistId}';
 
-    return GestureDetector(
-      onTap: () => onPlay(entry),
-      child: XpPanel(
-        color: Xp.surfaceAlt,
-        padding: const EdgeInsets.all(6),
-        // The panel width is user-draggable (a fraction of the page), so a card
-        // can get narrow. Below a threshold, drop the poster thumbnail so the
-        // text + dismiss button always fit — no overflow at any panel width.
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final showThumb = constraints.maxWidth >= 120;
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (showThumb) ...[
-                  XpBevel(
-                    raised: false,
-                    color: Xp.well,
-                    child: SizedBox(
-                      width: 42,
-                      height: 60,
-                      child: (art != null && File(art).existsSync())
-                          ? Image.file(File(art), fit: BoxFit.cover)
-                          : const Center(
-                              child: Icon(
-                                Icons.play_arrow,
-                                color: Xp.textFaint,
-                                size: 18,
+    return MouseRegion(
+      // The whole tile resumes playback on tap → show the click affordance.
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => onPlay(entry),
+        child: XpPanel(
+          color: Xp.surfaceAlt,
+          padding: const EdgeInsets.all(6),
+          // The panel width is user-draggable (a fraction of the page), so a card
+          // can get narrow. Below a threshold, drop the poster thumbnail so the
+          // text + dismiss button always fit — no overflow at any panel width.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final showThumb = constraints.maxWidth >= 120;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (showThumb) ...[
+                    XpBevel(
+                      raised: false,
+                      color: Xp.well,
+                      child: SizedBox(
+                        width: 42,
+                        height: 60,
+                        child: (art != null && File(art).existsSync())
+                            ? Image.file(File(art), fit: BoxFit.cover)
+                            : const Center(
+                                child: Icon(
+                                  Icons.play_arrow,
+                                  color: Xp.textFaint,
+                                  size: 18,
+                                ),
                               ),
-                            ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontFamily: Xp.fontFamily,
-                          fontFamilyFallback: Xp.fontFallback,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Xp.text,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Episode ${ep.number}',
-                        style: const TextStyle(color: Xp.textDim, fontSize: 11),
-                      ),
-                      const SizedBox(height: 6),
-                      XpBevel(
-                        raised: false,
-                        color: Xp.well,
-                        child: SizedBox(
-                          height: 8,
-                          child: LinearProgressIndicator(
-                            value: progress.clamp(0.0, 1.0),
-                            backgroundColor: Xp.well,
-                            color: Xp.accent,
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: Xp.fontFamily,
+                            fontFamilyFallback: Xp.fontFallback,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: Xp.text,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${_clock(ep.resumePosition)} / '
-                        '${_clock(ep.duration)} ~ $percent%',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontFamily: Xp.fontFamily,
-                          fontFamilyFallback: Xp.fontFallback,
-                          fontSize: 10,
-                          color: Xp.textDim,
+                        const SizedBox(height: 2),
+                        Text(
+                          'Episode ${ep.number}',
+                          style: const TextStyle(
+                            color: Xp.textDim,
+                            fontSize: 11,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 6),
+                        XpBevel(
+                          raised: false,
+                          color: Xp.well,
+                          child: SizedBox(
+                            height: 8,
+                            child: LinearProgressIndicator(
+                              value: progress.clamp(0.0, 1.0),
+                              backgroundColor: Xp.well,
+                              color: Xp.accent,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${_clock(ep.resumePosition)} / '
+                          '${_clock(ep.duration)} ~ $percent%',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: Xp.fontFamily,
+                            fontFamilyFallback: Xp.fontFallback,
+                            fontSize: 10,
+                            color: Xp.textDim,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                XpButton(
-                  dense: true,
-                  icon: Icons.close,
-                  tooltip: 'Remove from continue watching',
-                  onPressed: () => onDismiss(entry),
-                ),
-              ],
-            );
-          },
+                  XpButton(
+                    dense: true,
+                    icon: Icons.close,
+                    tooltip: 'Remove from continue watching',
+                    onPressed: () => onDismiss(entry),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

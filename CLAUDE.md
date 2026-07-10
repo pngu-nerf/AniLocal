@@ -61,6 +61,9 @@ Anime4K shaders · (maybe) JP-study dual subtitles. Do NOT start these yet.
 - Check: `flutter analyze` then `dart format .`
 - Add a dependency: `flutter pub add <pkg>` — then log it below.
 
+## Verification workflow (how Claude checks its work)
+- **Do NOT auto-launch or foreground the running app** to take screenshots or do visual confirmation — it disrupts the user's other work and the foregrounding is unreliable. Verify by **building only**: compile + tests (`tool/check.sh` = `flutter analyze` + `dart format --set-exit-if-changed`; add `flutter test` where a seam is touched). Leave ALL running / visual confirmation to the user — they do it themselves. Never bring the app to the foreground.
+
 ## macOS notes
 - media_kit needs a minimum deployment target + entitlements (network client / file access) in `macos/Runner`. Set these from the **current media_kit README**, not from memory.
 - Flutter 3.44 prefers Swift Package Manager for native deps (CocoaPods in maintenance). If a native dep snags, prefer the SwiftPM path.

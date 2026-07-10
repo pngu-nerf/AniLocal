@@ -7,10 +7,14 @@ import 'package:flutter/material.dart';
 const double kResizeDividerHitWidth = 10;
 
 /// The draggable seam between two panes — the single implementation shared by
-/// the theater episode-rail and the library continue-watching panel. A thin
-/// hover-aware line with a centered grab handle and a horizontal-resize cursor;
-/// it reports incremental drag deltas (the layout turns them into a clamped
-/// fraction) and signals when the drag ends (the cue to persist).
+/// the theater episode-rail and the library continue-watching panel. It is
+/// INVISIBLE at rest (the panes' own beveled wells already separate them; a
+/// resting rule here reads as a stray light line), revealing a themed accent
+/// line + centered grab handle only on hover/drag. A horizontal-resize cursor
+/// advertises it at all times, and the grab target stays the full hit-width
+/// whether or not anything is painted. It reports incremental drag deltas (the
+/// layout turns them into a clamped fraction) and signals when the drag ends
+/// (the cue to persist).
 ///
 /// It is geometry-agnostic: it knows nothing about which pane it borders or how
 /// wide anything is. The owning layout positions it on the boundary and maps the
@@ -51,9 +55,9 @@ class _ResizeDividerState extends State<ResizeDivider> {
             duration: const Duration(milliseconds: 120),
             width: active ? 4 : 1.5,
             decoration: BoxDecoration(
-              color: active
-                  ? scheme.primary
-                  : scheme.outlineVariant.withValues(alpha: 0.6),
+              // Transparent at rest → no stray light rule between the panes;
+              // the themed accent only appears on hover/drag.
+              color: active ? scheme.primary : Colors.transparent,
               borderRadius: BorderRadius.circular(2),
             ),
             // A short centered grab handle, visible only when active, so the

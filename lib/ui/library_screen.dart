@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -646,39 +647,43 @@ class _LibraryScreenState extends State<LibraryScreen> {
               valueListenable: widget.missingFolderPaths,
               builder: (context, missing, _) => XpScrollbar(
                 controller: _gridScroll,
-                child: GridView.builder(
-                  controller: _gridScroll,
-                  padding: const EdgeInsets.fromLTRB(16, 16, 24, 16),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 200,
-                    childAspectRatio: 0.62,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
+                child: LayoutBuilder(
+                  builder: (context, constraints) => GridView.builder(
+                    controller: _gridScroll,
+                    padding: _kGridPadding,
+                    // The cell is sized EXACTLY to a fixed-aspect poster box plus a
+                    // fixed text region, so every card is identically tall no matter
+                    // how long its title is. Because the poster height scales with
+                    // the tile width while the text region is a fixed pixel band,
+                    // no single childAspectRatio works at every width — so we solve
+                    // it per-layout: reproduce the old max-extent column count, then
+                    // derive the aspect ratio from this width's actual tile width.
+                    gridDelegate: _posterGridDelegate(constraints.maxWidth),
+                    itemCount: series.length,
+                    itemBuilder: (_, i) {
+                      final folders =
+                          _sourceFoldersBySeries[series[i].anilistId] ??
+                          const <String>{};
+                      final unavailable = seriesUnavailable(folders, missing);
+                      return _SeriesCard(
+                        series: series[i],
+                        repository: widget.repository,
+                        fixMatch: widget.fixMatch,
+                        watchState: widget.watchState,
+                        sourceSelection: widget.sourceSelection,
+                        watchOrder: widget.watchOrder,
+                        nextEpisode: _upNext[series[i].anilistId],
+                        downloaded: _downloadCounts[series[i].anilistId],
+                        unavailable: unavailable,
+                        onPlay: _play,
+                        loadAutoPlayNext: widget.loadAutoPlayNext,
+                        loadSkipMode: widget.loadSkipMode,
+                        loadRailFraction: widget.loadRailFraction,
+                        setRailFraction: widget.setRailFraction,
+                        onReturn: _reload,
+                      );
+                    },
                   ),
-                  itemCount: series.length,
-                  itemBuilder: (_, i) {
-                    final folders =
-                        _sourceFoldersBySeries[series[i].anilistId] ??
-                        const <String>{};
-                    final unavailable = seriesUnavailable(folders, missing);
-                    return _SeriesCard(
-                      series: series[i],
-                      repository: widget.repository,
-                      fixMatch: widget.fixMatch,
-                      watchState: widget.watchState,
-                      sourceSelection: widget.sourceSelection,
-                      watchOrder: widget.watchOrder,
-                      nextEpisode: _upNext[series[i].anilistId],
-                      downloaded: _downloadCounts[series[i].anilistId],
-                      unavailable: unavailable,
-                      onPlay: _play,
-                      loadAutoPlayNext: widget.loadAutoPlayNext,
-                      loadSkipMode: widget.loadSkipMode,
-                      loadRailFraction: widget.loadRailFraction,
-                      setRailFraction: widget.setRailFraction,
-                      onReturn: _reload,
-                    );
-                  },
                 ),
               ),
             ),
@@ -933,6 +938,59 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+/// Poster aspect ratio (width / height) for every library card's cover.
+///
+/// Verified against the cached AniList art: `coverImage.extraLarge` is 460px
+/// wide with heights clustering at 650 (≈0.707) and ranging 0.667–0.711 — i.e.
+/// the covers are NOT a single ratio. We fix the box to the dominant 460×650
+/// and [BoxFit.cover] it — the cover FILLS the box (full-bleed, no gaps),
+/// cropping whichever dimension overflows. Because the box is already a proper
+/// ~2:3 poster shape, a normal cover fills with negligible crop; only a
+/// genuinely off-ratio poster crops slightly (acceptable — no empty side/top
+/// gaps). Every card's poster is identically sized.
+const double _kPosterAspect = 460 / 650;
+
+/// Title font size + line height for a card, shared with [_kTitleBlockHeight]
+/// so the reserved title block is exactly two lines tall.
+const double _kCardTitleFontSize = 13;
+const double _kCardTitleLineHeight = 1.25;
+
+/// Height of the ALWAYS-two-lines title block. Reserving two lines even for a
+/// one-line title (its second line stays empty) keeps the meta/download line
+/// below it pinned to the same vertical position on every card, regardless of
+/// title length.
+const double _kTitleBlockHeight =
+    _kCardTitleFontSize * _kCardTitleLineHeight * 2; // 32.5
+
+/// Fixed height of the text band under the poster: the two-line title block, a
+/// small gap, and one meta line — plus a little headroom. Fixed (and fed to the
+/// grid delegate) so every card is uniform total height regardless of title
+/// length; a short title just leaves slack inside its reserved title block.
+const double _kCardTextRegion = 6 + _kTitleBlockHeight + 2 + 15; // ≈55.5
+
+/// Grid padding — kept as a named const so the same value feeds both the
+/// [GridView] and the column-count math in [_posterGridDelegate].
+const EdgeInsets _kGridPadding = EdgeInsets.fromLTRB(16, 16, 24, 16);
+
+/// Reproduces the old `SliverGridDelegateWithMaxCrossAxisExtent(200)` column
+/// count, then returns a fixed-count delegate whose `childAspectRatio` makes
+/// each cell exactly `posterHeight(tileWidth) + _kCardTextRegion` tall.
+SliverGridDelegate _posterGridDelegate(double gridWidth) {
+  const maxExtent = 200.0;
+  const spacing = 16.0;
+  final avail = gridWidth - _kGridPadding.horizontal;
+  // Same ceil rule the max-extent delegate uses, so column count is unchanged.
+  final count = math.max(1, ((avail + spacing) / (maxExtent + spacing)).ceil());
+  final tileWidth = (avail - spacing * (count - 1)) / count;
+  final cellHeight = tileWidth / _kPosterAspect + _kCardTextRegion;
+  return SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: count,
+    childAspectRatio: tileWidth / cellHeight,
+    crossAxisSpacing: spacing,
+    mainAxisSpacing: spacing,
+  );
+}
+
 class _SeriesCard extends StatefulWidget {
   const _SeriesCard({
     required this.series,
@@ -1027,7 +1085,7 @@ class _SeriesCardState extends State<_SeriesCard> {
   /// cramped card — the tail (the +X) drops first, never overflowing. The
   /// unavailable / pending states keep their plain copy.
   Widget _metaLine(Series series, bool unavailable) {
-    const style = TextStyle(color: Xp.textDim, fontSize: 11);
+    const style = TextStyle(color: Xp.textDim, fontSize: 11, height: 1.2);
     const one = TextOverflow.ellipsis;
     if (unavailable) {
       return const Text(
@@ -1095,8 +1153,13 @@ class _SeriesCardState extends State<_SeriesCard> {
         series.titles.native ??
         '#${series.anilistId}';
     final art = series.coverImageRef;
-    // The cover sits in a sunken bevel frame at rest and pops out (raised) on
-    // hover — the tactile XP cue that it's a button.
+    // Inverted card: the poster is the FIXED element — a 2:3 box showing the
+    // whole cover, uncropped and identical across every card — sitting in a
+    // sunken bevel frame that pops out (raised) on hover (the tactile XP cue
+    // that it's a button). Below it a fixed-height text band keeps card heights
+    // uniform regardless of title length. The "Next" affordance is a beveled
+    // footer strip OVERLAID on the poster's bottom sliver, so its presence never
+    // changes the card's height.
     return Opacity(
       opacity: unavailable ? 0.5 : 1,
       child: MouseRegion(
@@ -1108,69 +1171,168 @@ class _SeriesCardState extends State<_SeriesCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: XpBevel(
-                  raised: _hover && !unavailable,
-                  color: Xp.well,
-                  child: Stack(
-                    fit: StackFit.expand,
+              AspectRatio(
+                aspectRatio: _kPosterAspect,
+                child: LayoutBuilder(
+                  builder: (context, box) => XpBevel(
+                    raised: _hover && !unavailable,
+                    color: Xp.well,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (art != null && File(art).existsSync())
+                          // cover, not contain: FILL the 2:3 box (no gaps),
+                          // cropping whichever dimension overflows.
+                          Image.file(File(art), fit: BoxFit.cover)
+                        else
+                          Center(
+                            // A pending placeholder reads as "identifying", not
+                            // a broken image (it has no art yet, by design).
+                            child: Icon(
+                              series.pending
+                                  ? Icons.hourglass_empty
+                                  : Icons.image_not_supported,
+                              color: Xp.textFaint,
+                            ),
+                          ),
+                        if (unavailable)
+                          Container(
+                            color: Colors.black54,
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.link_off,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                          ),
+                        if (next != null && !unavailable)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            // ~1/10th of the poster, but never below a legible
+                            // floor so the label reads on the smallest tiles.
+                            height: math.max(
+                              _kNextStripMinHeight,
+                              box.maxHeight * 0.1,
+                            ),
+                            child: _NextStrip(
+                              number: next.number,
+                              onPlay: () async {
+                                await widget.onPlay(next, series);
+                                widget.onReturn();
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: _kCardTextRegion,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (art != null && File(art).existsSync())
-                        Image.file(File(art), fit: BoxFit.cover)
-                      else
-                        Center(
-                          // A pending placeholder reads as "identifying", not a
-                          // broken image (it has no art yet, by design).
-                          child: Icon(
-                            series.pending
-                                ? Icons.hourglass_empty
-                                : Icons.image_not_supported,
-                            color: Xp.textFaint,
+                      // Always a two-line-tall block (a one-line title leaves
+                      // its second line empty) so the meta line below is pinned
+                      // to the same Y on every card.
+                      SizedBox(
+                        height: _kTitleBlockHeight,
+                        width: double.infinity,
+                        child: Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: _kCardTitleFontSize,
+                            height: _kCardTitleLineHeight,
+                            color: _hover && !unavailable
+                                ? Xp.accentBright
+                                : Xp.text,
                           ),
                         ),
-                      if (unavailable)
-                        Container(
-                          color: Colors.black54,
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.link_off,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      _metaLine(series, unavailable),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: _hover && !unavailable ? Xp.accentBright : Xp.text,
-                ),
-              ),
-              const SizedBox(height: 2),
-              _metaLine(series, unavailable),
-              if (next != null && !unavailable) ...[
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: XpButton(
-                    dense: true,
-                    icon: Icons.play_arrow,
-                    label: 'Next: Ep ${next.number}',
-                    onPressed: () async {
-                      await widget.onPlay(next, series);
-                      widget.onReturn();
-                    },
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Minimum height (logical px) of the overlaid "Next" footer strip, so its label
+/// stays legible even when 1/10th of a small poster would be thinner.
+const double _kNextStripMinHeight = 22;
+
+/// The "Next: Ep N" affordance: a beveled footer strip seated on the bottom
+/// sliver of a card's poster. It reads as an integrated part of the card (a
+/// bottom "seat"), styled from the same tokens as [XpButton] — NOT a floating
+/// Material button. Its own tap plays the next episode; because it's a nested
+/// [GestureDetector], the tap wins the gesture arena and does NOT bubble to the
+/// card's open-detail tap (the same control-vs-parent pattern the player uses).
+class _NextStrip extends StatefulWidget {
+  const _NextStrip({required this.number, required this.onPlay});
+
+  final int number;
+  final Future<void> Function() onPlay;
+
+  @override
+  State<_NextStrip> createState() => _NextStripState();
+}
+
+class _NextStripState extends State<_NextStrip> {
+  bool _hover = false;
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final pressed = _down;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _down = true),
+        onTapUp: (_) => setState(() => _down = false),
+        onTapCancel: () => setState(() => _down = false),
+        onTap: widget.onPlay,
+        child: XpBevel(
+          raised: !pressed,
+          gradient: Xp.controlGradient(hover: _hover),
+          child: Transform.translate(
+            offset: pressed ? const Offset(1, 1) : Offset.zero,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.play_arrow, size: 14, color: Xp.text),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    'Next: Ep ${widget.number}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: Xp.fontFamily,
+                      fontFamilyFallback: Xp.fontFallback,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Xp.text,
+                    ),
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
