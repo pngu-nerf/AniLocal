@@ -3286,6 +3286,276 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
   }
 }
 
+class $HiddenEpisodesTable extends HiddenEpisodes
+    with TableInfo<$HiddenEpisodesTable, HiddenEpisodeRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HiddenEpisodesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
+    'anilistId',
+  );
+  @override
+  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
+    'anilist_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _episodeMeta = const VerificationMeta(
+    'episode',
+  );
+  @override
+  late final GeneratedColumn<int> episode = GeneratedColumn<int>(
+    'episode',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hiddenAtMsMeta = const VerificationMeta(
+    'hiddenAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> hiddenAtMs = GeneratedColumn<int>(
+    'hidden_at_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [anilistId, episode, hiddenAtMs];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'hidden_episodes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HiddenEpisodeRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('anilist_id')) {
+      context.handle(
+        _anilistIdMeta,
+        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_anilistIdMeta);
+    }
+    if (data.containsKey('episode')) {
+      context.handle(
+        _episodeMeta,
+        episode.isAcceptableOrUnknown(data['episode']!, _episodeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_episodeMeta);
+    }
+    if (data.containsKey('hidden_at_ms')) {
+      context.handle(
+        _hiddenAtMsMeta,
+        hiddenAtMs.isAcceptableOrUnknown(
+          data['hidden_at_ms']!,
+          _hiddenAtMsMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {anilistId, episode};
+  @override
+  HiddenEpisodeRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HiddenEpisodeRow(
+      anilistId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}anilist_id'],
+      )!,
+      episode: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode'],
+      )!,
+      hiddenAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}hidden_at_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $HiddenEpisodesTable createAlias(String alias) {
+    return $HiddenEpisodesTable(attachedDatabase, alias);
+  }
+}
+
+class HiddenEpisodeRow extends DataClass
+    implements Insertable<HiddenEpisodeRow> {
+  final int anilistId;
+  final int episode;
+  final int hiddenAtMs;
+  const HiddenEpisodeRow({
+    required this.anilistId,
+    required this.episode,
+    required this.hiddenAtMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['anilist_id'] = Variable<int>(anilistId);
+    map['episode'] = Variable<int>(episode);
+    map['hidden_at_ms'] = Variable<int>(hiddenAtMs);
+    return map;
+  }
+
+  HiddenEpisodesCompanion toCompanion(bool nullToAbsent) {
+    return HiddenEpisodesCompanion(
+      anilistId: Value(anilistId),
+      episode: Value(episode),
+      hiddenAtMs: Value(hiddenAtMs),
+    );
+  }
+
+  factory HiddenEpisodeRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HiddenEpisodeRow(
+      anilistId: serializer.fromJson<int>(json['anilistId']),
+      episode: serializer.fromJson<int>(json['episode']),
+      hiddenAtMs: serializer.fromJson<int>(json['hiddenAtMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'anilistId': serializer.toJson<int>(anilistId),
+      'episode': serializer.toJson<int>(episode),
+      'hiddenAtMs': serializer.toJson<int>(hiddenAtMs),
+    };
+  }
+
+  HiddenEpisodeRow copyWith({int? anilistId, int? episode, int? hiddenAtMs}) =>
+      HiddenEpisodeRow(
+        anilistId: anilistId ?? this.anilistId,
+        episode: episode ?? this.episode,
+        hiddenAtMs: hiddenAtMs ?? this.hiddenAtMs,
+      );
+  HiddenEpisodeRow copyWithCompanion(HiddenEpisodesCompanion data) {
+    return HiddenEpisodeRow(
+      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      episode: data.episode.present ? data.episode.value : this.episode,
+      hiddenAtMs: data.hiddenAtMs.present
+          ? data.hiddenAtMs.value
+          : this.hiddenAtMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HiddenEpisodeRow(')
+          ..write('anilistId: $anilistId, ')
+          ..write('episode: $episode, ')
+          ..write('hiddenAtMs: $hiddenAtMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(anilistId, episode, hiddenAtMs);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HiddenEpisodeRow &&
+          other.anilistId == this.anilistId &&
+          other.episode == this.episode &&
+          other.hiddenAtMs == this.hiddenAtMs);
+}
+
+class HiddenEpisodesCompanion extends UpdateCompanion<HiddenEpisodeRow> {
+  final Value<int> anilistId;
+  final Value<int> episode;
+  final Value<int> hiddenAtMs;
+  final Value<int> rowid;
+  const HiddenEpisodesCompanion({
+    this.anilistId = const Value.absent(),
+    this.episode = const Value.absent(),
+    this.hiddenAtMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HiddenEpisodesCompanion.insert({
+    required int anilistId,
+    required int episode,
+    this.hiddenAtMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : anilistId = Value(anilistId),
+       episode = Value(episode);
+  static Insertable<HiddenEpisodeRow> custom({
+    Expression<int>? anilistId,
+    Expression<int>? episode,
+    Expression<int>? hiddenAtMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (anilistId != null) 'anilist_id': anilistId,
+      if (episode != null) 'episode': episode,
+      if (hiddenAtMs != null) 'hidden_at_ms': hiddenAtMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HiddenEpisodesCompanion copyWith({
+    Value<int>? anilistId,
+    Value<int>? episode,
+    Value<int>? hiddenAtMs,
+    Value<int>? rowid,
+  }) {
+    return HiddenEpisodesCompanion(
+      anilistId: anilistId ?? this.anilistId,
+      episode: episode ?? this.episode,
+      hiddenAtMs: hiddenAtMs ?? this.hiddenAtMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (anilistId.present) {
+      map['anilist_id'] = Variable<int>(anilistId.value);
+    }
+    if (episode.present) {
+      map['episode'] = Variable<int>(episode.value);
+    }
+    if (hiddenAtMs.present) {
+      map['hidden_at_ms'] = Variable<int>(hiddenAtMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HiddenEpisodesCompanion(')
+          ..write('anilistId: $anilistId, ')
+          ..write('episode: $episode, ')
+          ..write('hiddenAtMs: $hiddenAtMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AppSettingsTable extends AppSettings
     with TableInfo<$AppSettingsTable, AppSettingRow> {
   @override
@@ -3506,6 +3776,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     this,
   );
   late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
+  late final $HiddenEpisodesTable hiddenEpisodes = $HiddenEpisodesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -3519,6 +3790,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     watchStates,
     sourceOverrides,
     skipSegments,
+    hiddenEpisodes,
     appSettings,
   ];
 }
@@ -5200,6 +5472,176 @@ typedef $$SkipSegmentsTableProcessedTableManager =
       SkipSegmentRow,
       PrefetchHooks Function()
     >;
+typedef $$HiddenEpisodesTableCreateCompanionBuilder =
+    HiddenEpisodesCompanion Function({
+      required int anilistId,
+      required int episode,
+      Value<int> hiddenAtMs,
+      Value<int> rowid,
+    });
+typedef $$HiddenEpisodesTableUpdateCompanionBuilder =
+    HiddenEpisodesCompanion Function({
+      Value<int> anilistId,
+      Value<int> episode,
+      Value<int> hiddenAtMs,
+      Value<int> rowid,
+    });
+
+class $$HiddenEpisodesTableFilterComposer
+    extends Composer<_$CacheDatabase, $HiddenEpisodesTable> {
+  $$HiddenEpisodesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get episode => $composableBuilder(
+    column: $table.episode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get hiddenAtMs => $composableBuilder(
+    column: $table.hiddenAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HiddenEpisodesTableOrderingComposer
+    extends Composer<_$CacheDatabase, $HiddenEpisodesTable> {
+  $$HiddenEpisodesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get episode => $composableBuilder(
+    column: $table.episode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get hiddenAtMs => $composableBuilder(
+    column: $table.hiddenAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HiddenEpisodesTableAnnotationComposer
+    extends Composer<_$CacheDatabase, $HiddenEpisodesTable> {
+  $$HiddenEpisodesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get anilistId =>
+      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+
+  GeneratedColumn<int> get episode =>
+      $composableBuilder(column: $table.episode, builder: (column) => column);
+
+  GeneratedColumn<int> get hiddenAtMs => $composableBuilder(
+    column: $table.hiddenAtMs,
+    builder: (column) => column,
+  );
+}
+
+class $$HiddenEpisodesTableTableManager
+    extends
+        RootTableManager<
+          _$CacheDatabase,
+          $HiddenEpisodesTable,
+          HiddenEpisodeRow,
+          $$HiddenEpisodesTableFilterComposer,
+          $$HiddenEpisodesTableOrderingComposer,
+          $$HiddenEpisodesTableAnnotationComposer,
+          $$HiddenEpisodesTableCreateCompanionBuilder,
+          $$HiddenEpisodesTableUpdateCompanionBuilder,
+          (
+            HiddenEpisodeRow,
+            BaseReferences<
+              _$CacheDatabase,
+              $HiddenEpisodesTable,
+              HiddenEpisodeRow
+            >,
+          ),
+          HiddenEpisodeRow,
+          PrefetchHooks Function()
+        > {
+  $$HiddenEpisodesTableTableManager(
+    _$CacheDatabase db,
+    $HiddenEpisodesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HiddenEpisodesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HiddenEpisodesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HiddenEpisodesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> anilistId = const Value.absent(),
+                Value<int> episode = const Value.absent(),
+                Value<int> hiddenAtMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HiddenEpisodesCompanion(
+                anilistId: anilistId,
+                episode: episode,
+                hiddenAtMs: hiddenAtMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int anilistId,
+                required int episode,
+                Value<int> hiddenAtMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HiddenEpisodesCompanion.insert(
+                anilistId: anilistId,
+                episode: episode,
+                hiddenAtMs: hiddenAtMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HiddenEpisodesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$CacheDatabase,
+      $HiddenEpisodesTable,
+      HiddenEpisodeRow,
+      $$HiddenEpisodesTableFilterComposer,
+      $$HiddenEpisodesTableOrderingComposer,
+      $$HiddenEpisodesTableAnnotationComposer,
+      $$HiddenEpisodesTableCreateCompanionBuilder,
+      $$HiddenEpisodesTableUpdateCompanionBuilder,
+      (
+        HiddenEpisodeRow,
+        BaseReferences<_$CacheDatabase, $HiddenEpisodesTable, HiddenEpisodeRow>,
+      ),
+      HiddenEpisodeRow,
+      PrefetchHooks Function()
+    >;
 typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
       required String key,
@@ -5357,6 +5799,8 @@ class $CacheDatabaseManager {
       $$SourceOverridesTableTableManager(_db, _db.sourceOverrides);
   $$SkipSegmentsTableTableManager get skipSegments =>
       $$SkipSegmentsTableTableManager(_db, _db.skipSegments);
+  $$HiddenEpisodesTableTableManager get hiddenEpisodes =>
+      $$HiddenEpisodesTableTableManager(_db, _db.hiddenEpisodes);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
 }

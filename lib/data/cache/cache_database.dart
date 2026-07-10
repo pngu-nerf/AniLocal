@@ -205,6 +205,29 @@ class SkipSegments extends Table {
   String get tableName => 'skip_segments';
 }
 
+/// User-hidden MISSING episodes (the missing-episodes feature). Keyed by EPISODE
+/// IDENTITY ([anilistId] + the anchored [episode] position), consistent with
+/// watch_state / source_overrides / skip_segments. A hidden episode is removed
+/// from the show's episode list (no ghost tile) and excluded from completeness
+/// counts. Hiding is always per-episode, even when the action targets a bundle.
+///
+/// SACRED (seam #5): the auto fill path (LibrarySync → applySync) and
+/// refreshMetadata have NO write path to this table, so a rescan / metadata
+/// refresh never wipes hidden state — it is persisted user data, like a
+/// fix-match or a source pin. The only writers are the hide/unhide UI actions.
+@DataClassName('HiddenEpisodeRow')
+class HiddenEpisodes extends Table {
+  IntColumn get anilistId => integer()();
+  IntColumn get episode => integer()();
+  IntColumn get hiddenAtMs => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {anilistId, episode};
+
+  @override
+  String get tableName => 'hidden_episodes';
+}
+
 /// App preferences (key/value). NOT part of the AniList projection — a small
 /// local store for UI choices like the collapsed "Continue watching" section.
 @DataClassName('AppSettingRow')
@@ -228,6 +251,7 @@ class AppSettings extends Table {
     WatchStates,
     SourceOverrides,
     SkipSegments,
+    HiddenEpisodes,
     AppSettings,
   ],
 )
@@ -235,7 +259,7 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
@@ -245,7 +269,8 @@ class CacheDatabase extends _$CacheDatabase {
   // volume binding (see [_migrateFileCacheToRelativeV9]); v10 file_cache
   // .pending_identification — the "discovered but not yet identified" state for
   // immediate library population (an additive column, default 0 = preserves
-  // every existing row's meaning).
+  // every existing row's meaning); v11 hidden_episodes — user-hidden missing
+  // episodes (a brand-new table, so existing populated caches are untouched).
   //
   // v8 RECLAIMED: it was briefly scratch on an unshipped branch (series_relations,
   // the "Up Next" overshoot) then reverted — it never reached main and no DB sits
@@ -299,6 +324,12 @@ class CacheDatabase extends _$CacheDatabase {
         // here would be a duplicate-column error. Only a cache that was already
         // at v9 (real column-less file_cache) needs the addColumn.
         await m.addColumn(fileCache, fileCache.pendingIdentification);
+      }
+      if (from < 11) {
+        // Brand-new table for the missing-episodes feature; a from-<11 upgrade
+        // just creates it empty, so every existing populated cache is
+        // unaffected (no shows have hidden episodes until the user hides one).
+        await m.createTable(hiddenEpisodes);
       }
     },
   );
@@ -530,6 +561,41 @@ class CacheDatabase extends _$CacheDatabase {
   /// so fix-matches / watch-state are untouched).
   Future<void> upsertSkipSegment(SkipSegmentRow row) =>
       into(skipSegments).insertOnConflictUpdate(row);
+
+  // --- Hidden episodes (missing-episodes feature). Written ONLY by the
+  //     hide/unhide UI actions; the fill path (applySync) and refreshMetadata
+  //     never touch this table, so a rescan/refresh can't wipe it (seam #5). ---
+
+  Future<List<HiddenEpisodeRow>> allHiddenRows() =>
+      select(hiddenEpisodes).get();
+
+  Future<List<HiddenEpisodeRow>> hiddenRowsFor(int anilistId) => (select(
+    hiddenEpisodes,
+  )..where((h) => h.anilistId.equals(anilistId))).get();
+
+  /// Hide a set of episode positions for one series (per-episode, even when the
+  /// hide action targeted a bundle). Idempotent upserts in one transaction.
+  Future<void> hideEpisodes(int anilistId, List<int> episodes) => transaction(
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (final ep in episodes) {
+        await into(hiddenEpisodes).insertOnConflictUpdate(
+          HiddenEpisodeRow(anilistId: anilistId, episode: ep, hiddenAtMs: now),
+        );
+      }
+    },
+  );
+
+  /// Unhide a set of episode positions for one series.
+  Future<void> unhideEpisodes(int anilistId, List<int> episodes) =>
+      transaction(() async {
+        for (final ep in episodes) {
+          await (delete(hiddenEpisodes)..where(
+                (h) => h.anilistId.equals(anilistId) & h.episode.equals(ep),
+              ))
+              .go();
+        }
+      });
 
   // --- App settings (key/value preferences) ---
 

@@ -5,6 +5,7 @@ import '../domain/models/skip_mode.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import '../domain/repositories/missing_episodes_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
@@ -23,6 +24,9 @@ class AniLocalApp extends StatelessWidget {
     required this.watchState,
     required this.sourceSelection,
     required this.watchOrder,
+    required this.missing,
+    required this.loadMissingEnabled,
+    required this.setMissingEnabled,
     required this.onScan,
     required this.onRefreshMetadata,
     required this.onAddFolder,
@@ -47,6 +51,14 @@ class AniLocalApp extends StatelessWidget {
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
+
+  /// Hidden-episode store (missing-episodes feature); sacred across rescans.
+  final MissingEpisodesRepository missing;
+
+  /// The missing-episodes feature toggle (persisted; default on). Off = no ghost
+  /// tiles / no Hidden tab / counts ignore hidden state, anywhere.
+  final Future<bool> Function() loadMissingEnabled;
+  final Future<void> Function(bool enabled) setMissingEnabled;
 
   /// Fill path. [onDiscovered] fires mid-scan once newly-seen files have been
   /// written as pending placeholders (before identification), so the UI can
@@ -110,6 +122,9 @@ class AniLocalApp extends StatelessWidget {
         watchState: watchState,
         sourceSelection: sourceSelection,
         watchOrder: watchOrder,
+        missing: missing,
+        loadMissingEnabled: loadMissingEnabled,
+        setMissingEnabled: setMissingEnabled,
         onScan: onScan,
         onRefreshMetadata: onRefreshMetadata,
         onAddFolder: onAddFolder,

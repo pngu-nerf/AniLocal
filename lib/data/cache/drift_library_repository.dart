@@ -8,6 +8,7 @@ import '../../domain/models/series.dart';
 import '../../domain/models/skip_range.dart';
 import '../../domain/models/titles.dart';
 import '../../domain/repositories/library_repository.dart';
+import '../../domain/repositories/missing_episodes_repository.dart';
 import '../../domain/repositories/source_selection_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
@@ -74,7 +75,8 @@ class DriftLibraryRepository
         LibraryRepository,
         WatchStateRepository,
         SourceSelectionRepository,
-        WatchOrderRepository {
+        WatchOrderRepository,
+        MissingEpisodesRepository {
   DriftLibraryRepository(this._db, {VolumeResolver? resolver})
     : _resolver = resolver ?? DiskutilVolumeResolver();
 
@@ -506,6 +508,32 @@ class DriftLibraryRepository
       episode.anchoredNumber,
     );
   }
+
+  // --- Missing episodes (hidden state). Sole writer of hidden_episodes;
+  //     the fill path (applySync) / refreshMetadata never touch it (seam #5),
+  //     so a rescan/refresh never wipes a hide. Keyed by episode identity. ---
+
+  @override
+  Future<Set<int>> hiddenEpisodes(int anilistId) async => {
+    for (final h in await _db.hiddenRowsFor(anilistId)) h.episode,
+  };
+
+  @override
+  Future<Map<int, Set<int>>> allHiddenEpisodes() async {
+    final result = <int, Set<int>>{};
+    for (final h in await _db.allHiddenRows()) {
+      result.putIfAbsent(h.anilistId, () => {}).add(h.episode);
+    }
+    return result;
+  }
+
+  @override
+  Future<void> hideEpisodes(int anilistId, List<int> episodes) =>
+      _db.hideEpisodes(anilistId, episodes);
+
+  @override
+  Future<void> unhideEpisodes(int anilistId, List<int> episodes) =>
+      _db.unhideEpisodes(anilistId, episodes);
 
   // --- Watch order ("Up Next"). The SINGLE source of "what's next" — every
   //     caller (player auto-advance, library "Next: Ep N") routes through here.

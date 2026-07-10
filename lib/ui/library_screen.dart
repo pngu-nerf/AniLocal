@@ -11,6 +11,7 @@ import '../domain/models/skip_mode.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
+import '../domain/repositories/missing_episodes_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
@@ -62,6 +63,9 @@ class LibraryScreen extends StatefulWidget {
     required this.watchState,
     required this.sourceSelection,
     required this.watchOrder,
+    required this.missing,
+    required this.loadMissingEnabled,
+    required this.setMissingEnabled,
     required this.onScan,
     required this.onRefreshMetadata,
     required this.onAddFolder,
@@ -86,6 +90,15 @@ class LibraryScreen extends StatefulWidget {
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
+
+  /// Hidden-episode store (missing-episodes feature); passed through to the
+  /// detail screen and read here to exclude hidden episodes from card counts.
+  final MissingEpisodesRepository missing;
+
+  /// Missing-episodes feature toggle (persisted, default on). Governs ghost
+  /// tiles, the Hidden tab, and whether hidden episodes affect completeness.
+  final Future<bool> Function() loadMissingEnabled;
+  final Future<void> Function(bool enabled) setMissingEnabled;
 
   /// Fill path. [onDiscovered] fires mid-scan, after newly-seen files are
   /// written as pending placeholders but before identification — the screen
@@ -161,9 +174,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Map<int, Set<String>> _sourceFoldersBySeries = {};
   // anilistId -> downloaded-episode tally for the card's "⬇N of M +X" line:
   // inRange = downloaded eps whose anchored position is within 1..episodeCount;
-  // outOfRange = the rest (position > count, or unanchored). Loaded async
-  // alongside the source folders (same episodesFor read).
-  Map<int, ({int inRange, int outOfRange})> _downloadCounts = {};
+  // outOfRange = the rest (position > count, or unanchored); total = the
+  // completeness denominator (episodeCount minus any hidden in-range positions
+  // when the missing-episodes feature is on, else episodeCount; null if unknown).
+  // Loaded async alongside the source folders (same episodesFor read).
+  Map<int, ({int inRange, int outOfRange, int? total})> _downloadCounts = {};
   bool _scanning = false;
   bool _continueCollapsed = false;
   // Count of CONFIRMED-unmatched files (AniList said no) — NOT pending
@@ -233,8 +248,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Reads existing cached domain state only — pure display, no schema change.
   Future<void> _loadSeriesStats() async {
     final series = await _series;
+    // Hidden episodes are excluded from the completeness count when the feature
+    // is on (consistent with the show page); off → no exclusion. One read for
+    // the whole grid (a series absent from the map has nothing hidden).
+    final missingEnabled = await widget.loadMissingEnabled();
+    final allHidden = missingEnabled
+        ? await widget.missing.allHiddenEpisodes()
+        : const <int, Set<int>>{};
     final folders = <int, Set<String>>{};
-    final counts = <int, ({int inRange, int outOfRange})>{};
+    final counts = <int, ({int inRange, int outOfRange, int? total})>{};
     for (final s in series) {
       final eps = await widget.repository.episodesFor(s.anilistId);
       folders[s.anilistId] = {
@@ -246,19 +268,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
       // episode per entry (episodesFor is de-duplicated), so the two partition
       // the download count. When the AniList total is unknown we can't judge
       // range, so treat all as in-range (the card then shows just "⬇N").
+      // Hidden positions drop out of the count AND reduce the denominator, so
+      // hiding the only missing episode reads "11 of 11" (same rule the show
+      // page uses via computeDownloadTally).
+      final hidden = allHidden[s.anilistId] ?? const <int>{};
       final m = s.episodeCount;
       var inRange = 0;
       var outOfRange = 0;
+      var hiddenInRange = 0;
       for (final e in eps) {
-        if (m == null) {
-          inRange++;
-        } else if (e.anchoredNumber >= 1 && e.anchoredNumber <= m) {
+        if (hidden.contains(e.anchoredNumber)) continue;
+        if (m == null || (e.anchoredNumber >= 1 && e.anchoredNumber <= m)) {
           inRange++;
         } else {
           outOfRange++;
         }
       }
-      counts[s.anilistId] = (inRange: inRange, outOfRange: outOfRange);
+      if (m != null) {
+        for (final h in hidden) {
+          if (h >= 1 && h <= m) hiddenInRange++;
+        }
+      }
+      counts[s.anilistId] = (
+        inRange: inRange,
+        outOfRange: outOfRange,
+        total: m == null ? null : m - hiddenInRange,
+      );
     }
     if (mounted) {
       setState(() {
@@ -293,6 +328,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _openSettings() async {
     var enabled = await widget.loadAutoPlayNext();
     var skipMode = await widget.loadSkipMode();
+    var missingEnabled = await widget.loadMissingEnabled();
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -338,6 +374,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
               // --- Metadata ---------------------------------------------
               const _SettingsSection('Metadata'),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Show missing episodes'),
+                subtitle: const Text(
+                  'Ghost tiles for gaps in a series; hide ones you don’t '
+                  'want.',
+                ),
+                value: missingEnabled,
+                onChanged: (v) {
+                  setLocal(() => missingEnabled = v);
+                  widget.setMissingEnabled(v);
+                },
+              ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
@@ -672,6 +721,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         watchState: widget.watchState,
                         sourceSelection: widget.sourceSelection,
                         watchOrder: widget.watchOrder,
+                        // `missing` (local) is the missing-FOLDER set above;
+                        // the repository is `widget.missing`.
+                        missingRepo: widget.missing,
+                        loadMissingEnabled: widget.loadMissingEnabled,
                         nextEpisode: _upNext[series[i].anilistId],
                         downloaded: _downloadCounts[series[i].anilistId],
                         unavailable: unavailable,
@@ -999,6 +1052,8 @@ class _SeriesCard extends StatefulWidget {
     required this.watchState,
     required this.sourceSelection,
     required this.watchOrder,
+    required this.missingRepo,
+    required this.loadMissingEnabled,
     required this.nextEpisode,
     required this.downloaded,
     required this.unavailable,
@@ -1016,15 +1071,18 @@ class _SeriesCard extends StatefulWidget {
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
+  final MissingEpisodesRepository missingRepo;
+  final Future<bool> Function() loadMissingEnabled;
 
   /// The next episode to watch for this series (relations-aware), or null when
   /// the series isn't started / has nothing next. Drives the "Next" button.
   final Episode? nextEpisode;
 
   /// Downloaded-episode tally for the "⬇N of M +X" metadata line: in-range vs
-  /// out-of-range counts. Null while the async stats load (the line then shows
+  /// out-of-range counts, and the completeness denominator (M minus hidden
+  /// in-range positions). Null while the async stats load (the line then shows
   /// just the show-type until it arrives — no wrong numbers flashed).
-  final ({int inRange, int outOfRange})? downloaded;
+  final ({int inRange, int outOfRange, int? total})? downloaded;
 
   /// True when every source folder of this show is currently missing (offline
   /// drive/NAS): dimmed + marked, and a tap shows a reconnect hint rather than
@@ -1068,6 +1126,8 @@ class _SeriesCardState extends State<_SeriesCard> {
           watchState: widget.watchState,
           sourceSelection: widget.sourceSelection,
           watchOrder: widget.watchOrder,
+          missing: widget.missingRepo,
+          loadMissingEnabled: widget.loadMissingEnabled,
           loadAutoPlayNext: widget.loadAutoPlayNext,
           loadSkipMode: widget.loadSkipMode,
           loadRailFraction: widget.loadRailFraction,
@@ -1107,7 +1167,9 @@ class _SeriesCardState extends State<_SeriesCard> {
     if (series.format != null) spans.add(TextSpan(text: series.format));
     final dl = widget.downloaded;
     if (dl != null) {
-      final m = series.episodeCount;
+      // The completeness denominator already accounts for hidden episodes (see
+      // _loadSeriesStats); null when the AniList total is unknown.
+      final m = dl.total;
       if (spans.isNotEmpty) spans.add(const TextSpan(text: ' · '));
       // A flat, single-color Material icon (not the ⬇ emoji, which the OS draws
       // full-color with a box). Rendered inline via a WidgetSpan, sized to the

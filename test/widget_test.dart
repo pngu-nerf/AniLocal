@@ -9,6 +9,7 @@ import 'package:anilocal/domain/models/next_result.dart';
 import 'package:anilocal/domain/models/skip_mode.dart';
 import 'package:anilocal/domain/repositories/fix_match_repository.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
+import 'package:anilocal/domain/repositories/missing_episodes_repository.dart';
 import 'package:anilocal/domain/repositories/source_selection_repository.dart';
 import 'package:anilocal/domain/repositories/watch_order_repository.dart';
 import 'package:anilocal/domain/repositories/watch_state_repository.dart';
@@ -44,7 +45,8 @@ class _FakeRepository
         LibraryRepository,
         WatchStateRepository,
         SourceSelectionRepository,
-        WatchOrderRepository {
+        WatchOrderRepository,
+        MissingEpisodesRepository {
   @override
   Future<List<Series>> allSeries() async => const [
     Series(
@@ -104,6 +106,15 @@ class _FakeRepository
 
   @override
   Future<Map<int, Episode>> upNextBySeries() async => const {};
+
+  @override
+  Future<Set<int>> hiddenEpisodes(int anilistId) async => const {};
+  @override
+  Future<Map<int, Set<int>>> allHiddenEpisodes() async => const {};
+  @override
+  Future<void> hideEpisodes(int anilistId, List<int> episodes) async {}
+  @override
+  Future<void> unhideEpisodes(int anilistId, List<int> episodes) async {}
 }
 
 void main() {
@@ -117,6 +128,9 @@ void main() {
         watchState: _FakeRepository(),
         sourceSelection: _FakeRepository(),
         watchOrder: _FakeRepository(),
+        missing: _FakeRepository(),
+        loadMissingEnabled: () async => true,
+        setMissingEnabled: (_) async {},
         onScan: (_) async => const SyncSummary(
           filesScanned: 0,
           unchanged: 0,

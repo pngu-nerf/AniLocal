@@ -138,6 +138,7 @@ void main() {
   const continueCollapsedKey = 'continue_watching_collapsed';
   const autoPlayNextKey = 'autoplay_next';
   const skipModeKey = 'skip_mode';
+  const missingEpisodesKey = 'missing_episodes_enabled';
   const railFractionKey = 'theater_rail_fraction';
   // The default rail width (matches TheaterLayoutConfig.theaterDefault); the
   // theater clamps the loaded value to the drag bounds.
@@ -157,6 +158,9 @@ void main() {
       watchState: repository,
       sourceSelection: repository,
       watchOrder: repository,
+      // DriftLibraryRepository also implements MissingEpisodesRepository (the
+      // sacred hidden-episode store; keyed by episode identity like watch-state).
+      missing: repository,
       onScan: scan,
       onRefreshMetadata: sync.refreshMetadata,
       onAddFolder: addFolder,
@@ -177,6 +181,11 @@ void main() {
       loadSkipMode: () async =>
           SkipMode.fromToken(await database.getSetting(skipModeKey)),
       setSkipMode: (mode) => database.setSetting(skipModeKey, mode.token),
+      // Missing-episodes feature defaults ON: only an explicit 'false' disables.
+      loadMissingEnabled: () async =>
+          await database.getSetting(missingEpisodesKey) != 'false',
+      setMissingEnabled: (enabled) =>
+          database.setSetting(missingEpisodesKey, '$enabled'),
       // Theater rail width (fraction). Unset/unparseable -> the default.
       loadRailFraction: () async =>
           double.tryParse(await database.getSetting(railFractionKey) ?? '') ??
