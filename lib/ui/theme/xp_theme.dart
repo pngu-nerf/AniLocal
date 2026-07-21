@@ -2,29 +2,27 @@ import 'package:flutter/material.dart';
 
 import 'xp_tokens.dart';
 
-/// The BODY font, chosen here for a temporary side-by-side comparison. Flip the
-/// active face by editing the ONE `_bodyFont` line below. Candidates are bundled
-/// OFL assets (see the `fonts:` block in pubspec.yaml); [helveticaNeue] uses the
-/// platform face in [Xp.fontFamily].
+/// The BODY font. Two options: the platform sans in [Xp.fontFamily]
+/// (Helvetica Neue — the default, currently in use) and the bundled OFL
+/// [archivo] (kept for an ongoing trial). Flip with the ONE `_bodyFont` line.
 ///
-/// TEMPORARY scaffolding — once a winner is picked, this enum + switch collapse
-/// to the single chosen font and the losing assets/pubspec entries are removed
-/// (per the cleanup contract). The DISPLAY role (dot-matrix) is a painter
-/// (`VfdReadout`) that uses NO font, so it is unaffected by this switch.
-enum BodyFont { helveticaNeue, ibmPlexMono, spaceGrotesk, archivo }
+/// The DISPLAY role (dot-matrix) is a painter (`VfdReadout`) that uses NO font,
+/// so it is unaffected by this switch.
+enum BodyFont { helveticaNeue, archivo }
 
-/// ⇩⇩⇩  THE SWITCH — edit THIS ONE LINE to compare body faces.  ⇩⇩⇩
+/// ⇩⇩⇩  THE SWITCH — edit THIS ONE LINE to change the body face.  ⇩⇩⇩
 const BodyFont _bodyFont = BodyFont.helveticaNeue;
 
 /// The active body font's family + fallback, resolved from [_bodyFont]. A
 /// missing glyph still degrades through the sans fallback stack.
-({String family, List<String> fallback})
-_resolveBodyFont() => switch (_bodyFont) {
-  BodyFont.helveticaNeue => (family: Xp.fontFamily, fallback: Xp.fontFallback),
-  BodyFont.ibmPlexMono => (family: 'IBM Plex Mono', fallback: Xp.fontFallback),
-  BodyFont.spaceGrotesk => (family: 'Space Grotesk', fallback: Xp.fontFallback),
-  BodyFont.archivo => (family: 'Archivo', fallback: Xp.fontFallback),
-};
+({String family, List<String> fallback}) _resolveBodyFont() =>
+    switch (_bodyFont) {
+      BodyFont.helveticaNeue => (
+        family: Xp.fontFamily,
+        fallback: Xp.fontFallback,
+      ),
+      BodyFont.archivo => (family: 'Archivo', fallback: Xp.fontFallback),
+    };
 
 /// The VFD "fine-instrument" [ThemeData], derived from [Xp] tokens and applied
 /// app-wide. The body font comes from the [_bodyFont] switch (single source);
@@ -54,27 +52,29 @@ abstract final class XpTheme {
 
     final t = base.textTheme;
     return base.copyWith(
-      // The BODY type role — the single source of running-text hierarchy (the
-      // lit dot-matrix DISPLAY role is VfdReadout, entirely separate). A small
-      // deliberate title / body / caption scale; sizes stay at the M3 metrics
-      // (copyWith preserves each role's height + letter-spacing) so this only
-      // sets weight/color/family — no layout shift. `.apply` then stamps the
-      // matte body color + Helvetica Neue onto EVERY role, including the
-      // Material-chrome roles used by dialogs, list tiles, and buttons, so body
-      // text everywhere inherits the printed chassis treatment by construction.
+      // The BODY type role, now carrying the CHROME treatment: thin (w300) +
+      // letter-spaced, matte cream — so running text reads like the same
+      // screen-printed labeling, not a separate weight. Sizes stay at the M3
+      // metrics (copyWith preserves each role's height) so only weight/tracking/
+      // color/family change — no layout shift. `.apply` then stamps the matte
+      // body color + the switched family onto EVERY role (dialogs, list tiles,
+      // buttons included), so body text everywhere inherits it by construction.
       textTheme: t
           .copyWith(
             titleMedium: t.titleMedium?.copyWith(
               fontSize: 16,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w300,
+              letterSpacing: 1.2,
             ),
             bodyMedium: t.bodyMedium?.copyWith(
               fontSize: 14,
-              fontWeight: FontWeight.w400,
+              fontWeight: FontWeight.w300,
+              letterSpacing: 0.8,
             ),
             bodySmall: t.bodySmall?.copyWith(
               fontSize: 12,
-              fontWeight: FontWeight.w400,
+              fontWeight: FontWeight.w300,
+              letterSpacing: 0.8,
             ),
           )
           .apply(

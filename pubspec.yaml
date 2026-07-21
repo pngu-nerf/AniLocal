@@ -96,19 +96,11 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
-  # BODY-font comparison candidates — bundled LOCAL assets (offline-first: no
-  # runtime font fetching). All three are SIL OFL 1.1 (license files sit beside
-  # the TTFs in fonts/). Space Grotesk + Archivo are variable fonts (the wght
-  # axis follows the requested weight). TEMPORARY: the active face is chosen by
-  # the `_bodyFont` switch in lib/ui/theme/xp_theme.dart; once a winner is
-  # picked, the losers + their pubspec entries get deleted (cleanup contract).
+  # Bundled LOCAL body font (offline-first: no runtime font fetching). Archivo
+  # is SIL OFL 1.1 (license file beside the TTF in fonts/); a variable font (the
+  # wght axis follows the requested weight). Selectable via the `_bodyFont`
+  # switch in lib/ui/theme/xp_theme.dart (default is the platform Helvetica Neue).
   fonts:
-    - family: IBM Plex Mono
-      fonts:
-        - asset: fonts/IBMPlexMono-Regular.ttf
-    - family: Space Grotesk
-      fonts:
-        - asset: fonts/SpaceGrotesk-Variable.ttf
     - family: Archivo
       fonts:
         - asset: fonts/Archivo-Variable.ttf

@@ -17,7 +17,8 @@ import 'package:flutter/material.dart';
 /// - **NO gradients** — every "gradient" token is a flat two-stop of one color.
 ///   Depth comes from thin, restrained metal bezels, not glossy fills.
 /// - **Sparse-lit against dark:** most surfaces are black or dark brushed
-///   metal; glow ([glow]/[boxGlow]) is spent only on lit/active elements.
+///   metal; glow (the dot-matrix readouts' bloom) is spent only on lit
+///   elements, never decoratively.
 /// - **Cream wordmark** ([wordmark]) for branding labels; calm cyan-tinted
 ///   off-white ([text]) for legible body/list text (NOT glowing).
 abstract final class Xp {
@@ -116,29 +117,6 @@ abstract final class Xp {
         ? const [controlTopHover, controlBotHover]
         : const [controlTop, controlBot],
   );
-
-  // --- Phosphor bloom ------------------------------------------------------
-  /// Soft phosphor bloom for lit TEXT — a functional glow, applied ONLY to
-  /// active/lit elements (readouts, selected labels), never decoratively. Two
-  /// blurred copies of the phosphor color give the tight-core + soft-halo of a
-  /// real VFD segment. [color] defaults to the cyan phosphor.
-  static List<Shadow> glow(Color color, {double strength = 1}) => [
-    Shadow(color: color.withValues(alpha: 0.55 * strength), blurRadius: 4),
-    Shadow(color: color.withValues(alpha: 0.30 * strength), blurRadius: 11),
-  ];
-
-  /// Soft phosphor bloom for a lit SHAPE (a meter segment, an indicator dot) —
-  /// the box-shadow analogue of [glow].
-  static List<BoxShadow> boxGlow(
-    Color color, {
-    double strength = 1,
-    double radius = 6,
-  }) => [
-    BoxShadow(
-      color: color.withValues(alpha: 0.45 * strength),
-      blurRadius: radius,
-    ),
-  ];
 
   // --- Metrics -------------------------------------------------------------
   /// Width of a single bezel ring (an element has two = a 2px machined lip).
