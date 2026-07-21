@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../domain/missing_episodes.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/episode_list_row.dart';
+import '../domain/models/episode_slot.dart';
 import '../domain/models/episode_source.dart';
 import '../domain/models/series.dart';
 import '../domain/models/skip_mode.dart';
@@ -16,12 +17,40 @@ import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
 import 'settings_dialog.dart';
+import 'library/library_search_bar.dart';
 import 'theater/theater_screen.dart';
 import 'theme/xp_theme.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 import 'widgets/multi_select_list.dart';
+
+/// Whether an episode matches the live episode-search [query]. Matches on:
+///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
+///    400–499…; "14" → 14, 140–149) — NOT arbitrary substring (so "7" never
+///    matches 47, and "41" never matches 141), and
+///  - the [fileName] (a present episode's filename basename) by case-insensitive
+///    SUBSTRING, so text from the filename — resolution, group, etc. — is
+///    searchable (a missing/ghost episode has no file, so it matches by number
+///    only).
+///
+/// A blank query matches everything (clearing restores the full list). The
+/// synthetic per-episode title is deliberately NOT matched: it is always the
+/// literal `"Episode N"` (real titles aren't cached), so matching it added only
+/// noise (e.g. "episode" matching everything). Pure (UI-layer, filters an
+/// already-loaded list) so it's unit-testable — the episode-list analogue of
+/// the homepage's `seriesMatchesQuery`.
+@visibleForTesting
+bool episodeMatchesQuery({
+  required int number,
+  String? fileName,
+  required String query,
+}) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return true;
+  if ('$number'.startsWith(q)) return true;
+  return fileName != null && fileName.toLowerCase().contains(q);
+}
 
 /// Series detail: cover + metadata + the episodes for this series, in the
 /// homepage's blackout-XP look (its title bar, tokens, and components). With the
@@ -111,6 +140,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   final ScrollController _scroll = ScrollController();
 
+  /// Live episode-list search (in-memory, no reload) — mirrors the homepage
+  /// library search. Filters whichever list is in front (Episodes or Hidden);
+  /// empty query restores the full list.
+  final TextEditingController _searchController = TextEditingController();
+  String _episodeQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -120,6 +155,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   @override
   void dispose() {
     _scroll.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -163,6 +199,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       });
     }
   }
+
+  /// Update the live search query. Also drops transient selection/expansion
+  /// state so a checked bundle/hidden selection can't outlive the filtered list
+  /// it referred to.
+  void _setQuery(String value) => setState(() {
+    _episodeQuery = value;
+    _hiddenSelection = {};
+    _bundleSelection.clear();
+    _expandedBundles.clear();
+  });
 
   Future<void> _hide(List<int> numbers) async {
     await widget.missing.hideEpisodes(widget.series.anilistId, numbers);
@@ -328,11 +374,18 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     if (changed == true) _reload();
   }
 
-  Future<void> _splitFromHere(List<Episode> all, int index) async {
-    final range = all.sublist(index).map((e) => e.fileRef).toList();
+  Future<void> _splitFromHere(Episode from) async {
+    // Split from THIS episode onward — resolved by the episode's real position
+    // in the full (unfiltered) list, not a filtered row index, so a search that
+    // reorders/omits rows can't split the wrong range.
+    final start = _episodes.indexOf(from);
+    final range = _episodes
+        .sublist(start < 0 ? 0 : start)
+        .map((e) => e.fileRef)
+        .toList();
     // Real prior-season count: this series' AniList episode count (fallback to
     // the split point minus one). Never hardcoded.
-    final prior = widget.series.episodeCount ?? (all[index].number - 1);
+    final prior = widget.series.episodeCount ?? (from.number - 1);
     final done = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => FixMatchScreen(
@@ -349,10 +402,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   // --- Tiles ----------------------------------------------------------------
 
-  /// A present (in-library) episode. [index] is its position in [episodes] (the
-  /// present-only list), needed for the season-split action.
-  Widget _episodeTile(List<Episode> episodes, int index) {
-    final e = episodes[index];
+  /// A present (in-library) episode tile, rendered from the [e] carried by its
+  /// row — NOT a positional index into `_episodes` (which is wrong once a search
+  /// filters the list). Tap plays [e]; split resolves [e]'s real position.
+  Widget _episodeTile(Episode e) {
     final multi = e.hasMultipleSources;
     // A pending placeholder can't be source-pinned (no real identity to key the
     // pin to) — it always plays the automatic source. Show the source count,
@@ -419,7 +472,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               icon: const Icon(Icons.more_vert, color: Xp.text),
               onSelected: (v) {
                 if (v == 'reassign') _reassignOne(e);
-                if (v == 'split') _splitFromHere(episodes, index);
+                if (v == 'split') _splitFromHere(e);
                 if (v == 'source') _chooseSource(e);
               },
               itemBuilder: (_) => [
@@ -656,7 +709,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   /// The Hidden tab: every hidden episode individually, with the reusable
   /// multi-select + an Unhide button. No confirm dialog — select-then-unhide is
   /// the two-step safeguard.
-  Widget _hiddenView(List<int> hiddenSorted) {
+  Widget _hiddenView(List<int> hiddenSorted, String query) {
+    // A search that matches no hidden episode reads as a clean empty state, not
+    // a blank list.
+    if (hiddenSorted.isEmpty) {
+      return _emptyState(
+        query.trim().isEmpty ? 'No hidden episodes' : 'No episodes match',
+      );
+    }
     return XpPanel(
       inset: true,
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
@@ -797,11 +857,47 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       episodeCount: series.episodeCount,
     );
     final tally = computeDownloadTally(slots, series.episodeCount);
-    final rows = showMissing
-        ? groupIntoRows(slots)
-        : [for (final e in _episodes) PresentRow(e)];
     final hiddenSorted = _hidden.toList()..sort();
     final hiddenTabAvailable = showMissing && hiddenSorted.isNotEmpty;
+
+    // Live search filters the list in front of the user. On the Episodes tab it
+    // filters present + ghost slots (dropping hidden, which never show there)
+    // and re-groups the survivors — so a filtered run of missing episodes still
+    // bundles/singles per the existing 2+-consecutive rule (grouping is computed
+    // live). Empty query → full list, normal grouping.
+    final q = _episodeQuery.trim().toLowerCase();
+    final List<EpisodeListRow> rows;
+    if (!showMissing) {
+      rows = [
+        for (final e in _episodes)
+          if (episodeMatchesQuery(
+            number: e.number,
+            fileName: _name(e.fileRef),
+            query: q,
+          ))
+            PresentRow(e),
+      ];
+    } else if (q.isEmpty) {
+      rows = groupIntoRows(slots);
+    } else {
+      rows = groupIntoRows([
+        for (final s in slots)
+          if (s.status != EpisodeStatus.hidden &&
+              episodeMatchesQuery(
+                number: s.episode?.number ?? s.number,
+                // A ghost (missing) slot has no file → number-only match.
+                fileName: s.episode == null ? null : _name(s.episode!.fileRef),
+                query: q,
+              ))
+            s,
+      ]);
+    }
+    final visibleHidden = q.isEmpty
+        ? hiddenSorted
+        : [
+            for (final n in hiddenSorted)
+              if (episodeMatchesQuery(number: n, query: q)) n,
+          ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -918,6 +1014,20 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                // Live episode search, pinned below the tab control, above the
+                // list — the same component + behavior as the homepage search.
+                if (!_loading && !_error) ...[
+                  LibrarySearchBar(
+                    controller: _searchController,
+                    hintText: 'Search episodes',
+                    onChanged: _setQuery,
+                    onClear: () {
+                      _searchController.clear();
+                      _setQuery('');
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.all(24),
@@ -926,9 +1036,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 else if (_error)
                   _errorState()
                 else if (_viewingHidden && hiddenTabAvailable)
-                  _hiddenView(hiddenSorted)
+                  _hiddenView(visibleHidden, q)
                 else
-                  _episodeWell(rows),
+                  _episodeWell(rows, q),
               ],
             ),
           ),
@@ -959,43 +1069,55 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   /// The episode list in a sunken XP well, rows separated by hairlines. Dimmed
   /// when the drive is disconnected (files-dependent affordances read inert).
-  Widget _episodeWell(List<EpisodeListRow> rows) {
+  Widget _episodeWell(List<EpisodeListRow> rows, String query) {
     final tiles = _episodeRows(rows);
-    final children = <Widget>[];
-    for (var i = 0; i < tiles.length; i++) {
-      if (i > 0) {
-        children.add(const Divider(height: 1, color: Xp.divider));
+    final Widget well;
+    if (tiles.isEmpty) {
+      // Distinguish "nothing here" from "search matched nothing".
+      well = _emptyState(
+        query.trim().isEmpty ? 'No episodes' : 'No episodes match',
+      );
+    } else {
+      final children = <Widget>[];
+      for (var i = 0; i < tiles.length; i++) {
+        if (i > 0) {
+          children.add(const Divider(height: 1, color: Xp.divider));
+        }
+        children.add(tiles[i]);
       }
-      children.add(tiles[i]);
+      well = XpPanel(
+        inset: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      );
     }
-    final well = XpPanel(
-      inset: true,
-      child: children.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(
-                child: Text('No episodes', style: TextStyle(color: Xp.textDim)),
-              ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
-            ),
-    );
     // Cached list stays visible when disconnected, just dimmed to read inert.
     return Opacity(opacity: _sourcesUnavailable ? 0.5 : 1, child: well);
   }
 
-  /// Materialize the grouped rows into tile widgets, tracking each present
-  /// episode's index in the present-only list (for the season-split action).
+  /// A clean centered message in a sunken well — used for empty / no-match
+  /// episode lists.
+  Widget _emptyState(String message) => XpPanel(
+    inset: true,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: Text(message, style: const TextStyle(color: Xp.textDim)),
+      ),
+    ),
+  );
+
+  /// Materialize the grouped rows into tile widgets. Present tiles render from
+  /// the Episode the row carries (never a positional index), so a filtered list
+  /// shows — and acts on — the correct episodes.
   List<Widget> _episodeRows(List<EpisodeListRow> rows) {
     final widgets = <Widget>[];
-    var presentIndex = 0;
     for (final row in rows) {
       switch (row) {
-        case PresentRow():
-          widgets.add(_episodeTile(_episodes, presentIndex));
-          presentIndex++;
+        case PresentRow(:final episode):
+          widgets.add(_episodeTile(episode));
         case MissingSingleRow(:final number):
           widgets.add(_missingSingleTile(number));
         case MissingBundleRow():

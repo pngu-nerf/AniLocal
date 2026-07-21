@@ -16,11 +16,15 @@ class LibrarySearchBar extends StatelessWidget {
     required this.controller,
     required this.onChanged,
     required this.onClear,
+    this.hintText = 'Search your library',
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final VoidCallback onClear;
+
+  /// Placeholder text (e.g. "Search episodes" when reused on the detail page).
+  final String hintText;
 
   @override
   Widget build(BuildContext context) {
@@ -43,12 +47,12 @@ class LibrarySearchBar extends StatelessWidget {
                 fontSize: 13,
                 color: Xp.text,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 border: InputBorder.none,
-                hintText: 'Search your library',
-                hintStyle: TextStyle(color: Xp.textFaint, fontSize: 13),
+                hintText: hintText,
+                hintStyle: const TextStyle(color: Xp.textFaint, fontSize: 13),
               ),
             ),
           ),
