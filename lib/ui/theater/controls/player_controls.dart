@@ -4,6 +4,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart'
     show FullscreenInheritedWidget, toggleFullscreen;
 
+import '../../theme/vfd_readout.dart';
+import '../../theme/xp_tokens.dart';
 import 'player_controls_state.dart';
 
 /// True if an inherited widget of type [T] exists above [context], read WITHOUT
@@ -33,7 +35,9 @@ bool playerIsFullscreen(BuildContext context) =>
 /// config — none knows which slot it's in. Engine-reactive controls read player
 /// streams directly (so they update identically in windowed and fullscreen).
 
-const _iconColor = Colors.white;
+// Player-control icons/labels sit on the bottom scrim over video — a soft
+// cyan-white keeps them cohesive with the panel while staying legible.
+const _iconColor = Xp.text;
 
 class PlayPauseButton extends StatelessWidget {
   const PlayPauseButton({super.key, required this.player});
@@ -84,14 +88,9 @@ class TimeLabel extends StatelessWidget {
           final dur = durSnap.data ?? Duration.zero;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              '${_fmt(pos)} / ${_fmt(dur)}',
-              style: const TextStyle(
-                color: _iconColor,
-                fontFeatures: [FontFeature.tabularFigures()],
-                fontSize: 12,
-              ),
-            ),
+            // A dot-matrix time readout — the shared display role (canonical
+            // VfdReadout defaults: cyan phosphor + bloom, no per-call styling).
+            child: VfdReadout('${_fmt(pos)} / ${_fmt(dur)}'),
           );
         },
       ),

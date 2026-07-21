@@ -433,13 +433,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  // Episode label as a CHROME label (thin tracked matte),
+                  // mixed-case; same role as the show titles.
+                  ChromeLabel(
                     e.title ?? 'Episode ${e.number}',
-                    style: const TextStyle(
-                      color: Xp.text,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                    upper: false,
+                    fontSize: 13,
+                    maxLines: 2,
+                    letterSpacing: 1,
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -543,16 +544,22 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                ChromeLabel(
                   'Missing',
-                  style: TextStyle(color: Xp.textFaint, fontSize: 11),
+                  upper: false,
+                  color: Xp.textFaint,
+                  fontSize: 11,
+                  letterSpacing: 1,
                 ),
               ],
             ),
           ),
-          Text(
+          ChromeLabel(
             'Episode $number',
-            style: const TextStyle(color: Xp.textFaint, fontSize: 13),
+            upper: false,
+            color: Xp.textFaint,
+            fontSize: 13,
+            letterSpacing: 1,
           ),
           const SizedBox(width: 4),
           PopupMenuButton<String>(
@@ -608,26 +615,26 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
+                        ChromeLabel(
                           'Episode ${b.first}',
-                          style: const TextStyle(
-                            color: Xp.textFaint,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          upper: false,
+                          color: Xp.textFaint,
+                          fontSize: 13,
+                          letterSpacing: 1,
                         ),
-                        Text(
+                        ChromeLabel(
                           '${b.numbers.length} missing episodes',
-                          style: const TextStyle(
-                            color: Xp.textFaint,
-                            fontSize: 11,
-                          ),
+                          upper: false,
+                          color: Xp.textFaint,
+                          fontSize: 11,
+                          letterSpacing: 1,
                         ),
-                        Text(
+                        ChromeLabel(
                           'Episode ${b.last}',
-                          style: const TextStyle(
-                            color: Xp.textFaint,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          upper: false,
+                          color: Xp.textFaint,
+                          fontSize: 13,
+                          letterSpacing: 1,
                         ),
                       ],
                     ),

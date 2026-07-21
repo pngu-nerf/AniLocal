@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// A small uppercase, letter-spaced section label — the theater's quiet,
-/// consistent way of titling a zone ("NOW PLAYING", "EPISODES"). Shared so the
-/// zones read as one room.
+import '../theme/vfd_readout.dart';
+import '../theme/xp_widgets.dart';
+
+/// A zone header: a CHROME section label ("NOW PLAYING", "EPISODES") beside an
+/// optional lit dot-matrix COUNTER — mirroring the reference device's pairing
+/// of a printed chassis label with a lit readout. The label matches every other
+/// chrome title/header; the count matches the playback timer.
 class ZoneEyebrow extends StatelessWidget {
   const ZoneEyebrow({super.key, required this.label, this.trailing});
 
@@ -11,21 +15,16 @@ class ZoneEyebrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final style = TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 1.5,
-      color: scheme.onSurfaceVariant,
-    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
       child: Row(
         children: [
-          Text(label.toUpperCase(), style: style),
+          // Printed chrome label, left; lit dot-matrix count hard-right (compact
+          // pitch so it sits inline with the small label).
+          Expanded(child: ChromeLabel(label)),
           if (trailing != null) ...[
-            const Spacer(),
-            Text(trailing!, style: style),
+            const SizedBox(width: 8),
+            VfdReadout(trailing!, dotPitch: 2),
           ],
         ],
       ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/series.dart';
+import '../../theme/xp_widgets.dart';
 import '../theater_widgets.dart';
 
 /// The SERIES-INFO zone: cover, title, episode count, and the existing
@@ -62,9 +63,12 @@ class SeriesInfoZone extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const ZoneEyebrow(label: 'Now playing'),
-              Text(
+              // Episode title as a CHROME label (thin tracked matte caps).
+              ChromeLabel(
                 nowPlaying.title ?? 'Episode ${nowPlaying.number}',
-                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                upper: false,
+                fontSize: 15,
+                letterSpacing: 1.2,
               ),
               const SizedBox(height: 16),
               Row(
@@ -76,12 +80,13 @@ class SeriesInfoZone extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        // Series title as a CHROME label (thin tracked caps).
+                        ChromeLabel(
                           title,
-                          style: text.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            height: 1.1,
-                          ),
+                          upper: false,
+                          fontSize: 20,
+                          maxLines: 2,
+                          letterSpacing: 1.2,
                         ),
                         if (series.titles.native != null) ...[
                           const SizedBox(height: 2),

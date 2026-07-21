@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/episode.dart';
+import '../../theme/xp_tokens.dart';
+import '../../theme/xp_widgets.dart';
 import '../theater_widgets.dart';
 
 /// The EPISODE-LIST zone: an independently scrollable list of the series'
@@ -152,16 +154,14 @@ class _EpisodeTile extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  // Episode label as a CHROME label (thin tracked matte),
+                  // mixed-case; the now-playing episode reads lit (cyan).
+                  ChromeLabel(
                     episode.title ?? 'Episode ${episode.number}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: current ? FontWeight.w700 : FontWeight.w500,
-                      color: current
-                          ? scheme.onPrimaryContainer
-                          : scheme.onSurface,
-                    ),
+                    upper: false,
+                    fontSize: 14,
+                    letterSpacing: 1,
+                    color: current ? Xp.accentBright : Xp.text,
                   ),
                   if (!episode.watched &&
                       episode.resumePosition > Duration.zero)

@@ -10,6 +10,7 @@ import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'library_screen.dart';
+import 'theme/xp_theme.dart';
 
 /// Root of the AniLocal UI.
 ///
@@ -112,9 +113,18 @@ class AniLocalApp extends StatelessWidget {
     return MaterialApp(
       title: 'AniLocal',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
+      // The VFD "fine-instrument" theme, applied app-wide so EVERY screen
+      // (theater, folders, fix-match, settings, dialogs) inherits the phosphor
+      // palette and legible sans — one cohesive instrument, not per-subtree.
+      theme: XpTheme.data(),
+      // A root DefaultTextStyle from the theme's body role, so ALL body Text
+      // inherits the matte-cream Helvetica-Neue treatment by construction —
+      // even any subtree that isn't under a Material. The single source for the
+      // body role (the display role is VfdReadout); no widget sets the body
+      // font itself. (Material still overrides its own chrome text as usual.)
+      builder: (context, child) => DefaultTextStyle(
+        style: Theme.of(context).textTheme.bodyMedium!,
+        child: child!,
       ),
       home: LibraryScreen(
         repository: repository,

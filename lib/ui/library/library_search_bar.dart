@@ -41,12 +41,7 @@ class LibrarySearchBar extends StatelessWidget {
               onChanged: onChanged,
               textInputAction: TextInputAction.search,
               cursorColor: Xp.accentBright,
-              style: const TextStyle(
-                fontFamily: Xp.fontFamily,
-                fontFamilyFallback: Xp.fontFallback,
-                fontSize: 13,
-                color: Xp.text,
-              ),
+              style: const TextStyle(fontSize: 13, color: Xp.text),
               decoration: InputDecoration(
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),

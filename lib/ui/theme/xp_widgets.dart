@@ -1,7 +1,90 @@
 import 'package:flutter/material.dart';
 
 import '../window_chrome.dart';
+import 'vfd_readout.dart';
 import 'xp_tokens.dart';
+
+/// A CHROME label — the thin, tracked-out, matte UPPERCASE text "screen-printed
+/// on the chassis" (screen titles, section headers, button/tab labels). Uses
+/// [Xp.chrome]; renders UPPERCASE but keeps the original-case string as its
+/// [Semantics] label (screen readers + tests). Deliberately distinct from the
+/// lit dot-matrix readouts ([VfdReadout]) and from body running text — it reads
+/// as printed on the metal, not lit.
+class ChromeLabel extends StatelessWidget {
+  const ChromeLabel(
+    this.text, {
+    super.key,
+    this.color = Xp.text,
+    this.fontSize = 12,
+    this.letterSpacing = 2,
+    this.weight = FontWeight.w300,
+    this.maxLines = 1,
+    this.height = 1.1,
+    this.upper = true,
+  });
+
+  final String text;
+  final Color color;
+  final double fontSize;
+  final double letterSpacing;
+  final FontWeight weight;
+
+  /// Allow a multi-line chrome title (e.g. a show name); still ellipsizes.
+  final int maxLines;
+
+  /// Line height — pass the caller's own to preserve a tuned fixed-height block.
+  final double height;
+
+  /// Uppercase the text (the default chrome look for UI labels). Content titles
+  /// / episode names pass `false` to keep the chrome treatment (thin, tracked,
+  /// matte) while preserving readable mixed case.
+  final bool upper;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: text,
+    // Replace the child Text's own semantics with the original-case label —
+    // screen readers get the real string and finders match it (matters most
+    // when [upper] is true).
+    excludeSemantics: true,
+    child: Text(
+      upper ? text.toUpperCase() : text,
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      style: Xp.chrome(
+        fontSize: fontSize,
+        color: color,
+        weight: weight,
+        letterSpacing: letterSpacing,
+        height: height,
+      ),
+    ),
+  );
+}
+
+/// The app WORDMARK — a cream serif rendering of the app name (branding ONLY,
+/// never arbitrary text). Its own role, distinct from chrome/body/display.
+class Wordmark extends StatelessWidget {
+  const Wordmark(this.text, {super.key, this.fontSize = 15});
+
+  final String text;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(
+      fontFamily: Xp.wordmarkFont,
+      fontFamilyFallback: Xp.wordmarkFallback,
+      fontSize: fontSize,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.5,
+      color: Xp.wordmark,
+    ),
+  );
+}
 
 /// The bevel primitive every XP control is built from: a 2-px double 3D border
 /// (an outer extreme pair + an inner mild pair) over a face color/gradient.
@@ -136,15 +219,15 @@ class _XpButtonState extends State<XpButton> {
         // ellipsize. Toolbar buttons sit in an unbounded Wrap, where a Flexible
         // in a min-size Row would throw, so they size to their text.
         () {
+          // Button text is CHROME — tracked-out matte caps, printed on the key.
           final text = Text(
-            widget.label!,
+            widget.label!.toUpperCase(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: Xp.fontFamily,
-              fontFamilyFallback: Xp.fontFallback,
-              fontSize: dense ? 12 : 13,
+            style: Xp.chrome(
+              fontSize: dense ? 11 : 12,
               color: enabled ? Xp.text : Xp.textFaint,
+              letterSpacing: dense ? 1.2 : 1.6,
             ),
           );
           return dense ? Flexible(child: text) : text;
@@ -212,18 +295,10 @@ class XpGroupBox extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: Xp.fontFamily,
-                      fontFamilyFallback: Xp.fontFallback,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Xp.accentBright,
-                    ),
-                  ),
+                  // The caption is a CHROME label — a section header: matte
+                  // cream tracked-caps, printed on the chassis. NOT the lit
+                  // cyan dot-matrix (reserved for time/counters/status).
+                  child: ChromeLabel(title),
                 ),
                 ?trailing,
               ],
@@ -253,11 +328,16 @@ class XpTitleBar extends StatelessWidget {
   const XpTitleBar({
     super.key,
     required this.caption,
+    this.captionWidget,
     this.leading,
     this.trailing,
   });
 
   final String caption;
+
+  /// Overrides the default [caption] rendering — used to show the serif
+  /// [Wordmark] on the home window instead of a chrome label.
+  final Widget? captionWidget;
 
   /// Optional leading control (e.g. a back button on a pushed screen), placed
   /// AFTER the traffic-light inset and BEFORE the caption. Rendered outside the
@@ -307,25 +387,18 @@ class XpTitleBar extends StatelessWidget {
                             ),
                             const SizedBox(width: 7),
                           ],
+                          // Default: a CHROME caption (tracked matte caps on the
+                          // flat metal). The home window overrides with a serif
+                          // [Wordmark] via [captionWidget].
                           Expanded(
-                            child: Text(
-                              caption,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontFamily: Xp.fontFamily,
-                                fontFamilyFallback: Xp.fontFallback,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Xp.textOnTitle,
-                                shadows: [
-                                  Shadow(
-                                    color: Color(0x99000000),
-                                    offset: Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            child:
+                                captionWidget ??
+                                ChromeLabel(
+                                  caption,
+                                  color: Xp.textOnTitle,
+                                  fontSize: 12,
+                                  letterSpacing: 1.5,
+                                ),
                           ),
                         ],
                       ),
@@ -349,12 +422,16 @@ class XpWindow extends StatelessWidget {
     super.key,
     required this.caption,
     required this.child,
+    this.captionWidget,
     this.titleLeading,
     this.titleTrailing,
   });
 
   final String caption;
   final Widget child;
+
+  /// Overrides the default caption rendering (e.g. the serif [Wordmark]).
+  final Widget? captionWidget;
   final Widget? titleLeading;
   final Widget? titleTrailing;
 
@@ -381,6 +458,7 @@ class XpWindow extends StatelessWidget {
             children: [
               XpTitleBar(
                 caption: caption,
+                captionWidget: captionWidget,
                 leading: titleLeading,
                 trailing: titleTrailing,
               ),
@@ -447,16 +525,15 @@ class _XpTitleTabState extends State<XpTitleTab> {
             Icon(widget.icon, size: 14, color: color),
             if (widget.showLabel) ...[
               const SizedBox(width: 5),
+              // Tab labels are CHROME — tracked-out matte caps.
               Text(
-                widget.label,
+                widget.label.toUpperCase(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: Xp.fontFamily,
-                  fontFamilyFallback: Xp.fontFallback,
+                style: Xp.chrome(
                   fontSize: 12,
-                  fontWeight: FontWeight.bold,
                   color: color,
+                  letterSpacing: 1.4,
                 ),
               ),
             ],

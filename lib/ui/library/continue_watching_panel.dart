@@ -76,12 +76,7 @@ class ContinueWatchingPanel extends StatelessWidget {
                     'Continue watching',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: Xp.fontFamily,
-                      fontFamilyFallback: Xp.fontFallback,
-                      fontSize: 12,
-                      color: Xp.textDim,
-                    ),
+                    style: const TextStyle(fontSize: 12, color: Xp.textDim),
                   ),
                 ),
               ),
@@ -175,17 +170,14 @@ class _Card extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        // Show title as a CHROME label (thin tracked matte
+                        // caps), matching the grid card and section headers.
+                        ChromeLabel(
                           title,
+                          upper: false,
                           maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: Xp.fontFamily,
-                            fontFamilyFallback: Xp.fontFallback,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: Xp.text,
-                          ),
+                          fontSize: 12,
+                          letterSpacing: 1,
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -215,8 +207,6 @@ class _Card extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontFamily: Xp.fontFamily,
-                            fontFamilyFallback: Xp.fontFallback,
                             fontSize: 10,
                             color: Xp.textDim,
                           ),

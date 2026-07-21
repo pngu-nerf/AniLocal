@@ -206,7 +206,10 @@ void main() {
     await pumpAt(tester, const Size(1100, 760));
     expect(find.textContaining('AniLocal'), findsOneWidget); // title bar
     expect(find.text('Bocchi the Rock!'), findsOneWidget); // grid card
-    expect(find.text('Continue watching'), findsOneWidget); // side panel
+    expect(
+      find.bySemanticsLabel('Continue watching'),
+      findsOneWidget,
+    ); // side panel
     expect(find.text('Search your library'), findsOneWidget); // search hint
     // Frieren shows in BOTH the grid and the continue-watching panel.
     expect(find.text('Frieren'), findsNWidgets(2));
@@ -217,7 +220,7 @@ void main() {
     // Still renders the chrome + content with no overflow at a cramped width.
     expect(find.textContaining('AniLocal'), findsOneWidget);
     expect(find.text('Bocchi the Rock!'), findsOneWidget);
-    expect(find.text('Continue watching'), findsOneWidget);
+    expect(find.bySemanticsLabel('Continue watching'), findsOneWidget);
   });
 
   testWidgets('XP landing fits at the minimum window size (600x400)', (
@@ -230,7 +233,7 @@ void main() {
     // tightest size the app can actually reach.
     await pumpAt(tester, const Size(600, 400));
     expect(find.textContaining('AniLocal'), findsOneWidget);
-    expect(find.text('Continue watching'), findsOneWidget);
+    expect(find.bySemanticsLabel('Continue watching'), findsOneWidget);
     expect(find.text('Search your library'), findsOneWidget);
     // A grid card still renders (grid remains present beside the sidebar).
     expect(find.text('Bocchi the Rock!'), findsOneWidget);

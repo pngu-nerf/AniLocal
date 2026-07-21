@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../domain/models/skip_range.dart';
+import '../../theme/xp_tokens.dart';
 
 /// Custom, paintable seek/timeline bar — replaces media_kit's default seek bar
-/// (which can't be painted on). Standard scrub/tap-to-seek + a played fill + a
-/// thumb, PLUS the cached intro/outro skip regions shaded directly on the track
-/// ([_SeekBarPainter] via [skipSpanFraction]).
+/// (which can't be painted on). Rendered as a VFD **segmented level meter**
+/// (spectrum-analyzer cells: lit cyan up to the play position, unlit ahead)
+/// with a thin lit **playhead**, PLUS the cached intro/outro skip regions
+/// shaded in amber (the status color) directly on the track ([_SeekBarPainter]
+/// via [skipSpanFraction]).
 ///
 /// Self-contained: it reads position/duration from the [player] and seeks it;
 /// it has no idea where in the bar it sits.
@@ -64,7 +67,6 @@ class _SeekBarState extends State<SeekBar> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -86,9 +88,9 @@ class _SeekBarState extends State<SeekBar> {
             child: CustomPaint(
               painter: _SeekBarPainter(
                 fraction: _fraction,
-                trackColor: Colors.white24,
-                playedColor: scheme.primary,
-                thumbColor: scheme.primary,
+                trackColor: Xp.accent,
+                playedColor: Xp.accent,
+                thumbColor: Xp.accentBright,
                 scrubbing: _dragFraction != null,
                 // Markers are positioned against the ACTUAL file duration and
                 // clamped by skipSpanFraction, so an outro window overhanging
@@ -126,37 +128,45 @@ class _SeekBarPainter extends CustomPainter {
   final SkipRange? intro;
   final SkipRange? outro;
 
-  // Distinct marker hues, translucent so they tint the region over both the
-  // played fill and the empty track: amber = intro (OP), green = outro (ED).
-  static const _introColor = Color(0x99FFC107);
-  static const _outroColor = Color(0x9966BB6A);
+  // Skip windows (OP/ED) are STATUS, so they shade in translucent amber — the
+  // panel's reserved status color — over both lit and unlit cells. OP and ED
+  // read apart by position (start vs end); one hue keeps the two-color rule.
+  static const _skipColor = Color(0x80FFB43C);
+
+  // Segmented-meter geometry (spectrum-analyzer cells).
+  static const _cellWidth = 3.0;
+  static const _cellGap = 1.5;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const trackHeight = 4.0;
+    const meterHeight = 8.0;
     final cy = size.height / 2;
-    final radius = Radius.circular(trackHeight / 2);
-    final top = cy - trackHeight / 2;
-    final bottom = cy + trackHeight / 2;
+    final top = cy - meterHeight / 2;
+    final bottom = cy + meterHeight / 2;
 
-    // Background track.
-    canvas.drawRRect(
-      RRect.fromLTRBR(0, top, size.width, bottom, radius),
-      Paint()..color = trackColor,
-    );
-
-    // Played fill.
     final playedX = (size.width * fraction).clamp(0.0, size.width);
-    canvas.drawRRect(
-      RRect.fromLTRBR(0, top, playedX, bottom, radius),
-      Paint()..color = playedColor,
-    );
 
-    // Skip-region markers, on the real timeline (replaces the old separate
-    // strip). Positioned by skipSpanFraction against the file duration and
-    // CLAMPED to [0,1] — an overhanging outro never draws past the bar. Drawn
-    // over the fill so the region reads regardless of play progress; a missing
-    // window draws nothing.
+    // Discrete cells: lit cyan (with bloom) up to the play position, faint
+    // unlit cells ahead — the resting spectrum-analyzer look.
+    const pitch = _cellWidth + _cellGap;
+    final count = (size.width / pitch).floor().clamp(1, 100000);
+    final unlit = Paint()..color = trackColor.withValues(alpha: 0.12);
+    final lit = Paint()..color = playedColor;
+    final bloom = Paint()
+      ..color = playedColor.withValues(alpha: 0.35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+    final litUntil = fraction * count;
+    for (var i = 0; i < count; i++) {
+      final rect = Rect.fromLTWH(i * pitch, top, _cellWidth, meterHeight);
+      final isLit = i < litUntil;
+      if (isLit) canvas.drawRect(rect, bloom);
+      canvas.drawRect(rect, isLit ? lit : unlit);
+    }
+
+    // Skip-region markers, on the real timeline. Positioned by skipSpanFraction
+    // against the file duration and CLAMPED to [0,1] — an overhanging outro
+    // never draws past the bar. Drawn over the cells so the window reads
+    // regardless of play progress; a missing window draws nothing.
     void shade(SkipRange? r, Color color) {
       final span = skipSpanFraction(r, durationMs);
       if (span == null) return;
@@ -171,13 +181,21 @@ class _SeekBarPainter extends CustomPainter {
       );
     }
 
-    shade(intro, _introColor);
-    shade(outro, _outroColor);
+    shade(intro, _skipColor);
+    shade(outro, _skipColor);
 
-    // Thumb.
-    canvas.drawCircle(
-      Offset(playedX, cy),
-      scrubbing ? 8 : 6,
+    // Playhead — a thin lit cyan cursor spanning the full height, with bloom;
+    // brighter and a touch wider while scrubbing. (Not a knob: a fine
+    // instrument's cursor line.)
+    final headW = scrubbing ? 3.0 : 2.0;
+    canvas.drawRect(
+      Rect.fromLTWH(playedX - headW / 2, 0, headW, size.height),
+      Paint()
+        ..color = thumbColor.withValues(alpha: 0.4)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(playedX - headW / 2, 0, headW, size.height),
       Paint()..color = thumbColor,
     );
   }

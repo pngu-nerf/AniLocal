@@ -460,7 +460,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
         // native title bar), so our blue title bar reaches the window's top edge
         // and the traffic lights sit centered within it.
         body: XpWindow(
-          caption: 'AniLocal — Library',
+          caption: 'AniLocal',
+          // Branding: the serif WORDMARK for the app name, with a chrome
+          // subtitle — the two non-display roles side by side.
+          captionWidget: const Row(
+            children: [
+              Flexible(child: Wordmark('AniLocal')),
+              SizedBox(width: 10),
+              Flexible(
+                child: ChromeLabel('Library', color: Xp.textDim, fontSize: 11),
+              ),
+            ],
+          ),
           // The app actions live at the title bar's TOP-RIGHT — the traffic
           // lights are top-left, so the right edge is free and the two coexist.
           titleTrailing: _TitleActions(
@@ -674,7 +685,7 @@ class _TitleActions extends StatelessWidget {
               height: 14,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.white,
+                color: Xp.accent,
               ),
             ),
           ),
@@ -1051,9 +1062,11 @@ class _SeriesCardState extends State<_SeriesCard> {
                           Container(
                             color: Colors.black54,
                             alignment: Alignment.center,
+                            // Amber = status (the drive is disconnected, not
+                            // broken) — the panel's reserved attention color.
                             child: const Icon(
                               Icons.link_off,
-                              color: Colors.white,
+                              color: Xp.warning,
                               size: 32,
                             ),
                           ),
@@ -1094,18 +1107,20 @@ class _SeriesCardState extends State<_SeriesCard> {
                       SizedBox(
                         height: _kTitleBlockHeight,
                         width: double.infinity,
-                        child: Text(
+                        // Show title as a CHROME label — the thin tracked matte
+                        // caps used for "Continue watching" / "Settings". Keeps
+                        // the card's fixed font size + line height so the 2-line
+                        // title block stays uniform across cards.
+                        child: ChromeLabel(
                           title,
+                          upper: false,
                           maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: _kCardTitleFontSize,
-                            height: _kCardTitleLineHeight,
-                            color: _hover && !unavailable
-                                ? Xp.accentBright
-                                : Xp.text,
-                          ),
+                          fontSize: _kCardTitleFontSize,
+                          height: _kCardTitleLineHeight,
+                          letterSpacing: 1,
+                          color: _hover && !unavailable
+                              ? Xp.accentBright
+                              : Xp.text,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1175,8 +1190,6 @@ class _NextStripState extends State<_NextStrip> {
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontFamily: Xp.fontFamily,
-                      fontFamilyFallback: Xp.fontFallback,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: Xp.text,
