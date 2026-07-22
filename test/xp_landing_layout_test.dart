@@ -16,6 +16,7 @@ import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:anilocal/ui/theme/header_readout.dart';
 
 /// A library with several shows + a couple of in-progress entries, so a pump
 /// exercises every XP zone at once: toolbar, search, the continue-watching side
@@ -199,12 +200,16 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_app());
-    await tester.pumpAndSettle();
+    // Bounded pumps (not pumpAndSettle): the header VFD readout can run a
+    // continuous marquee for a long/cramped title, which never "settles". Two
+    // pumps resolve the in-memory repo futures and render the grid.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
   }
 
   testWidgets('XP landing fits at a normal window width', (tester) async {
     await pumpAt(tester, const Size(1100, 760));
-    expect(find.textContaining('AniLocal'), findsOneWidget); // title bar
+    expect(find.byType(HeaderReadout), findsOneWidget); // title bar
     expect(find.text('Bocchi the Rock!'), findsOneWidget); // grid card
     expect(
       find.bySemanticsLabel('Continue watching'),
@@ -218,7 +223,7 @@ void main() {
   testWidgets('XP landing fits at a narrow window width', (tester) async {
     await pumpAt(tester, const Size(380, 720));
     // Still renders the chrome + content with no overflow at a cramped width.
-    expect(find.textContaining('AniLocal'), findsOneWidget);
+    expect(find.byType(HeaderReadout), findsOneWidget);
     expect(find.text('Bocchi the Rock!'), findsOneWidget);
     expect(find.bySemanticsLabel('Continue watching'), findsOneWidget);
   });
@@ -232,7 +237,7 @@ void main() {
     // continue-watching sidebar, grid — stays usable at that minimum. It's the
     // tightest size the app can actually reach.
     await pumpAt(tester, const Size(600, 400));
-    expect(find.textContaining('AniLocal'), findsOneWidget);
+    expect(find.byType(HeaderReadout), findsOneWidget);
     expect(find.bySemanticsLabel('Continue watching'), findsOneWidget);
     expect(find.text('Search your library'), findsOneWidget);
     // A grid card still renders (grid remains present beside the sidebar).

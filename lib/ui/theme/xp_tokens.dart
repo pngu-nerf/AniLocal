@@ -138,14 +138,14 @@ abstract final class Xp {
   );
 
   // --- Type: three roles, mirroring the reference device -------------------
-  // 1. DISPLAY  — lit dot-matrix readouts (time, counters, status). Rendered by
-  //    the `VfdReadout` painter, NOT a font. Glows cyan/amber against black.
+  // 1. DISPLAY  — lit dot-matrix readouts (time, counters, status; the header
+  //    "AniLocal" branding screen — see `HeaderReadout`). Rendered by the
+  //    `VfdReadout` painter, NOT a font. Glows cyan/amber against black.
   // 2. BODY     — running text / lists: the legible sans below ([fontFamily]),
   //    matte cream ([text]). Set once in the theme (see xp_theme.dart).
   // 3. CHROME   — thin, tracked-out, matte UPPERCASE labels "screen-printed on
   //    the chassis" (titles, section headers, button/tab labels). NOT glowing,
   //    NOT cyan — printed, part of the metal. See [chrome].
-  // 4. WORDMARK — cream serif for the app name/branding ONLY. See [wordmarkFont].
 
   /// Legible technical sans — the BODY voice (running text, lists).
   static const String fontFamily = 'Helvetica Neue';
@@ -176,10 +176,4 @@ abstract final class Xp {
     color: color,
     height: height,
   );
-
-  /// The WORDMARK face — a cream serif for the app name only (branding). A
-  /// system serif; a bundled OFL serif could replace it later for an exact
-  /// "Technics"-style match.
-  static const String wordmarkFont = 'Georgia';
-  static const List<String> wordmarkFallback = ['Times New Roman', 'Times'];
 }

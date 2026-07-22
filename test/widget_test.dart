@@ -16,6 +16,7 @@ import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:anilocal/ui/theme/header_readout.dart';
 
 class _FakeFixMatch implements FixMatchRepository {
   @override
@@ -159,9 +160,13 @@ void main() {
         setPanelFraction: (_) async {},
       ),
     );
-    await tester.pumpAndSettle();
+    // Bounded pumps, not pumpAndSettle: the header VFD readout may run a
+    // continuous marquee (which never settles). Two pumps resolve the futures
+    // and render the grid.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
-    expect(find.textContaining('AniLocal'), findsOneWidget);
+    expect(find.byType(HeaderReadout), findsOneWidget);
     expect(find.text('Frieren'), findsOneWidget);
     expect(find.textContaining('TV'), findsOneWidget);
   });

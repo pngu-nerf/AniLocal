@@ -24,10 +24,12 @@ import 'library/library_search_bar.dart';
 import 'series_detail_screen.dart';
 import 'settings_dialog.dart';
 import 'theater/theater_screen.dart';
+import 'theme/header_readout.dart';
 import 'theme/xp_theme.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
+import 'widgets/header_actions.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -461,20 +463,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
         // and the traffic lights sit centered within it.
         body: XpWindow(
           caption: 'AniLocal',
-          // Branding: the serif WORDMARK for the app name, with a chrome
-          // subtitle — the two non-display roles side by side.
-          captionWidget: const Row(
-            children: [
-              Flexible(child: Wordmark('AniLocal')),
-              SizedBox(width: 10),
-              Flexible(
-                child: ChromeLabel('Library', color: Xp.textDim, fontSize: 11),
-              ),
-            ],
-          ),
-          // The app actions live at the title bar's TOP-RIGHT — the traffic
-          // lights are top-left, so the right edge is free and the two coexist.
-          titleTrailing: _TitleActions(
+          // Branding is the header VFD readout — a lit dot-matrix "screen" in
+          // the chassis. Idle on the library it reads "AniLocal LIBRARY".
+          captionWidget: const HeaderReadout(title: 'Library'),
+          // The app actions live at the title bar's TOP-RIGHT — the SAME shared
+          // bar every header screen uses, so the header looks identical
+          // everywhere (only the back button differs).
+          titleTrailing: HeaderActionsBar(
             scanning: _scanning,
             unmatchedCount: _unmatchedCount,
             onFolders: _openFolders,
@@ -634,93 +629,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         loadRailFraction: widget.loadRailFraction,
                         setRailFraction: widget.setRailFraction,
                         onReturn: _reload,
+                        onFolders: _openFolders,
+                        onScan: _scan,
+                        onUnmatched: _openUnmatched,
+                        unmatchedCount: _unmatchedCount,
                       );
                     },
                   ),
                 ),
               ),
             ),
-    );
-  }
-}
-
-/// The app actions, rendered at the TOP-RIGHT of the title bar as labelled
-/// tabs (icon + title) that hang from the bar down to its bottom edge — like
-/// tabs in a binder. The traffic lights sit top-left, so the right side is free.
-/// "Unmatched" appears ONLY when confirmed-unmatched files exist
-/// ([unmatchedCount] > 0); it's always reachable from Settings → Metadata.
-class _TitleActions extends StatelessWidget {
-  const _TitleActions({
-    required this.scanning,
-    required this.unmatchedCount,
-    required this.onFolders,
-    required this.onUnmatched,
-    required this.onScan,
-    required this.onSettings,
-  });
-
-  final bool scanning;
-  final int unmatchedCount;
-  final Future<void> Function() onFolders;
-  final VoidCallback onUnmatched;
-  final Future<void> Function() onScan;
-  final Future<void> Function() onSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    // Show tab titles at every allowed window size — the 600pt minimum width
-    // (see MainFlutterWindow.contentMinSize) sits above this threshold, so
-    // labels are always visible in practice; the icon-only fallback only trips
-    // below it (defensive, still exercised by the narrow-window test).
-    final showLabel = MediaQuery.sizeOf(context).width >= 560;
-    // Stretched so each tab fills the bar's height and reaches its bottom edge.
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (scanning) ...[
-          const Center(
-            child: SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Xp.accent,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-        XpTitleTab(
-          icon: Icons.folder_open,
-          label: 'Sources',
-          tooltip: 'Media sources',
-          showLabel: showLabel,
-          onPressed: onFolders,
-        ),
-        XpTitleTab(
-          icon: Icons.sync,
-          label: 'Sync',
-          tooltip: scanning ? 'Syncing…' : 'Sync metadata',
-          showLabel: showLabel,
-          onPressed: scanning ? null : onScan,
-        ),
-        if (unmatchedCount > 0)
-          XpTitleTab(
-            icon: Icons.help_outline,
-            label: 'Unmatched',
-            tooltip: 'Unmatched files ($unmatchedCount)',
-            showLabel: showLabel,
-            onPressed: onUnmatched,
-          ),
-        XpTitleTab(
-          icon: Icons.settings,
-          label: 'Settings',
-          tooltip: 'Settings',
-          showLabel: showLabel,
-          onPressed: onSettings,
-        ),
-      ],
     );
   }
 }
@@ -855,6 +773,11 @@ class _SeriesCard extends StatefulWidget {
     required this.loadRailFraction,
     required this.setRailFraction,
     required this.onReturn,
+    // Header actions forwarded to the detail screen so its header matches home.
+    required this.onFolders,
+    required this.onScan,
+    required this.onUnmatched,
+    required this.unmatchedCount,
   });
 
   final Series series;
@@ -891,6 +814,13 @@ class _SeriesCard extends StatefulWidget {
   final Future<double> Function() loadRailFraction;
   final Future<void> Function(double fraction) setRailFraction;
   final VoidCallback onReturn;
+
+  /// Header actions forwarded to the detail screen (Sources / Sync / Unmatched)
+  /// so its header matches the home header. [unmatchedCount] is a snapshot.
+  final Future<void> Function() onFolders;
+  final Future<void> Function() onScan;
+  final VoidCallback onUnmatched;
+  final int unmatchedCount;
 
   @override
   State<_SeriesCard> createState() => _SeriesCardState();
@@ -933,6 +863,10 @@ class _SeriesCardState extends State<_SeriesCard> {
           setSkipMode: widget.setSkipMode,
           loadRailFraction: widget.loadRailFraction,
           setRailFraction: widget.setRailFraction,
+          onFolders: widget.onFolders,
+          onScan: widget.onScan,
+          onUnmatched: widget.onUnmatched,
+          unmatchedCount: widget.unmatchedCount,
         ),
       ),
     );

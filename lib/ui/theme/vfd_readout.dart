@@ -45,14 +45,17 @@ class VfdReadout extends StatelessWidget {
   /// Draw the unlit dot grid faintly (the resting phosphor of a real display).
   final bool showGrid;
 
-  /// Rendered pixel size of the readout for the given [text] and [dotPitch].
-  Size get _size {
+  /// Rendered width for [text] at [dotPitch] WITHOUT building the widget — lets
+  /// a parent (e.g. the header marquee) measure and lay out around a readout.
+  /// Each glyph is 5 dots wide with a 1-dot gap between glyphs.
+  static double widthFor(String text, {double dotPitch = 3}) {
     final n = text.length;
-    if (n == 0) return Size(0, 7 * dotPitch);
-    // Each glyph is 5 dots wide with a 1-dot gap between glyphs.
-    final cols = n * 5 + (n - 1);
-    return Size(cols * dotPitch, 7 * dotPitch);
+    if (n == 0) return 0;
+    return (n * 5 + (n - 1)) * dotPitch;
   }
+
+  /// Rendered pixel size of the readout for the given [text] and [dotPitch].
+  Size get _size => Size(widthFor(text, dotPitch: dotPitch), 7 * dotPitch);
 
   @override
   Widget build(BuildContext context) {

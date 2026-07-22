@@ -62,30 +62,6 @@ class ChromeLabel extends StatelessWidget {
   );
 }
 
-/// The app WORDMARK — a cream serif rendering of the app name (branding ONLY,
-/// never arbitrary text). Its own role, distinct from chrome/body/display.
-class Wordmark extends StatelessWidget {
-  const Wordmark(this.text, {super.key, this.fontSize = 15});
-
-  final String text;
-  final double fontSize;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    maxLines: 1,
-    overflow: TextOverflow.ellipsis,
-    style: TextStyle(
-      fontFamily: Xp.wordmarkFont,
-      fontFamilyFallback: Xp.wordmarkFallback,
-      fontSize: fontSize,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.5,
-      color: Xp.wordmark,
-    ),
-  );
-}
-
 /// The bevel primitive every XP control is built from: a 2-px double 3D border
 /// (an outer extreme pair + an inner mild pair) over a face color/gradient.
 /// [raised] pops it out (lit top-left, shadowed bottom-right); `false` sinks it
@@ -311,19 +287,18 @@ class XpGroupBox extends StatelessWidget {
   }
 }
 
-/// The XP title bar: the glossy blue gradient caption with a 1px top sheen, an
-/// app glyph, and the caption text. This is where the design spends its boldness.
+/// The window title bar (the native macOS one is hidden — see
+/// `MainFlutterWindow.swift`). Layout is a LEFT cluster and a RIGHT cluster with
+/// a draggable gap between them:
 ///
-/// It IS the window's real title bar now: the standard macOS one is hidden (see
-/// `MainFlutterWindow.swift`). The caption region is a [WindowDragArea]
-/// (click-drag moves the window, double-click zooms) and its leading content is
-/// inset past the traffic lights, which float over its left edge. The old
-/// ornamental min/restore/close pips are gone — the native traffic lights are
-/// the real, and only, window controls now.
+///   [traffic-light inset] → [leading (back)] → [captionWidget/caption]
+///       … draggable middle … → [trailing actions]
 ///
-/// The optional [trailing] actions sit at the top-right OUTSIDE the drag area:
-/// the double-tap-to-zoom recognizer would otherwise defer their single clicks
-/// (~300ms), so only the caption/background is draggable, not the buttons.
+/// The left cluster is pinned just right of the traffic lights (which float over
+/// the bar's left edge); [captionWidget] is normally the VFD `HeaderReadout`.
+/// Only the middle is a [WindowDragArea] (grab it to move the window; double-tap
+/// zooms) — leading/caption/trailing sit OUTSIDE it so their taps aren't
+/// deferred (~300ms) by the double-tap recognizer.
 class XpTitleBar extends StatelessWidget {
   const XpTitleBar({
     super.key,
@@ -335,8 +310,8 @@ class XpTitleBar extends StatelessWidget {
 
   final String caption;
 
-  /// Overrides the default [caption] rendering — used to show the serif
-  /// [Wordmark] on the home window instead of a chrome label.
+  /// Overrides the default [caption] rendering — used to set the header VFD
+  /// readout (`HeaderReadout`) as the branding, instead of a chrome label.
   final Widget? captionWidget;
 
   /// Optional leading control (e.g. a back button on a pushed screen), placed
@@ -367,42 +342,52 @@ class XpTitleBar extends StatelessWidget {
                 // caption, so it never gets squeezed (and so can never overflow)
                 // when wide trailing tabs shrink the caption slot.
                 const SizedBox(width: kTrafficLightInset),
-                // Optional leading control (back button), past the traffic
-                // lights and outside the drag area so its taps aren't deferred.
-                ?leading,
-                // The caption is the draggable region and the ONLY thing that
-                // yields when space is tight: its text ellipsizes, and on an
-                // extremely narrow slot even the glyph drops — so the bar fits
-                // any width without overflow.
+                // Left cluster: the VFD display, then the back button to its
+                // RIGHT — laid over a draggable, clipping middle. Both render at
+                // their natural (FIXED) widths, left-aligned & vertically
+                // centered; the empty space to the right is draggable (grab it to
+                // move the window). A cramped bar CLIPS gracefully (ClipRect)
+                // instead of overflowing. Back is a real button ON TOP of the
+                // drag layer (taps not deferred); the display's painters pass
+                // pointers through, so you can still drag over the screen.
                 Expanded(
-                  child: WindowDragArea(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) => Row(
-                        children: [
-                          if (constraints.maxWidth > 40) ...[
-                            const Icon(
-                              Icons.tv,
-                              size: 16,
-                              color: Xp.textOnTitle,
-                            ),
-                            const SizedBox(width: 7),
-                          ],
-                          // Default: a CHROME caption (tracked matte caps on the
-                          // flat metal). The home window overrides with a serif
-                          // [Wordmark] via [captionWidget].
-                          Expanded(
-                            child:
-                                captionWidget ??
-                                ChromeLabel(
-                                  caption,
-                                  color: Xp.textOnTitle,
-                                  fontSize: 12,
-                                  letterSpacing: 1.5,
-                                ),
-                          ),
-                        ],
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: WindowDragArea(child: const SizedBox.expand()),
                       ),
-                    ),
+                      Positioned.fill(
+                        child: ClipRect(
+                          child: OverflowBox(
+                            alignment: Alignment.centerLeft,
+                            minWidth: 0,
+                            maxWidth: double.infinity,
+                            child: Row(
+                              // Stretch so the back button HANGS full-height,
+                              // identical to the trailing tabs; the display is
+                              // wrapped in Center so the black screen keeps its
+                              // own (shorter) height instead of stretching.
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Center(
+                                  child:
+                                      captionWidget ??
+                                      ChromeLabel(
+                                        caption,
+                                        color: Xp.textOnTitle,
+                                        fontSize: 12,
+                                        letterSpacing: 1.5,
+                                      ),
+                                ),
+                                if (leading != null) const SizedBox(width: 10),
+                                ?leading,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 if (trailing != null) ...[trailing!, const SizedBox(width: 6)],
@@ -430,7 +415,7 @@ class XpWindow extends StatelessWidget {
   final String caption;
   final Widget child;
 
-  /// Overrides the default caption rendering (e.g. the serif [Wordmark]).
+  /// Overrides the default caption rendering (e.g. the `HeaderReadout`).
   final Widget? captionWidget;
   final Widget? titleLeading;
   final Widget? titleTrailing;

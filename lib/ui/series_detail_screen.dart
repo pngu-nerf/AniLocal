@@ -18,11 +18,13 @@ import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
 import 'settings_dialog.dart';
 import 'library/library_search_bar.dart';
+import 'theme/header_readout.dart';
 import 'theater/theater_screen.dart';
 import 'theme/xp_theme.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
+import 'widgets/header_actions.dart';
 import 'widgets/multi_select_list.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
@@ -77,6 +79,11 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.setSkipMode,
     required this.loadRailFraction,
     required this.setRailFraction,
+    // Shared header actions, so the detail header matches the home header.
+    required this.onFolders,
+    required this.onScan,
+    required this.onUnmatched,
+    required this.unmatchedCount,
   });
 
   final Series series;
@@ -104,6 +111,13 @@ class SeriesDetailScreen extends StatefulWidget {
   final Future<void> Function(SkipMode mode) setSkipMode;
   final Future<double> Function() loadRailFraction;
   final Future<void> Function(double fraction) setRailFraction;
+
+  /// Shared header actions (Sources / Sync / Unmatched), forwarded so the detail
+  /// header is identical to the home header. [unmatchedCount] is a snapshot.
+  final Future<void> Function() onFolders;
+  final Future<void> Function() onScan;
+  final VoidCallback onUnmatched;
+  final int unmatchedCount;
 
   @override
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
@@ -243,6 +257,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       ),
     ),
   );
+
+  /// Header "Sync" on the detail screen: run the home-provided sync, then reload
+  /// this screen's data. No local spinner — the sync runs quietly.
+  Future<void> _sync() async {
+    await widget.onScan();
+    if (mounted) await _reload();
+  }
 
   String get _query =>
       widget.series.titles.romaji ??
@@ -826,7 +847,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         series.titles.native ??
         '#${series.anilistId}';
 
-    final showLabel = MediaQuery.sizeOf(context).width >= 560;
+    // Match HeaderActionsBar's label threshold so the back button collapses to
+    // an icon at the same width as the right-side tabs (consistent header).
+    final showLabel = MediaQuery.sizeOf(context).width >= 760;
 
     return Theme(
       data: XpTheme.data(),
@@ -834,6 +857,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         backgroundColor: Xp.desktop,
         body: XpWindow(
           caption: title,
+          // The header VFD readout reflects the viewed show: "AniLocal <TITLE>".
+          captionWidget: HeaderReadout(title: title),
           titleLeading: XpTitleTab(
             icon: Icons.arrow_back,
             label: 'Back',
@@ -841,12 +866,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
             showLabel: showLabel,
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          titleTrailing: XpTitleTab(
-            icon: Icons.settings,
-            label: 'Settings',
-            tooltip: 'Settings',
-            showLabel: showLabel,
-            onPressed: _openSettings,
+          // The SAME shared action bar as the home header — so the header looks
+          // identical on every screen; only the back button (leading) differs.
+          titleTrailing: HeaderActionsBar(
+            // No local spinner on the detail screen — sync runs quietly.
+            scanning: false,
+            unmatchedCount: widget.unmatchedCount,
+            onFolders: widget.onFolders,
+            onScan: _sync,
+            onUnmatched: widget.onUnmatched,
+            onSettings: _openSettings,
           ),
           child: _content(series, title),
         ),
