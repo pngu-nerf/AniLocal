@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/series.dart';
+import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
-import '../theater_widgets.dart';
 
 /// The SERIES-INFO zone: cover, title, episode count, and the existing
 /// metadata, plus the episode currently playing. Sits below the video.
@@ -33,7 +33,6 @@ class SeriesInfoZone extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final title =
         series.titles.english ??
@@ -54,7 +53,8 @@ class SeriesInfoZone extends StatelessWidget {
     // can't fit the column, it's clipped (capped) instead of overflowing —
     // never the case at normal sizes (this content is short).
     return Material(
-      color: scheme.surfaceContainerLow,
+      // Chassis panel below the video stage.
+      color: Xp.surface,
       child: ClipRect(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -62,8 +62,8 @@ class SeriesInfoZone extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const ZoneEyebrow(label: 'Now playing'),
-              // Episode title as a CHROME label (thin tracked matte caps).
+              // The now-playing episode title leads the card (the "NOW PLAYING"
+              // eyebrow was removed). Chrome label, thin tracked matte caps.
               ChromeLabel(
                 nowPlaying.title ?? 'Episode ${nowPlaying.number}',
                 upper: false,
@@ -92,17 +92,13 @@ class SeriesInfoZone extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             series.titles.native!,
-                            style: text.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                            style: text.bodySmall?.copyWith(color: Xp.textDim),
                           ),
                         ],
                         const SizedBox(height: 10),
                         Text(
                           series.pending ? 'Identifying…' : meta.join('  ·  '),
-                          style: text.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                          style: text.bodyMedium?.copyWith(color: Xp.textDim),
                         ),
                       ],
                     ),
@@ -127,20 +123,21 @@ class _Cover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
         width: 92,
         child: AspectRatio(
           aspectRatio: 2 / 3,
+          // Cover art is CONTENT — rendered pristine (no tint/effect). Only the
+          // placeholder fallback wears the VFD palette.
           child: (art != null && File(art!).existsSync())
               ? Image.file(File(art!), fit: BoxFit.cover)
               : ColoredBox(
-                  color: scheme.surfaceContainerHighest,
+                  color: Xp.well,
                   child: Icon(
                     pending ? Icons.hourglass_empty : Icons.movie_outlined,
-                    color: scheme.onSurfaceVariant,
+                    color: Xp.textFaint,
                   ),
                 ),
         ),

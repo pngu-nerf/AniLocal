@@ -11,6 +11,13 @@ import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'library_screen.dart';
 import 'theme/xp_theme.dart';
+import 'tooltip_dismiss_observer.dart';
+
+/// Dismisses tooltips on every root-navigator transition — the single guard that
+/// keeps a mounted tooltip from crashing during media_kit's fullscreen
+/// enter/exit resize, whatever path triggered it (⛶ / Escape / native). One
+/// stable instance so app rebuilds don't churn the navigator's observer list.
+final _tooltipDismissObserver = TooltipDismissingRouteObserver();
 
 /// Root of the AniLocal UI.
 ///
@@ -113,6 +120,9 @@ class AniLocalApp extends StatelessWidget {
     return MaterialApp(
       title: 'AniLocal',
       debugShowCheckedModeBanner: false,
+      // Dismiss tooltips on every route transition (fullscreen enter/exit is a
+      // root-navigator push/pop) — see TooltipDismissingRouteObserver.
+      navigatorObservers: [_tooltipDismissObserver],
       // The VFD "fine-instrument" theme, applied app-wide so EVERY screen
       // (theater, folders, fix-match, settings, dialogs) inherits the phosphor
       // palette and legible sans — one cohesive instrument, not per-subtree.

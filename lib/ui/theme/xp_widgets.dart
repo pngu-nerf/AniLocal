@@ -154,6 +154,7 @@ class XpButton extends StatefulWidget {
     this.tooltip,
     this.selected = false,
     this.dense = false,
+    this.lit = false,
   });
 
   final VoidCallback? onPressed;
@@ -167,6 +168,11 @@ class XpButton extends StatefulWidget {
   /// Compact variant (smaller padding/type) for in-content affordances like a
   /// card's "Next episode" button.
   final bool dense;
+
+  /// ARMED: the legend (icon + label) lights cyan phosphor ([Xp.accent]) on the
+  /// matte chassis face — the SC-CH900 "active button" look, for a transient
+  /// armed affordance (e.g. Skip Intro / Play Next while available).
+  final bool lit;
 
   @override
   State<XpButton> createState() => _XpButtonState();
@@ -186,7 +192,7 @@ class _XpButtonState extends State<XpButton> {
         Icon(
           widget.icon,
           size: dense ? 14 : 16,
-          color: enabled ? Xp.text : Xp.textFaint,
+          color: enabled ? (widget.lit ? Xp.accent : Xp.text) : Xp.textFaint,
         ),
       if (widget.icon != null && widget.label != null)
         SizedBox(width: dense ? 5 : 7),
@@ -202,7 +208,9 @@ class _XpButtonState extends State<XpButton> {
             overflow: TextOverflow.ellipsis,
             style: Xp.chrome(
               fontSize: dense ? 11 : 12,
-              color: enabled ? Xp.text : Xp.textFaint,
+              color: enabled
+                  ? (widget.lit ? Xp.accent : Xp.text)
+                  : Xp.textFaint,
               letterSpacing: dense ? 1.2 : 1.6,
             ),
           );

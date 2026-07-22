@@ -12,6 +12,7 @@ import '../../../domain/repositories/watch_order_repository.dart';
 import '../../../domain/repositories/watch_state_repository.dart';
 import '../../../playback/media_remote.dart';
 import '../../../playback/playback_controller.dart';
+import '../../theme/xp_tokens.dart';
 import '../controls/player_control_bar.dart';
 import '../controls/player_controls_state.dart';
 
@@ -352,11 +353,12 @@ class _VideoZoneState extends State<VideoZone> {
 
   @override
   Widget build(BuildContext context) {
-    // A true-black "stage" so letterboxing reads as theater, not a gap. The
-    // control bar is rendered by media_kit over the texture via `controls:`,
-    // so it overlays the video here AND in the fullscreen route automatically.
+    // A true-black VFD "stage" (Xp.well) so letterboxing reads as an unlit
+    // display field, not a gap. The control bar is rendered by media_kit over
+    // the texture via `controls:`, so it overlays the video here AND in the
+    // fullscreen route automatically.
     return ColoredBox(
-      color: const Color(0xFF0A0A0B),
+      color: Xp.well,
       child: Video(
         controller: _playback.controller,
         controls: (_) => PlayerControls(

@@ -6,6 +6,9 @@ import '../../domain/models/skip_mode.dart';
 import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
+import '../theme/header_readout.dart';
+import '../theme/xp_tokens.dart';
+import '../theme/xp_widgets.dart';
 import '../window_chrome.dart';
 import 'theater_layout.dart';
 import 'theater_layout_config.dart';
@@ -145,11 +148,58 @@ class _TheaterScreenState extends State<TheaterScreen> {
     final config = widget.config.copyWith(railFraction: _railFraction);
 
     return Scaffold(
+      // The theater keeps its Material Scaffold/AppBar (NOT XpWindow), but the
+      // AppBar is repainted into the VFD language: a dark brushed-metal chassis
+      // header with a thin lit-cyan hairline, the same VFD readout as home/detail
+      // ("AniLocal <SHOW>"), and a VFD back tab. Windowed only — media_kit's
+      // fullscreen route replaces the whole view, so this chrome never shows there.
       appBar: AppBar(
-        // Inset the back button clear of the traffic lights (hidden title bar).
-        leadingWidth: kAppBarLeadingWidth,
-        leading: trafficLightBackButton(),
-        title: Text(title),
+        backgroundColor: Xp.frame,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: Xp.titleBarHeight,
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        // The cluster is drawn in flexibleSpace (NOT the title: slot, which
+        // centers its content) so the back tab bottom-aligns onto the header
+        // hairline and HANGS exactly like the home/detail title tabs. Same
+        // titleGradient chassis, same XpTitleTab, same 760px label threshold.
+        flexibleSpace: DecoratedBox(
+          decoration: const BoxDecoration(gradient: Xp.titleGradient),
+          child: Column(
+            children: [
+              Expanded(
+                child: Padding(
+                  // Clear the macOS traffic lights, like every top bar.
+                  padding: const EdgeInsets.only(left: kTrafficLightInset),
+                  child: Row(
+                    // Stretch so the back tab fills the header height and hangs
+                    // to the hairline; the readout is centered in its own slot.
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Center(child: HeaderReadout(title: title)),
+                      const SizedBox(width: 10),
+                      XpTitleTab(
+                        icon: Icons.arrow_back,
+                        label: 'Back',
+                        tooltip: 'Back',
+                        showLabel: MediaQuery.sizeOf(context).width >= 760,
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // The lit-cyan header hairline the back tab hangs on.
+              const ColoredBox(
+                color: Xp.titleGloss,
+                child: SizedBox(height: 1, width: double.infinity),
+              ),
+            ],
+          ),
+        ),
       ),
       body: TheaterLayout(
         config: config,

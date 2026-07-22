@@ -63,19 +63,23 @@ class ControlBarConfig {
   ControlBarConfig copyWith({Map<ControlSlot, List<PlayerControl>>? slots}) =>
       ControlBarConfig(slots: slots ?? this.slots);
 
-  /// Windowed (in-VideoZone) arrangement. Skip intro/outro sit ABOVE the
-  /// timeline (right-aligned, clear of the scrubber); the up-next pre-roll sits
-  /// centered in the button row. Right slot is left-to-right `volume, subtitles,
-  /// settings, fullscreen` (so right-to-left it reads settings/subtitles/volume,
-  /// per the brief, with fullscreen pinned rightmost). Moving Skip Intro here
-  /// from the center was a slot reassignment (config) — but "above the timeline"
-  /// needed the [ControlSlot.aboveBar] region added first (see the flag note).
+  /// Windowed (in-VideoZone) arrangement. Skip intro/outro AND the up-next
+  /// pre-roll all sit in [ControlSlot.aboveBar] — the right-aligned anchor ABOVE
+  /// the timeline — so every transient affordance shares one physical-button
+  /// location. Only one is ever relevant at a time (skip inside its window;
+  /// up-next in the last ~5s, with the outro button suppressed during the
+  /// pre-roll), so they don't collide. Right slot is left-to-right `volume,
+  /// subtitles, settings, fullscreen` (fullscreen pinned rightmost); the empty
+  /// center just holds the flex spacer between the left and right button groups.
   static const ControlBarConfig windowedDefault = ControlBarConfig(
     slots: {
-      ControlSlot.aboveBar: [PlayerControl.skipIntro, PlayerControl.skipOutro],
+      ControlSlot.aboveBar: [
+        PlayerControl.skipIntro,
+        PlayerControl.skipOutro,
+        PlayerControl.upNext,
+      ],
       ControlSlot.scrubber: [PlayerControl.seekBar],
       ControlSlot.left: [PlayerControl.playPause, PlayerControl.timeLabel],
-      ControlSlot.center: [PlayerControl.upNext],
       ControlSlot.right: [
         PlayerControl.volume,
         PlayerControl.subtitles,

@@ -6,6 +6,7 @@ import 'package:media_kit_video/media_kit_video.dart'
 
 import '../../theme/vfd_readout.dart';
 import '../../theme/xp_tokens.dart';
+import '../../theme/xp_widgets.dart';
 import 'player_controls_state.dart';
 
 /// True if an inherited widget of type [T] exists above [context], read WITHOUT
@@ -244,6 +245,8 @@ class FullscreenButton extends StatelessWidget {
       color: _iconColor,
       tooltip: full ? 'Exit fullscreen' : 'Fullscreen',
       icon: Icon(full ? Icons.fullscreen_exit : Icons.fullscreen),
+      // Tooltip dismissal on the fullscreen transition is handled centrally by
+      // TooltipDismissingRouteObserver (root navigator), not per-path here.
       onPressed: () => toggleFullscreen(context),
     );
   }
@@ -271,12 +274,16 @@ class SkipButton extends StatelessWidget {
       builder: (context, s, _) {
         final show = intro ? s.showSkipIntro : s.showSkipOutro;
         if (!show) return const SizedBox.shrink();
+        // VFD physical button: matte chassis, lit cyan while ARMED (it only
+        // shows inside the skip window). Same component as the control bar.
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: FilledButton.icon(
+          child: XpButton(
+            dense: true,
+            lit: true,
+            icon: intro ? Icons.fast_forward : Icons.skip_next,
+            label: intro ? 'Skip Intro' : 'Skip Outro',
             onPressed: onPressed,
-            icon: Icon(intro ? Icons.fast_forward : Icons.skip_next),
-            label: Text(intro ? 'Skip Intro' : 'Skip Outro'),
           ),
         );
       },
@@ -307,26 +314,31 @@ class UpNextControl extends StatelessWidget {
         final next = s.upNext;
         if (!s.preRollShowing || next == null) return const SizedBox.shrink();
         final title = next.title ?? 'Episode ${next.number}';
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(8),
-          ),
+        // A compact pair of VFD physical buttons — the armed "Play next" (lit
+        // cyan, carrying the countdown) + a matte "cancel" — so the up-next
+        // reads as the same button family as Skip Intro/Outro. The next-episode
+        // title moves to the Play-next tooltip so the affordance stays compact
+        // enough to share the skip anchor without overflowing a narrow bar.
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                child: Text(
-                  'Up next: $title · ${s.preRollSeconds}s',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: _iconColor, fontSize: 12),
-                ),
+              XpButton(
+                dense: true,
+                lit: true,
+                icon: Icons.play_arrow,
+                label: 'Play next · ${s.preRollSeconds}s',
+                tooltip: 'Play next: $title',
+                onPressed: onPlayNow,
               ),
               const SizedBox(width: 6),
-              TextButton(onPressed: onCancel, child: const Text('Cancel')),
-              FilledButton(onPressed: onPlayNow, child: const Text('Play now')),
+              XpButton(
+                dense: true,
+                icon: Icons.close,
+                tooltip: 'Cancel',
+                onPressed: onCancel,
+              ),
             ],
           ),
         );

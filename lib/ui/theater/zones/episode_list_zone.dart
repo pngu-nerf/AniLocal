@@ -76,14 +76,15 @@ class _EpisodeListZoneState extends State<EpisodeListZone> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.surface,
+      // True-black display field — the rail reads as a lit panel, matching the
+      // detail-page episode list.
+      color: Xp.well,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ZoneEyebrow(label: 'Episodes', trailing: '${widget.episodes.length}'),
-          const Divider(height: 1),
+          const Divider(height: 1, color: Xp.divider),
           Expanded(
             child: widget.episodes.isEmpty
                 ? const _EmptyEpisodes()
@@ -121,7 +122,6 @@ class _EpisodeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final progress = episode.duration > Duration.zero
         ? episode.resumePosition.inMilliseconds /
               episode.duration.inMilliseconds
@@ -135,11 +135,11 @@ class _EpisodeTile extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
-          color: current ? scheme.primaryContainer : Colors.transparent,
-          // The "selected seat": a primary accent bar on the now-playing row.
+          // Now-playing row lit: dim-cyan fill + a lit cyan accent bar.
+          color: current ? Xp.accentDeep : Colors.transparent,
           border: Border(
             left: BorderSide(
-              color: current ? scheme.primary : Colors.transparent,
+              color: current ? Xp.accent : Colors.transparent,
               width: 3,
             ),
           ),
@@ -172,7 +172,8 @@ class _EpisodeTile extends StatelessWidget {
                         child: LinearProgressIndicator(
                           value: progress.clamp(0.0, 1.0),
                           minHeight: 3,
-                          backgroundColor: scheme.surfaceContainerHighest,
+                          color: Xp.accent,
+                          backgroundColor: Xp.surfaceAlt,
                         ),
                       ),
                     ),
@@ -180,9 +181,9 @@ class _EpisodeTile extends StatelessWidget {
               ),
             ),
             if (episode.watched)
-              Icon(Icons.check_circle, size: 16, color: scheme.primary)
+              const Icon(Icons.check_circle, size: 16, color: Xp.accent)
             else if (current)
-              Icon(Icons.volume_up, size: 16, color: scheme.onPrimaryContainer),
+              const Icon(Icons.volume_up, size: 16, color: Xp.accentBright),
           ],
         ),
       ),
@@ -200,13 +201,13 @@ class _NumberChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
       width: 34,
       height: 34,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: active ? scheme.primary : scheme.surfaceContainerHighest,
+        // Lit cyan chip when now-playing; matte metal otherwise.
+        color: active ? Xp.accent : Xp.surfaceAlt,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -214,7 +215,7 @@ class _NumberChip extends StatelessWidget {
         style: TextStyle(
           fontFeatures: const [FontFeature.tabularFigures()],
           fontWeight: FontWeight.w700,
-          color: active ? scheme.onPrimary : scheme.onSurfaceVariant,
+          color: active ? Xp.desktop : Xp.textDim,
         ),
       ),
     );

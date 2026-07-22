@@ -198,6 +198,8 @@ class _PlayerControlsState extends State<PlayerControls> {
     // transition), guarded to only exit. No-op when not in fullscreen.
     if (key == LogicalKeyboardKey.escape) {
       if (playerIsFullscreen(context)) {
+        // Tooltip dismissal on this transition is handled centrally by
+        // TooltipDismissingRouteObserver (root navigator), not here.
         toggleFullscreen(context);
         return KeyEventResult.handled;
       }
