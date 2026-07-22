@@ -24,6 +24,7 @@ import 'theme/xp_theme.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
+import 'widgets/episode_row.dart';
 import 'widgets/header_actions.dart';
 import 'widgets/multi_select_list.dart';
 
@@ -302,6 +303,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           loadSkipMode: widget.loadSkipMode,
           loadRailFraction: widget.loadRailFraction,
           setRailFraction: widget.setRailFraction,
+          // Same header actions as this screen — so the theater header matches.
+          unmatchedCount: widget.unmatchedCount,
+          onFolders: widget.onFolders,
+          onScan: _sync,
+          onUnmatched: widget.onUnmatched,
+          onSettings: _openSettings,
         ),
       ),
     );
@@ -441,117 +448,68 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
     return _Tappable(
       onTap: () => _play(e),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _numberBadge('${e.number}'),
-            const SizedBox(width: 12),
-            // Flexible so the variable-height subtitle (1–3 lines) never
-            // overflows and the row grows to fit.
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Episode label as a CHROME label (thin tracked matte),
-                  // mixed-case; same role as the show titles.
-                  ChromeLabel(
-                    e.title ?? 'Episode ${e.number}',
-                    upper: false,
-                    fontSize: 13,
-                    maxLines: 2,
-                    letterSpacing: 1,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: Xp.textDim, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (e.watched)
-              const Padding(
-                padding: EdgeInsets.only(top: 2, right: 2),
-                child: Icon(Icons.check_circle, size: 18, color: Xp.accent),
-              ),
-            if (pinnable)
-              IconButton(
-                tooltip: '${e.sources.length} sources — choose…',
-                icon: Badge(
-                  label: Text('${e.sources.length}'),
-                  child: const Icon(
-                    Icons.layers_outlined,
-                    color: Xp.text,
-                    size: 20,
-                  ),
-                ),
-                onPressed: () => _chooseSource(e),
-              ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Xp.text),
-              onSelected: (v) {
-                if (v == 'reassign') _reassignOne(e);
-                if (v == 'split') _splitFromHere(e);
-                if (v == 'source') _chooseSource(e);
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'reassign',
-                  child: Text('Reassign this episode…'),
-                ),
-                const PopupMenuItem(
-                  value: 'split',
-                  child: Text('Split: reassign from here…'),
-                ),
-                if (pinnable)
-                  const PopupMenuItem(
-                    value: 'source',
-                    child: Text('Choose source…'),
-                  ),
-              ],
-            ),
-          ],
+      // The SHARED episode row (same as the theater rail) — the detail slot
+      // carries this list's filename/resume subtitle; trailing carries the
+      // watched mark, the source picker, and the per-episode menu.
+      child: EpisodeRow(
+        number: e.number,
+        title: e.title ?? 'Episode ${e.number}',
+        detail: Text(
+          subtitle,
+          style: const TextStyle(color: Xp.textDim, fontSize: 11),
         ),
+        trailing: [
+          const SizedBox(width: 8),
+          if (e.watched)
+            const Padding(
+              padding: EdgeInsets.only(top: 2, right: 2),
+              child: Icon(Icons.check_circle, size: 18, color: Xp.accent),
+            ),
+          if (pinnable)
+            IconButton(
+              tooltip: '${e.sources.length} sources — choose…',
+              icon: Badge(
+                label: Text('${e.sources.length}'),
+                child: const Icon(
+                  Icons.layers_outlined,
+                  color: Xp.text,
+                  size: 20,
+                ),
+              ),
+              onPressed: () => _chooseSource(e),
+            ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Xp.text),
+            onSelected: (v) {
+              if (v == 'reassign') _reassignOne(e);
+              if (v == 'split') _splitFromHere(e);
+              if (v == 'source') _chooseSource(e);
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'reassign',
+                child: Text('Reassign this episode…'),
+              ),
+              const PopupMenuItem(
+                value: 'split',
+                child: Text('Split: reassign from here…'),
+              ),
+              if (pinnable)
+                const PopupMenuItem(
+                  value: 'source',
+                  child: Text('Choose source…'),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  /// A filled number badge for a present episode.
-  Widget _numberBadge(String label) => Container(
-    width: 34,
-    height: 34,
-    alignment: Alignment.center,
-    decoration: const BoxDecoration(
-      shape: BoxShape.circle,
-      color: Xp.accentDeep,
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: Xp.text,
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-      ),
-    ),
-  );
-
-  /// A faded, outlined circular badge for a missing episode's number.
-  Widget _ghostBadge(int number) => Container(
-    width: 34,
-    height: 34,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      border: Border.all(color: Xp.textFaint, width: 1.5),
-    ),
-    child: Text(
-      '$number',
-      style: const TextStyle(color: Xp.textFaint, fontSize: 12),
-    ),
-  );
+  /// A faded, outlined circular badge for a missing episode's number — the
+  /// shared badge in its ghost variant (so present + missing badges can't drift).
+  Widget _ghostBadge(int number) =>
+      EpisodeNumberBadge(number: number, ghost: true);
 
   /// A single missing episode (a ghost). Three-dots → "Hide missing episode".
   Widget _missingSingleTile(int number) {

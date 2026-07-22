@@ -75,16 +75,26 @@ class PlayerControlBar extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // A right-aligned row OVER the timeline (Skip Intro/Outro live here).
+        // A right-aligned row OVER the timeline (Skip Intro/Outro/up-next live
+        // here). FittedBox(scaleDown) keeps the full-size transient buttons from
+        // overflowing the anchor at narrow bar widths: they stay natural size
+        // when there's room and shrink UNIFORMLY (proportions intact) when not.
         if (config.controlsIn(ControlSlot.aboveBar).isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                for (final c in config.controlsIn(ControlSlot.aboveBar))
-                  _control(c),
-              ],
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final c in config.controlsIn(ControlSlot.aboveBar))
+                      _control(c),
+                  ],
+                ),
+              ),
             ),
           ),
         for (final c in config.controlsIn(ControlSlot.scrubber))
@@ -258,13 +268,16 @@ class _PlayerControlsState extends State<PlayerControls> {
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: (_) => _focus.requestFocus(),
-        // Wake-on-move lives HERE, not on the MouseRegion's onHover: a
+        // Wake-on-move lives HERE, on the Listener that SITS ABOVE the
+        // cursor-hiding MouseRegion — NOT on the MouseRegion's own onHover: a
         // MouseRegion whose cursor is SystemMouseCursors.none stops delivering
-        // its own onHover (that's what broke reveal-on-move when the cursor
-        // hide was added — recovery degraded to a click). This Listener does no
+        // its own onHover (that's what broke reveal-on-move when the cursor hide
+        // was added — recovery degraded to a click). This Listener does no
         // cursor manipulation, so onPointerHover keeps firing on every mouse
         // move over the video and is the reliable recovery — bar + cursor come
-        // back together via the shared [_show], no click needed.
+        // back together via the shared [_show], no click needed. It is the ONLY
+        // in-place recovery in fullscreen (windowed can also recover by leaving
+        // to the rail and re-entering → MouseRegion.onEnter below).
         onPointerHover: (_) => _show(),
         child: MouseRegion(
           // Cursor shares the ONE idle state with the bar: hidden when the bar
@@ -272,9 +285,15 @@ class _PlayerControlsState extends State<PlayerControls> {
           // region is the VIDEO overlay only (media_kit renders it Positioned-
           // .fill over the texture), so the hide is confined to the video — the
           // episode rail and series-info zones are separate widgets and keep
-          // their cursor regardless. `defer` lets controls show their own
-          // cursors when visible.
-          cursor: _visible ? MouseCursor.defer : SystemMouseCursors.none,
+          // their cursor regardless.
+          //
+          // Un-hide uses a CONCRETE cursor (basic), not MouseCursor.defer:
+          // deferring out of SystemMouseCursors.none is unreliable on desktop
+          // (the arrow can fail to re-appear on wiggle — the reported bug),
+          // whereas a concrete cursor forces the re-show. Controls still show
+          // their OWN cursors when hovered: their MouseRegions are descendants
+          // (frontmost), so a button's click cursor wins over this basic.
+          cursor: _visible ? SystemMouseCursors.basic : SystemMouseCursors.none,
           onEnter: (_) {
             _show();
             _focus
@@ -299,16 +318,27 @@ class _PlayerControlsState extends State<PlayerControls> {
                   duration: const Duration(milliseconds: 200),
                   child: IgnorePointer(
                     ignoring: !_visible,
+                    // The bottom scrim so the controls pop against bright video.
+                    // It's a child of the SAME AnimatedOpacity + IgnorePointer as
+                    // the bar, so it fades in/out in lockstep — controls hidden
+                    // (idle while playing) ⇒ scrim fully clears ⇒ pristine video.
+                    // Strong deep-black gradient over a tall ramp (NOT a second
+                    // scrim — the existing one, deepened).
                     child: DecoratedBox(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Colors.black87],
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.55),
+                            Colors.black,
+                          ],
+                          stops: const [0.0, 0.55, 1.0],
                         ),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 24),
+                        padding: const EdgeInsets.only(top: 48),
                         // The bar's controls must NEVER hold keyboard focus, so a
                         // focused slider/button can't swallow space/←/→ — the
                         // player's shortcuts always win. They stay fully

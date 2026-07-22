@@ -9,7 +9,7 @@ import '../../domain/repositories/watch_state_repository.dart';
 import '../theme/header_readout.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
-import '../window_chrome.dart';
+import '../widgets/header_actions.dart';
 import 'theater_layout.dart';
 import 'theater_layout_config.dart';
 import 'zones/episode_list_zone.dart';
@@ -34,6 +34,11 @@ class TheaterScreen extends StatefulWidget {
     required this.watchOrder,
     required this.loadAutoPlayNext,
     required this.loadSkipMode,
+    required this.unmatchedCount,
+    required this.onFolders,
+    required this.onScan,
+    required this.onUnmatched,
+    required this.onSettings,
     this.loadRailFraction,
     this.setRailFraction,
     this.config = TheaterLayoutConfig.theaterDefault,
@@ -46,6 +51,16 @@ class TheaterScreen extends StatefulWidget {
   final WatchOrderRepository watchOrder;
   final Future<bool> Function() loadAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
+
+  /// The shared header actions (Sources / Sync / Unmatched / Settings), forwarded
+  /// from the launching screen so the theater header is IDENTICAL to home/detail
+  /// — same [HeaderActionsBar], only the back button differs. Sync runs quietly
+  /// here (no local spinner), like the detail screen.
+  final int unmatchedCount;
+  final Future<void> Function() onFolders;
+  final Future<void> Function() onScan;
+  final VoidCallback onUnmatched;
+  final VoidCallback onSettings;
 
   /// Persisted rail width (fraction of total). When [loadRailFraction] is
   /// supplied the rail gets a draggable divider and remembers its width across
@@ -148,56 +163,33 @@ class _TheaterScreenState extends State<TheaterScreen> {
     final config = widget.config.copyWith(railFraction: _railFraction);
 
     return Scaffold(
-      // The theater keeps its Material Scaffold/AppBar (NOT XpWindow), but the
-      // AppBar is repainted into the VFD language: a dark brushed-metal chassis
-      // header with a thin lit-cyan hairline, the same VFD readout as home/detail
-      // ("AniLocal <SHOW>"), and a VFD back tab. Windowed only — media_kit's
+      // The theater keeps its Material Scaffold (NOT XpWindow — it's a pushed
+      // route, not the root window frame), but its header is the SAME shared
+      // XpTitleBar as home/detail rather than a bespoke AppBar. Identical layout
+      // everywhere: left cluster (VFD readout + back tab), a draggable middle,
+      // and the right-aligned HeaderActionsBar (Sources / Sync / Unmatched /
+      // Settings) — only the back button differs. Windowed only; media_kit's
       // fullscreen route replaces the whole view, so this chrome never shows there.
-      appBar: AppBar(
-        backgroundColor: Xp.frame,
-        surfaceTintColor: Colors.transparent,
-        shadowColor: Colors.transparent,
-        elevation: 0,
-        toolbarHeight: Xp.titleBarHeight,
-        automaticallyImplyLeading: false,
-        titleSpacing: 0,
-        // The cluster is drawn in flexibleSpace (NOT the title: slot, which
-        // centers its content) so the back tab bottom-aligns onto the header
-        // hairline and HANGS exactly like the home/detail title tabs. Same
-        // titleGradient chassis, same XpTitleTab, same 760px label threshold.
-        flexibleSpace: DecoratedBox(
-          decoration: const BoxDecoration(gradient: Xp.titleGradient),
-          child: Column(
-            children: [
-              Expanded(
-                child: Padding(
-                  // Clear the macOS traffic lights, like every top bar.
-                  padding: const EdgeInsets.only(left: kTrafficLightInset),
-                  child: Row(
-                    // Stretch so the back tab fills the header height and hangs
-                    // to the hairline; the readout is centered in its own slot.
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(child: HeaderReadout(title: title)),
-                      const SizedBox(width: 10),
-                      XpTitleTab(
-                        icon: Icons.arrow_back,
-                        label: 'Back',
-                        tooltip: 'Back',
-                        showLabel: MediaQuery.sizeOf(context).width >= 760,
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // The lit-cyan header hairline the back tab hangs on.
-              const ColoredBox(
-                color: Xp.titleGloss,
-                child: SizedBox(height: 1, width: double.infinity),
-              ),
-            ],
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(Xp.titleBarHeight),
+        child: XpTitleBar(
+          caption: title,
+          captionWidget: HeaderReadout(title: title),
+          leading: XpTitleTab(
+            icon: Icons.arrow_back,
+            label: 'Back',
+            tooltip: 'Back',
+            showLabel: MediaQuery.sizeOf(context).width >= 760,
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          trailing: HeaderActionsBar(
+            // Sync runs quietly from the theater (no local spinner), like detail.
+            scanning: false,
+            unmatchedCount: widget.unmatchedCount,
+            onFolders: widget.onFolders,
+            onScan: widget.onScan,
+            onUnmatched: widget.onUnmatched,
+            onSettings: widget.onSettings,
           ),
         ),
       ),

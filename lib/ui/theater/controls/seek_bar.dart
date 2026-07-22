@@ -6,10 +6,11 @@ import '../../theme/xp_tokens.dart';
 
 /// Custom, paintable seek/timeline bar — replaces media_kit's default seek bar
 /// (which can't be painted on). Rendered as a VFD **segmented level meter**
-/// (spectrum-analyzer cells: lit cyan up to the play position, unlit ahead)
-/// with a thin lit **playhead**, PLUS the cached intro/outro skip regions
-/// shaded in amber (the status color) directly on the track ([_SeekBarPainter]
-/// via [skipSpanFraction]).
+/// (spectrum-analyzer cells: lit cyan up to the play position, unlit ahead),
+/// the position quantized to the nearest cell (a brighter "peak" cell marks it —
+/// no separate playhead line), PLUS the cached intro/outro skip regions shaded
+/// in amber (the status color) directly on the track ([_SeekBarPainter] via
+/// [skipSpanFraction]).
 ///
 /// Self-contained: it reads position/duration from the [player] and seeks it;
 /// it has no idea where in the bar it sits.
@@ -144,23 +145,31 @@ class _SeekBarPainter extends CustomPainter {
     final top = cy - meterHeight / 2;
     final bottom = cy + meterHeight / 2;
 
-    final playedX = (size.width * fraction).clamp(0.0, size.width);
-
     // Discrete cells: lit cyan (with bloom) up to the play position, faint
-    // unlit cells ahead — the resting spectrum-analyzer look.
+    // unlit cells ahead — the resting spectrum-analyzer look. The position
+    // SNAPS to the nearest whole cell at ALL times (including mid-drag), so the
+    // meter always reads as a quantized level — the frontmost lit cell is the
+    // brighter "peak" that marks the position (no separate playhead line).
+    // Seeking stays precise/continuous: the gesture handlers seek to the exact
+    // fraction; only this DRAW is quantized.
     const pitch = _cellWidth + _cellGap;
     final count = (size.width / pitch).floor().clamp(1, 100000);
     final unlit = Paint()..color = trackColor.withValues(alpha: 0.12);
     final lit = Paint()..color = playedColor;
+    final peak = Paint()..color = thumbColor;
     final bloom = Paint()
       ..color = playedColor.withValues(alpha: 0.35)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
-    final litUntil = fraction * count;
+    final peakBloom = Paint()
+      ..color = thumbColor.withValues(alpha: scrubbing ? 0.6 : 0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    final litCount = (fraction * count).round().clamp(0, count);
     for (var i = 0; i < count; i++) {
       final rect = Rect.fromLTWH(i * pitch, top, _cellWidth, meterHeight);
-      final isLit = i < litUntil;
-      if (isLit) canvas.drawRect(rect, bloom);
-      canvas.drawRect(rect, isLit ? lit : unlit);
+      final isLit = i < litCount;
+      final isPeak = isLit && i == litCount - 1;
+      if (isLit) canvas.drawRect(rect, isPeak ? peakBloom : bloom);
+      canvas.drawRect(rect, isLit ? (isPeak ? peak : lit) : unlit);
     }
 
     // Skip-region markers, on the real timeline. Positioned by skipSpanFraction
@@ -183,21 +192,6 @@ class _SeekBarPainter extends CustomPainter {
 
     shade(intro, _skipColor);
     shade(outro, _skipColor);
-
-    // Playhead — a thin lit cyan cursor spanning the full height, with bloom;
-    // brighter and a touch wider while scrubbing. (Not a knob: a fine
-    // instrument's cursor line.)
-    final headW = scrubbing ? 3.0 : 2.0;
-    canvas.drawRect(
-      Rect.fromLTWH(playedX - headW / 2, 0, headW, size.height),
-      Paint()
-        ..color = thumbColor.withValues(alpha: 0.4)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(playedX - headW / 2, 0, headW, size.height),
-      Paint()..color = thumbColor,
-    );
   }
 
   @override

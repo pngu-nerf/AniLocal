@@ -275,11 +275,11 @@ class SkipButton extends StatelessWidget {
         final show = intro ? s.showSkipIntro : s.showSkipOutro;
         if (!show) return const SizedBox.shrink();
         // VFD physical button: matte chassis, lit cyan while ARMED (it only
-        // shows inside the skip window). Same component as the control bar.
+        // shows inside the skip window). Full-size (NOT dense) so it stands the
+        // same height as the header/top-menu buttons.
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: XpButton(
-            dense: true,
             lit: true,
             icon: intro ? Icons.fast_forward : Icons.skip_next,
             label: intro ? 'Skip Intro' : 'Skip Outro',
@@ -324,8 +324,9 @@ class UpNextControl extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Full-size (NOT dense) so the up-next buttons match the
+              // header/top-menu button height, same as Skip Intro/Outro.
               XpButton(
-                dense: true,
                 lit: true,
                 icon: Icons.play_arrow,
                 label: 'Play next · ${s.preRollSeconds}s',
@@ -334,7 +335,6 @@ class UpNextControl extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               XpButton(
-                dense: true,
                 icon: Icons.close,
                 tooltip: 'Cancel',
                 onPressed: onCancel,

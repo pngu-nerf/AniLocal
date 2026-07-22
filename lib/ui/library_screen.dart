@@ -319,6 +319,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           loadSkipMode: widget.loadSkipMode,
           loadRailFraction: widget.loadRailFraction,
           setRailFraction: widget.setRailFraction,
+          // Same header actions as the library — so the theater header matches.
+          unmatchedCount: _unmatchedCount,
+          onFolders: _openFolders,
+          onScan: _scan,
+          onUnmatched: _openUnmatched,
+          onSettings: _openSettings,
         ),
       ),
     );

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../domain/models/episode.dart';
 import '../../theme/xp_tokens.dart';
-import '../../theme/xp_widgets.dart';
+import '../../widgets/episode_row.dart';
 import '../theater_widgets.dart';
 
 /// The EPISODE-LIST zone: an independently scrollable list of the series'
@@ -126,97 +126,38 @@ class _EpisodeTile extends StatelessWidget {
         ? episode.resumePosition.inMilliseconds /
               episode.duration.inMilliseconds
         : 0.0;
+    final resuming = !episode.watched && episode.resumePosition > Duration.zero;
 
     return InkWell(
       onTap: onTap,
       // Mouse-driven list: don't grab keyboard focus on tap, or selecting an
       // episode would steal the player's shortcut focus (it's a sibling zone).
       canRequestFocus: false,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          // Now-playing row lit: dim-cyan fill + a lit cyan accent bar.
-          color: current ? Xp.accentDeep : Colors.transparent,
-          border: Border(
-            left: BorderSide(
-              color: current ? Xp.accent : Colors.transparent,
-              width: 3,
-            ),
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            _NumberChip(number: episode.number, active: current),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Episode label as a CHROME label (thin tracked matte),
-                  // mixed-case; the now-playing episode reads lit (cyan).
-                  ChromeLabel(
-                    episode.title ?? 'Episode ${episode.number}',
-                    upper: false,
-                    fontSize: 14,
-                    letterSpacing: 1,
-                    color: current ? Xp.accentBright : Xp.text,
-                  ),
-                  if (!episode.watched &&
-                      episode.resumePosition > Duration.zero)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: progress.clamp(0.0, 1.0),
-                          minHeight: 3,
-                          color: Xp.accent,
-                          backgroundColor: Xp.surfaceAlt,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (episode.watched)
-              const Icon(Icons.check_circle, size: 16, color: Xp.accent)
-            else if (current)
-              const Icon(Icons.volume_up, size: 16, color: Xp.accentBright),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Leading episode-number chip. Numbering is a real sequence here, so it earns
-/// its place as the row's structural marker.
-class _NumberChip extends StatelessWidget {
-  const _NumberChip({required this.number, required this.active});
-
-  final int number;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 34,
-      height: 34,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        // Lit cyan chip when now-playing; matte metal otherwise.
-        color: active ? Xp.accent : Xp.surfaceAlt,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        '$number',
-        style: TextStyle(
-          fontFeatures: const [FontFeature.tabularFigures()],
-          fontWeight: FontWeight.w700,
-          color: active ? Xp.desktop : Xp.textDim,
-        ),
+      // The SHARED episode row (same as the detail-page list) — with the rail's
+      // now-playing highlight on, and its per-row resume-progress bar kept in
+      // the detail slot (the detail-page list has no such bar).
+      child: EpisodeRow(
+        number: episode.number,
+        title: episode.title ?? 'Episode ${episode.number}',
+        active: current,
+        nowPlayingCapable: true,
+        detail: resuming
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: progress.clamp(0.0, 1.0),
+                  minHeight: 3,
+                  color: Xp.accent,
+                  backgroundColor: Xp.surfaceAlt,
+                ),
+              )
+            : null,
+        trailing: [
+          if (episode.watched)
+            const Icon(Icons.check_circle, size: 16, color: Xp.accent)
+          else if (current)
+            const Icon(Icons.volume_up, size: 16, color: Xp.accentBright),
+        ],
       ),
     );
   }
