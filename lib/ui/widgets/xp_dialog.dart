@@ -52,8 +52,7 @@ class XpDialog extends StatelessWidget {
                   // Content on the chassis; Flexible so a tall body (a caller's
                   // SingleChildScrollView) scrolls instead of overflowing.
                   Flexible(
-                    child: ColoredBox(
-                      color: Xp.frame,
+                    child: XpChassis(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
                         child: content,
@@ -61,8 +60,7 @@ class XpDialog extends StatelessWidget {
                     ),
                   ),
                   if (actions.isNotEmpty)
-                    ColoredBox(
-                      color: Xp.frame,
+                    XpChassis(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                         child: Row(

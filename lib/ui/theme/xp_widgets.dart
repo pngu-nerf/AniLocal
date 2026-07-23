@@ -142,6 +142,45 @@ class XpPanel extends StatelessWidget {
   );
 }
 
+/// The chassis SURFACE that content sits on inside the instrument chrome
+/// ([XpWindow], [XpDialog]). It's a flat [Material] carrying the chassis
+/// [color], NOT a bare [ColoredBox] — so `ListTile`/ink widgets inside have a
+/// real [Material] to paint their background + splashes on. (A [ColoredBox]
+/// between a `ListTile` and the far Material hid that paint and tripped the
+/// framework's "ListTile background color or ink splashes may be invisible"
+/// warning; the Material here is the one-place root-cause fix.)
+///
+/// Kept visually IDENTICAL to the old `ColoredBox`: [MaterialType.canvas] with
+/// NO elevation/shadow and no M3 tint, and ink splashes/highlights/hover are
+/// suppressed for descendants — the Material is for correctness, not to add
+/// ripples, so the flat/matte VFD look is unchanged. (Menus/overlays render
+/// outside this subtree, so their own hover feedback is untouched.)
+class XpChassis extends StatelessWidget {
+  const XpChassis({super.key, required this.child, this.color = Xp.frame});
+
+  final Widget child;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      type: MaterialType.canvas,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          splashFactory: NoSplash.splashFactory,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
 /// A tactile XP push button: beveled-out at rest, sinking in (and nudging its
 /// label down-right 1px) when pressed, and warming on hover. Icon and/or label;
 /// consumes only design tokens, so every button on the page matches.
@@ -455,9 +494,7 @@ class XpWindow extends StatelessWidget {
                 leading: titleLeading,
                 trailing: titleTrailing,
               ),
-              Expanded(
-                child: ColoredBox(color: Xp.frame, child: child),
-              ),
+              Expanded(child: XpChassis(child: child)),
             ],
           ),
         ),
