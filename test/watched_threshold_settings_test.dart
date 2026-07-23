@@ -1,3 +1,4 @@
+import 'package:anilocal/domain/repositories/settings_repository.dart';
 import 'package:anilocal/ui/settings_dialog.dart';
 import 'package:flutter_test/flutter_test.dart';
 

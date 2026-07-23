@@ -7,11 +7,11 @@ import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/picture_mode.dart';
 import '../domain/models/series.dart';
-import '../domain/models/skip_mode.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/missing_episodes_repository.dart';
+import '../domain/repositories/settings_repository.dart';
 import '../domain/repositories/show_preferences_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
@@ -25,13 +25,12 @@ import 'library/library_search_bar.dart';
 import 'series_detail_screen.dart';
 import 'settings_dialog.dart';
 import 'theater/theater_screen.dart';
-import 'theme/header_readout.dart';
-import 'theme/xp_theme.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 import 'widgets/header_actions.dart';
 import 'widgets/show_cover.dart';
+import 'widgets/xp_screen.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -70,8 +69,7 @@ class LibraryScreen extends StatefulWidget {
     required this.watchOrder,
     required this.missing,
     required this.showPreferences,
-    required this.loadMissingEnabled,
-    required this.setMissingEnabled,
+    required this.settings,
     required this.onScan,
     required this.onRefreshMetadata,
     required this.onAddFolder,
@@ -79,24 +77,6 @@ class LibraryScreen extends StatefulWidget {
     required this.missingFolders,
     required this.missingFolderPaths,
     required this.onOpenAccessSettings,
-    required this.loadContinueCollapsed,
-    required this.setContinueCollapsed,
-    required this.loadAutoPlayNext,
-    required this.setAutoPlayNext,
-    required this.loadSkipMode,
-    required this.setSkipMode,
-    required this.loadWatchedThreshold,
-    required this.setWatchedThreshold,
-    required this.loadHideNextEpisode,
-    required this.setHideNextEpisode,
-    required this.loadShowContinueWatching,
-    required this.setShowContinueWatching,
-    required this.loadShowSearchBar,
-    required this.setShowSearchBar,
-    required this.loadRailFraction,
-    required this.setRailFraction,
-    required this.loadPanelFraction,
-    required this.setPanelFraction,
   });
 
   final LibraryRepository repository;
@@ -113,10 +93,10 @@ class LibraryScreen extends StatefulWidget {
   /// from each card's three-dots menu; sacred across rescans.
   final ShowPreferencesRepository showPreferences;
 
-  /// Missing-episodes feature toggle (persisted, default on). Governs ghost
-  /// tiles, the Hidden tab, and whether hidden episodes affect completeness.
-  final Future<bool> Function() loadMissingEnabled;
-  final Future<void> Function(bool enabled) setMissingEnabled;
+  /// ALL app-wide settings behind ONE injected object; read here (missing-
+  /// enabled, homepage-visibility toggles, panel fraction) and passed to the
+  /// detail/theater screens + the settings dialog.
+  final SettingsRepository settings;
 
   /// Fill path. [onDiscovered] fires mid-scan, after newly-seen files are
   /// written as pending placeholders but before identification — the screen
@@ -127,43 +107,6 @@ class LibraryScreen extends StatefulWidget {
   /// pruning, preserves overrides/watch-state. Returns counts for a snackbar.
   final Future<({int seriesRefreshed, int skipsFetched})> Function()
   onRefreshMetadata;
-
-  /// Load/persist the collapsed state of the "Continue watching" section.
-  final Future<bool> Function() loadContinueCollapsed;
-  final Future<void> Function(bool collapsed) setContinueCollapsed;
-
-  /// Auto-play-next setting (persisted); read by the player, toggled here.
-  final Future<bool> Function() loadAutoPlayNext;
-  final Future<void> Function(bool enabled) setAutoPlayNext;
-
-  /// Skip mode (off/button/auto), persisted; read by the player, set here.
-  final Future<SkipMode> Function() loadSkipMode;
-  final Future<void> Function(SkipMode mode) setSkipMode;
-
-  /// Watched-threshold (time-from-end; 0:00 = off), persisted. Read by the
-  /// player, set from Settings; forwarded to the detail screen too.
-  final Future<Duration> Function() loadWatchedThreshold;
-  final Future<void> Function(Duration value) setWatchedThreshold;
-
-  /// Global "Hide next episode" (persisted; master apply-to-all over per-show).
-  final Future<bool> Function() loadHideNextEpisode;
-  final Future<void> Function(bool hidden) setHideNextEpisode;
-
-  /// Global homepage visibility toggles (persisted): the continue-watching
-  /// sidebar and the search bar. Read here to gate those zones.
-  final Future<bool> Function() loadShowContinueWatching;
-  final Future<void> Function(bool show) setShowContinueWatching;
-  final Future<bool> Function() loadShowSearchBar;
-  final Future<void> Function(bool show) setShowSearchBar;
-
-  /// Theater rail width (fraction), persisted; the rail divider reads/writes it.
-  final Future<double> Function() loadRailFraction;
-  final Future<void> Function(double fraction) setRailFraction;
-
-  /// Continue-watching panel width (fraction), persisted; the panel divider
-  /// reads/writes it — the landing-page analogue of the rail fraction above.
-  final Future<double> Function() loadPanelFraction;
-  final Future<void> Function(double fraction) setPanelFraction;
 
   /// Opens the native folder picker; reports whether a folder was added and the
   /// denied TCC category label (if the folder's category access was refused).
@@ -232,10 +175,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.initState();
     _reload();
     _loadHomepageToggles();
-    widget.loadContinueCollapsed().then((c) {
+    widget.settings.loadContinueCollapsed().then((c) {
       if (mounted) setState(() => _continueCollapsed = c);
     });
-    widget.loadPanelFraction().then((f) {
+    widget.settings.loadPanelFraction().then((f) {
       final clamped = f.clamp(
         LibraryLayoutConfig.panelFractionMin,
         LibraryLayoutConfig.panelFractionMax,
@@ -253,7 +196,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   void _toggleContinueCollapsed() {
     setState(() => _continueCollapsed = !_continueCollapsed);
-    widget.setContinueCollapsed(_continueCollapsed);
+    widget.settings.setContinueCollapsed(_continueCollapsed);
   }
 
   Future<void> _dismissFromContinue(ContinueWatching entry) async {
@@ -290,7 +233,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // Hidden episodes are excluded from the completeness count when the feature
     // is on (consistent with the show page); off → no exclusion. One read for
     // the whole grid (a series absent from the map has nothing hidden).
-    final missingEnabled = await widget.loadMissingEnabled();
+    final missingEnabled = await widget.settings.loadMissingEnabled();
     final allHidden = missingEnabled
         ? await widget.missing.allHiddenEpisodes()
         : const <int, Set<int>>{};
@@ -351,11 +294,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           repository: widget.repository,
           watchState: widget.watchState,
           watchOrder: widget.watchOrder,
-          loadAutoPlayNext: widget.loadAutoPlayNext,
-          loadSkipMode: widget.loadSkipMode,
-          loadWatchedThreshold: widget.loadWatchedThreshold,
-          loadRailFraction: widget.loadRailFraction,
-          setRailFraction: widget.setRailFraction,
+          settings: widget.settings,
           // Same header actions as the library — so the theater header matches.
           unmatchedCount: _unmatchedCount,
           onFolders: _openFolders,
@@ -372,8 +311,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _play(entry.episode, entry.series);
 
   Future<void> _loadHomepageToggles() async {
-    final showContinue = await widget.loadShowContinueWatching();
-    final showSearch = await widget.loadShowSearchBar();
+    final showContinue = await widget.settings.loadShowContinueWatching();
+    final showSearch = await widget.settings.loadShowSearchBar();
     if (mounted) {
       setState(() {
         _showContinueWatching = showContinue;
@@ -393,26 +332,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _openSettings() async {
     await showAppSettingsDialog(
       context,
-      SettingsActions(
-        loadAutoPlayNext: widget.loadAutoPlayNext,
-        setAutoPlayNext: widget.setAutoPlayNext,
-        loadSkipMode: widget.loadSkipMode,
-        setSkipMode: widget.setSkipMode,
-        loadWatchedThreshold: widget.loadWatchedThreshold,
-        setWatchedThreshold: widget.setWatchedThreshold,
-        loadMissingEnabled: widget.loadMissingEnabled,
-        setMissingEnabled: widget.setMissingEnabled,
+      settings: widget.settings,
+      actions: SettingsDialogActions(
         onRefreshMetadata: widget.onRefreshMetadata,
         onRefreshed: _reload,
         loadUnmatchedCount: () async => _unmatchedCount,
         onOpenUnmatched: _openUnmatched,
         onOpenSources: _openFolders,
-        loadHideNextEpisode: widget.loadHideNextEpisode,
-        setHideNextEpisode: widget.setHideNextEpisode,
-        loadShowContinueWatching: widget.loadShowContinueWatching,
-        setShowContinueWatching: widget.setShowContinueWatching,
-        loadShowSearchBar: widget.loadShowSearchBar,
-        setShowSearchBar: widget.setShowSearchBar,
       ),
     );
     // Reflect any change made in the dialog: homepage-toggle visibility, and a
@@ -527,129 +453,115 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // The blackout-XP look is scoped to this screen's subtree: pushed routes
-    // (detail, theater, folders) sit above this Theme on the app's Navigator,
-    // so they keep the current theme until we style them in a later pass.
-    return Theme(
-      data: XpTheme.data(),
-      child: Scaffold(
-        backgroundColor: Xp.desktop,
-        // No desktop "margin": the XP window now fills the OS window (we hid the
-        // native title bar), so our blue title bar reaches the window's top edge
-        // and the traffic lights sit centered within it.
-        body: XpWindow(
-          caption: 'AniLocal',
-          // Branding is the header VFD readout — a lit dot-matrix "screen" in
-          // the chassis. Idle on the library it reads "AniLocal LIBRARY".
-          captionWidget: const HeaderReadout(title: 'Library'),
-          // The app actions live at the title bar's TOP-RIGHT — the SAME shared
-          // bar every header screen uses, so the header looks identical
-          // everywhere (only the back button differs).
-          titleTrailing: HeaderActionsBar(
-            scanning: _scanning,
-            unmatchedCount: _unmatchedCount,
-            onFolders: _openFolders,
-            onUnmatched: _openUnmatched,
-            onScan: _scan,
-            onSettings: _openSettings,
+    // The ONE shared screen shell (XpScreen). Home is the root route → no back
+    // tab (showBack: false); the app actions ride the header's trailing slot —
+    // the SAME HeaderActionsBar as detail/theater. The VFD readout reads
+    // "AniLocal LIBRARY". Theme is applied app-wide, so no per-screen wrap.
+    return XpScreen(
+      title: 'Library',
+      showBack: false,
+      trailing: HeaderActionsBar(
+        scanning: _scanning,
+        unmatchedCount: _unmatchedCount,
+        onFolders: _openFolders,
+        onUnmatched: _openUnmatched,
+        onScan: _scan,
+        onSettings: _openSettings,
+      ),
+      child: Column(
+        children: [
+          // Permission-denied banner (Settings recovery).
+          ValueListenableBuilder<List<String>>(
+            valueListenable: widget.accessIssues,
+            builder: (context, labels, _) => labels.isEmpty
+                ? const SizedBox.shrink()
+                : AccessBanner(
+                    labels: labels,
+                    onOpenSettings: widget.onOpenAccessSettings,
+                    onRescan: _scanning ? () {} : _scan,
+                  ),
           ),
-          child: Column(
-            children: [
-              // Permission-denied banner (Settings recovery).
-              ValueListenableBuilder<List<String>>(
-                valueListenable: widget.accessIssues,
-                builder: (context, labels, _) => labels.isEmpty
-                    ? const SizedBox.shrink()
-                    : AccessBanner(
-                        labels: labels,
-                        onOpenSettings: widget.onOpenAccessSettings,
-                        onRescan: _scanning ? () {} : _scan,
-                      ),
-              ),
-              // Offline drive/mount banner (reconnect — NOT a permission issue).
-              ValueListenableBuilder<List<String>>(
-                valueListenable: widget.missingFolders,
-                builder: (context, labels, _) => labels.isEmpty
-                    ? const SizedBox.shrink()
-                    : ReconnectBanner(
-                        labels: labels,
-                        onRescan: _scanning ? () {} : _scan,
-                      ),
-              ),
-              // Search + continue-watching panel + grid share the page via the
-              // composable landing layout (the seam analogous to the theater
-              // zones): search pinned full-width on top, panel on the left,
-              // grid filling the rest. The one FutureBuilder resolves the
-              // cached library once; search filters that in-memory list.
-              Expanded(
-                child: FutureBuilder<List<Series>>(
-                  future: _series,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState != ConnectionState.done) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final all = snapshot.data ?? const <Series>[];
-                    if (all.isEmpty) {
-                      // Truly empty library — no search/panel, just onboarding.
-                      return _EmptyState(
-                        scanning: _scanning,
-                        onAddFolder: _addFolder,
-                      );
-                    }
-                    final filtered = [
-                      for (final s in all)
-                        if (seriesMatchesQuery(s, _query)) s,
-                    ];
-                    return LibraryLayout(
-                      config: LibraryLayoutConfig(
-                        panelCollapsed: _continueCollapsed,
-                        panelFraction: _panelFraction,
-                      ),
-                      // Same divider mechanism as the theater rail: live-resize
-                      // updates the fraction; drag-end persists it.
-                      onPanelResize: (f) => setState(() => _panelFraction = f),
-                      onPanelResizeEnd: () =>
-                          widget.setPanelFraction(_panelFraction),
-                      zones: {
-                        // Search bar — hidden by the global homepage toggle.
-                        if (_showSearchBar)
-                          LibraryZone.search: Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-                            child: LibrarySearchBar(
-                              controller: _searchController,
-                              onChanged: (v) => setState(() => _query = v),
-                              onClear: () {
-                                _searchController.clear();
-                                setState(() => _query = '');
-                              },
-                            ),
-                          ),
-                        // Continue-watching sidebar — present only when there
-                        // are entries AND the global homepage toggle allows it.
-                        if (_continueEntries.isNotEmpty &&
-                            _showContinueWatching)
-                          LibraryZone.continueWatching: Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 4, 4, 8),
-                            child: ContinueWatchingPanel(
-                              entries: _continueEntries,
-                              onPlay: _playFromContinue,
-                              onDismiss: _dismissFromContinue,
-                              collapsed: _continueCollapsed,
-                              onToggleCollapsed: _toggleContinueCollapsed,
-                            ),
-                          ),
-                        LibraryZone.grid: Padding(
-                          padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
-                          child: _buildGrid(filtered),
+          // Offline drive/mount banner (reconnect — NOT a permission issue).
+          ValueListenableBuilder<List<String>>(
+            valueListenable: widget.missingFolders,
+            builder: (context, labels, _) => labels.isEmpty
+                ? const SizedBox.shrink()
+                : ReconnectBanner(
+                    labels: labels,
+                    onRescan: _scanning ? () {} : _scan,
+                  ),
+          ),
+          // Search + continue-watching panel + grid share the page via the
+          // composable landing layout (the seam analogous to the theater
+          // zones): search pinned full-width on top, panel on the left,
+          // grid filling the rest. The one FutureBuilder resolves the
+          // cached library once; search filters that in-memory list.
+          Expanded(
+            child: FutureBuilder<List<Series>>(
+              future: _series,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final all = snapshot.data ?? const <Series>[];
+                if (all.isEmpty) {
+                  // Truly empty library — no search/panel, just onboarding.
+                  return _EmptyState(
+                    scanning: _scanning,
+                    onAddFolder: _addFolder,
+                  );
+                }
+                final filtered = [
+                  for (final s in all)
+                    if (seriesMatchesQuery(s, _query)) s,
+                ];
+                return LibraryLayout(
+                  config: LibraryLayoutConfig(
+                    panelCollapsed: _continueCollapsed,
+                    panelFraction: _panelFraction,
+                  ),
+                  // Same divider mechanism as the theater rail: live-resize
+                  // updates the fraction; drag-end persists it.
+                  onPanelResize: (f) => setState(() => _panelFraction = f),
+                  onPanelResizeEnd: () =>
+                      widget.settings.setPanelFraction(_panelFraction),
+                  zones: {
+                    // Search bar — hidden by the global homepage toggle.
+                    if (_showSearchBar)
+                      LibraryZone.search: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                        child: LibrarySearchBar(
+                          controller: _searchController,
+                          onChanged: (v) => setState(() => _query = v),
+                          onClear: () {
+                            _searchController.clear();
+                            setState(() => _query = '');
+                          },
                         ),
-                      },
-                    );
+                      ),
+                    // Continue-watching sidebar — present only when there
+                    // are entries AND the global homepage toggle allows it.
+                    if (_continueEntries.isNotEmpty && _showContinueWatching)
+                      LibraryZone.continueWatching: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 4, 8),
+                        child: ContinueWatchingPanel(
+                          entries: _continueEntries,
+                          onPlay: _playFromContinue,
+                          onDismiss: _dismissFromContinue,
+                          collapsed: _continueCollapsed,
+                          onToggleCollapsed: _toggleContinueCollapsed,
+                        ),
+                      ),
+                    LibraryZone.grid: Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
+                      child: _buildGrid(filtered),
+                    ),
                   },
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -697,28 +609,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         // the repository is `widget.missing`.
                         missingRepo: widget.missing,
                         showPreferences: widget.showPreferences,
-                        loadMissingEnabled: widget.loadMissingEnabled,
-                        setMissingEnabled: widget.setMissingEnabled,
+                        settings: widget.settings,
                         onRefreshMetadata: widget.onRefreshMetadata,
                         nextEpisode: _upNext[series[i].anilistId],
                         downloaded: _downloadCounts[series[i].anilistId],
                         unavailable: unavailable,
                         onPlay: _play,
-                        loadAutoPlayNext: widget.loadAutoPlayNext,
-                        setAutoPlayNext: widget.setAutoPlayNext,
-                        loadSkipMode: widget.loadSkipMode,
-                        setSkipMode: widget.setSkipMode,
-                        loadWatchedThreshold: widget.loadWatchedThreshold,
-                        setWatchedThreshold: widget.setWatchedThreshold,
-                        loadHideNextEpisode: widget.loadHideNextEpisode,
-                        setHideNextEpisode: widget.setHideNextEpisode,
-                        loadShowContinueWatching:
-                            widget.loadShowContinueWatching,
-                        setShowContinueWatching: widget.setShowContinueWatching,
-                        loadShowSearchBar: widget.loadShowSearchBar,
-                        setShowSearchBar: widget.setShowSearchBar,
-                        loadRailFraction: widget.loadRailFraction,
-                        setRailFraction: widget.setRailFraction,
                         onReturn: _reload,
                         onFolders: _openFolders,
                         onScan: _scan,
@@ -851,27 +747,12 @@ class _SeriesCard extends StatefulWidget {
     required this.watchOrder,
     required this.missingRepo,
     required this.showPreferences,
-    required this.loadMissingEnabled,
-    required this.setMissingEnabled,
+    required this.settings,
     required this.onRefreshMetadata,
     required this.nextEpisode,
     required this.downloaded,
     required this.unavailable,
     required this.onPlay,
-    required this.loadAutoPlayNext,
-    required this.setAutoPlayNext,
-    required this.loadSkipMode,
-    required this.setSkipMode,
-    required this.loadWatchedThreshold,
-    required this.setWatchedThreshold,
-    required this.loadHideNextEpisode,
-    required this.setHideNextEpisode,
-    required this.loadShowContinueWatching,
-    required this.setShowContinueWatching,
-    required this.loadShowSearchBar,
-    required this.setShowSearchBar,
-    required this.loadRailFraction,
-    required this.setRailFraction,
     required this.onReturn,
     // Header actions forwarded to the detail screen so its header matches home.
     required this.onFolders,
@@ -888,8 +769,7 @@ class _SeriesCard extends StatefulWidget {
   final WatchOrderRepository watchOrder;
   final MissingEpisodesRepository missingRepo;
   final ShowPreferencesRepository showPreferences;
-  final Future<bool> Function() loadMissingEnabled;
-  final Future<void> Function(bool enabled) setMissingEnabled;
+  final SettingsRepository settings;
   final Future<({int seriesRefreshed, int skipsFetched})> Function()
   onRefreshMetadata;
 
@@ -908,20 +788,6 @@ class _SeriesCard extends StatefulWidget {
   /// opening it. Still listed in place (cached art/metadata shown).
   final bool unavailable;
   final Future<void> Function(Episode, Series) onPlay;
-  final Future<bool> Function() loadAutoPlayNext;
-  final Future<void> Function(bool enabled) setAutoPlayNext;
-  final Future<SkipMode> Function() loadSkipMode;
-  final Future<void> Function(SkipMode mode) setSkipMode;
-  final Future<Duration> Function() loadWatchedThreshold;
-  final Future<void> Function(Duration value) setWatchedThreshold;
-  final Future<bool> Function() loadHideNextEpisode;
-  final Future<void> Function(bool hidden) setHideNextEpisode;
-  final Future<bool> Function() loadShowContinueWatching;
-  final Future<void> Function(bool show) setShowContinueWatching;
-  final Future<bool> Function() loadShowSearchBar;
-  final Future<void> Function(bool show) setShowSearchBar;
-  final Future<double> Function() loadRailFraction;
-  final Future<void> Function(double fraction) setRailFraction;
   final VoidCallback onReturn;
 
   /// Header actions forwarded to the detail screen (Sources / Sync / Unmatched)
@@ -963,23 +829,8 @@ class _SeriesCardState extends State<_SeriesCard> {
           sourceSelection: widget.sourceSelection,
           watchOrder: widget.watchOrder,
           missing: widget.missingRepo,
-          loadMissingEnabled: widget.loadMissingEnabled,
-          setMissingEnabled: widget.setMissingEnabled,
+          settings: widget.settings,
           onRefreshMetadata: widget.onRefreshMetadata,
-          loadAutoPlayNext: widget.loadAutoPlayNext,
-          setAutoPlayNext: widget.setAutoPlayNext,
-          loadSkipMode: widget.loadSkipMode,
-          setSkipMode: widget.setSkipMode,
-          loadWatchedThreshold: widget.loadWatchedThreshold,
-          setWatchedThreshold: widget.setWatchedThreshold,
-          loadHideNextEpisode: widget.loadHideNextEpisode,
-          setHideNextEpisode: widget.setHideNextEpisode,
-          loadShowContinueWatching: widget.loadShowContinueWatching,
-          setShowContinueWatching: widget.setShowContinueWatching,
-          loadShowSearchBar: widget.loadShowSearchBar,
-          setShowSearchBar: widget.setShowSearchBar,
-          loadRailFraction: widget.loadRailFraction,
-          setRailFraction: widget.setRailFraction,
           onFolders: widget.onFolders,
           onScan: widget.onScan,
           onUnmatched: widget.onUnmatched,

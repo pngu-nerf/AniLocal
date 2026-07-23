@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/models/skip_mode.dart';
+import '../domain/repositories/settings_repository.dart';
 import 'theme/xp_widgets.dart';
 import 'widgets/xp_dialog.dart';
 
-/// The largest watched-threshold the min:sec input accepts (9:59).
-const watchedThresholdMax = Duration(minutes: 9, seconds: 59);
-
-/// The default watched-threshold on first run — ~a typical ED/credits length,
-/// so the old proportional-90% behavior is roughly preserved.
-const watchedThresholdDefault = Duration(seconds: 90);
+// watchedThresholdDefault / watchedThresholdMax now live in
+// domain/repositories/settings_repository.dart (imported above) so the data
+// layer can share them; the parse/format helpers below use them.
 
 /// Parse a `m:ss` watched-threshold entry, or null if invalid. Rejects
 /// non-numeric input, seconds ≥ 60, values past [watchedThresholdMax] (9:59),
@@ -34,43 +32,19 @@ String formatWatchedThreshold(Duration d) {
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
-/// The callbacks + loaders the shared app Settings dialog needs, so the homepage
-/// and the detail page open the IDENTICAL dialog (single source of truth).
-class SettingsActions {
-  const SettingsActions({
-    required this.loadAutoPlayNext,
-    required this.setAutoPlayNext,
-    required this.loadSkipMode,
-    required this.setSkipMode,
-    required this.loadWatchedThreshold,
-    required this.setWatchedThreshold,
-    required this.loadMissingEnabled,
-    required this.setMissingEnabled,
+/// The few NON-setting, per-screen hooks the Settings dialog needs (the settings
+/// themselves come from the injected [SettingsRepository]). These genuinely
+/// differ per entry point — "reload THIS screen", this screen's unmatched count,
+/// where "open sources/unmatched" navigate — so they're passed in, while every
+/// actual setting is single-source.
+class SettingsDialogActions {
+  const SettingsDialogActions({
     required this.onRefreshMetadata,
     required this.onRefreshed,
     required this.loadUnmatchedCount,
     required this.onOpenUnmatched,
     required this.onOpenSources,
-    required this.loadHideNextEpisode,
-    required this.setHideNextEpisode,
-    required this.loadShowContinueWatching,
-    required this.setShowContinueWatching,
-    required this.loadShowSearchBar,
-    required this.setShowSearchBar,
   });
-
-  final Future<bool> Function() loadAutoPlayNext;
-  final Future<void> Function(bool enabled) setAutoPlayNext;
-  final Future<SkipMode> Function() loadSkipMode;
-  final Future<void> Function(SkipMode mode) setSkipMode;
-
-  /// Watched-threshold as an absolute time-from-end (0:00 = auto-watched off);
-  /// the single value ALL watched-marking consumers read.
-  final Future<Duration> Function() loadWatchedThreshold;
-  final Future<void> Function(Duration value) setWatchedThreshold;
-
-  final Future<bool> Function() loadMissingEnabled;
-  final Future<void> Function(bool enabled) setMissingEnabled;
 
   /// Re-fetch metadata (idMal + skip data) for cached series. Returns counts.
   final Future<({int seriesRefreshed, int skipsFetched})> Function()
@@ -87,17 +61,6 @@ class SettingsActions {
 
   /// Open the Sources (library folders) page — the same page the header opens.
   final VoidCallback onOpenSources;
-
-  /// GLOBAL "Hide Next Episode". [setHideNextEpisode] is a master apply-to-all:
-  /// it persists the global flag AND overwrites every per-show value to match.
-  final Future<bool> Function() loadHideNextEpisode;
-  final Future<void> Function(bool hidden) setHideNextEpisode;
-
-  /// GLOBAL homepage toggles: continue-watching sidebar + search bar visibility.
-  final Future<bool> Function() loadShowContinueWatching;
-  final Future<void> Function(bool show) setShowContinueWatching;
-  final Future<bool> Function() loadShowSearchBar;
-  final Future<void> Function(bool show) setShowSearchBar;
 }
 
 String skipModeLabel(SkipMode mode) => switch (mode) {
@@ -107,18 +70,20 @@ String skipModeLabel(SkipMode mode) => switch (mode) {
 };
 
 /// Open the shared app Settings dialog. Reachable from the homepage title bar
-/// and the detail-page title bar; both pass a [SettingsActions] bundle.
+/// and the detail-page title bar; both pass the ONE injected [SettingsRepository]
+/// (all settings) + a small [SettingsDialogActions] of per-screen hooks.
 Future<void> showAppSettingsDialog(
-  BuildContext context,
-  SettingsActions actions,
-) async {
-  var enabled = await actions.loadAutoPlayNext();
-  var skipMode = await actions.loadSkipMode();
-  var watchedThreshold = await actions.loadWatchedThreshold();
-  var missingEnabled = await actions.loadMissingEnabled();
-  var hideNext = await actions.loadHideNextEpisode();
-  var showContinue = await actions.loadShowContinueWatching();
-  var showSearch = await actions.loadShowSearchBar();
+  BuildContext context, {
+  required SettingsRepository settings,
+  required SettingsDialogActions actions,
+}) async {
+  var enabled = await settings.loadAutoPlayNext();
+  var skipMode = await settings.loadSkipMode();
+  var watchedThreshold = await settings.loadWatchedThreshold();
+  var missingEnabled = await settings.loadMissingEnabled();
+  var hideNext = await settings.loadHideNextEpisode();
+  var showContinue = await settings.loadShowContinueWatching();
+  var showSearch = await settings.loadShowSearchBar();
   final unmatchedCount = await actions.loadUnmatchedCount();
   if (!context.mounted) return;
   // Seed the min:sec field from the persisted value; disposed after the dialog.
@@ -171,7 +136,7 @@ Future<void> showAppSettingsDialog(
                       value: enabled,
                       onChanged: (v) {
                         setLocal(() => enabled = v);
-                        actions.setAutoPlayNext(v);
+                        settings.setAutoPlayNext(v);
                       },
                     ),
                     const Padding(
@@ -190,7 +155,7 @@ Future<void> showAppSettingsDialog(
                         title: Text(skipModeLabel(mode)),
                         onTap: () {
                           setLocal(() => skipMode = mode);
-                          actions.setSkipMode(mode);
+                          settings.setSkipMode(mode);
                         },
                       ),
                     const Padding(
@@ -224,7 +189,7 @@ Future<void> showAppSettingsDialog(
                           setLocal(() => thresholdValid = parsed != null);
                           if (parsed != null) {
                             watchedThreshold = parsed;
-                            actions.setWatchedThreshold(parsed);
+                            settings.setWatchedThreshold(parsed);
                           }
                         },
                         // Normalize on commit so a half-typed/invalid entry snaps
@@ -264,7 +229,7 @@ Future<void> showAppSettingsDialog(
                       value: missingEnabled,
                       onChanged: (v) {
                         setLocal(() => missingEnabled = v);
-                        actions.setMissingEnabled(v);
+                        settings.setMissingEnabled(v);
                       },
                     ),
                     ListTile(
@@ -306,7 +271,7 @@ Future<void> showAppSettingsDialog(
                       value: hideNext,
                       onChanged: (v) {
                         setLocal(() => hideNext = v);
-                        actions.setHideNextEpisode(v);
+                        settings.setHideNextEpisode(v);
                       },
                     ),
                     SwitchListTile(
@@ -315,7 +280,7 @@ Future<void> showAppSettingsDialog(
                       value: showContinue,
                       onChanged: (v) {
                         setLocal(() => showContinue = v);
-                        actions.setShowContinueWatching(v);
+                        settings.setShowContinueWatching(v);
                       },
                     ),
                     SwitchListTile(
@@ -324,7 +289,7 @@ Future<void> showAppSettingsDialog(
                       value: showSearch,
                       onChanged: (v) {
                         setLocal(() => showSearch = v);
-                        actions.setShowSearchBar(v);
+                        settings.setShowSearchBar(v);
                       },
                     ),
                   ],
@@ -376,7 +341,7 @@ class _Section extends StatelessWidget {
 /// Re-fetch metadata + skip data for cached series (no scan, no data loss).
 Future<void> _refreshMetadata(
   BuildContext dialogContext,
-  SettingsActions actions,
+  SettingsDialogActions actions,
 ) async {
   // Capture the app-level messenger before popping the dialog.
   final messenger = ScaffoldMessenger.of(dialogContext);

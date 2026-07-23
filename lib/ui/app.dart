@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../domain/models/skip_mode.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/missing_episodes_repository.dart';
+import '../domain/repositories/settings_repository.dart';
 import '../domain/repositories/show_preferences_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
@@ -35,8 +35,7 @@ class AniLocalApp extends StatelessWidget {
     required this.watchOrder,
     required this.missing,
     required this.showPreferences,
-    required this.loadMissingEnabled,
-    required this.setMissingEnabled,
+    required this.settings,
     required this.onScan,
     required this.onRefreshMetadata,
     required this.onAddFolder,
@@ -44,24 +43,6 @@ class AniLocalApp extends StatelessWidget {
     required this.missingFolders,
     required this.missingFolderPaths,
     required this.onOpenAccessSettings,
-    required this.loadContinueCollapsed,
-    required this.setContinueCollapsed,
-    required this.loadAutoPlayNext,
-    required this.setAutoPlayNext,
-    required this.loadSkipMode,
-    required this.setSkipMode,
-    required this.loadWatchedThreshold,
-    required this.setWatchedThreshold,
-    required this.loadHideNextEpisode,
-    required this.setHideNextEpisode,
-    required this.loadShowContinueWatching,
-    required this.setShowContinueWatching,
-    required this.loadShowSearchBar,
-    required this.setShowSearchBar,
-    required this.loadRailFraction,
-    required this.setRailFraction,
-    required this.loadPanelFraction,
-    required this.setPanelFraction,
   });
 
   final LibraryRepository repository;
@@ -77,10 +58,10 @@ class AniLocalApp extends StatelessWidget {
   /// across rescans (no fill-path writer).
   final ShowPreferencesRepository showPreferences;
 
-  /// The missing-episodes feature toggle (persisted; default on). Off = no ghost
-  /// tiles / no Hidden tab / counts ignore hidden state, anywhere.
-  final Future<bool> Function() loadMissingEnabled;
-  final Future<void> Function(bool enabled) setMissingEnabled;
+  /// ALL app-wide settings behind ONE injected object (was ~20 threaded
+  /// load*/set* functions). Passed down like the other repositories; screens +
+  /// the settings dialog read/write through it.
+  final SettingsRepository settings;
 
   /// Fill path. [onDiscovered] fires mid-scan once newly-seen files have been
   /// written as pending placeholders (before identification), so the UI can
@@ -91,43 +72,6 @@ class AniLocalApp extends StatelessWidget {
   /// scanning files or touching overrides/watch-state. Returns counts.
   final Future<({int seriesRefreshed, int skipsFetched})> Function()
   onRefreshMetadata;
-  final Future<bool> Function() loadContinueCollapsed;
-  final Future<void> Function(bool collapsed) setContinueCollapsed;
-
-  /// Auto-play-next setting (persisted); read by the player on episode end.
-  final Future<bool> Function() loadAutoPlayNext;
-  final Future<void> Function(bool enabled) setAutoPlayNext;
-
-  /// Skip mode (off/button/auto), persisted; read by the player per episode.
-  final Future<SkipMode> Function() loadSkipMode;
-  final Future<void> Function(SkipMode mode) setSkipMode;
-
-  /// Watched-threshold (time-from-end; 0:00 = auto-watched off), persisted. The
-  /// SINGLE value every watched-marking consumer reads; set from Settings.
-  final Future<Duration> Function() loadWatchedThreshold;
-  final Future<void> Function(Duration value) setWatchedThreshold;
-
-  /// Global "Hide next episode" (persisted). Setting it is a master apply-to-all
-  /// that overwrites every per-show next-episode choice.
-  final Future<bool> Function() loadHideNextEpisode;
-  final Future<void> Function(bool hidden) setHideNextEpisode;
-
-  /// Global homepage visibility toggles (persisted, default shown): the
-  /// continue-watching sidebar and the search bar.
-  final Future<bool> Function() loadShowContinueWatching;
-  final Future<void> Function(bool show) setShowContinueWatching;
-  final Future<bool> Function() loadShowSearchBar;
-  final Future<void> Function(bool show) setShowSearchBar;
-
-  /// Theater rail width (fraction of total), persisted; the rail divider in the
-  /// theater reads it on open and writes it when a drag ends.
-  final Future<double> Function() loadRailFraction;
-  final Future<void> Function(double fraction) setRailFraction;
-
-  /// Continue-watching panel width (fraction), persisted; the landing-page
-  /// analogue of the theater rail fraction.
-  final Future<double> Function() loadPanelFraction;
-  final Future<void> Function(double fraction) setPanelFraction;
 
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 
@@ -175,8 +119,7 @@ class AniLocalApp extends StatelessWidget {
         watchOrder: watchOrder,
         missing: missing,
         showPreferences: showPreferences,
-        loadMissingEnabled: loadMissingEnabled,
-        setMissingEnabled: setMissingEnabled,
+        settings: settings,
         onScan: onScan,
         onRefreshMetadata: onRefreshMetadata,
         onAddFolder: onAddFolder,
@@ -184,24 +127,6 @@ class AniLocalApp extends StatelessWidget {
         missingFolders: missingFolders,
         missingFolderPaths: missingFolderPaths,
         onOpenAccessSettings: onOpenAccessSettings,
-        loadContinueCollapsed: loadContinueCollapsed,
-        setContinueCollapsed: setContinueCollapsed,
-        loadAutoPlayNext: loadAutoPlayNext,
-        setAutoPlayNext: setAutoPlayNext,
-        loadSkipMode: loadSkipMode,
-        setSkipMode: setSkipMode,
-        loadWatchedThreshold: loadWatchedThreshold,
-        setWatchedThreshold: setWatchedThreshold,
-        loadHideNextEpisode: loadHideNextEpisode,
-        setHideNextEpisode: setHideNextEpisode,
-        loadShowContinueWatching: loadShowContinueWatching,
-        setShowContinueWatching: setShowContinueWatching,
-        loadShowSearchBar: loadShowSearchBar,
-        setShowSearchBar: setShowSearchBar,
-        loadRailFraction: loadRailFraction,
-        setRailFraction: setRailFraction,
-        loadPanelFraction: loadPanelFraction,
-        setPanelFraction: setPanelFraction,
       ),
     );
   }

@@ -5,7 +5,6 @@ import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/sync_summary.dart';
 import 'package:anilocal/domain/models/next_result.dart';
-import 'package:anilocal/domain/models/skip_mode.dart';
 import 'package:anilocal/domain/repositories/fix_match_repository.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
 import 'package:anilocal/domain/repositories/missing_episodes_repository.dart';
@@ -15,6 +14,7 @@ import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/fake_settings.dart';
 import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:anilocal/domain/models/show_preferences.dart';
 import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
@@ -156,8 +156,7 @@ void main() {
         watchOrder: repo,
         missing: repo,
         showPreferences: repo,
-        loadMissingEnabled: () async => true,
-        setMissingEnabled: (_) async {},
+        settings: const FakeSettings(),
         onScan: (_) async {
           scans++;
           return _emptySummary;
@@ -168,24 +167,6 @@ void main() {
         missingFolders: ValueNotifier<List<String>>(const []),
         missingFolderPaths: ValueNotifier<Set<String>>(const {}),
         onOpenAccessSettings: () async => true,
-        loadContinueCollapsed: () async => false,
-        setContinueCollapsed: (_) async {},
-        loadAutoPlayNext: () async => true,
-        setAutoPlayNext: (_) async {},
-        loadSkipMode: () async => SkipMode.button,
-        setSkipMode: (_) async {},
-        loadWatchedThreshold: () async => const Duration(seconds: 90),
-        setWatchedThreshold: (_) async {},
-        loadHideNextEpisode: () async => false,
-        setHideNextEpisode: (_) async {},
-        loadShowContinueWatching: () async => true,
-        setShowContinueWatching: (_) async {},
-        loadShowSearchBar: () async => true,
-        setShowSearchBar: (_) async {},
-        loadRailFraction: () async => 0.30,
-        setRailFraction: (_) async {},
-        loadPanelFraction: () async => 0.22,
-        setPanelFraction: (_) async {},
       ),
     );
     await tester.pumpAndSettle();

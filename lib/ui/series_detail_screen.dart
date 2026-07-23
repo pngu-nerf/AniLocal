@@ -8,19 +8,17 @@ import '../domain/models/episode_list_row.dart';
 import '../domain/models/episode_slot.dart';
 import '../domain/models/episode_source.dart';
 import '../domain/models/series.dart';
-import '../domain/models/skip_mode.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/missing_episodes_repository.dart';
+import '../domain/repositories/settings_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'fix_match_screen.dart';
 import 'settings_dialog.dart';
 import 'library/library_search_bar.dart';
-import 'theme/header_readout.dart';
 import 'theater/theater_screen.dart';
-import 'theme/xp_theme.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
@@ -29,6 +27,7 @@ import 'widgets/episode_tile.dart';
 import 'widgets/header_actions.dart';
 import 'widgets/show_cover.dart';
 import 'widgets/xp_dialog.dart';
+import 'widgets/xp_screen.dart';
 import 'widgets/multi_select_list.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
@@ -74,23 +73,8 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.missing,
-    required this.loadMissingEnabled,
-    required this.setMissingEnabled,
+    required this.settings,
     required this.onRefreshMetadata,
-    required this.loadAutoPlayNext,
-    required this.setAutoPlayNext,
-    required this.loadSkipMode,
-    required this.setSkipMode,
-    required this.loadWatchedThreshold,
-    required this.setWatchedThreshold,
-    required this.loadHideNextEpisode,
-    required this.setHideNextEpisode,
-    required this.loadShowContinueWatching,
-    required this.setShowContinueWatching,
-    required this.loadShowSearchBar,
-    required this.setShowSearchBar,
-    required this.loadRailFraction,
-    required this.setRailFraction,
     // Shared header actions, so the detail header matches the home header.
     required this.onFolders,
     required this.onScan,
@@ -108,29 +92,13 @@ class SeriesDetailScreen extends StatefulWidget {
   /// Hidden-episode store (read + hide/unhide). Sacred across rescans (seam #5).
   final MissingEpisodesRepository missing;
 
-  /// Whether the missing-episodes feature is enabled (global setting). When
-  /// false: no ghost tiles, no Hidden tab, counts ignore hidden state.
-  final Future<bool> Function() loadMissingEnabled;
+  /// ALL app-wide settings behind ONE injected object — read here (missing-
+  /// enabled), forwarded to the theater (rail fraction + player prefs) and the
+  /// shared settings dialog (opened identically from home + here).
+  final SettingsRepository settings;
 
-  // Settings-dialog wiring (the title-bar Settings button opens the SAME shared
-  // dialog as the homepage).
-  final Future<void> Function(bool enabled) setMissingEnabled;
   final Future<({int seriesRefreshed, int skipsFetched})> Function()
   onRefreshMetadata;
-  final Future<bool> Function() loadAutoPlayNext;
-  final Future<void> Function(bool enabled) setAutoPlayNext;
-  final Future<SkipMode> Function() loadSkipMode;
-  final Future<void> Function(SkipMode mode) setSkipMode;
-  final Future<Duration> Function() loadWatchedThreshold;
-  final Future<void> Function(Duration value) setWatchedThreshold;
-  final Future<bool> Function() loadHideNextEpisode;
-  final Future<void> Function(bool hidden) setHideNextEpisode;
-  final Future<bool> Function() loadShowContinueWatching;
-  final Future<void> Function(bool show) setShowContinueWatching;
-  final Future<bool> Function() loadShowSearchBar;
-  final Future<void> Function(bool show) setShowSearchBar;
-  final Future<double> Function() loadRailFraction;
-  final Future<void> Function(double fraction) setRailFraction;
 
   /// Shared header actions (Sources / Sync / Unmatched), forwarded so the detail
   /// header is identical to the home header. [unmatchedCount] is a snapshot.
@@ -195,7 +163,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   Future<void> _reload() async {
     try {
-      final enabled = await widget.loadMissingEnabled();
+      final enabled = await widget.settings.loadMissingEnabled();
       final eps = await widget.repository.episodesFor(widget.series.anilistId);
       // The feature never applies to a not-yet-identified placeholder (no
       // AniList count, synthetic negative id) — treat it as nothing hidden.
@@ -256,15 +224,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   void _openSettings() => showAppSettingsDialog(
     context,
-    SettingsActions(
-      loadAutoPlayNext: widget.loadAutoPlayNext,
-      setAutoPlayNext: widget.setAutoPlayNext,
-      loadSkipMode: widget.loadSkipMode,
-      setSkipMode: widget.setSkipMode,
-      loadWatchedThreshold: widget.loadWatchedThreshold,
-      setWatchedThreshold: widget.setWatchedThreshold,
-      loadMissingEnabled: widget.loadMissingEnabled,
-      setMissingEnabled: widget.setMissingEnabled,
+    settings: widget.settings,
+    actions: SettingsDialogActions(
       onRefreshMetadata: widget.onRefreshMetadata,
       onRefreshed: _reload,
       loadUnmatchedCount: () async =>
@@ -279,12 +240,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       ),
       // Edit Sources opens the same folders page the header does.
       onOpenSources: widget.onFolders,
-      loadHideNextEpisode: widget.loadHideNextEpisode,
-      setHideNextEpisode: widget.setHideNextEpisode,
-      loadShowContinueWatching: widget.loadShowContinueWatching,
-      setShowContinueWatching: widget.setShowContinueWatching,
-      loadShowSearchBar: widget.loadShowSearchBar,
-      setShowSearchBar: widget.setShowSearchBar,
     ),
   );
 
@@ -328,11 +283,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           repository: widget.repository,
           watchState: widget.watchState,
           watchOrder: widget.watchOrder,
-          loadAutoPlayNext: widget.loadAutoPlayNext,
-          loadSkipMode: widget.loadSkipMode,
-          loadWatchedThreshold: widget.loadWatchedThreshold,
-          loadRailFraction: widget.loadRailFraction,
-          setRailFraction: widget.setRailFraction,
+          settings: widget.settings,
           // Same header actions as this screen — so the theater header matches.
           unmatchedCount: widget.unmatchedCount,
           onFolders: widget.onFolders,
@@ -862,39 +813,21 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final series = widget.series;
     final title = series.displayTitle;
 
-    // Match HeaderActionsBar's label threshold so the back button collapses to
-    // an icon at the same width as the right-side tabs (consistent header).
-    final showLabel = MediaQuery.sizeOf(context).width >= 760;
-
-    return Theme(
-      data: XpTheme.data(),
-      child: Scaffold(
-        backgroundColor: Xp.desktop,
-        body: XpWindow(
-          caption: title,
-          // The header VFD readout reflects the viewed show: "AniLocal <TITLE>".
-          captionWidget: HeaderReadout(title: title),
-          titleLeading: XpTitleTab(
-            icon: Icons.arrow_back,
-            label: 'Back',
-            tooltip: 'Back',
-            showLabel: showLabel,
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          // The SAME shared action bar as the home header — so the header looks
-          // identical on every screen; only the back button (leading) differs.
-          titleTrailing: HeaderActionsBar(
-            // No local spinner on the detail screen — sync runs quietly.
-            scanning: false,
-            unmatchedCount: widget.unmatchedCount,
-            onFolders: widget.onFolders,
-            onScan: _sync,
-            onUnmatched: widget.onUnmatched,
-            onSettings: _openSettings,
-          ),
-          child: _content(series, title),
-        ),
+    // The ONE shared screen shell (XpScreen): a VFD back tab + the SAME
+    // HeaderActionsBar as home/theater, readout reading "AniLocal <TITLE>".
+    // Theme is applied app-wide, so no per-screen wrap.
+    return XpScreen(
+      title: title,
+      trailing: HeaderActionsBar(
+        // No local spinner on the detail screen — sync runs quietly.
+        scanning: false,
+        unmatchedCount: widget.unmatchedCount,
+        onFolders: widget.onFolders,
+        onScan: _sync,
+        onUnmatched: widget.onUnmatched,
+        onSettings: _openSettings,
       ),
+      child: _content(series, title),
     );
   }
 

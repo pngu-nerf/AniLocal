@@ -12,7 +12,7 @@ import '../../../domain/repositories/watch_order_repository.dart';
 import '../../../domain/repositories/watch_state_repository.dart';
 import '../../../playback/media_remote.dart';
 import '../../../playback/playback_controller.dart';
-import '../../settings_dialog.dart' show watchedThresholdDefault;
+import '../../../domain/repositories/settings_repository.dart';
 import '../../theme/xp_tokens.dart';
 import '../controls/player_control_bar.dart';
 import '../controls/player_controls_state.dart';
@@ -38,21 +38,17 @@ class VideoZone extends StatefulWidget {
     required this.episode,
     required this.watchState,
     required this.watchOrder,
-    required this.autoPlayEnabled,
-    required this.skipMode,
-    required this.watchedThreshold,
+    required this.settings,
     this.onEpisodeChanged,
   });
 
   final Episode episode;
   final WatchStateRepository watchState;
   final WatchOrderRepository watchOrder;
-  final Future<bool> Function() autoPlayEnabled;
-  final Future<SkipMode> Function() skipMode;
 
-  /// The watched-threshold as an absolute time-from-end (0:00 = auto-watched
-  /// off). The SINGLE source for when this zone marks an episode watched.
-  final Future<Duration> Function() watchedThreshold;
+  /// App-wide settings (one injected object); this zone reads auto-play, skip
+  /// mode, and the watched-threshold from it per episode.
+  final SettingsRepository settings;
 
   final ValueChanged<Episode>? onEpisodeChanged;
 
@@ -221,11 +217,11 @@ class _VideoZoneState extends State<VideoZone> {
   }
 
   Future<void> _loadEpisodeContext(Episode episode) async {
-    final enabled = await widget.autoPlayEnabled();
-    final mode = await widget.skipMode();
+    final enabled = await widget.settings.loadAutoPlayNext();
+    final mode = await widget.settings.loadSkipMode();
     final result = await widget.watchOrder.nextEpisode(episode);
     if (!mounted) return;
-    final threshold = await widget.watchedThreshold();
+    final threshold = await widget.settings.loadWatchedThreshold();
     if (!mounted) return;
     _autoPlayEnabled = enabled;
     _skipMode = mode;
