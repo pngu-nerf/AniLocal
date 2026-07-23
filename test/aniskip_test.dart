@@ -231,6 +231,7 @@ void main() {
           resumePositionMs: 5000,
           durationMs: 0,
           watched: false,
+          watchedManual: false,
           updatedAtMs: 1,
         ),
       );

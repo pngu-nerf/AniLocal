@@ -6,6 +6,7 @@ import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/missing_episodes_repository.dart';
+import '../domain/repositories/show_preferences_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
@@ -33,6 +34,7 @@ class AniLocalApp extends StatelessWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.missing,
+    required this.showPreferences,
     required this.loadMissingEnabled,
     required this.setMissingEnabled,
     required this.onScan,
@@ -48,6 +50,14 @@ class AniLocalApp extends StatelessWidget {
     required this.setAutoPlayNext,
     required this.loadSkipMode,
     required this.setSkipMode,
+    required this.loadWatchedThreshold,
+    required this.setWatchedThreshold,
+    required this.loadHideNextEpisode,
+    required this.setHideNextEpisode,
+    required this.loadShowContinueWatching,
+    required this.setShowContinueWatching,
+    required this.loadShowSearchBar,
+    required this.setShowSearchBar,
     required this.loadRailFraction,
     required this.setRailFraction,
     required this.loadPanelFraction,
@@ -62,6 +72,10 @@ class AniLocalApp extends StatelessWidget {
 
   /// Hidden-episode store (missing-episodes feature); sacred across rescans.
   final MissingEpisodesRepository missing;
+
+  /// Per-show preferences store (cover display mode + hide-next-episode); sacred
+  /// across rescans (no fill-path writer).
+  final ShowPreferencesRepository showPreferences;
 
   /// The missing-episodes feature toggle (persisted; default on). Off = no ghost
   /// tiles / no Hidden tab / counts ignore hidden state, anywhere.
@@ -87,6 +101,23 @@ class AniLocalApp extends StatelessWidget {
   /// Skip mode (off/button/auto), persisted; read by the player per episode.
   final Future<SkipMode> Function() loadSkipMode;
   final Future<void> Function(SkipMode mode) setSkipMode;
+
+  /// Watched-threshold (time-from-end; 0:00 = auto-watched off), persisted. The
+  /// SINGLE value every watched-marking consumer reads; set from Settings.
+  final Future<Duration> Function() loadWatchedThreshold;
+  final Future<void> Function(Duration value) setWatchedThreshold;
+
+  /// Global "Hide next episode" (persisted). Setting it is a master apply-to-all
+  /// that overwrites every per-show next-episode choice.
+  final Future<bool> Function() loadHideNextEpisode;
+  final Future<void> Function(bool hidden) setHideNextEpisode;
+
+  /// Global homepage visibility toggles (persisted, default shown): the
+  /// continue-watching sidebar and the search bar.
+  final Future<bool> Function() loadShowContinueWatching;
+  final Future<void> Function(bool show) setShowContinueWatching;
+  final Future<bool> Function() loadShowSearchBar;
+  final Future<void> Function(bool show) setShowSearchBar;
 
   /// Theater rail width (fraction of total), persisted; the rail divider in the
   /// theater reads it on open and writes it when a drag ends.
@@ -143,6 +174,7 @@ class AniLocalApp extends StatelessWidget {
         sourceSelection: sourceSelection,
         watchOrder: watchOrder,
         missing: missing,
+        showPreferences: showPreferences,
         loadMissingEnabled: loadMissingEnabled,
         setMissingEnabled: setMissingEnabled,
         onScan: onScan,
@@ -158,6 +190,14 @@ class AniLocalApp extends StatelessWidget {
         setAutoPlayNext: setAutoPlayNext,
         loadSkipMode: loadSkipMode,
         setSkipMode: setSkipMode,
+        loadWatchedThreshold: loadWatchedThreshold,
+        setWatchedThreshold: setWatchedThreshold,
+        loadHideNextEpisode: loadHideNextEpisode,
+        setHideNextEpisode: setHideNextEpisode,
+        loadShowContinueWatching: loadShowContinueWatching,
+        setShowContinueWatching: setShowContinueWatching,
+        loadShowSearchBar: loadShowSearchBar,
+        setShowSearchBar: setShowSearchBar,
         loadRailFraction: loadRailFraction,
         setRailFraction: setRailFraction,
         loadPanelFraction: loadPanelFraction,

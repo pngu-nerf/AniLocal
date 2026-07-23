@@ -16,6 +16,9 @@ import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:anilocal/domain/models/picture_mode.dart';
+import 'package:anilocal/domain/models/show_preferences.dart';
+import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
 
 class _FakeFixMatch implements FixMatchRepository {
@@ -47,7 +50,8 @@ class _FakeRepository
         WatchStateRepository,
         SourceSelectionRepository,
         WatchOrderRepository,
-        MissingEpisodesRepository {
+        MissingEpisodesRepository,
+        ShowPreferencesRepository {
   @override
   Future<List<Series>> allSeries() async => const [
     Series(
@@ -85,6 +89,25 @@ class _FakeRepository
 
   @override
   Future<void> setWatched(Episode episode, {required bool watched}) async {}
+
+  @override
+  Future<void> setWatchedManual(Episode e, {required bool watched}) async {}
+
+  @override
+  Future<ShowPreferences> preferencesFor(int anilistId) async =>
+      const ShowPreferences();
+  @override
+  Future<Map<int, ShowPreferences>> allPreferences() async => const {};
+  @override
+  Future<void> setPictureMode(int anilistId, PictureMode mode) async {}
+  @override
+  Future<void> setNextEpisodeHidden(
+    int anilistId, {
+    required bool hidden,
+  }) async {}
+
+  @override
+  Future<void> setAllNextEpisodeHidden({required bool hidden}) async {}
 
   @override
   Future<void> clearProgress(Episode episode) async {}
@@ -130,6 +153,7 @@ void main() {
         sourceSelection: _FakeRepository(),
         watchOrder: _FakeRepository(),
         missing: _FakeRepository(),
+        showPreferences: _FakeRepository(),
         loadMissingEnabled: () async => true,
         setMissingEnabled: (_) async {},
         onScan: (_) async => const SyncSummary(
@@ -154,6 +178,14 @@ void main() {
         setAutoPlayNext: (_) async {},
         loadSkipMode: () async => SkipMode.button,
         setSkipMode: (_) async {},
+        loadWatchedThreshold: () async => const Duration(seconds: 90),
+        setWatchedThreshold: (_) async {},
+        loadHideNextEpisode: () async => false,
+        setHideNextEpisode: (_) async {},
+        loadShowContinueWatching: () async => true,
+        setShowContinueWatching: (_) async {},
+        loadShowSearchBar: () async => true,
+        setShowSearchBar: (_) async {},
         loadRailFraction: () async => 0.30,
         setRailFraction: (_) async {},
         loadPanelFraction: () async => 0.22,

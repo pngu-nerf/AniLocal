@@ -2154,6 +2154,21 @@ class $WatchStatesTable extends WatchStates
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _watchedManualMeta = const VerificationMeta(
+    'watchedManual',
+  );
+  @override
+  late final GeneratedColumn<bool> watchedManual = GeneratedColumn<bool>(
+    'watched_manual',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("watched_manual" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
     'updatedAtMs',
   );
@@ -2173,6 +2188,7 @@ class $WatchStatesTable extends WatchStates
     resumePositionMs,
     durationMs,
     watched,
+    watchedManual,
     updatedAtMs,
   ];
   @override
@@ -2224,6 +2240,15 @@ class $WatchStatesTable extends WatchStates
         watched.isAcceptableOrUnknown(data['watched']!, _watchedMeta),
       );
     }
+    if (data.containsKey('watched_manual')) {
+      context.handle(
+        _watchedManualMeta,
+        watchedManual.isAcceptableOrUnknown(
+          data['watched_manual']!,
+          _watchedManualMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at_ms')) {
       context.handle(
         _updatedAtMsMeta,
@@ -2262,6 +2287,10 @@ class $WatchStatesTable extends WatchStates
         DriftSqlType.bool,
         data['${effectivePrefix}watched'],
       )!,
+      watchedManual: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}watched_manual'],
+      )!,
       updatedAtMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at_ms'],
@@ -2281,6 +2310,13 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   final int resumePositionMs;
   final int durationMs;
   final bool watched;
+
+  /// True when [watched] was set by a MANUAL toggle (the sticky per-episode
+  /// override) rather than derived from the watched-threshold during playback.
+  /// A manual override wins over the threshold: the auto path won't touch a row
+  /// with this set, and it survives refresh/rescan (watch_state is never in the
+  /// fill path — seam #5). false = the [watched] value is threshold-derived.
+  final bool watchedManual;
   final int updatedAtMs;
   const WatchStateRow({
     required this.anilistId,
@@ -2288,6 +2324,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
     required this.resumePositionMs,
     required this.durationMs,
     required this.watched,
+    required this.watchedManual,
     required this.updatedAtMs,
   });
   @override
@@ -2298,6 +2335,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
     map['resume_position_ms'] = Variable<int>(resumePositionMs);
     map['duration_ms'] = Variable<int>(durationMs);
     map['watched'] = Variable<bool>(watched);
+    map['watched_manual'] = Variable<bool>(watchedManual);
     map['updated_at_ms'] = Variable<int>(updatedAtMs);
     return map;
   }
@@ -2309,6 +2347,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
       resumePositionMs: Value(resumePositionMs),
       durationMs: Value(durationMs),
       watched: Value(watched),
+      watchedManual: Value(watchedManual),
       updatedAtMs: Value(updatedAtMs),
     );
   }
@@ -2324,6 +2363,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
       resumePositionMs: serializer.fromJson<int>(json['resumePositionMs']),
       durationMs: serializer.fromJson<int>(json['durationMs']),
       watched: serializer.fromJson<bool>(json['watched']),
+      watchedManual: serializer.fromJson<bool>(json['watchedManual']),
       updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
     );
   }
@@ -2336,6 +2376,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
       'resumePositionMs': serializer.toJson<int>(resumePositionMs),
       'durationMs': serializer.toJson<int>(durationMs),
       'watched': serializer.toJson<bool>(watched),
+      'watchedManual': serializer.toJson<bool>(watchedManual),
       'updatedAtMs': serializer.toJson<int>(updatedAtMs),
     };
   }
@@ -2346,6 +2387,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
     int? resumePositionMs,
     int? durationMs,
     bool? watched,
+    bool? watchedManual,
     int? updatedAtMs,
   }) => WatchStateRow(
     anilistId: anilistId ?? this.anilistId,
@@ -2353,6 +2395,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
     resumePositionMs: resumePositionMs ?? this.resumePositionMs,
     durationMs: durationMs ?? this.durationMs,
     watched: watched ?? this.watched,
+    watchedManual: watchedManual ?? this.watchedManual,
     updatedAtMs: updatedAtMs ?? this.updatedAtMs,
   );
   WatchStateRow copyWithCompanion(WatchStatesCompanion data) {
@@ -2366,6 +2409,9 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
           ? data.durationMs.value
           : this.durationMs,
       watched: data.watched.present ? data.watched.value : this.watched,
+      watchedManual: data.watchedManual.present
+          ? data.watchedManual.value
+          : this.watchedManual,
       updatedAtMs: data.updatedAtMs.present
           ? data.updatedAtMs.value
           : this.updatedAtMs,
@@ -2380,6 +2426,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
           ..write('resumePositionMs: $resumePositionMs, ')
           ..write('durationMs: $durationMs, ')
           ..write('watched: $watched, ')
+          ..write('watchedManual: $watchedManual, ')
           ..write('updatedAtMs: $updatedAtMs')
           ..write(')'))
         .toString();
@@ -2392,6 +2439,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
     resumePositionMs,
     durationMs,
     watched,
+    watchedManual,
     updatedAtMs,
   );
   @override
@@ -2403,6 +2451,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
           other.resumePositionMs == this.resumePositionMs &&
           other.durationMs == this.durationMs &&
           other.watched == this.watched &&
+          other.watchedManual == this.watchedManual &&
           other.updatedAtMs == this.updatedAtMs);
 }
 
@@ -2412,6 +2461,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
   final Value<int> resumePositionMs;
   final Value<int> durationMs;
   final Value<bool> watched;
+  final Value<bool> watchedManual;
   final Value<int> updatedAtMs;
   final Value<int> rowid;
   const WatchStatesCompanion({
@@ -2420,6 +2470,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     this.resumePositionMs = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.watched = const Value.absent(),
+    this.watchedManual = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2429,6 +2480,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     this.resumePositionMs = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.watched = const Value.absent(),
+    this.watchedManual = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : anilistId = Value(anilistId),
@@ -2439,6 +2491,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     Expression<int>? resumePositionMs,
     Expression<int>? durationMs,
     Expression<bool>? watched,
+    Expression<bool>? watchedManual,
     Expression<int>? updatedAtMs,
     Expression<int>? rowid,
   }) {
@@ -2448,6 +2501,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
       if (resumePositionMs != null) 'resume_position_ms': resumePositionMs,
       if (durationMs != null) 'duration_ms': durationMs,
       if (watched != null) 'watched': watched,
+      if (watchedManual != null) 'watched_manual': watchedManual,
       if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2459,6 +2513,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     Value<int>? resumePositionMs,
     Value<int>? durationMs,
     Value<bool>? watched,
+    Value<bool>? watchedManual,
     Value<int>? updatedAtMs,
     Value<int>? rowid,
   }) {
@@ -2468,6 +2523,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
       resumePositionMs: resumePositionMs ?? this.resumePositionMs,
       durationMs: durationMs ?? this.durationMs,
       watched: watched ?? this.watched,
+      watchedManual: watchedManual ?? this.watchedManual,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
       rowid: rowid ?? this.rowid,
     );
@@ -2491,6 +2547,9 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     if (watched.present) {
       map['watched'] = Variable<bool>(watched.value);
     }
+    if (watchedManual.present) {
+      map['watched_manual'] = Variable<bool>(watchedManual.value);
+    }
     if (updatedAtMs.present) {
       map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
     }
@@ -2508,6 +2567,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
           ..write('resumePositionMs: $resumePositionMs, ')
           ..write('durationMs: $durationMs, ')
           ..write('watched: $watched, ')
+          ..write('watchedManual: $watchedManual, ')
           ..write('updatedAtMs: $updatedAtMs, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3764,6 +3824,280 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingRow> {
   }
 }
 
+class $ShowPrefsTable extends ShowPrefs
+    with TableInfo<$ShowPrefsTable, ShowPreferenceRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ShowPrefsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
+    'anilistId',
+  );
+  @override
+  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
+    'anilist_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pictureModeMeta = const VerificationMeta(
+    'pictureMode',
+  );
+  @override
+  late final GeneratedColumn<String> pictureMode = GeneratedColumn<String>(
+    'picture_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('normal'),
+  );
+  static const VerificationMeta _nextEpisodeHiddenMeta = const VerificationMeta(
+    'nextEpisodeHidden',
+  );
+  @override
+  late final GeneratedColumn<bool> nextEpisodeHidden = GeneratedColumn<bool>(
+    'next_episode_hidden',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("next_episode_hidden" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    anilistId,
+    pictureMode,
+    nextEpisodeHidden,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'show_preferences';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ShowPreferenceRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('anilist_id')) {
+      context.handle(
+        _anilistIdMeta,
+        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+      );
+    }
+    if (data.containsKey('picture_mode')) {
+      context.handle(
+        _pictureModeMeta,
+        pictureMode.isAcceptableOrUnknown(
+          data['picture_mode']!,
+          _pictureModeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_episode_hidden')) {
+      context.handle(
+        _nextEpisodeHiddenMeta,
+        nextEpisodeHidden.isAcceptableOrUnknown(
+          data['next_episode_hidden']!,
+          _nextEpisodeHiddenMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {anilistId};
+  @override
+  ShowPreferenceRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ShowPreferenceRow(
+      anilistId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}anilist_id'],
+      )!,
+      pictureMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}picture_mode'],
+      )!,
+      nextEpisodeHidden: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}next_episode_hidden'],
+      )!,
+    );
+  }
+
+  @override
+  $ShowPrefsTable createAlias(String alias) {
+    return $ShowPrefsTable(attachedDatabase, alias);
+  }
+}
+
+class ShowPreferenceRow extends DataClass
+    implements Insertable<ShowPreferenceRow> {
+  final int anilistId;
+
+  /// Cover display mode token (see PictureMode): 'normal' / 'blur' / 'removed'.
+  final String pictureMode;
+
+  /// Whether the card's "Next episode" button is hidden for this show.
+  final bool nextEpisodeHidden;
+  const ShowPreferenceRow({
+    required this.anilistId,
+    required this.pictureMode,
+    required this.nextEpisodeHidden,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['anilist_id'] = Variable<int>(anilistId);
+    map['picture_mode'] = Variable<String>(pictureMode);
+    map['next_episode_hidden'] = Variable<bool>(nextEpisodeHidden);
+    return map;
+  }
+
+  ShowPrefsCompanion toCompanion(bool nullToAbsent) {
+    return ShowPrefsCompanion(
+      anilistId: Value(anilistId),
+      pictureMode: Value(pictureMode),
+      nextEpisodeHidden: Value(nextEpisodeHidden),
+    );
+  }
+
+  factory ShowPreferenceRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ShowPreferenceRow(
+      anilistId: serializer.fromJson<int>(json['anilistId']),
+      pictureMode: serializer.fromJson<String>(json['pictureMode']),
+      nextEpisodeHidden: serializer.fromJson<bool>(json['nextEpisodeHidden']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'anilistId': serializer.toJson<int>(anilistId),
+      'pictureMode': serializer.toJson<String>(pictureMode),
+      'nextEpisodeHidden': serializer.toJson<bool>(nextEpisodeHidden),
+    };
+  }
+
+  ShowPreferenceRow copyWith({
+    int? anilistId,
+    String? pictureMode,
+    bool? nextEpisodeHidden,
+  }) => ShowPreferenceRow(
+    anilistId: anilistId ?? this.anilistId,
+    pictureMode: pictureMode ?? this.pictureMode,
+    nextEpisodeHidden: nextEpisodeHidden ?? this.nextEpisodeHidden,
+  );
+  ShowPreferenceRow copyWithCompanion(ShowPrefsCompanion data) {
+    return ShowPreferenceRow(
+      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      pictureMode: data.pictureMode.present
+          ? data.pictureMode.value
+          : this.pictureMode,
+      nextEpisodeHidden: data.nextEpisodeHidden.present
+          ? data.nextEpisodeHidden.value
+          : this.nextEpisodeHidden,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ShowPreferenceRow(')
+          ..write('anilistId: $anilistId, ')
+          ..write('pictureMode: $pictureMode, ')
+          ..write('nextEpisodeHidden: $nextEpisodeHidden')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(anilistId, pictureMode, nextEpisodeHidden);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ShowPreferenceRow &&
+          other.anilistId == this.anilistId &&
+          other.pictureMode == this.pictureMode &&
+          other.nextEpisodeHidden == this.nextEpisodeHidden);
+}
+
+class ShowPrefsCompanion extends UpdateCompanion<ShowPreferenceRow> {
+  final Value<int> anilistId;
+  final Value<String> pictureMode;
+  final Value<bool> nextEpisodeHidden;
+  const ShowPrefsCompanion({
+    this.anilistId = const Value.absent(),
+    this.pictureMode = const Value.absent(),
+    this.nextEpisodeHidden = const Value.absent(),
+  });
+  ShowPrefsCompanion.insert({
+    this.anilistId = const Value.absent(),
+    this.pictureMode = const Value.absent(),
+    this.nextEpisodeHidden = const Value.absent(),
+  });
+  static Insertable<ShowPreferenceRow> custom({
+    Expression<int>? anilistId,
+    Expression<String>? pictureMode,
+    Expression<bool>? nextEpisodeHidden,
+  }) {
+    return RawValuesInsertable({
+      if (anilistId != null) 'anilist_id': anilistId,
+      if (pictureMode != null) 'picture_mode': pictureMode,
+      if (nextEpisodeHidden != null) 'next_episode_hidden': nextEpisodeHidden,
+    });
+  }
+
+  ShowPrefsCompanion copyWith({
+    Value<int>? anilistId,
+    Value<String>? pictureMode,
+    Value<bool>? nextEpisodeHidden,
+  }) {
+    return ShowPrefsCompanion(
+      anilistId: anilistId ?? this.anilistId,
+      pictureMode: pictureMode ?? this.pictureMode,
+      nextEpisodeHidden: nextEpisodeHidden ?? this.nextEpisodeHidden,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (anilistId.present) {
+      map['anilist_id'] = Variable<int>(anilistId.value);
+    }
+    if (pictureMode.present) {
+      map['picture_mode'] = Variable<String>(pictureMode.value);
+    }
+    if (nextEpisodeHidden.present) {
+      map['next_episode_hidden'] = Variable<bool>(nextEpisodeHidden.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ShowPrefsCompanion(')
+          ..write('anilistId: $anilistId, ')
+          ..write('pictureMode: $pictureMode, ')
+          ..write('nextEpisodeHidden: $nextEpisodeHidden')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$CacheDatabase extends GeneratedDatabase {
   _$CacheDatabase(QueryExecutor e) : super(e);
   $CacheDatabaseManager get managers => $CacheDatabaseManager(this);
@@ -3778,6 +4112,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
   late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
   late final $HiddenEpisodesTable hiddenEpisodes = $HiddenEpisodesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $ShowPrefsTable showPrefs = $ShowPrefsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3792,6 +4127,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     skipSegments,
     hiddenEpisodes,
     appSettings,
+    showPrefs,
   ];
 }
 
@@ -4832,6 +5168,7 @@ typedef $$WatchStatesTableCreateCompanionBuilder =
       Value<int> resumePositionMs,
       Value<int> durationMs,
       Value<bool> watched,
+      Value<bool> watchedManual,
       Value<int> updatedAtMs,
       Value<int> rowid,
     });
@@ -4842,6 +5179,7 @@ typedef $$WatchStatesTableUpdateCompanionBuilder =
       Value<int> resumePositionMs,
       Value<int> durationMs,
       Value<bool> watched,
+      Value<bool> watchedManual,
       Value<int> updatedAtMs,
       Value<int> rowid,
     });
@@ -4877,6 +5215,11 @@ class $$WatchStatesTableFilterComposer
 
   ColumnFilters<bool> get watched => $composableBuilder(
     column: $table.watched,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get watchedManual => $composableBuilder(
+    column: $table.watchedManual,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4920,6 +5263,11 @@ class $$WatchStatesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get watchedManual => $composableBuilder(
+    column: $table.watchedManual,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAtMs => $composableBuilder(
     column: $table.updatedAtMs,
     builder: (column) => ColumnOrderings(column),
@@ -4953,6 +5301,11 @@ class $$WatchStatesTableAnnotationComposer
 
   GeneratedColumn<bool> get watched =>
       $composableBuilder(column: $table.watched, builder: (column) => column);
+
+  GeneratedColumn<bool> get watchedManual => $composableBuilder(
+    column: $table.watchedManual,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get updatedAtMs => $composableBuilder(
     column: $table.updatedAtMs,
@@ -4996,6 +5349,7 @@ class $$WatchStatesTableTableManager
                 Value<int> resumePositionMs = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<bool> watched = const Value.absent(),
+                Value<bool> watchedManual = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WatchStatesCompanion(
@@ -5004,6 +5358,7 @@ class $$WatchStatesTableTableManager
                 resumePositionMs: resumePositionMs,
                 durationMs: durationMs,
                 watched: watched,
+                watchedManual: watchedManual,
                 updatedAtMs: updatedAtMs,
                 rowid: rowid,
               ),
@@ -5014,6 +5369,7 @@ class $$WatchStatesTableTableManager
                 Value<int> resumePositionMs = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<bool> watched = const Value.absent(),
+                Value<bool> watchedManual = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WatchStatesCompanion.insert(
@@ -5022,6 +5378,7 @@ class $$WatchStatesTableTableManager
                 resumePositionMs: resumePositionMs,
                 durationMs: durationMs,
                 watched: watched,
+                watchedManual: watchedManual,
                 updatedAtMs: updatedAtMs,
                 rowid: rowid,
               ),
@@ -5781,6 +6138,166 @@ typedef $$AppSettingsTableProcessedTableManager =
       AppSettingRow,
       PrefetchHooks Function()
     >;
+typedef $$ShowPrefsTableCreateCompanionBuilder =
+    ShowPrefsCompanion Function({
+      Value<int> anilistId,
+      Value<String> pictureMode,
+      Value<bool> nextEpisodeHidden,
+    });
+typedef $$ShowPrefsTableUpdateCompanionBuilder =
+    ShowPrefsCompanion Function({
+      Value<int> anilistId,
+      Value<String> pictureMode,
+      Value<bool> nextEpisodeHidden,
+    });
+
+class $$ShowPrefsTableFilterComposer
+    extends Composer<_$CacheDatabase, $ShowPrefsTable> {
+  $$ShowPrefsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pictureMode => $composableBuilder(
+    column: $table.pictureMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get nextEpisodeHidden => $composableBuilder(
+    column: $table.nextEpisodeHidden,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ShowPrefsTableOrderingComposer
+    extends Composer<_$CacheDatabase, $ShowPrefsTable> {
+  $$ShowPrefsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get anilistId => $composableBuilder(
+    column: $table.anilistId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pictureMode => $composableBuilder(
+    column: $table.pictureMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get nextEpisodeHidden => $composableBuilder(
+    column: $table.nextEpisodeHidden,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ShowPrefsTableAnnotationComposer
+    extends Composer<_$CacheDatabase, $ShowPrefsTable> {
+  $$ShowPrefsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get anilistId =>
+      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+
+  GeneratedColumn<String> get pictureMode => $composableBuilder(
+    column: $table.pictureMode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get nextEpisodeHidden => $composableBuilder(
+    column: $table.nextEpisodeHidden,
+    builder: (column) => column,
+  );
+}
+
+class $$ShowPrefsTableTableManager
+    extends
+        RootTableManager<
+          _$CacheDatabase,
+          $ShowPrefsTable,
+          ShowPreferenceRow,
+          $$ShowPrefsTableFilterComposer,
+          $$ShowPrefsTableOrderingComposer,
+          $$ShowPrefsTableAnnotationComposer,
+          $$ShowPrefsTableCreateCompanionBuilder,
+          $$ShowPrefsTableUpdateCompanionBuilder,
+          (
+            ShowPreferenceRow,
+            BaseReferences<_$CacheDatabase, $ShowPrefsTable, ShowPreferenceRow>,
+          ),
+          ShowPreferenceRow,
+          PrefetchHooks Function()
+        > {
+  $$ShowPrefsTableTableManager(_$CacheDatabase db, $ShowPrefsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ShowPrefsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ShowPrefsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ShowPrefsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> anilistId = const Value.absent(),
+                Value<String> pictureMode = const Value.absent(),
+                Value<bool> nextEpisodeHidden = const Value.absent(),
+              }) => ShowPrefsCompanion(
+                anilistId: anilistId,
+                pictureMode: pictureMode,
+                nextEpisodeHidden: nextEpisodeHidden,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> anilistId = const Value.absent(),
+                Value<String> pictureMode = const Value.absent(),
+                Value<bool> nextEpisodeHidden = const Value.absent(),
+              }) => ShowPrefsCompanion.insert(
+                anilistId: anilistId,
+                pictureMode: pictureMode,
+                nextEpisodeHidden: nextEpisodeHidden,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ShowPrefsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$CacheDatabase,
+      $ShowPrefsTable,
+      ShowPreferenceRow,
+      $$ShowPrefsTableFilterComposer,
+      $$ShowPrefsTableOrderingComposer,
+      $$ShowPrefsTableAnnotationComposer,
+      $$ShowPrefsTableCreateCompanionBuilder,
+      $$ShowPrefsTableUpdateCompanionBuilder,
+      (
+        ShowPreferenceRow,
+        BaseReferences<_$CacheDatabase, $ShowPrefsTable, ShowPreferenceRow>,
+      ),
+      ShowPreferenceRow,
+      PrefetchHooks Function()
+    >;
 
 class $CacheDatabaseManager {
   final _$CacheDatabase _db;
@@ -5803,4 +6320,6 @@ class $CacheDatabaseManager {
       $$HiddenEpisodesTableTableManager(_db, _db.hiddenEpisodes);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$ShowPrefsTableTableManager get showPrefs =>
+      $$ShowPrefsTableTableManager(_db, _db.showPrefs);
 }

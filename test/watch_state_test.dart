@@ -144,6 +144,72 @@ void main() {
   );
 
   test(
+    'setWatchedManual marks watched WITHOUT clearing the resume position',
+    () async {
+      await touch('Cowboy Bebop - 03.mkv', 800);
+      await sync.sync([dir.path]);
+      await repo.saveProgress(
+        await episode(1, 3),
+        position: const Duration(minutes: 10),
+        duration: const Duration(minutes: 24),
+      );
+
+      await repo.setWatchedManual(await episode(1, 3), watched: true);
+
+      final after = await episode(1, 3);
+      expect(after.watched, isTrue);
+      expect(
+        after.resumePosition,
+        const Duration(minutes: 10),
+        reason: 'manual toggle leaves progress untouched',
+      );
+      // Watched ⇒ still out of continue-watching even though resume survived.
+      expect(await repo.continueWatching(), isEmpty);
+    },
+  );
+
+  test('a manual override WINS over the auto/threshold path', () async {
+    await touch('Cowboy Bebop - 03.mkv', 800);
+    await sync.sync([dir.path]);
+
+    // User manually marks UNWATCHED…
+    await repo.setWatchedManual(await episode(1, 3), watched: false);
+    // …then the threshold tries to auto-mark watched — must be a no-op.
+    await repo.setWatched(await episode(1, 3), watched: true);
+    expect(
+      (await episode(1, 3)).watched,
+      isFalse,
+      reason: 'manual unwatched beats the auto threshold',
+    );
+
+    // And the reverse: manual watched survives an auto "unwatched" attempt.
+    await repo.setWatchedManual(await episode(1, 3), watched: true);
+    await repo.setWatched(await episode(1, 3), watched: false);
+    expect((await episode(1, 3)).watched, isTrue);
+  });
+
+  test('saveProgress does NOT clobber a manual watched override', () async {
+    await touch('Cowboy Bebop - 03.mkv', 800);
+    await sync.sync([dir.path]);
+    await repo.setWatchedManual(await episode(1, 3), watched: true);
+
+    // Simulate resume ticking while (re)playing a manually-watched episode.
+    await repo.saveProgress(
+      await episode(1, 3),
+      position: const Duration(minutes: 12),
+      duration: const Duration(minutes: 24),
+    );
+
+    final after = await episode(1, 3);
+    expect(
+      after.watched,
+      isTrue,
+      reason: 'the sticky override survives a progress save',
+    );
+    expect(after.resumePosition, const Duration(minutes: 12));
+  });
+
+  test(
     'clearProgress dismisses from continue-watching, NOT marking watched',
     () async {
       await touch('Cowboy Bebop - 03.mkv', 800);

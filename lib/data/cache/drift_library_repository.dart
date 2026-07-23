@@ -4,11 +4,14 @@ import '../../domain/models/episode_source.dart';
 import '../../domain/models/identified_episode.dart';
 import '../../domain/models/next_result.dart';
 import '../../domain/models/library_folder.dart';
+import '../../domain/models/picture_mode.dart';
 import '../../domain/models/series.dart';
+import '../../domain/models/show_preferences.dart';
 import '../../domain/models/skip_range.dart';
 import '../../domain/models/titles.dart';
 import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/missing_episodes_repository.dart';
+import '../../domain/repositories/show_preferences_repository.dart';
 import '../../domain/repositories/source_selection_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
@@ -76,7 +79,8 @@ class DriftLibraryRepository
         WatchStateRepository,
         SourceSelectionRepository,
         WatchOrderRepository,
-        MissingEpisodesRepository {
+        MissingEpisodesRepository,
+        ShowPreferencesRepository {
   DriftLibraryRepository(this._db, {VolumeResolver? resolver})
     : _resolver = resolver ?? DiskutilVolumeResolver();
 
@@ -237,9 +241,11 @@ class DriftLibraryRepository
         if (e.anilistId != null) e.anilistId!,
     };
     final byId = {for (final r in await _db.allSeriesRows()) r.anilistId: r};
+    final prefs = await allPreferences();
     final list = [
       for (final id in wanted)
-        if (byId[id] != null) _toSeries(byId[id]!),
+        if (byId[id] != null)
+          _toSeries(byId[id]!, prefs[id] ?? const ShowPreferences()),
     ];
     // Pending (not-yet-identified) files surface as NAMED PLACEHOLDERS — one
     // per distinct parsed-title group — so the library reflects what's on disk
@@ -400,14 +406,21 @@ class DriftLibraryRepository
     Episode episode, {
     required Duration position,
     required Duration duration,
-  }) {
-    return _db.upsertWatchState(
+  }) async {
+    // Progress-only write: PRESERVE the existing watched + manual-override flags
+    // (never clobber a manual watched/unwatched while resume keeps ticking).
+    final existing = await _db.watchStateFor(
+      episode.seriesAnilistId,
+      episode.anchoredNumber,
+    );
+    await _db.upsertWatchState(
       WatchStateRow(
         anilistId: episode.seriesAnilistId,
         episode: episode.anchoredNumber,
         resumePositionMs: position.inMilliseconds,
         durationMs: duration.inMilliseconds,
-        watched: false,
+        watched: existing?.watched ?? false,
+        watchedManual: existing?.watchedManual ?? false,
         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
       ),
     );
@@ -419,6 +432,9 @@ class DriftLibraryRepository
       episode.seriesAnilistId,
       episode.anchoredNumber,
     );
+    // The AUTO / threshold path. A MANUAL override wins: never touch a row the
+    // user set by hand (the sticky watched-override is sacred user data).
+    if (existing?.watchedManual ?? false) return;
     await _db.upsertWatchState(
       WatchStateRow(
         anilistId: episode.seriesAnilistId,
@@ -427,6 +443,33 @@ class DriftLibraryRepository
         resumePositionMs: watched ? 0 : (existing?.resumePositionMs ?? 0),
         durationMs: existing?.durationMs ?? episode.duration.inMilliseconds,
         watched: watched,
+        watchedManual: false,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  @override
+  Future<void> setWatchedManual(
+    Episode episode, {
+    required bool watched,
+  }) async {
+    final existing = await _db.watchStateFor(
+      episode.seriesAnilistId,
+      episode.anchoredNumber,
+    );
+    // Sticky manual override: set watched + mark it manual so the auto/threshold
+    // path leaves it alone, and it survives re-entry AND refresh/rescan (seam #5
+    // — watch_state has no fill-path writer). Progress is UNTOUCHED: the saved
+    // resume position + duration carry over exactly.
+    await _db.upsertWatchState(
+      WatchStateRow(
+        anilistId: episode.seriesAnilistId,
+        episode: episode.anchoredNumber,
+        resumePositionMs: existing?.resumePositionMs ?? 0,
+        durationMs: existing?.durationMs ?? episode.duration.inMilliseconds,
+        watched: watched,
+        watchedManual: true,
         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
       ),
     );
@@ -447,6 +490,7 @@ class DriftLibraryRepository
     final skips = {
       for (final s in await _db.allSkipRows()) (s.anilistId, s.episode): s,
     };
+    final prefs = await allPreferences();
 
     final result = <ContinueWatching>[];
     for (final w in inProgress) {
@@ -455,7 +499,10 @@ class DriftLibraryRepository
       if (match == null || series == null) continue; // file/series gone
       result.add(
         ContinueWatching(
-          series: _toSeries(series),
+          series: _toSeries(
+            series,
+            prefs[w.anilistId] ?? const ShowPreferences(),
+          ),
           episode: _toEpisode(match, w, skips[(w.anilistId, w.episode)]),
         ),
       );
@@ -629,14 +676,83 @@ class DriftLibraryRepository
         )
       : null;
 
-  Series _toSeries(CachedSeriesRow r) => Series(
+  Series _toSeries(
+    CachedSeriesRow r, [
+    ShowPreferences prefs = const ShowPreferences(),
+  ]) => Series(
     anilistId: r.anilistId,
     titles: Titles(romaji: r.romaji, english: r.english, native: r.nativeTitle),
     format: r.format,
     episodeCount: r.episodeCount,
     // The LOCAL art path, so offline browse shows art (not the remote URL).
     coverImageRef: r.coverImagePath,
+    // Per-show prefs surfaced onto the projection so every cover site + the
+    // card's Next button render consistently (the store stays the source).
+    pictureMode: prefs.pictureMode,
+    nextEpisodeHidden: prefs.nextEpisodeHidden,
   );
+
+  ShowPreferences _toPrefs(ShowPreferenceRow? r) => ShowPreferences(
+    pictureMode: PictureMode.fromToken(r?.pictureMode),
+    nextEpisodeHidden: r?.nextEpisodeHidden ?? false,
+  );
+
+  // --- Per-show preferences (ShowPreferencesRepository). Sacred: no fill-path
+  //     writer, so refresh/rescan can't wipe these. ---
+
+  @override
+  Future<ShowPreferences> preferencesFor(int anilistId) async =>
+      _toPrefs(await _db.showPrefFor(anilistId));
+
+  @override
+  Future<Map<int, ShowPreferences>> allPreferences() async => {
+    for (final r in await _db.allShowPrefRows()) r.anilistId: _toPrefs(r),
+  };
+
+  @override
+  Future<void> setPictureMode(int anilistId, PictureMode mode) async {
+    final existing = await _db.showPrefFor(anilistId);
+    await _db.upsertShowPref(
+      ShowPreferenceRow(
+        anilistId: anilistId,
+        pictureMode: mode.token,
+        nextEpisodeHidden: existing?.nextEpisodeHidden ?? false,
+      ),
+    );
+  }
+
+  @override
+  Future<void> setNextEpisodeHidden(
+    int anilistId, {
+    required bool hidden,
+  }) async {
+    final existing = await _db.showPrefFor(anilistId);
+    await _db.upsertShowPref(
+      ShowPreferenceRow(
+        anilistId: anilistId,
+        pictureMode: existing?.pictureMode ?? PictureMode.normal.token,
+        nextEpisodeHidden: hidden,
+      ),
+    );
+  }
+
+  @override
+  Future<void> setAllNextEpisodeHidden({required bool hidden}) async {
+    // Overwrite every cached show's flag, preserving each show's picture mode.
+    final existing = {
+      for (final r in await _db.allShowPrefRows()) r.anilistId: r,
+    };
+    for (final s in await _db.allSeriesRows()) {
+      await _db.upsertShowPref(
+        ShowPreferenceRow(
+          anilistId: s.anilistId,
+          pictureMode:
+              existing[s.anilistId]?.pictureMode ?? PictureMode.normal.token,
+          nextEpisodeHidden: hidden,
+        ),
+      );
+    }
+  }
 
   String _sortTitle(Series s) =>
       (s.titles.english ?? s.titles.romaji ?? s.titles.native ?? '')

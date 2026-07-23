@@ -12,9 +12,16 @@ abstract interface class WatchStateRepository {
     required Duration duration,
   });
 
-  /// Mark [episode] watched/unwatched. Marking watched clears the resume
-  /// position (a finished episode leaves "Continue watching").
+  /// AUTO (threshold-derived) watched mark. Marking watched clears the resume
+  /// position (a finished episode leaves "Continue watching"). RESPECTS a manual
+  /// override: if the episode was set by [setWatchedManual], this is a no-op —
+  /// the manual value wins over the threshold.
   Future<void> setWatched(Episode episode, {required bool watched});
+
+  /// MANUAL, sticky watched-override (the per-episode toggle). Wins over the
+  /// auto/threshold path and survives re-entry AND metadata refresh/rescan.
+  /// Does NOT change the saved resume position (progress is untouched).
+  Future<void> setWatchedManual(Episode episode, {required bool watched});
 
   /// Dismiss [episode] from "Continue watching" — removes its in-progress
   /// state without marking it watched.

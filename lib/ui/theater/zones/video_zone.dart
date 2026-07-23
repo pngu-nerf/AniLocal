@@ -12,6 +12,7 @@ import '../../../domain/repositories/watch_order_repository.dart';
 import '../../../domain/repositories/watch_state_repository.dart';
 import '../../../playback/media_remote.dart';
 import '../../../playback/playback_controller.dart';
+import '../../settings_dialog.dart' show watchedThresholdDefault;
 import '../../theme/xp_tokens.dart';
 import '../controls/player_control_bar.dart';
 import '../controls/player_controls_state.dart';
@@ -39,6 +40,7 @@ class VideoZone extends StatefulWidget {
     required this.watchOrder,
     required this.autoPlayEnabled,
     required this.skipMode,
+    required this.watchedThreshold,
     this.onEpisodeChanged,
   });
 
@@ -47,6 +49,11 @@ class VideoZone extends StatefulWidget {
   final WatchOrderRepository watchOrder;
   final Future<bool> Function() autoPlayEnabled;
   final Future<SkipMode> Function() skipMode;
+
+  /// The watched-threshold as an absolute time-from-end (0:00 = auto-watched
+  /// off). The SINGLE source for when this zone marks an episode watched.
+  final Future<Duration> Function() watchedThreshold;
+
   final ValueChanged<Episode>? onEpisodeChanged;
 
   @override
@@ -54,8 +61,16 @@ class VideoZone extends StatefulWidget {
 }
 
 class _VideoZoneState extends State<VideoZone> {
-  static const double _watchedThreshold = 0.90;
   static const Duration _preRollLead = Duration(seconds: 5);
+
+  /// Watched-threshold (time-from-end) loaded from the setting per episode. An
+  /// episode is auto-marked watched once the time REMAINING drops to/below this.
+  /// Zero disables auto-watched entirely (the master off-switch). Seeded from
+  /// the default; the [_thresholdLoaded] gate keeps the seed out of the logic
+  /// until the real value has loaded (avoids acting on a stale seed).
+  Duration _watchedThreshold = watchedThresholdDefault;
+  bool _thresholdLoaded = false;
+  bool get _autoWatchedOn => _watchedThreshold > Duration.zero;
 
   late final PlaybackController _playback;
   late final ValueNotifier<PlayerControlsState> _controls;
@@ -67,8 +82,18 @@ class _VideoZoneState extends State<VideoZone> {
   StreamSubscription<bool>? _playingSub;
   Timer? _saveTimer;
 
+  /// Commits progress when the APP itself is leaving (window loses focus /
+  /// hidden / quit) — the graceful-exit save for departures that don't dispose
+  /// this widget (a route pop does; a Cmd-Q / minimise doesn't). Best-effort on
+  /// a hard quit; the periodic timer remains the crash/force-quit safety net.
+  late final AppLifecycleListener _lifecycle;
+
   late Episode _shown;
   Duration _position = Duration.zero;
+
+  /// The previous position observed, to tell CONTINUOUS playback advance from a
+  /// SEEK jump — only the former may cross the watched-threshold.
+  Duration _lastPos = Duration.zero;
   Duration _duration = Duration.zero;
   bool _markedWatched = false;
 
@@ -124,28 +149,38 @@ class _VideoZoneState extends State<VideoZone> {
       onTogglePlayPause: _playback.player.playOrPause,
       onNext: _goToNext,
     );
-    _playback.open(_shown, startAt: _shown.resumePosition);
+    _playback.open(_shown, startAt: PlaybackController.resumeStartFor(_shown));
     _loadEpisodeContext(_shown);
     _durSub = _playback.durationStream.listen((d) {
       _duration = d;
-      _pushNowPlaying(); // duration just became known
+      // Duration just became known — an episode SHORTER than the threshold is
+      // "past threshold" from the start, so mark watched on open.
+      _maybeMarkShortEpisode();
+      _pushNowPlaying();
     });
     _posSub = _playback.positionStream.listen(_onPosition);
     _completedSub = _playback.completedStream.listen((done) {
       if (done) _onCompleted();
     });
-    // Reflect play/pause to the OS immediately so the now-playing widget and
-    // command routing stay in sync the moment state flips.
-    _playingSub = _playback.player.stream.playing.listen(
-      (_) => _pushNowPlaying(),
-    );
-    // The save tick doubles as a low-rate now-playing refresh so the system's
-    // elapsed-time scrubber stays roughly current (incl. after a seek) without
-    // a method call on every position frame.
-    _saveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    // Reflect play/pause to the OS immediately, and SAVE on the transition so a
+    // pause commits the resume position at once (not only on the timer tick).
+    _playingSub = _playback.player.stream.playing.listen((_) {
       _persist();
       _pushNowPlaying();
     });
+    // A short save cadence so progress feels live (was 5s — laggy). Event-saves
+    // (pause above, paused-seek in _onPosition) cover the meaningful moments;
+    // this 1s tick covers steady playback WITHOUT a per-frame DB write. Doubles
+    // as the OS now-playing refresh.
+    _saveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _persist();
+      _pushNowPlaying();
+    });
+    // Save the moment the app is backgrounded / hidden / about to quit —
+    // `inactive` is the earliest such signal on every platform. In-app route
+    // pushes don't change the app lifecycle, so this fires only on a real
+    // departure from the app, not on navigation within it.
+    _lifecycle = AppLifecycleListener(onInactive: _persist);
   }
 
   /// Publish the current episode + engine state to the OS now-playing center.
@@ -171,11 +206,15 @@ class _VideoZoneState extends State<VideoZone> {
   /// one in place and reset per-episode state.
   void _switchTo(Episode episode) {
     _persist();
-    _playback.open(episode, startAt: episode.resumePosition);
+    _playback.open(
+      episode,
+      startAt: PlaybackController.resumeStartFor(episode),
+    );
     _shown = episode;
     _markedWatched = false;
     _position = Duration.zero;
     _duration = Duration.zero;
+    _lastPos = Duration.zero;
     _preRollShowing = false;
     _loadEpisodeContext(episode);
     _pushNowPlaying(); // new title to the OS now-playing center
@@ -186,8 +225,12 @@ class _VideoZoneState extends State<VideoZone> {
     final mode = await widget.skipMode();
     final result = await widget.watchOrder.nextEpisode(episode);
     if (!mounted) return;
+    final threshold = await widget.watchedThreshold();
+    if (!mounted) return;
     _autoPlayEnabled = enabled;
     _skipMode = mode;
+    _watchedThreshold = threshold;
+    _thresholdLoaded = true;
     _next = result is NextEpisode ? result.episode : null;
     _preRollCancelled = false;
     _preRollShowing = false;
@@ -196,20 +239,61 @@ class _VideoZoneState extends State<VideoZone> {
     _introSkipped = false;
     _outroSkipped = false;
     _pushControls();
+    // Now that the threshold is known, re-check the short-episode case (it may
+    // have loaded after the duration arrived).
+    _maybeMarkShortEpisode();
+  }
+
+  /// Whether auto-watched marking can currently apply (setting loaded, not off,
+  /// not already marked, duration known).
+  bool get _canAutoWatch =>
+      _thresholdLoaded &&
+      _autoWatchedOn &&
+      !_markedWatched &&
+      _duration.inMilliseconds > 0;
+
+  void _markWatched() {
+    _markedWatched = true;
+    widget.watchState.setWatched(_shown, watched: true);
+  }
+
+  /// "Episode shorter than the threshold" → the whole episode is inside the
+  /// threshold window, so it's watched the moment it opens (position-independent,
+  /// never a seek). Called when the duration/threshold become known.
+  void _maybeMarkShortEpisode() {
+    if (!_canAutoWatch) return;
+    if (_duration.inMilliseconds <= _watchedThreshold.inMilliseconds) {
+      _markWatched();
+    }
+  }
+
+  /// Watched-mark from CONTINUOUS PLAYBACK reaching the threshold — never from a
+  /// seek. [deltaMs] is the advance since the last position: a small forward
+  /// step is natural playback; a jump (or backward) is a seek and must NOT mark
+  /// (so scrubbing near the end can't accidentally complete the episode).
+  void _maybeMarkFromPlayback(int deltaMs) {
+    if (!_canAutoWatch) return;
+    if (deltaMs < 0 || deltaMs > 2000) return; // a seek jump, not playback
+    final remaining = _duration.inMilliseconds - _position.inMilliseconds;
+    if (remaining <= _watchedThreshold.inMilliseconds) _markWatched();
   }
 
   void _onPosition(Duration pos) {
+    final playing = _playback.player.state.playing;
+    final deltaMs = pos.inMilliseconds - _lastPos.inMilliseconds;
+    _lastPos = pos;
     _position = pos;
-    final total = _duration.inMilliseconds;
-    if (!_markedWatched &&
-        total > 0 &&
-        pos.inMilliseconds >= total * _watchedThreshold) {
-      _markedWatched = true;
-      widget.watchState.setWatched(_shown, watched: true);
-    }
+    // Only continuous playback may cross the watched-threshold. A seek (paused
+    // or a jump while playing) updates the resume position but never marks.
+    if (playing) _maybeMarkFromPlayback(deltaMs);
+    // Save immediately on a paused seek/scrub — paused position only changes via
+    // a seek, so this "seeking moves the resume point" even without playing.
+    // During playback the 1s timer handles cadence (no per-frame DB write).
+    if (!playing) _persist();
 
     _applySkips(pos);
 
+    final total = _duration.inMilliseconds;
     if (_autoPlayEnabled && _next != null && !_preRollCancelled && total > 0) {
       final remaining = _duration - pos;
       if (remaining > Duration.zero && remaining <= _preRollLead) {
@@ -302,7 +386,11 @@ class _VideoZoneState extends State<VideoZone> {
   }
 
   Future<void> _onCompleted() async {
-    if (!_markedWatched) {
+    // "Played to the end" ≠ "crossed the watched mark": these are decoupled.
+    // Marking watched obeys the threshold setting (off at 0:00) — reaching the
+    // end via playback already crossed it in _maybeMarkFromPlayback; this is the
+    // safety net. Auto-advance below is INDEPENDENT and still runs at 0:00.
+    if (_autoWatchedOn && !_markedWatched) {
       _markedWatched = true;
       await widget.watchState.setWatched(_shown, watched: true);
     }
@@ -314,6 +402,10 @@ class _VideoZoneState extends State<VideoZone> {
   /// The one advance path. On success it updates the frame + tells the host (so
   /// the episode list follows); at a season boundary it stops cleanly.
   Future<void> _goToNext() async {
+    // Episode-switch is a graceful departure from the outgoing episode: commit
+    // its exact position before opening the next (a no-op once it's watched,
+    // e.g. an end-of-episode auto-advance that already cleared resume).
+    _persist();
     final next = await _playback.advanceToNext();
     if (!mounted) return;
     if (next == null) {
@@ -325,6 +417,7 @@ class _VideoZoneState extends State<VideoZone> {
     _markedWatched = false;
     _position = Duration.zero;
     _duration = Duration.zero;
+    _lastPos = Duration.zero;
     _preRollShowing = false;
     _pushNowPlaying(); // new title to the OS now-playing center
     await _loadEpisodeContext(next);
@@ -344,6 +437,9 @@ class _VideoZoneState extends State<VideoZone> {
     _durSub?.cancel();
     _completedSub?.cancel();
     _playingSub?.cancel();
+    _lifecycle.dispose();
+    // Graceful departure (route pop / page-change / widget teardown): commit the
+    // exact final position now. Complements the periodic save (the safety net).
     _persist();
     _remote.dispose(); // relinquish now-playing + stop receiving commands
     _controls.dispose();

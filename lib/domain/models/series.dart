@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'picture_mode.dart';
 import 'related_series.dart';
 import 'titles.dart';
 
@@ -18,6 +19,8 @@ class Series extends Equatable {
     this.idMal,
     this.relations = const [],
     this.pending = false,
+    this.pictureMode = PictureMode.normal,
+    this.nextEpisodeHidden = false,
   });
 
   /// For a real AniList entry this is its positive AniList ID. For a PENDING
@@ -54,6 +57,15 @@ class Series extends Equatable {
   /// it goes to the fix-match screen).
   final bool pending;
 
+  /// How this show's cover is DISPLAYED (a per-show preference surfaced onto the
+  /// projection so every cover site renders consistently). The cached
+  /// [coverImageRef] is never altered — this only changes how it's shown.
+  final PictureMode pictureMode;
+
+  /// When true, the card's "Next episode" button is hidden for this show (a
+  /// per-show preference).
+  final bool nextEpisodeHidden;
+
   @override
   List<Object?> get props => [
     anilistId,
@@ -64,5 +76,7 @@ class Series extends Equatable {
     idMal,
     relations,
     pending,
+    pictureMode,
+    nextEpisodeHidden,
   ];
 }

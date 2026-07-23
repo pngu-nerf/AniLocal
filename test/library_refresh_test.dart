@@ -16,6 +16,9 @@ import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:anilocal/domain/models/picture_mode.dart';
+import 'package:anilocal/domain/models/show_preferences.dart';
+import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
 
 const _summary = SyncSummary(
   filesScanned: 1,
@@ -39,7 +42,8 @@ class _MutableLib
         WatchStateRepository,
         SourceSelectionRepository,
         WatchOrderRepository,
-        MissingEpisodesRepository {
+        MissingEpisodesRepository,
+        ShowPreferencesRepository {
   List<Series> series = [];
 
   @override
@@ -64,6 +68,25 @@ class _MutableLib
   }) async {}
   @override
   Future<void> setWatched(Episode e, {required bool watched}) async {}
+
+  @override
+  Future<void> setWatchedManual(Episode e, {required bool watched}) async {}
+
+  @override
+  Future<ShowPreferences> preferencesFor(int anilistId) async =>
+      const ShowPreferences();
+  @override
+  Future<Map<int, ShowPreferences>> allPreferences() async => const {};
+  @override
+  Future<void> setPictureMode(int anilistId, PictureMode mode) async {}
+  @override
+  Future<void> setNextEpisodeHidden(
+    int anilistId, {
+    required bool hidden,
+  }) async {}
+
+  @override
+  Future<void> setAllNextEpisodeHidden({required bool hidden}) async {}
   @override
   Future<void> clearProgress(Episode e) async {}
   @override
@@ -123,6 +146,7 @@ void main() {
         watchState: repo,
         sourceSelection: repo,
         missing: repo,
+        showPreferences: repo,
         loadMissingEnabled: () async => true,
         setMissingEnabled: (_) async {},
         watchOrder: repo,
@@ -143,6 +167,14 @@ void main() {
         setAutoPlayNext: (_) async {},
         loadSkipMode: () async => SkipMode.button,
         setSkipMode: (_) async {},
+        loadWatchedThreshold: () async => const Duration(seconds: 90),
+        setWatchedThreshold: (_) async {},
+        loadHideNextEpisode: () async => false,
+        setHideNextEpisode: (_) async {},
+        loadShowContinueWatching: () async => true,
+        setShowContinueWatching: (_) async {},
+        loadShowSearchBar: () async => true,
+        setShowSearchBar: (_) async {},
         loadRailFraction: () async => 0.30,
         setRailFraction: (_) async {},
         loadPanelFraction: () async => 0.22,

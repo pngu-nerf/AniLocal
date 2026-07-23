@@ -1,11 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/episode.dart';
+import '../../../domain/models/picture_mode.dart';
 import '../../../domain/models/series.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
+import '../../widgets/show_cover.dart';
 
 /// The SERIES-INFO zone: cover, title, episode count, and the existing
 /// metadata, plus the episode currently playing. Sits below the video.
@@ -74,7 +74,11 @@ class SeriesInfoZone extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Cover(art: art, pending: series.pending),
+                  _Cover(
+                    art: art,
+                    pending: series.pending,
+                    pictureMode: series.pictureMode,
+                  ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -116,10 +120,15 @@ class SeriesInfoZone extends StatelessWidget {
 /// Cover art at a fixed 2:3 poster ratio. A pending placeholder shows a quiet
 /// "identifying" tile rather than a broken image.
 class _Cover extends StatelessWidget {
-  const _Cover({required this.art, required this.pending});
+  const _Cover({
+    required this.art,
+    required this.pending,
+    required this.pictureMode,
+  });
 
   final String? art;
   final bool pending;
+  final PictureMode pictureMode;
 
   @override
   Widget build(BuildContext context) {
@@ -129,17 +138,15 @@ class _Cover extends StatelessWidget {
         width: 92,
         child: AspectRatio(
           aspectRatio: 2 / 3,
-          // Cover art is CONTENT — rendered pristine (no tint/effect). Only the
-          // placeholder fallback wears the VFD palette.
-          child: (art != null && File(art!).existsSync())
-              ? Image.file(File(art!), fit: BoxFit.cover)
-              : ColoredBox(
-                  color: Xp.well,
-                  child: Icon(
-                    pending ? Icons.hourglass_empty : Icons.movie_outlined,
-                    color: Xp.textFaint,
-                  ),
-                ),
+          // Cover through the show's picture mode — consistent with the grid +
+          // detail (blur/removed apply here too).
+          child: ShowCover(
+            imagePath: art,
+            pictureMode: pictureMode,
+            placeholderIcon: pending
+                ? Icons.hourglass_empty
+                : Icons.movie_outlined,
+          ),
         ),
       ),
     );

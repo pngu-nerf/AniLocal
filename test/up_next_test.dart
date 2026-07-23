@@ -47,6 +47,7 @@ void main() {
       resumePositionMs: 0,
       durationMs: 0,
       watched: true,
+      watchedManual: false,
       updatedAtMs: ep,
     ),
   );

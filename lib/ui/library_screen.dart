@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -6,12 +5,14 @@ import 'package:flutter/material.dart';
 
 import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
+import '../domain/models/picture_mode.dart';
 import '../domain/models/series.dart';
 import '../domain/models/skip_mode.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/missing_episodes_repository.dart';
+import '../domain/repositories/show_preferences_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
@@ -30,6 +31,7 @@ import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 import 'widgets/header_actions.dart';
+import 'widgets/show_cover.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -67,6 +69,7 @@ class LibraryScreen extends StatefulWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.missing,
+    required this.showPreferences,
     required this.loadMissingEnabled,
     required this.setMissingEnabled,
     required this.onScan,
@@ -82,6 +85,14 @@ class LibraryScreen extends StatefulWidget {
     required this.setAutoPlayNext,
     required this.loadSkipMode,
     required this.setSkipMode,
+    required this.loadWatchedThreshold,
+    required this.setWatchedThreshold,
+    required this.loadHideNextEpisode,
+    required this.setHideNextEpisode,
+    required this.loadShowContinueWatching,
+    required this.setShowContinueWatching,
+    required this.loadShowSearchBar,
+    required this.setShowSearchBar,
     required this.loadRailFraction,
     required this.setRailFraction,
     required this.loadPanelFraction,
@@ -97,6 +108,10 @@ class LibraryScreen extends StatefulWidget {
   /// Hidden-episode store (missing-episodes feature); passed through to the
   /// detail screen and read here to exclude hidden episodes from card counts.
   final MissingEpisodesRepository missing;
+
+  /// Per-show preferences store (cover display mode + hide-next-episode), set
+  /// from each card's three-dots menu; sacred across rescans.
+  final ShowPreferencesRepository showPreferences;
 
   /// Missing-episodes feature toggle (persisted, default on). Governs ghost
   /// tiles, the Hidden tab, and whether hidden episodes affect completeness.
@@ -124,6 +139,22 @@ class LibraryScreen extends StatefulWidget {
   /// Skip mode (off/button/auto), persisted; read by the player, set here.
   final Future<SkipMode> Function() loadSkipMode;
   final Future<void> Function(SkipMode mode) setSkipMode;
+
+  /// Watched-threshold (time-from-end; 0:00 = off), persisted. Read by the
+  /// player, set from Settings; forwarded to the detail screen too.
+  final Future<Duration> Function() loadWatchedThreshold;
+  final Future<void> Function(Duration value) setWatchedThreshold;
+
+  /// Global "Hide next episode" (persisted; master apply-to-all over per-show).
+  final Future<bool> Function() loadHideNextEpisode;
+  final Future<void> Function(bool hidden) setHideNextEpisode;
+
+  /// Global homepage visibility toggles (persisted): the continue-watching
+  /// sidebar and the search bar. Read here to gate those zones.
+  final Future<bool> Function() loadShowContinueWatching;
+  final Future<void> Function(bool show) setShowContinueWatching;
+  final Future<bool> Function() loadShowSearchBar;
+  final Future<void> Function(bool show) setShowSearchBar;
 
   /// Theater rail width (fraction), persisted; the rail divider reads/writes it.
   final Future<double> Function() loadRailFraction;
@@ -184,6 +215,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Map<int, ({int inRange, int outOfRange, int? total})> _downloadCounts = {};
   bool _scanning = false;
   bool _continueCollapsed = false;
+  // Global homepage visibility toggles (persisted). Default visible; re-read
+  // after the Settings dialog closes so a change takes effect immediately.
+  bool _showContinueWatching = true;
+  bool _showSearchBar = true;
   // Count of CONFIRMED-unmatched files (AniList said no) — NOT pending
   // placeholders, which auto-resolve. Gates the top-bar Unmatched button; the
   // Settings → Metadata entry is always shown regardless.
@@ -196,6 +231,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     _reload();
+    _loadHomepageToggles();
     widget.loadContinueCollapsed().then((c) {
       if (mounted) setState(() => _continueCollapsed = c);
     });
@@ -317,6 +353,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           watchOrder: widget.watchOrder,
           loadAutoPlayNext: widget.loadAutoPlayNext,
           loadSkipMode: widget.loadSkipMode,
+          loadWatchedThreshold: widget.loadWatchedThreshold,
           loadRailFraction: widget.loadRailFraction,
           setRailFraction: widget.setRailFraction,
           // Same header actions as the library — so the theater header matches.
@@ -334,23 +371,56 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _playFromContinue(ContinueWatching entry) =>
       _play(entry.episode, entry.series);
 
+  Future<void> _loadHomepageToggles() async {
+    final showContinue = await widget.loadShowContinueWatching();
+    final showSearch = await widget.loadShowSearchBar();
+    if (mounted) {
+      setState(() {
+        _showContinueWatching = showContinue;
+        _showSearchBar = showSearch;
+        // Hiding the search bar clears any active query, so the grid isn't left
+        // filtered with no visible way to reset it.
+        if (!showSearch && _query.isNotEmpty) {
+          _searchController.clear();
+          _query = '';
+        }
+      });
+    }
+  }
+
   /// The homepage entry to the shared app Settings dialog (identical to the one
   /// the detail page opens from its title bar).
-  Future<void> _openSettings() => showAppSettingsDialog(
-    context,
-    SettingsActions(
-      loadAutoPlayNext: widget.loadAutoPlayNext,
-      setAutoPlayNext: widget.setAutoPlayNext,
-      loadSkipMode: widget.loadSkipMode,
-      setSkipMode: widget.setSkipMode,
-      loadMissingEnabled: widget.loadMissingEnabled,
-      setMissingEnabled: widget.setMissingEnabled,
-      onRefreshMetadata: widget.onRefreshMetadata,
-      onRefreshed: _reload,
-      loadUnmatchedCount: () async => _unmatchedCount,
-      onOpenUnmatched: _openUnmatched,
-    ),
-  );
+  Future<void> _openSettings() async {
+    await showAppSettingsDialog(
+      context,
+      SettingsActions(
+        loadAutoPlayNext: widget.loadAutoPlayNext,
+        setAutoPlayNext: widget.setAutoPlayNext,
+        loadSkipMode: widget.loadSkipMode,
+        setSkipMode: widget.setSkipMode,
+        loadWatchedThreshold: widget.loadWatchedThreshold,
+        setWatchedThreshold: widget.setWatchedThreshold,
+        loadMissingEnabled: widget.loadMissingEnabled,
+        setMissingEnabled: widget.setMissingEnabled,
+        onRefreshMetadata: widget.onRefreshMetadata,
+        onRefreshed: _reload,
+        loadUnmatchedCount: () async => _unmatchedCount,
+        onOpenUnmatched: _openUnmatched,
+        onOpenSources: _openFolders,
+        loadHideNextEpisode: widget.loadHideNextEpisode,
+        setHideNextEpisode: widget.setHideNextEpisode,
+        loadShowContinueWatching: widget.loadShowContinueWatching,
+        setShowContinueWatching: widget.setShowContinueWatching,
+        loadShowSearchBar: widget.loadShowSearchBar,
+        setShowSearchBar: widget.setShowSearchBar,
+      ),
+    );
+    // Reflect any change made in the dialog: homepage-toggle visibility, and a
+    // reload (the global "hide next episode" apply-to-all rewrote per-show prefs
+    // that the cards render).
+    await _loadHomepageToggles();
+    _reload();
+  }
 
   Future<Set<String>> _folderPaths() async =>
       (await widget.repository.watchedFolders()).map((f) => f.path).toSet();
@@ -541,18 +611,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       onPanelResizeEnd: () =>
                           widget.setPanelFraction(_panelFraction),
                       zones: {
-                        LibraryZone.search: Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-                          child: LibrarySearchBar(
-                            controller: _searchController,
-                            onChanged: (v) => setState(() => _query = v),
-                            onClear: () {
-                              _searchController.clear();
-                              setState(() => _query = '');
-                            },
+                        // Search bar — hidden by the global homepage toggle.
+                        if (_showSearchBar)
+                          LibraryZone.search: Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                            child: LibrarySearchBar(
+                              controller: _searchController,
+                              onChanged: (v) => setState(() => _query = v),
+                              onClear: () {
+                                _searchController.clear();
+                                setState(() => _query = '');
+                              },
+                            ),
                           ),
-                        ),
-                        if (_continueEntries.isNotEmpty)
+                        // Continue-watching sidebar — present only when there
+                        // are entries AND the global homepage toggle allows it.
+                        if (_continueEntries.isNotEmpty &&
+                            _showContinueWatching)
                           LibraryZone.continueWatching: Padding(
                             padding: const EdgeInsets.fromLTRB(8, 4, 4, 8),
                             child: ContinueWatchingPanel(
@@ -621,6 +696,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         // `missing` (local) is the missing-FOLDER set above;
                         // the repository is `widget.missing`.
                         missingRepo: widget.missing,
+                        showPreferences: widget.showPreferences,
                         loadMissingEnabled: widget.loadMissingEnabled,
                         setMissingEnabled: widget.setMissingEnabled,
                         onRefreshMetadata: widget.onRefreshMetadata,
@@ -632,6 +708,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         setAutoPlayNext: widget.setAutoPlayNext,
                         loadSkipMode: widget.loadSkipMode,
                         setSkipMode: widget.setSkipMode,
+                        loadWatchedThreshold: widget.loadWatchedThreshold,
+                        setWatchedThreshold: widget.setWatchedThreshold,
+                        loadHideNextEpisode: widget.loadHideNextEpisode,
+                        setHideNextEpisode: widget.setHideNextEpisode,
+                        loadShowContinueWatching:
+                            widget.loadShowContinueWatching,
+                        setShowContinueWatching: widget.setShowContinueWatching,
+                        loadShowSearchBar: widget.loadShowSearchBar,
+                        setShowSearchBar: widget.setShowSearchBar,
                         loadRailFraction: widget.loadRailFraction,
                         setRailFraction: widget.setRailFraction,
                         onReturn: _reload,
@@ -765,6 +850,7 @@ class _SeriesCard extends StatefulWidget {
     required this.sourceSelection,
     required this.watchOrder,
     required this.missingRepo,
+    required this.showPreferences,
     required this.loadMissingEnabled,
     required this.setMissingEnabled,
     required this.onRefreshMetadata,
@@ -776,6 +862,14 @@ class _SeriesCard extends StatefulWidget {
     required this.setAutoPlayNext,
     required this.loadSkipMode,
     required this.setSkipMode,
+    required this.loadWatchedThreshold,
+    required this.setWatchedThreshold,
+    required this.loadHideNextEpisode,
+    required this.setHideNextEpisode,
+    required this.loadShowContinueWatching,
+    required this.setShowContinueWatching,
+    required this.loadShowSearchBar,
+    required this.setShowSearchBar,
     required this.loadRailFraction,
     required this.setRailFraction,
     required this.onReturn,
@@ -793,6 +887,7 @@ class _SeriesCard extends StatefulWidget {
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
   final MissingEpisodesRepository missingRepo;
+  final ShowPreferencesRepository showPreferences;
   final Future<bool> Function() loadMissingEnabled;
   final Future<void> Function(bool enabled) setMissingEnabled;
   final Future<({int seriesRefreshed, int skipsFetched})> Function()
@@ -817,6 +912,14 @@ class _SeriesCard extends StatefulWidget {
   final Future<void> Function(bool enabled) setAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
   final Future<void> Function(SkipMode mode) setSkipMode;
+  final Future<Duration> Function() loadWatchedThreshold;
+  final Future<void> Function(Duration value) setWatchedThreshold;
+  final Future<bool> Function() loadHideNextEpisode;
+  final Future<void> Function(bool hidden) setHideNextEpisode;
+  final Future<bool> Function() loadShowContinueWatching;
+  final Future<void> Function(bool show) setShowContinueWatching;
+  final Future<bool> Function() loadShowSearchBar;
+  final Future<void> Function(bool show) setShowSearchBar;
   final Future<double> Function() loadRailFraction;
   final Future<void> Function(double fraction) setRailFraction;
   final VoidCallback onReturn;
@@ -867,6 +970,14 @@ class _SeriesCardState extends State<_SeriesCard> {
           setAutoPlayNext: widget.setAutoPlayNext,
           loadSkipMode: widget.loadSkipMode,
           setSkipMode: widget.setSkipMode,
+          loadWatchedThreshold: widget.loadWatchedThreshold,
+          setWatchedThreshold: widget.setWatchedThreshold,
+          loadHideNextEpisode: widget.loadHideNextEpisode,
+          setHideNextEpisode: widget.setHideNextEpisode,
+          loadShowContinueWatching: widget.loadShowContinueWatching,
+          setShowContinueWatching: widget.setShowContinueWatching,
+          loadShowSearchBar: widget.loadShowSearchBar,
+          setShowSearchBar: widget.setShowSearchBar,
           loadRailFraction: widget.loadRailFraction,
           setRailFraction: widget.setRailFraction,
           onFolders: widget.onFolders,
@@ -945,6 +1056,82 @@ class _SeriesCardState extends State<_SeriesCard> {
     );
   }
 
+  Future<void> _setPicture(PictureMode mode) async {
+    await widget.showPreferences.setPictureMode(widget.series.anilistId, mode);
+    widget.onReturn(); // reload so the projection (and every cover) refreshes
+  }
+
+  Future<void> _setNextHidden(bool hidden) async {
+    await widget.showPreferences.setNextEpisodeHidden(
+      widget.series.anilistId,
+      hidden: hidden,
+    );
+    widget.onReturn();
+  }
+
+  /// The per-show three-dots menu: an Edit Picture submenu (three mutually
+  /// exclusive cover states, current one checked; Blur/Reset disabled when the
+  /// show has no cached cover) + a Hide Next Episode toggle.
+  Widget _showMenu(Series series) {
+    final mode = series.pictureMode;
+    final hasCover = ShowCover.hasCover(series.coverImageRef);
+    Widget radio(bool on) =>
+        Icon(on ? Icons.radio_button_checked : Icons.radio_button_unchecked);
+    return MenuAnchor(
+      builder: (context, controller, _) => IconButton(
+        iconSize: 18,
+        visualDensity: VisualDensity.compact,
+        tooltip: 'Show options',
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.black.withValues(alpha: 0.45),
+          foregroundColor: Colors.white,
+          minimumSize: const Size(28, 28),
+          padding: EdgeInsets.zero,
+        ),
+        icon: const Icon(Icons.more_vert),
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+      menuChildren: [
+        SubmenuButton(
+          leadingIcon: const Icon(Icons.image_outlined, size: 18),
+          menuChildren: [
+            MenuItemButton(
+              leadingIcon: radio(mode == PictureMode.blur),
+              // Needs a cover to blur — disabled when the show has none.
+              onPressed: hasCover ? () => _setPicture(PictureMode.blur) : null,
+              child: const Text('Blur Picture'),
+            ),
+            MenuItemButton(
+              leadingIcon: radio(mode == PictureMode.removed),
+              onPressed: () => _setPicture(PictureMode.removed),
+              child: const Text('Remove Picture'),
+            ),
+            MenuItemButton(
+              leadingIcon: radio(mode == PictureMode.normal),
+              // Reset only means something when there's a cover to restore.
+              onPressed: hasCover
+                  ? () => _setPicture(PictureMode.normal)
+                  : null,
+              child: const Text('Reset to default'),
+            ),
+          ],
+          child: const Text('Edit Picture'),
+        ),
+        MenuItemButton(
+          leadingIcon: Icon(
+            series.nextEpisodeHidden
+                ? Icons.check_box
+                : Icons.check_box_outline_blank,
+            size: 18,
+          ),
+          onPressed: () => _setNextHidden(!series.nextEpisodeHidden),
+          child: const Text('Hide Next Episode'),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final series = widget.series;
@@ -983,21 +1170,17 @@ class _SeriesCardState extends State<_SeriesCard> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        if (art != null && File(art).existsSync())
-                          // cover, not contain: FILL the 2:3 box (no gaps),
-                          // cropping whichever dimension overflows.
-                          Image.file(File(art), fit: BoxFit.cover)
-                        else
-                          Center(
-                            // A pending placeholder reads as "identifying", not
-                            // a broken image (it has no art yet, by design).
-                            child: Icon(
-                              series.pending
-                                  ? Icons.hourglass_empty
-                                  : Icons.image_not_supported,
-                              color: Xp.textFaint,
-                            ),
-                          ),
+                        // The cover, rendered through its per-show picture mode
+                        // (normal / blurred / removed). cover-fit FILLS the 2:3
+                        // box; the cached image is never altered.
+                        ShowCover(
+                          imagePath: art,
+                          pictureMode: series.pictureMode,
+                          // Pending reads as "identifying", not a broken image.
+                          placeholderIcon: series.pending
+                              ? Icons.hourglass_empty
+                              : Icons.image_not_supported,
+                        ),
                         if (unavailable)
                           Container(
                             color: Colors.black54,
@@ -1010,7 +1193,11 @@ class _SeriesCardState extends State<_SeriesCard> {
                               size: 32,
                             ),
                           ),
-                        if (next != null && !unavailable)
+                        // Per-show "Next episode" affordance — suppressed when
+                        // this show's hide-next-episode preference is on.
+                        if (next != null &&
+                            !unavailable &&
+                            !series.nextEpisodeHidden)
                           Positioned(
                             left: 0,
                             right: 0,
@@ -1028,6 +1215,15 @@ class _SeriesCardState extends State<_SeriesCard> {
                                 widget.onReturn();
                               },
                             ),
+                          ),
+                        // Per-show three-dots menu (Edit Picture / Hide Next
+                        // Episode), top-right. Not on a pending placeholder (no
+                        // real identity to key a preference to).
+                        if (!series.pending)
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: _showMenu(series),
                           ),
                       ],
                     ),

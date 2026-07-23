@@ -19,6 +19,8 @@ import 'domain/models/sync_summary.dart';
 import 'sync/fix_match_service.dart';
 import 'sync/library_sync.dart';
 import 'ui/app.dart';
+import 'ui/settings_dialog.dart'
+    show watchedThresholdDefault, watchedThresholdMax;
 
 /// Episodic formats for the AniList candidate search (cut MUSIC false-positives).
 const List<String> kEpisodicAnimeFormats = [
@@ -138,7 +140,13 @@ void main() {
   const continueCollapsedKey = 'continue_watching_collapsed';
   const autoPlayNextKey = 'autoplay_next';
   const skipModeKey = 'skip_mode';
+  // Watched-threshold (time-from-end), stored as whole milliseconds.
+  const watchedThresholdKey = 'watched_threshold_ms';
   const missingEpisodesKey = 'missing_episodes_enabled';
+  // New global homepage/next-episode preferences.
+  const hideNextEpisodeKey = 'hide_next_episode_global';
+  const showContinueWatchingKey = 'show_continue_watching';
+  const showSearchBarKey = 'show_search_bar';
   const railFractionKey = 'theater_rail_fraction';
   // The default rail width (matches TheaterLayoutConfig.theaterDefault); the
   // theater clamps the loaded value to the drag bounds.
@@ -161,6 +169,8 @@ void main() {
       // DriftLibraryRepository also implements MissingEpisodesRepository (the
       // sacred hidden-episode store; keyed by episode identity like watch-state).
       missing: repository,
+      // …and ShowPreferencesRepository (per-show cover/next-episode prefs).
+      showPreferences: repository,
       onScan: scan,
       onRefreshMetadata: sync.refreshMetadata,
       onAddFolder: addFolder,
@@ -181,11 +191,42 @@ void main() {
       loadSkipMode: () async =>
           SkipMode.fromToken(await database.getSetting(skipModeKey)),
       setSkipMode: (mode) => database.setSetting(skipModeKey, mode.token),
+      // Watched-threshold: unset/unparseable -> the ~1:30 default. Clamped to
+      // [0, 9:59] so a hand-edited store can never yield an out-of-range value.
+      loadWatchedThreshold: () async {
+        final ms = int.tryParse(
+          await database.getSetting(watchedThresholdKey) ?? '',
+        );
+        if (ms == null) return watchedThresholdDefault;
+        return Duration(
+          milliseconds: ms.clamp(0, watchedThresholdMax.inMilliseconds),
+        );
+      },
+      setWatchedThreshold: (value) =>
+          database.setSetting(watchedThresholdKey, '${value.inMilliseconds}'),
       // Missing-episodes feature defaults ON: only an explicit 'false' disables.
       loadMissingEnabled: () async =>
           await database.getSetting(missingEpisodesKey) != 'false',
       setMissingEnabled: (enabled) =>
           database.setSetting(missingEpisodesKey, '$enabled'),
+      // Global "Hide next episode" (default off). Setting it is a master
+      // apply-to-all: persist the flag AND overwrite every per-show value.
+      loadHideNextEpisode: () async =>
+          await database.getSetting(hideNextEpisodeKey) == 'true',
+      setHideNextEpisode: (hidden) async {
+        await database.setSetting(hideNextEpisodeKey, '$hidden');
+        await repository.setAllNextEpisodeHidden(hidden: hidden);
+      },
+      // Continue-watching sidebar + search bar default VISIBLE: only an explicit
+      // 'false' hides them.
+      loadShowContinueWatching: () async =>
+          await database.getSetting(showContinueWatchingKey) != 'false',
+      setShowContinueWatching: (show) =>
+          database.setSetting(showContinueWatchingKey, '$show'),
+      loadShowSearchBar: () async =>
+          await database.getSetting(showSearchBarKey) != 'false',
+      setShowSearchBar: (show) =>
+          database.setSetting(showSearchBarKey, '$show'),
       // Theater rail width (fraction). Unset/unparseable -> the default.
       loadRailFraction: () async =>
           double.tryParse(await database.getSetting(railFractionKey) ?? '') ??

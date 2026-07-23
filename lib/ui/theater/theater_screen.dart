@@ -34,6 +34,7 @@ class TheaterScreen extends StatefulWidget {
     required this.watchOrder,
     required this.loadAutoPlayNext,
     required this.loadSkipMode,
+    required this.loadWatchedThreshold,
     required this.unmatchedCount,
     required this.onFolders,
     required this.onScan,
@@ -51,6 +52,10 @@ class TheaterScreen extends StatefulWidget {
   final WatchOrderRepository watchOrder;
   final Future<bool> Function() loadAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
+
+  /// Watched-threshold (time-from-end; 0:00 = auto-watched off) — forwarded to
+  /// the VideoZone, the sole consumer that marks episodes watched.
+  final Future<Duration> Function() loadWatchedThreshold;
 
   /// The shared header actions (Sources / Sync / Unmatched / Settings), forwarded
   /// from the launching screen so the theater header is IDENTICAL to home/detail
@@ -143,6 +148,7 @@ class _TheaterScreenState extends State<TheaterScreen> {
         watchOrder: widget.watchOrder,
         autoPlayEnabled: widget.loadAutoPlayNext,
         skipMode: widget.loadSkipMode,
+        watchedThreshold: widget.loadWatchedThreshold,
         onEpisodeChanged: _onAdvanced,
       ),
       TheaterZone.seriesInfo: SeriesInfoZone(

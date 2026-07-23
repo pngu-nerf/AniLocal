@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../domain/models/continue_watching.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
+import '../widgets/show_cover.dart';
 
 /// Vertical "Continue watching" side panel: in-progress episodes with a resume
 /// progress bar, newest first. Tapping an entry resumes playback; the per-card
@@ -153,15 +152,15 @@ class _Card extends StatelessWidget {
                       child: SizedBox(
                         width: 42,
                         height: 60,
-                        child: (art != null && File(art).existsSync())
-                            ? Image.file(File(art), fit: BoxFit.cover)
-                            : const Center(
-                                child: Icon(
-                                  Icons.play_arrow,
-                                  color: Xp.textFaint,
-                                  size: 18,
-                                ),
-                              ),
+                        // Same shared picture-state renderer the grid / detail /
+                        // player use — so blur / remove apply here too, via the
+                        // per-show mode carried on entry.series (no parallel path).
+                        child: ShowCover(
+                          imagePath: art,
+                          pictureMode: entry.series.pictureMode,
+                          placeholderIcon: Icons.play_arrow,
+                          iconSize: 18,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),

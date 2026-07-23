@@ -147,6 +147,14 @@ class WatchStates extends Table {
   IntColumn get resumePositionMs => integer().withDefault(const Constant(0))();
   IntColumn get durationMs => integer().withDefault(const Constant(0))();
   BoolColumn get watched => boolean().withDefault(const Constant(false))();
+
+  /// True when [watched] was set by a MANUAL toggle (the sticky per-episode
+  /// override) rather than derived from the watched-threshold during playback.
+  /// A manual override wins over the threshold: the auto path won't touch a row
+  /// with this set, and it survives refresh/rescan (watch_state is never in the
+  /// fill path — seam #5). false = the [watched] value is threshold-derived.
+  BoolColumn get watchedManual =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 
   @override
@@ -242,6 +250,30 @@ class AppSettings extends Table {
   String get tableName => 'app_settings';
 }
 
+/// PER-SHOW preferences, keyed by show identity ([anilistId]). Sacred user data:
+/// written ONLY by the per-show menu actions; the fill path (applySync) and
+/// refreshMetadata never touch it, so a rescan/refresh can't wipe it (seam #5) —
+/// like watch_state / source_overrides / hidden_episodes. Extensible: a new
+/// per-show pref is a new column here + a field on the domain ShowPreferences,
+/// NOT a parallel store. Absent row = all defaults.
+@DataClassName('ShowPreferenceRow')
+class ShowPrefs extends Table {
+  IntColumn get anilistId => integer()();
+
+  /// Cover display mode token (see PictureMode): 'normal' / 'blur' / 'removed'.
+  TextColumn get pictureMode => text().withDefault(const Constant('normal'))();
+
+  /// Whether the card's "Next episode" button is hidden for this show.
+  BoolColumn get nextEpisodeHidden =>
+      boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {anilistId};
+
+  @override
+  String get tableName => 'show_preferences';
+}
+
 @DriftDatabase(
   tables: [
     SeriesCache,
@@ -253,13 +285,14 @@ class AppSettings extends Table {
     SkipSegments,
     HiddenEpisodes,
     AppSettings,
+    ShowPrefs,
   ],
 )
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 13;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
@@ -270,7 +303,11 @@ class CacheDatabase extends _$CacheDatabase {
   // .pending_identification — the "discovered but not yet identified" state for
   // immediate library population (an additive column, default 0 = preserves
   // every existing row's meaning); v11 hidden_episodes — user-hidden missing
-  // episodes (a brand-new table, so existing populated caches are untouched).
+  // episodes (a brand-new table, so existing populated caches are untouched);
+  // v12 watch_state.watched_manual — the sticky manual watched-override flag (an
+  // additive column, default 0, so existing rows stay threshold-derived); v13
+  // show_preferences — per-show prefs (cover display mode + hide-next-episode),
+  // a brand-new table so existing populated caches are untouched.
   //
   // v8 RECLAIMED: it was briefly scratch on an unshipped branch (series_relations,
   // the "Up Next" overshoot) then reverted — it never reached main and no DB sits
@@ -330,6 +367,18 @@ class CacheDatabase extends _$CacheDatabase {
         // just creates it empty, so every existing populated cache is
         // unaffected (no shows have hidden episodes until the user hides one).
         await m.createTable(hiddenEpisodes);
+      }
+      if (from < 12) {
+        // Additive: the manual watched-override flag. Existing rows default to
+        // 0 (false) → their `watched` value keeps its threshold-derived meaning,
+        // so a populated cache is untouched and nothing is retroactively "manual".
+        await m.addColumn(watchStates, watchStates.watchedManual);
+      }
+      if (from < 13) {
+        // Brand-new per-show preferences table; a from-<13 upgrade just creates
+        // it empty, so every existing populated cache is unaffected (no show has
+        // an override until the user sets one).
+        await m.createTable(showPrefs);
       }
     },
   );
@@ -606,6 +655,19 @@ class CacheDatabase extends _$CacheDatabase {
   Future<void> setSetting(String key, String value) => into(
     appSettings,
   ).insertOnConflictUpdate(AppSettingRow(key: key, value: value));
+
+  // --- Per-show preferences. Written ONLY by the per-show menu actions; the
+  //     fill path (applySync) + refreshMetadata never touch this table, so a
+  //     rescan/refresh can't wipe a preference (seam #5). ---
+
+  Future<List<ShowPreferenceRow>> allShowPrefRows() => select(showPrefs).get();
+
+  Future<ShowPreferenceRow?> showPrefFor(int anilistId) => (select(
+    showPrefs,
+  )..where((p) => p.anilistId.equals(anilistId))).getSingleOrNull();
+
+  Future<void> upsertShowPref(ShowPreferenceRow row) =>
+      into(showPrefs).insertOnConflictUpdate(row);
 
   // --- Fill path (used by LibrarySync) ---
 

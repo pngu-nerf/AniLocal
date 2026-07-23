@@ -36,6 +36,14 @@ class PlaybackController {
     );
   }
 
+  /// Where playback should START for [e]: a WATCHED/complete episode always
+  /// plays fresh from the BEGINNING (its saved resume position is ignored — not
+  /// cleared — so a re-watch never drops the viewer near the end); an unwatched
+  /// episode resumes where it left off. The single source of this rule so every
+  /// open path (initial, list-swap, auto-advance) behaves identically.
+  static Duration resumeStartFor(Episode e) =>
+      e.watched ? Duration.zero : e.resumePosition;
+
   Stream<Duration> get positionStream => player.stream.position;
   Stream<Duration> get durationStream => player.stream.duration;
 
@@ -56,7 +64,7 @@ class PlaybackController {
     if (cur == null) return null;
     final result = await resolver.nextEpisode(cur);
     if (result is NextEpisode) {
-      await open(result.episode, startAt: result.episode.resumePosition);
+      await open(result.episode, startAt: resumeStartFor(result.episode));
       return result.episode;
     }
     return null; // NoNextEpisode -> stop

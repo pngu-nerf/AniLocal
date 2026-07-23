@@ -26,6 +26,7 @@ import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 import 'widgets/episode_row.dart';
 import 'widgets/header_actions.dart';
+import 'widgets/show_cover.dart';
 import 'widgets/multi_select_list.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
@@ -78,6 +79,14 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.setAutoPlayNext,
     required this.loadSkipMode,
     required this.setSkipMode,
+    required this.loadWatchedThreshold,
+    required this.setWatchedThreshold,
+    required this.loadHideNextEpisode,
+    required this.setHideNextEpisode,
+    required this.loadShowContinueWatching,
+    required this.setShowContinueWatching,
+    required this.loadShowSearchBar,
+    required this.setShowSearchBar,
     required this.loadRailFraction,
     required this.setRailFraction,
     // Shared header actions, so the detail header matches the home header.
@@ -110,6 +119,14 @@ class SeriesDetailScreen extends StatefulWidget {
   final Future<void> Function(bool enabled) setAutoPlayNext;
   final Future<SkipMode> Function() loadSkipMode;
   final Future<void> Function(SkipMode mode) setSkipMode;
+  final Future<Duration> Function() loadWatchedThreshold;
+  final Future<void> Function(Duration value) setWatchedThreshold;
+  final Future<bool> Function() loadHideNextEpisode;
+  final Future<void> Function(bool hidden) setHideNextEpisode;
+  final Future<bool> Function() loadShowContinueWatching;
+  final Future<void> Function(bool show) setShowContinueWatching;
+  final Future<bool> Function() loadShowSearchBar;
+  final Future<void> Function(bool show) setShowSearchBar;
   final Future<double> Function() loadRailFraction;
   final Future<void> Function(double fraction) setRailFraction;
 
@@ -242,6 +259,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       setAutoPlayNext: widget.setAutoPlayNext,
       loadSkipMode: widget.loadSkipMode,
       setSkipMode: widget.setSkipMode,
+      loadWatchedThreshold: widget.loadWatchedThreshold,
+      setWatchedThreshold: widget.setWatchedThreshold,
       loadMissingEnabled: widget.loadMissingEnabled,
       setMissingEnabled: widget.setMissingEnabled,
       onRefreshMetadata: widget.onRefreshMetadata,
@@ -256,6 +275,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           ),
         ),
       ),
+      // Edit Sources opens the same folders page the header does.
+      onOpenSources: widget.onFolders,
+      loadHideNextEpisode: widget.loadHideNextEpisode,
+      setHideNextEpisode: widget.setHideNextEpisode,
+      loadShowContinueWatching: widget.loadShowContinueWatching,
+      setShowContinueWatching: widget.setShowContinueWatching,
+      loadShowSearchBar: widget.loadShowSearchBar,
+      setShowSearchBar: widget.setShowSearchBar,
     ),
   );
 
@@ -301,6 +328,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           watchOrder: widget.watchOrder,
           loadAutoPlayNext: widget.loadAutoPlayNext,
           loadSkipMode: widget.loadSkipMode,
+          loadWatchedThreshold: widget.loadWatchedThreshold,
           loadRailFraction: widget.loadRailFraction,
           setRailFraction: widget.setRailFraction,
           // Same header actions as this screen — so the theater header matches.
@@ -478,32 +506,64 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               ),
               onPressed: () => _chooseSource(e),
             ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Xp.text),
-            onSelected: (v) {
-              if (v == 'reassign') _reassignOne(e);
-              if (v == 'split') _splitFromHere(e);
-              if (v == 'source') _chooseSource(e);
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'reassign',
-                child: Text('Reassign this episode…'),
-              ),
-              const PopupMenuItem(
-                value: 'split',
-                child: Text('Split: reassign from here…'),
-              ),
-              if (pinnable)
-                const PopupMenuItem(
-                  value: 'source',
-                  child: Text('Choose source…'),
-                ),
-            ],
-          ),
+          _episodeMenu(e, pinnable: pinnable),
         ],
       ),
     );
+  }
+
+  /// The per-episode three-dots menu for a REAL (owned) episode: the sticky
+  /// Mark-as-Watched toggle, then a "Reassign Show" submenu holding the two
+  /// pre-existing reassign actions, then the source picker for multi-source
+  /// episodes. NO hide option — hiding is a MISSING-episode-only concept (it
+  /// suppresses a ghost/gap tile); you can't hide an episode you actually have.
+  Widget _episodeMenu(Episode e, {required bool pinnable}) {
+    return MenuAnchor(
+      builder: (context, controller, _) => IconButton(
+        icon: const Icon(Icons.more_vert, color: Xp.text),
+        tooltip: 'Episode options',
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+      menuChildren: [
+        MenuItemButton(
+          leadingIcon: Icon(
+            e.watched ? Icons.remove_done : Icons.done_all,
+            size: 18,
+          ),
+          onPressed: () => _toggleWatched(e),
+          child: Text(e.watched ? 'Mark as Unwatched' : 'Mark as Watched'),
+        ),
+        SubmenuButton(
+          leadingIcon: const Icon(Icons.swap_horiz, size: 18),
+          menuChildren: [
+            MenuItemButton(
+              onPressed: () => _reassignOne(e),
+              child: const Text('Reassign Episode'),
+            ),
+            MenuItemButton(
+              onPressed: () => _splitFromHere(e),
+              child: const Text('Reassign This and All Following Episodes'),
+            ),
+          ],
+          child: const Text('Reassign Show'),
+        ),
+        if (pinnable)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.layers_outlined, size: 18),
+            onPressed: () => _chooseSource(e),
+            child: const Text('Choose source…'),
+          ),
+      ],
+    );
+  }
+
+  /// Sticky manual watched-override toggle. Flips the episode's watched flag via
+  /// the durable per-episode override (wins over the threshold, survives re-entry
+  /// + refresh); progress/resume is untouched.
+  Future<void> _toggleWatched(Episode e) async {
+    await widget.watchState.setWatchedManual(e, watched: !e.watched);
+    await _reload();
   }
 
   /// A faded, outlined circular badge for a missing episode's number — the
@@ -918,16 +978,25 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (art != null && File(art).existsSync())
-                      XpBevel(
-                        raised: false,
-                        color: Xp.well,
-                        child: Image.file(
-                          File(art),
-                          width: 150,
-                          fit: BoxFit.cover,
+                    // Cover through the show's picture mode (blur/removed apply
+                    // here too, consistently with the grid + player).
+                    XpBevel(
+                      raised: false,
+                      color: Xp.well,
+                      child: SizedBox(
+                        width: 150,
+                        child: AspectRatio(
+                          aspectRatio: 2 / 3,
+                          child: ShowCover(
+                            imagePath: art,
+                            pictureMode: series.pictureMode,
+                            placeholderIcon: series.pending
+                                ? Icons.hourglass_empty
+                                : Icons.movie_outlined,
+                          ),
                         ),
                       ),
+                    ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
