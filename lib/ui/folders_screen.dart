@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../domain/models/library_folder.dart';
 import '../domain/repositories/library_repository.dart';
 import 'access_recovery.dart';
-import 'window_chrome.dart';
+import 'theme/xp_tokens.dart';
+import 'theme/xp_widgets.dart';
+import 'widgets/xp_screen.dart';
 
 /// Manage the watched library folders. Adding goes through [onAddFolder] (the
 /// native open-panel, supplied by the composition root — the UI never imports
@@ -76,29 +78,23 @@ class _FoldersScreenState extends State<FoldersScreen> {
   @override
   Widget build(BuildContext context) {
     final folders = _folders;
-    return Scaffold(
-      appBar: AppBar(
-        // Hidden native title bar → traffic lights float over the top-left;
-        // inset the back button clear of them.
-        leadingWidth: kAppBarLeadingWidth,
-        leading: trafficLightBackButton(),
-        title: const Text('Sources'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.create_new_folder_outlined),
-            tooltip: 'Add source',
-            onPressed: _add,
-          ),
-        ],
+    return XpScreen(
+      title: 'Sources',
+      trailing: XpTitleTab(
+        icon: Icons.create_new_folder_outlined,
+        label: 'Add',
+        tooltip: 'Add source',
+        showLabel: MediaQuery.sizeOf(context).width >= 760,
+        onPressed: _add,
       ),
-      body: folders == null
+      child: folders == null
           ? const Center(child: CircularProgressIndicator())
           : folders.isEmpty
           ? Center(
-              child: FilledButton.icon(
+              child: XpButton(
+                icon: Icons.add,
+                label: 'Add a source',
                 onPressed: _add,
-                icon: const Icon(Icons.add),
-                label: const Text('Add a source'),
               ),
             )
           : Column(
@@ -107,17 +103,20 @@ class _FoldersScreenState extends State<FoldersScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.low_priority,
                         size: 16,
-                        color: Theme.of(context).colorScheme.outline,
+                        color: Xp.textDim,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Drag to set priority — the top source is preferred '
                           'for episodes found in more than one source.',
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: const TextStyle(
+                            color: Xp.textDim,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
@@ -127,22 +126,57 @@ class _FoldersScreenState extends State<FoldersScreen> {
                   child: ReorderableListView(
                     buildDefaultDragHandles: false,
                     onReorderItem: _onReorder,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
                     children: [
                       for (var i = 0; i < folders.length; i++)
-                        ListTile(
+                        Padding(
                           key: ValueKey(folders[i].path),
-                          leading: ReorderableDragStartListener(
-                            index: i,
-                            child: const Icon(Icons.drag_handle),
-                          ),
-                          title: Text(folders[i].path),
-                          subtitle: i == 0
-                              ? const Text('Preferred source')
-                              : null,
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            tooltip: 'Remove (drops its cached files)',
-                            onPressed: () => _remove(folders[i]),
+                          padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
+                          child: XpPanel(
+                            padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+                            child: Row(
+                              children: [
+                                ReorderableDragStartListener(
+                                  index: i,
+                                  child: const Icon(
+                                    Icons.drag_handle,
+                                    color: Xp.textDim,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      ChromeLabel(
+                                        folders[i].path,
+                                        upper: false,
+                                        fontSize: 13,
+                                        letterSpacing: 1,
+                                      ),
+                                      if (i == 0) ...[
+                                        const SizedBox(height: 2),
+                                        const Text(
+                                          'Preferred source',
+                                          style: TextStyle(
+                                            color: Xp.textDim,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                XpButton(
+                                  dense: true,
+                                  icon: Icons.delete_outline,
+                                  tooltip: 'Remove (drops its cached files)',
+                                  onPressed: () => _remove(folders[i]),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                     ],

@@ -1137,11 +1137,7 @@ class _SeriesCardState extends State<_SeriesCard> {
     final series = widget.series;
     final unavailable = widget.unavailable;
     final next = widget.nextEpisode;
-    final title =
-        series.titles.english ??
-        series.titles.romaji ??
-        series.titles.native ??
-        '#${series.anilistId}';
+    final title = series.displayTitle;
     final art = series.coverImageRef;
     // Inverted card: the poster is the FIXED element — a 2:3 box showing the
     // whole cover, uncropped and identical across every card — sitting in a

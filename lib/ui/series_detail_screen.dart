@@ -25,8 +25,10 @@ import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 import 'widgets/episode_row.dart';
+import 'widgets/episode_tile.dart';
 import 'widgets/header_actions.dart';
 import 'widgets/show_cover.dart';
+import 'widgets/xp_dialog.dart';
 import 'widgets/multi_select_list.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
@@ -372,8 +374,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       context: context,
       builder: (dialogContext) {
         final priorityDefault = e.sources.first; // sources are priority-ordered
-        return AlertDialog(
-          title: Text('Episode ${e.number} — source'),
+        return XpDialog(
+          title: 'Episode ${e.number} — source',
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -419,9 +421,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
             ),
           ),
           actions: [
-            TextButton(
+            XpButton(
+              label: 'Close',
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Close'),
             ),
           ],
         );
@@ -474,41 +476,40 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         '▸ resume ${_fmt(e.resumePosition)}',
     ].join('\n');
 
-    return _Tappable(
+    // The SHARED episode tile (same as the theater rail); this list keeps the
+    // now-playing affordance OFF and passes a filename/resume subtitle as the
+    // detail slot, with the watched mark, source picker, and per-episode menu
+    // in trailing. Tap opens the player.
+    return EpisodeTile(
+      number: e.number,
+      title: e.title ?? 'Episode ${e.number}',
       onTap: () => _play(e),
-      // The SHARED episode row (same as the theater rail) — the detail slot
-      // carries this list's filename/resume subtitle; trailing carries the
-      // watched mark, the source picker, and the per-episode menu.
-      child: EpisodeRow(
-        number: e.number,
-        title: e.title ?? 'Episode ${e.number}',
-        detail: Text(
-          subtitle,
-          style: const TextStyle(color: Xp.textDim, fontSize: 11),
-        ),
-        trailing: [
-          const SizedBox(width: 8),
-          if (e.watched)
-            const Padding(
-              padding: EdgeInsets.only(top: 2, right: 2),
-              child: Icon(Icons.check_circle, size: 18, color: Xp.accent),
-            ),
-          if (pinnable)
-            IconButton(
-              tooltip: '${e.sources.length} sources — choose…',
-              icon: Badge(
-                label: Text('${e.sources.length}'),
-                child: const Icon(
-                  Icons.layers_outlined,
-                  color: Xp.text,
-                  size: 20,
-                ),
-              ),
-              onPressed: () => _chooseSource(e),
-            ),
-          _episodeMenu(e, pinnable: pinnable),
-        ],
+      detail: Text(
+        subtitle,
+        style: const TextStyle(color: Xp.textDim, fontSize: 11),
       ),
+      trailing: [
+        const SizedBox(width: 8),
+        if (e.watched)
+          const Padding(
+            padding: EdgeInsets.only(top: 2, right: 2),
+            child: Icon(Icons.check_circle, size: 18, color: Xp.accent),
+          ),
+        if (pinnable)
+          IconButton(
+            tooltip: '${e.sources.length} sources — choose…',
+            icon: Badge(
+              label: Text('${e.sources.length}'),
+              child: const Icon(
+                Icons.layers_outlined,
+                color: Xp.text,
+                size: 20,
+              ),
+            ),
+            onPressed: () => _chooseSource(e),
+          ),
+        _episodeMenu(e, pinnable: pinnable),
+      ],
     );
   }
 
@@ -859,11 +860,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final series = widget.series;
-    final title =
-        series.titles.english ??
-        series.titles.romaji ??
-        series.titles.native ??
-        '#${series.anilistId}';
+    final title = series.displayTitle;
 
     // Match HeaderActionsBar's label threshold so the back button collapses to
     // an icon at the same width as the right-side tabs (consistent header).
@@ -1188,38 +1185,5 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       }
     }
     return widgets;
-  }
-}
-
-/// A hover-highlighting, click-cursor wrapper for a tappable list row — the XP
-/// affordance the homepage uses on its interactive tiles.
-class _Tappable extends StatefulWidget {
-  const _Tappable({required this.child, required this.onTap});
-
-  final Widget child;
-  final VoidCallback onTap;
-
-  @override
-  State<_Tappable> createState() => _TappableState();
-}
-
-class _TappableState extends State<_Tappable> {
-  bool _hover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: ColoredBox(
-          color: _hover ? Xp.surfaceAlt : Colors.transparent,
-          child: widget.child,
-        ),
-      ),
-    );
   }
 }

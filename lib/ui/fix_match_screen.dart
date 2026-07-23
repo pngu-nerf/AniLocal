@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
+import 'theme/xp_tokens.dart';
+import 'theme/xp_widgets.dart';
+import 'widgets/xp_screen.dart';
 
 /// Minimal manual fix-match: search AniList → pick from ranked candidates →
 /// assign. For a split (multiple files), an optional toggle chooses continuous
@@ -94,11 +97,9 @@ class _FixMatchScreenState extends State<FixMatchScreen> {
   @override
   Widget build(BuildContext context) {
     final count = widget.filePaths.length;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isSplit ? 'Reassign $count files' : 'Fix match'),
-      ),
-      body: Column(
+    return XpScreen(
+      title: widget.isSplit ? 'Reassign $count files' : 'Fix match',
+      child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
@@ -115,8 +116,9 @@ class _FixMatchScreenState extends State<FixMatchScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton.filled(
-                  icon: const Icon(Icons.search),
+                XpButton(
+                  icon: Icons.search,
+                  tooltip: 'Search',
                   onPressed: _search,
                 ),
               ],
@@ -134,20 +136,17 @@ class _FixMatchScreenState extends State<FixMatchScreen> {
                     : 'Show AniList episodes 1, 2, 3…',
               ),
             ),
-          const Divider(height: 1),
+          const Divider(height: 1, color: Xp.divider),
           Expanded(child: _candidates()),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: FilledButton(
+              child: XpButton(
+                lit: _selected != null && !_busy,
+                label: _busy
+                    ? 'Assigning…'
+                    : (_selected == null ? 'Pick a match' : 'Assign'),
                 onPressed: (_selected == null || _busy) ? null : _assign,
-                child: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(_selected == null ? 'Pick a match' : 'Assign'),
               ),
             ),
           ),
@@ -161,49 +160,124 @@ class _FixMatchScreenState extends State<FixMatchScreen> {
       future: _results,
       builder: (context, snapshot) {
         if (_results == null) {
-          return const Center(child: Text('Search for the correct title.'));
+          return const _CandidatesMessage('Search for the correct title.');
         }
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(child: Text('Search failed: ${snapshot.error}'));
+          return _CandidatesMessage('Search failed: ${snapshot.error}');
         }
         final results = snapshot.data ?? const [];
         if (results.isEmpty) {
-          return const Center(child: Text('No candidates.'));
+          return const _CandidatesMessage('No candidates.');
         }
-        return ListView(
-          children: [
-            for (final s in results)
-              ListTile(
-                selected: _selected?.anilistId == s.anilistId,
-                onTap: () => setState(() => _selected = s),
-                leading: s.coverImageRef != null && _isLocal(s.coverImageRef!)
-                    ? Image.file(File(s.coverImageRef!), width: 40)
-                    : const Icon(Icons.image_outlined),
-                title: Text(
-                  s.titles.english ??
-                      s.titles.romaji ??
-                      s.titles.native ??
-                      '#${s.anilistId}',
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          itemCount: results.length,
+          itemBuilder: (_, i) {
+            final s = results[i];
+            final selected = _selected?.anilistId == s.anilistId;
+            final title = s.displayTitle;
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => setState(() => _selected = s),
+                  child: XpPanel(
+                    // Selection is shown by lighting the panel face (dim cyan).
+                    color: selected ? Xp.accentDeep : null,
+                    padding: const EdgeInsets.fromLTRB(8, 6, 10, 6),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 36,
+                          height: 52,
+                          child:
+                              s.coverImageRef != null &&
+                                  _isLocal(s.coverImageRef!)
+                              ? Image.file(
+                                  File(s.coverImageRef!),
+                                  fit: BoxFit.cover,
+                                )
+                              : const ColoredBox(
+                                  color: Xp.well,
+                                  child: Icon(
+                                    Icons.image_outlined,
+                                    color: Xp.textFaint,
+                                    size: 18,
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ChromeLabel(
+                                title,
+                                upper: false,
+                                fontSize: 13,
+                                letterSpacing: 1,
+                                maxLines: 2,
+                                color: selected ? Xp.accentBright : Xp.text,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                [
+                                  if (s.format != null) s.format,
+                                  if (s.episodeCount != null)
+                                    '${s.episodeCount} ep',
+                                  'AniList #${s.anilistId}',
+                                ].join(' · '),
+                                style: const TextStyle(
+                                  color: Xp.textDim,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (selected) ...[
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.check_circle,
+                            size: 18,
+                            color: Xp.accent,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-                subtitle: Text(
-                  [
-                    if (s.format != null) s.format,
-                    if (s.episodeCount != null) '${s.episodeCount} ep',
-                    'AniList #${s.anilistId}',
-                  ].join(' · '),
-                ),
-                trailing: _selected?.anilistId == s.anilistId
-                    ? const Icon(Icons.check_circle)
-                    : null,
               ),
-          ],
+            );
+          },
         );
       },
     );
   }
 
   bool _isLocal(String ref) => !ref.startsWith('http');
+}
+
+/// Centered dim message for the candidates area's empty / prompt / error states.
+class _CandidatesMessage extends StatelessWidget {
+  const _CandidatesMessage(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Xp.textDim),
+      ),
+    ),
+  );
 }

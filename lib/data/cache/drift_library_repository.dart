@@ -754,7 +754,10 @@ class DriftLibraryRepository
     }
   }
 
-  String _sortTitle(Series s) =>
-      (s.titles.english ?? s.titles.romaji ?? s.titles.native ?? '')
-          .toLowerCase();
+  // Sort key = the same display title, lowercased. The empty-string fallback
+  // this used to carry only differed for an all-null-title series (unreachable —
+  // every real entry has ≥1 title, and a pending placeholder carries its parsed
+  // title in romaji), so routing through displayTitle keeps one source with no
+  // observable sort change.
+  String _sortTitle(Series s) => s.displayTitle.toLowerCase();
 }

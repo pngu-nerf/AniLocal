@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/models/skip_mode.dart';
+import 'theme/xp_widgets.dart';
+import 'widgets/xp_dialog.dart';
 
 /// The largest watched-threshold the min:sec input accepts (9:59).
 const watchedThresholdMax = Duration(minutes: 9, seconds: 59);
@@ -126,10 +128,10 @@ Future<void> showAppSettingsDialog(
   var thresholdValid = true;
   await showDialog<void>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Settings'),
-      // Bounded width + scroll so the collapsible sections (expanded by default)
-      // never overflow the dialog on a short window.
+    builder: (dialogContext) => XpDialog(
+      title: 'Settings',
+      // Bounded width + scroll so the collapsible sections never overflow the
+      // dialog on a short window.
       content: SizedBox(
         width: 400,
         child: StatefulBuilder(
@@ -333,9 +335,9 @@ Future<void> showAppSettingsDialog(
         ),
       ),
       actions: [
-        TextButton(
+        XpButton(
+          label: 'Done',
           onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Done'),
         ),
       ],
     ),

@@ -130,11 +130,7 @@ class _TheaterScreenState extends State<TheaterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        widget.series.titles.english ??
-        widget.series.titles.romaji ??
-        widget.series.titles.native ??
-        'Theater';
+    final title = widget.series.displayTitle;
 
     final episodes = _episodes ?? const <Episode>[];
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../domain/models/episode.dart';
 import '../../theme/xp_tokens.dart';
-import '../../widgets/episode_row.dart';
+import '../../widgets/episode_tile.dart';
 import '../theater_widgets.dart';
 
 /// The EPISODE-LIST zone: an independently scrollable list of the series'
@@ -95,68 +95,50 @@ class _EpisodeListZoneState extends State<EpisodeListZone> {
                     itemCount: widget.episodes.length,
                     itemBuilder: (context, i) {
                       final e = widget.episodes[i];
-                      return _EpisodeTile(
-                        episode: e,
-                        current: _isCurrent(e, widget.current),
+                      final resuming =
+                          !e.watched && e.resumePosition > Duration.zero;
+                      final progress = e.duration > Duration.zero
+                          ? e.resumePosition.inMilliseconds /
+                                e.duration.inMilliseconds
+                          : 0.0;
+                      final current = _isCurrent(e, widget.current);
+                      // Shared tile; the rail turns ON the now-playing highlight
+                      // and passes a resume-progress bar as the detail slot.
+                      return EpisodeTile(
+                        number: e.number,
+                        title: e.title ?? 'Episode ${e.number}',
+                        active: current,
+                        nowPlaying: true,
                         onTap: () => widget.onSelect(e),
+                        detail: resuming
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: progress.clamp(0.0, 1.0),
+                                  minHeight: 3,
+                                  color: Xp.accent,
+                                  backgroundColor: Xp.surfaceAlt,
+                                ),
+                              )
+                            : null,
+                        trailing: [
+                          if (e.watched)
+                            const Icon(
+                              Icons.check_circle,
+                              size: 16,
+                              color: Xp.accent,
+                            )
+                          else if (current)
+                            const Icon(
+                              Icons.volume_up,
+                              size: 16,
+                              color: Xp.accentBright,
+                            ),
+                        ],
                       );
                     },
                   ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EpisodeTile extends StatelessWidget {
-  const _EpisodeTile({
-    required this.episode,
-    required this.current,
-    required this.onTap,
-  });
-
-  final Episode episode;
-  final bool current;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = episode.duration > Duration.zero
-        ? episode.resumePosition.inMilliseconds /
-              episode.duration.inMilliseconds
-        : 0.0;
-    final resuming = !episode.watched && episode.resumePosition > Duration.zero;
-
-    return InkWell(
-      onTap: onTap,
-      // Mouse-driven list: don't grab keyboard focus on tap, or selecting an
-      // episode would steal the player's shortcut focus (it's a sibling zone).
-      canRequestFocus: false,
-      // The SHARED episode row (same as the detail-page list) — with the rail's
-      // now-playing highlight on, and its per-row resume-progress bar kept in
-      // the detail slot (the detail-page list has no such bar).
-      child: EpisodeRow(
-        number: episode.number,
-        title: episode.title ?? 'Episode ${episode.number}',
-        active: current,
-        nowPlayingCapable: true,
-        detail: resuming
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: LinearProgressIndicator(
-                  value: progress.clamp(0.0, 1.0),
-                  minHeight: 3,
-                  color: Xp.accent,
-                  backgroundColor: Xp.surfaceAlt,
-                ),
-              )
-            : null,
-        trailing: [
-          if (episode.watched)
-            const Icon(Icons.check_circle, size: 16, color: Xp.accent)
-          else if (current)
-            const Icon(Icons.volume_up, size: 16, color: Xp.accentBright),
         ],
       ),
     );

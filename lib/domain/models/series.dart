@@ -66,6 +66,15 @@ class Series extends Equatable {
   /// per-show preference).
   final bool nextEpisodeHidden;
 
+  /// The ONE source of truth for a show's displayed name: English → romaji →
+  /// native, falling back to the AniList id (`#123`) when a show somehow has no
+  /// title. Every surface (grid, detail, player, continue-watching, fix-match)
+  /// reads this so the fallback can't drift between them. NOTE: this is the
+  /// *display* title — a search-query seed deliberately differs (romaji-first,
+  /// empty fallback) and is not this.
+  String get displayTitle =>
+      titles.english ?? titles.romaji ?? titles.native ?? '#$anilistId';
+
   @override
   List<Object?> get props => [
     anilistId,

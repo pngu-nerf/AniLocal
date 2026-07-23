@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'theme/xp_widgets.dart';
+import 'widgets/xp_dialog.dart';
+
 /// Written path shown in every access-recovery surface, so a stale deep-link
 /// never strands the user.
 const String kFilesAndFoldersPath =
@@ -13,23 +16,21 @@ Future<void> showAccessDeniedDialog(
 ) {
   return showDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Folder access needed'),
+    builder: (ctx) => XpDialog(
+      title: 'Folder access needed',
       content: Text(
         "AniLocal can't access $label.\n\n"
         'Enable AniLocal in $kFilesAndFoldersPath, then sync metadata.',
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('Later'),
-        ),
-        FilledButton(
+        XpButton(label: 'Later', onPressed: () => Navigator.of(ctx).pop()),
+        XpButton(
+          lit: true,
+          label: 'Open Settings',
           onPressed: () async {
             await onOpenSettings();
             if (ctx.mounted) Navigator.of(ctx).pop();
           },
-          child: const Text('Open Settings'),
         ),
       ],
     ),

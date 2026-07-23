@@ -34,11 +34,7 @@ class SeriesInfoZone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final title =
-        series.titles.english ??
-        series.titles.romaji ??
-        series.titles.native ??
-        'Untitled';
+    final title = series.displayTitle;
     final art = series.coverImageRef;
 
     final meta = <String>[

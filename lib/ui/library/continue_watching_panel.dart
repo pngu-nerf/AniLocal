@@ -122,11 +122,7 @@ class _Card extends StatelessWidget {
     // Text mirrors the SAME two values the bar above reads — no re-fetch, no
     // recompute — so the label and the bar can never disagree.
     final percent = (progress * 100).round();
-    final title =
-        entry.series.titles.english ??
-        entry.series.titles.romaji ??
-        entry.series.titles.native ??
-        '#${entry.series.anilistId}';
+    final title = entry.series.displayTitle;
 
     return MouseRegion(
       // The whole tile resumes playback on tap → show the click affordance.
