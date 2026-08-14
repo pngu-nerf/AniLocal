@@ -147,13 +147,15 @@ class _TheaterScreenState extends State<TheaterScreen> {
     final config = widget.config.copyWith(railFraction: _railFraction);
 
     return Scaffold(
-      // The theater keeps its Material Scaffold (NOT XpWindow — it's a pushed
-      // route, not the root window frame), but its header is the SAME shared
-      // XpTitleBar as home/detail rather than a bespoke AppBar. Identical layout
-      // everywhere: left cluster (VFD readout + back tab), a draggable middle,
-      // and the right-aligned HeaderActionsBar (Sources / Sync / Unmatched /
-      // Settings) — only the back button differs. Windowed only; media_kit's
-      // fullscreen route replaces the whole view, so this chrome never shows there.
+      // The theater keeps its Material Scaffold and its own SHELL (NOT XpWindow
+      // — it's a pushed route, not the root window frame, and re-shelling it
+      // would drag in the fullscreen/focus/cursor machinery: see
+      // docs/header-architecture-audit.md). Only the shell differs. The header
+      // itself is the SAME XpTitleBar every other screen uses, in its standard
+      // layout — serif brand mark, window-centred VFD screen, the same
+      // label/abbreviation collapse — so the player's chrome reads identically
+      // to the rest of the app. Windowed only; media_kit's fullscreen route
+      // replaces the whole view, so this chrome never shows there.
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(Xp.titleBarHeight),
         child: XpTitleBar(
@@ -163,7 +165,7 @@ class _TheaterScreenState extends State<TheaterScreen> {
             icon: Icons.arrow_back,
             label: 'Back',
             tooltip: 'Back',
-            showLabel: MediaQuery.sizeOf(context).width >= 760,
+            showLabel: XpTitleBar.showsLabels(context),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           trailing: HeaderActionsBar(

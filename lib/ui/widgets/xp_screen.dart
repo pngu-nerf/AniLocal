@@ -36,23 +36,37 @@ class XpScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Match HeaderActionsBar's threshold so the back tab collapses to an icon at
-    // the same width as the action tabs.
-    final showLabel = MediaQuery.sizeOf(context).width >= 760;
+    // The one shared signal, so the back tab collapses to an icon at exactly
+    // the same width as the action tabs and the brand mark.
+    final showLabel = XpTitleBar.showsLabels(context);
+    final back = XpTitleTab(
+      icon: Icons.arrow_back,
+      label: 'Back',
+      tooltip: 'Back',
+      showLabel: showLabel,
+      onPressed: () => Navigator.of(context).maybePop(),
+    );
     return Scaffold(
       backgroundColor: Xp.desktop,
       body: XpWindow(
         caption: title,
         captionWidget: HeaderReadout(title: title),
+        // Home has nothing to pop, but its slot is RESERVED at the identical
+        // width — the very same tab, laid out but not painted and not
+        // hit-testable. That's what keeps the left cluster (and so the centred
+        // VFD screen, whose width the left cluster can constrain) from shifting
+        // between home and a pushed screen. Reserving the real tab rather than a
+        // hardcoded SizedBox means the blank tracks the tab's width for free,
+        // including through the label/icon collapse.
         titleLeading: showBack
-            ? XpTitleTab(
-                icon: Icons.arrow_back,
-                label: 'Back',
-                tooltip: 'Back',
-                showLabel: showLabel,
-                onPressed: () => Navigator.of(context).maybePop(),
-              )
-            : null,
+            ? back
+            : Visibility(
+                visible: false,
+                maintainSize: true,
+                maintainAnimation: true,
+                maintainState: true,
+                child: back,
+              ),
         titleTrailing: trailing,
         child: child,
       ),

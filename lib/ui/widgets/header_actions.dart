@@ -30,10 +30,11 @@ class HeaderActionsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Labels only when the bar is wide enough to fit them alongside the
-    // fixed-width VFD display in the left cluster; otherwise the tabs collapse
-    // to icons. ~760 clears the display + traffic-light inset + labels.
-    final showLabel = MediaQuery.sizeOf(context).width >= 760;
+    // Labels only when the bar is wide enough to fit them alongside the left
+    // cluster and the centred VFD screen; otherwise the tabs collapse to icons
+    // (which also hands the screen its room back). One shared signal — see
+    // [XpTitleBar.showsLabels].
+    final showLabel = XpTitleBar.showsLabels(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,

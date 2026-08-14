@@ -84,7 +84,7 @@ class _FoldersScreenState extends State<FoldersScreen> {
         icon: Icons.create_new_folder_outlined,
         label: 'Add',
         tooltip: 'Add source',
-        showLabel: MediaQuery.sizeOf(context).width >= 760,
+        showLabel: XpTitleBar.showsLabels(context),
         onPressed: _add,
       ),
       child: folders == null

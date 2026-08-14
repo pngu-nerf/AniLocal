@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../window_chrome.dart';
+import 'brand_wordmark.dart';
 import 'vfd_readout.dart';
 import 'xp_tokens.dart';
 
@@ -335,17 +338,29 @@ class XpGroupBox extends StatelessWidget {
 }
 
 /// The window title bar (the native macOS one is hidden — see
-/// `MainFlutterWindow.swift`). Layout is a LEFT cluster and a RIGHT cluster with
-/// a draggable gap between them:
+/// `MainFlutterWindow.swift`). Left to right:
 ///
-///   [traffic-light inset] → [leading (back)] → [captionWidget/caption]
-///       … draggable middle … → [trailing actions]
+///   [traffic lights] [AniLocal brand mark] [back / reserved blank]
+///       … [—— VFD screen, centred on the WINDOW ——] …   [trailing actions]
 ///
-/// The left cluster is pinned just right of the traffic lights (which float over
-/// the bar's left edge); [captionWidget] is normally the VFD `HeaderReadout`.
-/// Only the middle is a [WindowDragArea] (grab it to move the window; double-tap
-/// zooms) — leading/caption/trailing sit OUTSIDE it so their taps aren't
-/// deferred (~300ms) by the double-tap recognizer.
+/// Three things make this the instrument face rather than a toolbar:
+/// - **Branding is chassis, not screen.** The `BrandWordmark` is a molded chrome
+///   logo printed on the header body, just right of the traffic lights. The
+///   black screen ([captionWidget], normally a `HeaderReadout`) is left to show
+///   only the CONTEXT — "LIBRARY", a show title.
+/// - **The screen is centred on the window's midpoint and symmetric**, at every
+///   width — see [_HeaderCenterDelegate], which is where that rule lives.
+/// - **Back sits with the brand**, and the screen keeps its place on screens
+///   with no back action because the caller reserves the slot (see `XpScreen`).
+///
+/// **Window chrome:** everything that isn't a button behaves like a real title
+/// bar — drag to move, double-click to zoom. A full-bleed [WindowDragArea] sits
+/// UNDER everything for the bare chassis, and the VFD screen gets that same
+/// [WindowDragArea] wrapped directly around it (see [_brandedRow]) so the
+/// largest non-button target in the bar is unambiguously part of the chrome. The
+/// button clusters stay OUTSIDE any drag area, so their taps aren't deferred
+/// (~300ms) by the double-tap recognizer; the brand mark is an [IgnorePointer],
+/// so the chassis under it drags too.
 class XpTitleBar extends StatelessWidget {
   const XpTitleBar({
     super.key,
@@ -355,20 +370,41 @@ class XpTitleBar extends StatelessWidget {
     this.trailing,
   });
 
+  /// Whether the header spells itself out at the current window width: tabs
+  /// show text labels, and the brand mark is the full wordmark rather than its
+  /// initials.
+  ///
+  /// The ONE place this decision is made. Every part of the header — the back
+  /// tab, the action tabs, a screen's own tab, the brand — reads it, so the bar
+  /// contracts as a single piece instead of in stages, and re-tuning the point
+  /// is a change in one place. (That point is still [Xp.headerLabelWidth], a
+  /// flat window-width constant; a threshold derived from the actual labelled
+  /// cluster widths — which would fix its blindness to tab count — is diagnosed
+  /// and pending.)
+  static bool showsLabels(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= Xp.headerLabelWidth;
+
   final String caption;
 
-  /// Overrides the default [caption] rendering — used to set the header VFD
-  /// readout (`HeaderReadout`) as the branding, instead of a chrome label.
+  /// Overrides the default [caption] rendering — normally the VFD
+  /// `HeaderReadout`. In the standard layout this is the centred screen, and it
+  /// is given a TIGHT width (it must fill what it's handed, not size to text).
   final Widget? captionWidget;
 
-  /// Optional leading control (e.g. a back button on a pushed screen), placed
-  /// AFTER the traffic-light inset and BEFORE the caption. Rendered outside the
-  /// [WindowDragArea] so its taps aren't deferred by the drag recognizer.
+  /// Optional leading control — the back button, placed just right of the brand
+  /// mark. Callers that have no back action should pass a size-preserving blank
+  /// so the screen doesn't shift between screens.
   final Widget? leading;
 
   /// Optional actions/status shown at the trailing edge (app buttons, a scan
-  /// spinner). Rendered outside the [WindowDragArea] so taps aren't deferred.
+  /// spinner).
   final Widget? trailing;
+
+  /// Between the brand mark and the back button.
+  static const double _brandGap = 12;
+
+  /// Between the trailing actions and the window edge.
+  static const double _trailingGap = 6;
 
   @override
   Widget build(BuildContext context) {
@@ -379,65 +415,78 @@ class XpTitleBar extends StatelessWidget {
         children: [
           // The bright 1px sheen line across the very top — the "Luna" gloss.
           Container(height: 1, color: Xp.titleGloss),
-          Expanded(
-            child: Row(
-              // Stretch so trailing actions can fill the bar's height and reach
-              // its bottom edge (the "binder tab" look).
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+          Expanded(child: _brandedRow(showsLabels(context))),
+        ],
+      ),
+    );
+  }
+
+  Widget _brandedRow(bool showLabels) {
+    // LEFT cluster: traffic-light inset + brand + back slot. Stretch so the back
+    // tab HANGS full-height like the trailing tabs; the brand is centred so it
+    // keeps its own height.
+    final left = Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Fixed inset clearing the traffic lights, which float over the bar.
+        const SizedBox(width: kTrafficLightInset),
+        // Decorative: IgnorePointer so the chassis under the logo stays
+        // draggable (a text render box would otherwise absorb the pointer).
+        Center(
+          child: IgnorePointer(child: BrandWordmark(abbreviated: !showLabels)),
+        ),
+        if (leading != null) ...[const SizedBox(width: _brandGap), leading!],
+      ],
+    );
+    final right = trailing == null
+        ? null
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              trailing!,
+              const SizedBox(width: _trailingGap),
+            ],
+          );
+
+    return ClipRect(
+      child: Stack(
+        children: [
+          // Under everything: any bare chassis drags the window.
+          Positioned.fill(
+            child: WindowDragArea(child: const SizedBox.expand()),
+          ),
+          Positioned.fill(
+            child: CustomMultiChildLayout(
+              delegate: _HeaderCenterDelegate(),
               children: [
-                // Fixed inset clearing the traffic lights — OUTSIDE the flexible
-                // caption, so it never gets squeezed (and so can never overflow)
-                // when wide trailing tabs shrink the caption slot.
-                const SizedBox(width: kTrafficLightInset),
-                // Left cluster: the VFD display, then the back button to its
-                // RIGHT — laid over a draggable, clipping middle. Both render at
-                // their natural (FIXED) widths, left-aligned & vertically
-                // centered; the empty space to the right is draggable (grab it to
-                // move the window). A cramped bar CLIPS gracefully (ClipRect)
-                // instead of overflowing. Back is a real button ON TOP of the
-                // drag layer (taps not deferred); the display's painters pass
-                // pointers through, so you can still drag over the screen.
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: WindowDragArea(child: const SizedBox.expand()),
-                      ),
-                      Positioned.fill(
-                        child: ClipRect(
-                          child: OverflowBox(
-                            alignment: Alignment.centerLeft,
-                            minWidth: 0,
-                            maxWidth: double.infinity,
-                            child: Row(
-                              // Stretch so the back button HANGS full-height,
-                              // identical to the trailing tabs; the display is
-                              // wrapped in Center so the black screen keeps its
-                              // own (shorter) height instead of stretching.
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Center(
-                                  child:
-                                      captionWidget ??
-                                      ChromeLabel(
-                                        caption,
-                                        color: Xp.textOnTitle,
-                                        fontSize: 12,
-                                        letterSpacing: 1.5,
-                                      ),
-                                ),
-                                if (leading != null) const SizedBox(width: 10),
-                                ?leading,
-                              ],
-                            ),
+                LayoutId(id: _HeaderSlot.left, child: left),
+                LayoutId(
+                  id: _HeaderSlot.center,
+                  // The screen is CHROME, not a control: it gets the same
+                  // [WindowDragArea] as the bare chassis, so dragging it moves
+                  // the window and double-clicking it zooms — identical to the
+                  // rest of the non-button bar. Wrapped directly rather than
+                  // left to fall through to the full-bleed layer beneath: the
+                  // display is the biggest target in the bar, and its chrome
+                  // behaviour shouldn't depend on every widget inside it
+                  // happening to stay pointer-transparent.
+                  child: WindowDragArea(
+                    child:
+                        captionWidget ??
+                        Center(
+                          child: ChromeLabel(
+                            caption,
+                            color: Xp.textOnTitle,
+                            fontSize: 12,
+                            letterSpacing: 1.5,
                           ),
                         ),
-                      ),
-                    ],
                   ),
                 ),
-                if (trailing != null) ...[trailing!, const SizedBox(width: 6)],
+                if (right != null)
+                  LayoutId(id: _HeaderSlot.right, child: right),
               ],
             ),
           ),
@@ -445,6 +494,86 @@ class XpTitleBar extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _HeaderSlot { left, center, right }
+
+/// Places the header's VFD screen **centred on the window's horizontal
+/// midpoint, symmetrically**, between the two button clusters.
+///
+/// This is deliberately NOT "fill the gap between the clusters": the clusters
+/// are different widths, so gap-filling would put the screen visibly off-centre.
+/// Symmetry-about-the-window-centre wins. The half-width is therefore taken from
+/// whichever cluster is CLOSER to the centre *right now*, and applied to both
+/// sides — which leaves intentional empty chassis on the roomier side.
+///
+/// Which side constrains FLIPS with window width, so it is measured live rather
+/// than assumed: wide, the right cluster (Sources/Sync/Settings with labels) is
+/// the wider one; once the window narrows past [Xp.headerLabelWidth] those tabs
+/// collapse to icons and the LEFT cluster (traffic lights + brand + back)
+/// becomes the wider one. Both clusters are laid out first here, so the numbers
+/// used are their actual rendered widths at this instant.
+class _HeaderCenterDelegate extends MultiChildLayoutDelegate {
+  /// Clear air kept between the screen and the nearer cluster.
+  static const double margin = 10;
+
+  /// Floor on the screen's width, below which it's too cramped to read. Bought
+  /// by giving up [margin] first; past that the screen keeps shrinking rather
+  /// than run under a cluster. (Keeping the floor reachable at ordinary window
+  /// sizes is the job of the tab label/icon collapse — [Xp.headerLabelWidth].)
+  static const double minScreenWidth = 132;
+
+  @override
+  void performLayout(Size size) {
+    // Tight height so a cluster's tabs hang the full bar height. Width is left
+    // UNBOUNDED so an absurdly cramped bar clips (the caller wraps this in a
+    // ClipRect) instead of throwing a RenderFlex overflow.
+    final cluster = BoxConstraints(
+      minHeight: size.height,
+      maxHeight: size.height,
+    );
+    var leftW = 0.0;
+    var rightW = 0.0;
+    if (hasChild(_HeaderSlot.left)) {
+      leftW = layoutChild(_HeaderSlot.left, cluster).width;
+      positionChild(_HeaderSlot.left, Offset.zero);
+    }
+    if (hasChild(_HeaderSlot.right)) {
+      rightW = layoutChild(_HeaderSlot.right, cluster).width;
+      positionChild(_HeaderSlot.right, Offset(size.width - rightW, 0));
+    }
+    if (!hasChild(_HeaderSlot.center)) return;
+
+    final centerX = size.width / 2;
+    // Distance from the window centre to whichever cluster is NEARER it. That
+    // one number is the budget for BOTH sides — this is where "symmetric about
+    // the window centre" beats "fill the gap".
+    final room = math.min(centerX - leftW, centerX - rightW);
+    var half = room - margin;
+    if (2 * half < minScreenWidth) {
+      // Too cramped: spend the clear-air margin before spending width, but
+      // never past the nearer cluster. Symmetry is never traded away — a
+      // centred screen that has shrunk (its text marquees, and it clips
+      // cleanly) still reads right; an off-centre one never does.
+      half = math.min(room, minScreenWidth / 2);
+    }
+    final width = math.max(0.0, 2 * half);
+    // Tight width (the screen fills its allotment and measures its own text fit
+    // against it), loose height so it keeps its own and can be centred.
+    final screen = layoutChild(
+      _HeaderSlot.center,
+      BoxConstraints(minWidth: width, maxWidth: width, maxHeight: size.height),
+    );
+    positionChild(
+      _HeaderSlot.center,
+      Offset(centerX - width / 2, (size.height - screen.height) / 2),
+    );
+  }
+
+  // Stateless rule — a rebuild can't change it. Cluster/screen resizes still
+  // relayout: their children are laid out inside performLayout.
+  @override
+  bool shouldRelayout(_HeaderCenterDelegate old) => false;
 }
 
 /// The window-chrome look: a blue active-window frame with rounded top corners,

@@ -71,7 +71,7 @@ glance" + the five seams). Working rules for making changes: **`CLAUDE.md`**.
 | **Playback engine** | `lib/playback/playback_controller.dart` (owns the media_kit `Player`), `media_remote.dart` |
 | **The player UI** (video, controls, seek bar, rail) | `lib/ui/theater/` — `zones/` + `controls/`. ⚠️ see "Here be dragons" below |
 | **Screens** (home/library, detail, folders, unmatched, fix-match, settings) | `lib/ui/` (+ `lib/ui/library/`) |
-| **The instrument look** (VFD "fine-instrument" theme, Technics SC-CH900) | `lib/ui/theme/` — tokens (`xp_tokens`), widgets (`xp_widgets`), theme (`xp_theme`), readouts (`vfd_readout`, `header_readout`) |
+| **The instrument look** (VFD "fine-instrument" theme, Technics SC-CH900) | `lib/ui/theme/` — tokens (`xp_tokens`), widgets (`xp_widgets`), theme (`xp_theme`), readouts (`vfd_readout`, `header_readout`), brand mark (`brand_wordmark`) |
 | **Shared UI shells/components** | `lib/ui/widgets/` — `xp_screen`, `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list` |
 
 ---
@@ -94,8 +94,12 @@ The governing test for any change: **"to change X, how many places must I edit?"
   (the one screen shell — every non-theater screen; theater is the exception),
   `XpChassis` (the Material surface content sits on), `XpWindow`/`XpTitleBar`
   (window chrome), `EpisodeTile`/`EpisodeRow` (episode rows), `ShowCover` (every
-  cover), `HeaderReadout`/`HeaderActionsBar` (the header). Before adding a UI
-  element, find the existing one and make it configurable — don't fork it.
+  cover), `BrandWordmark`/`HeaderReadout`/`HeaderActionsBar` (the header).
+  Before adding a UI element, find the existing one and make it configurable —
+  don't fork it. (The header is the worked example: **all six screens including
+  the theater** mount the same `XpTitleBar` in its one layout — the theater
+  differs only in its *shell*, never in its header content, so there has never
+  been a second header to drift.)
 - **One getter for a shared value:** e.g. `Series.displayTitle` (title fallback
   policy in one place). New shared value/format → one getter/util, not inlined
   twice.

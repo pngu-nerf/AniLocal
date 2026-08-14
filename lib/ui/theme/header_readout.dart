@@ -4,102 +4,84 @@ import 'vfd_readout.dart';
 import 'xp_tokens.dart';
 
 /// The header status readout — a little TRUE-BLACK "screen" set into the header
-/// chassis. Inside it: an amber REMOTE-badge-style box around the fixed
-/// `AniLocal` prefix + a cyan dot-matrix status/title. Idle on the library:
-/// "AniLocal LIBRARY"; viewing a show: "AniLocal <TITLE>".
+/// chassis, showing the app's CONTEXT in cyan dot-matrix: "LIBRARY" on the home
+/// library, the show title on a detail page.
 ///
-/// The screen is a **FIXED width** (roughly "ANILOCAL SAKAMOTO DAYS") — it does
-/// NOT grow/shrink with the title or the window. Short titles sit static in the
-/// title region; long titles scroll (marquee) within it, clipped to the box so
-/// text appears/disappears cleanly at the edges. Content is STATIC per screen:
-/// it changes only on a deliberate context change (navigating to a show), never
-/// on hover.
+/// The screen shows the context ONLY. Branding is not a readout: "AniLocal" is
+/// a molded chrome logo on the chassis beside the screen (`BrandWordmark`), so
+/// the screen never repeats it and its whole width is spent on the one thing
+/// that actually changes. Content is STATIC per screen — it changes only on a
+/// deliberate context change (navigating to a show), never on hover.
 ///
-/// Two-color palette: the "AniLocal" badge is AMBER (the status-accent color),
-/// visually separating the fixed label from the changing CYAN title. True black
-/// ([Xp.well]) makes the phosphor read as a lit display against the chassis.
+/// **Width comes from the parent** (`XpTitleBar` sizes it so the screen is
+/// centred on the window — see there), so this widget needs a BOUNDED width and
+/// fills it. Fit is therefore recomputed live at every window size: a title
+/// that fits when the window is wide starts scrolling when it narrows past its
+/// fit point. Fits → centred and static; overflows → marquee. Either way the
+/// text is clipped to the black screen, so it appears/disappears cleanly at the
+/// edges and never spills onto the chrome.
 class HeaderReadout extends StatelessWidget {
   const HeaderReadout({super.key, required this.title});
 
-  /// The context word/title after the fixed "AniLocal" badge (dot-matrix caps):
-  /// "Library" on the home library, or the show title.
+  /// The context word/title in the screen: "Library" on the home library, or
+  /// the show title.
   final String title;
 
   static const double _pitch = 2; // glyph height = 7 * pitch = 14
-  static const double _gap = 8; // between the amber badge and the title
-  // Fixed title-region width — holds ~"SAKAMOTO DAYS"; longer titles scroll.
-  static const double _titleRegionW = 155;
   static const double _screenPadH = 6;
   static const double _screenPadV = 3;
+  static const double _glyphH = 7 * _pitch;
 
   @override
   Widget build(BuildContext context) {
-    const glyphH = 7 * _pitch;
-    final titleW = VfdReadout.widthFor(title, dotPitch: _pitch);
-    final overflow = titleW > _titleRegionW + 0.5;
-
-    return DecoratedBox(
-      // TRUE BLACK screen with a subtle machined bezel. Fixed width: the row
-      // below is all fixed-size children, so the screen never grows/shrinks.
-      decoration: BoxDecoration(
-        color: Xp.well,
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: Xp.bevelLoSoft),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: _screenPadH,
-          vertical: _screenPadV,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // The fixed "REMOTE"-style badge — a thin amber outline (no glow),
-            // rounded, snug around the CYAN dot-matrix "AniLocal".
-            const _AmberBadge(),
-            const SizedBox(width: _gap),
-            // Fixed-width title region — the "window" the CYAN title lives in,
-            // clipped so it appears/disappears cleanly at the edges.
-            SizedBox(
-              width: _titleRegionW,
-              height: glyphH,
-              child: ClipRect(
-                child: overflow
-                    ? _Marquee(title: title, textWidth: titleW, pitch: _pitch)
-                    : Align(
-                        alignment: Alignment.centerLeft,
-                        child: VfdReadout(title, dotPitch: _pitch),
-                      ),
-              ),
-            ),
-          ],
+    // Fill the width the parent allotted, and decide fit against THAT — the
+    // allotment shrinks as the window narrows, so the marquee kicks in exactly
+    // when the title stops fitting.
+    return _screen(
+      child: SizedBox(
+        height: _glyphH,
+        child: LayoutBuilder(
+          builder: (context, constraints) => _title(constraints.maxWidth),
         ),
       ),
     );
   }
-}
 
-/// The amber "REMOTE"-style badge around the fixed "AniLocal" label: JUST a thin
-/// amber outline (rounded). No fill and NO glow — a boxShadow would bleed amber
-/// through the transparent interior. The label inside is CYAN dot-matrix, the
-/// same phosphor color as the title; the amber is only the outline.
-class _AmberBadge extends StatelessWidget {
-  const _AmberBadge();
-
-  @override
-  Widget build(BuildContext context) => const DecoratedBox(
+  /// The physical screen: true black with a subtle machined bezel, its content
+  /// inset from the edges.
+  Widget _screen({required Widget child}) => DecoratedBox(
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.all(Radius.circular(3)),
-      border: Border.fromBorderSide(BorderSide(color: Xp.warning)),
+      color: Xp.well,
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: Xp.bevelLoSoft),
     ),
     child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      child: VfdReadout(
-        'AniLocal',
-        dotPitch: 2,
-      ), // cyan (default) — matches title
+      padding: const EdgeInsets.symmetric(
+        horizontal: _screenPadH,
+        vertical: _screenPadV,
+      ),
+      child: child,
     ),
   );
+
+  /// The lit title inside [regionW] of screen: centred when it fits, scrolling
+  /// when it doesn't. Clipped either way.
+  Widget _title(double regionW) {
+    final textW = VfdReadout.widthFor(title, dotPitch: _pitch);
+    final overflow = textW > regionW + 0.5;
+    return ClipRect(
+      child: overflow
+          // Keyed by title so a context change rebuilds the marquee with the
+          // new text's travel distance instead of reusing the old one's.
+          ? _Marquee(
+              key: ValueKey(title),
+              title: title,
+              textWidth: textW,
+              pitch: _pitch,
+            )
+          : Align(child: VfdReadout(title, dotPitch: _pitch)),
+    );
+  }
 }
 
 /// Scrolls [title] horizontally within its (clipped) parent when it's too wide
@@ -107,6 +89,7 @@ class _AmberBadge extends StatelessWidget {
 /// pause sits at the top of each cycle with the title left-aligned and readable.
 class _Marquee extends StatefulWidget {
   const _Marquee({
+    super.key,
     required this.title,
     required this.textWidth,
     required this.pitch,

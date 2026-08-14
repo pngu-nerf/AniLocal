@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
@@ -137,6 +139,14 @@ void main() {
   testWidgets('library grid re-reads the cache after a scan completes', (
     tester,
   ) async {
+    // A realistic window, not the 800x600 default: the test font is much wider
+    // than the real one, so at the default size the header's action tabs eat
+    // the centred VFD screen and its title starts scrolling — and a running
+    // marquee makes pumpAndSettle time out.
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final repo = _MutableLib()..series = [_s(1, 'Alpha')];
 
     await tester.pumpWidget(

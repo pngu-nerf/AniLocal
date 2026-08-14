@@ -1,5 +1,20 @@
 # Header-bar architecture audit (read-only)
 
+> **Status update (superseded in part).** The proposal below was adopted: home
+> and detail now go through `XpScreen`, so all five non-theater screens share
+> one shell, and the theater stays on its own. A later **header restyle** then
+> changed what that shared shell *looks* like, so the descriptions here are the
+> pre-restyle ones: branding moved out of the black screen onto the chassis as
+> `BrandWordmark`, the back tab moved to sit beside it (home reserves the slot),
+> and the VFD screen became window-centred and symmetric at every width
+> (`XpTitleBar` + `_HeaderCenterDelegate`; contract tests in
+> `test/header_layout_test.dart`). The theater then adopted that same restyled
+> header — **content only**: it still mounts `XpTitleBar` in its own
+> `Scaffold.appBar` shell, which was not touched, so no fullscreen/focus/cursor
+> machinery was involved. There is now exactly ONE header layout, with no
+> variant flags. The audit's *conclusions* — one shared header, theater shell
+> principled-and-separate — still hold, and are now fully realised.
+
 **Question:** the tech-debt audit flagged THREE header-construction approaches
 (XpWindow-inline / XpScreen / XpTitleBar), against the goal of "ONE header used
 everywhere, parts shown/hidden per screen." Can the *accidentally*-different ones

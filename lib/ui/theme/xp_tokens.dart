@@ -70,6 +70,12 @@ abstract final class Xp {
   static const Color wordmark = Color(0xFFECE4D0);
   static const Color textOnTitle = wordmark;
 
+  /// The two ends of the molded-chrome ramp across the brand wordmark's glyph
+  /// faces (see `BrandWordmark`): a lit top edge and a shaded roll-off. Only
+  /// the brand mark uses these — everything else is flat matte cream.
+  static const Color wordmarkHi = Color(0xFFFFF7E8);
+  static const Color wordmarkLo = Color(0xFFA9A293);
+
   // --- Phosphor accents ----------------------------------------------------
   /// Primary phosphor — lit readouts, active/selected elements. A MILKY,
   /// low-chroma grey-cyan, as if seen through a tinted/smoked screen: hue held
@@ -131,21 +137,34 @@ abstract final class Xp {
   static const double titleBarHeight = 30;
   static const double scrollbarThickness = 16;
 
+  /// Window width at/above which header tabs show their text labels; below it
+  /// they collapse to icon-only. ONE source of truth — the back tab, the app
+  /// actions, and a screen's own header tab must all flip at the same width,
+  /// and the centred header screen's width is measured against the clusters
+  /// this threshold resizes (see `XpTitleBar`).
+  static const double headerLabelWidth = 760;
+
   /// Chunky control padding (icon/label buttons, toolbar items).
   static const EdgeInsets controlPadding = EdgeInsets.symmetric(
     horizontal: 14,
     vertical: 7,
   );
 
-  // --- Type: three roles, mirroring the reference device -------------------
+  // --- Type: four roles, mirroring the reference device --------------------
   // 1. DISPLAY  — lit dot-matrix readouts (time, counters, status; the header
-  //    "AniLocal" branding screen — see `HeaderReadout`). Rendered by the
+  //    screen's context line — see `HeaderReadout`). Rendered by the
   //    `VfdReadout` painter, NOT a font. Glows cyan/amber against black.
   // 2. BODY     — running text / lists: the legible sans below ([fontFamily]),
   //    matte cream ([text]). Set once in the theme (see xp_theme.dart).
   // 3. CHROME   — thin, tracked-out, matte UPPERCASE labels "screen-printed on
   //    the chassis" (titles, section headers, button/tab labels). NOT glowing,
   //    NOT cyan — printed, part of the metal. See [chrome].
+  // 4. BRAND    — the app name as a molded chrome-plastic logo ON the chassis,
+  //    like the `Technics` mark on the reference unit: an elegant ROMAN SERIF
+  //    ([brandFontFamily]), the only serif in the app. See `BrandWordmark`.
+  //    Deliberately NOT display-role: branding is a physical part of the box,
+  //    not something the machine is telling you, so it never sits on the lit
+  //    screen ([wordmarkHi]/[wordmark]/[wordmarkLo] are its ramp).
 
   /// Legible technical sans — the BODY voice (running text, lists).
   static const String fontFamily = 'Helvetica Neue';
@@ -155,6 +174,25 @@ abstract final class Xp {
     'SF Pro Text',
     'Segoe UI',
     'Roboto',
+  ];
+
+  /// Refined roman serif — the BRAND voice, and ONLY the brand wordmark (see
+  /// `BrandWordmark`). A serif logotype is what separates the maker's mark from
+  /// the UI: every label, readout, and list on the instrument is sans or
+  /// dot-matrix, so the one serif element reads as the badge on the faceplate.
+  ///
+  /// System fonts, no asset: Baskerville is the elegant transitional roman that
+  /// holds its serifs at header size (Didot's hairlines disappear under the
+  /// molded lip at 16px). The chain degrades through macOS → Windows → generic
+  /// so a later Linux/Windows build still gets a serif rather than the sans.
+  static const String brandFontFamily = 'Baskerville';
+  static const List<String> brandFontFallback = [
+    'Hoefler Text',
+    'Palatino',
+    'Palatino Linotype',
+    'Georgia',
+    'Times New Roman',
+    'serif',
   ];
 
   /// The CHROME label style — the defining "labeled fine-equipment" look: a
