@@ -110,7 +110,38 @@ element retains a dependent through the pop.
 | --- | --- | --- |
 | **Baseline** (`pre-persistent-player`) | reproduces | reproduces |
 | **After Slice 1** (persistent player ownership; fullscreen still a route) | **expected to still reproduce** | **expected to STILL REPRODUCE** |
-| **After Slice 2** (fullscreen becomes state; no route) | expected **gone**, *if* the tooltip guard is re-hooked to a resize signal | expected **gone** (structural) |
+| **After Slice 2** (fullscreen becomes state; no route) | expected **gone** — the guard WAS re-hooked, see below | expected **gone** (structural) |
+
+### Slice 2 shipped — what to expect now
+
+Crash 2 should be **un-triggerable**, not merely unlikely: `enterFullscreen`'s
+route (a second `Video` over the same `VideoState`, with inherited widgets
+duplicated across two live routes) is the crash's precondition, and there is no
+longer any route. `test/player_fullscreen_is_state_test.dart` asserts a toggle
+pushes zero routes.
+
+Crash 1's *resize* trigger survived the route removal, so the guard was
+re-hooked rather than deleted — three layers now:
+1. `TooltipDismissOnResize` (`WidgetsBindingObserver.didChangeMetrics`) — the
+   replacement for what the route observer used to catch.
+2. A synchronous `Tooltip.dismissAllToolTips()` inside
+   `TheaterScreen._toggleFullscreen`, *before* the OS is asked to resize.
+3. `TooltipDismissingRouteObserver` — kept, still covers every other transition.
+
+**Test it the hard way**, since the repro is timing-dependent: several shows,
+several attempts, tooltip definitely showing at the moment of exit, both ⛶ and
+Escape, and exiting via the macOS green button too (see the known gap below).
+
+### Known gap: exiting fullscreen from the OS
+
+media_kit has no native→Dart fullscreen callback (its macOS plugin only calls
+back for `VideoOutput.Resize`), and it never had one — the old route-based path
+had the same gap. So if you leave fullscreen via the **green traffic light** or
+**Ctrl-Cmd-F**, the window un-fullscreens while our state still says fullscreen,
+leaving the chrome hidden. Recoverable: press ⛶ or Escape once. This is parity
+with the old behaviour, not a Slice-2 regression, and the fix (an
+`NSWindowDidExitFullScreen` observer on our own `anilocal/window` channel) is a
+small follow-up in our runner — deliberately not bundled into this slice.
 
 > ### ⚠️ Slice 1 does NOT fix either crash. That is the design, not a failure.
 > Slice 1 only moves *who owns the player* (composition root instead of a

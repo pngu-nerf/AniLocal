@@ -99,7 +99,15 @@ class AniLocalApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _PlaybackEngineOwner(playback: playback, child: _buildApp(context));
+    // Two app-lifetime wrappers, both deliberately ABOVE the Navigator:
+    //  - the one playback engine (Slice 1), so routes can't destroy it;
+    //  - the resize half of the tooltip-crash guard (Slice 2), because
+    //    fullscreen now resizes the window without any route transition for
+    //    TooltipDismissingRouteObserver to see.
+    return _PlaybackEngineOwner(
+      playback: playback,
+      child: TooltipDismissOnResize(child: _buildApp(context)),
+    );
   }
 
   Widget _buildApp(BuildContext context) {

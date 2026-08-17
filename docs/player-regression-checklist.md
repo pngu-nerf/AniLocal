@@ -58,9 +58,11 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] **Focus ownership** (`player_controls.dart` `_focus`): shortcuts keep working after clicking a control, hovering back over the video, tapping an episode, and returning from fullscreen (reclaimed on `onEnter`/`onPointerDown`).
 - [ ] **Bar never holds keyboard focus** (`Focus(canRequestFocus:false, descendantsAreFocusable:false)` around the bar): a focused slider/button must not swallow space/←/→.
 - [ ] **Rail can't steal focus** (`InkWell canRequestFocus:false`, episode tile).
-- [ ] **Fullscreen enter/exit** works via ⛶ and `Esc`, both through `toggleFullscreen`; same bar/config both modes.
+- [ ] **Fullscreen enter/exit** works via ⛶ and `Esc`, both through the ONE `PlayerControlsActions.toggleFullscreen`; same bar/config both modes. **No route is pushed** — the theater's own state hides the chrome and the OS window is toggled directly.
+- [ ] **Toggling fullscreen does NOT interrupt playback** (no black flash, no resume jump): the layout is shape-invariant, so the video zone is repositioned, never rebuilt.
 - [ ] **Overflow-crash guard** (`theater_layout.dart` `LayoutBuilder` clamps a transient unbounded width/height during the fullscreen-exit pop; series-info `ConstrainedBox(maxHeight)`). Don't remove; don't size the video by a fraction-multiply that could go infinite.
-- [ ] **Red-screen-crash guard** (`playerIsFullscreen` non-subscribing read). Never switch to `dependOnInheritedWidgetOfExactType`/`FullscreenInheritedWidget.of`.
+- [ ] **Red-screen-crash guard** — now STRUCTURAL: fullscreen pushes no route, so nothing can outlive a route-scoped inherited widget. Never reintroduce media_kit's `toggleFullscreen(context)` / `enterFullscreen` (that route is the crash's precondition).
+- [ ] **Tooltip guard is TWO hooks** — the root-navigator observer AND `TooltipDismissOnResize` (window metrics), plus a synchronous dismiss inside the toggle. Deleting the resize hook brings back the `size == theater.size` crash, because fullscreen no longer produces a route transition.
 - [ ] **Hit-test / pointer routing**: click-to-pause `GestureDetector(opaque)` is the **bottom** Stack child; control bar above it; hidden controls wrapped in `IgnorePointer`.
 - [ ] **Wake-on-move on `Listener.onPointerHover`, not the MouseRegion** (a `MouseRegion` with `cursor:none` stops firing its own `onHover`).
 - [ ] **Cursor-hide scoped to the video overlay only** — the rail and series-info keep their cursors.

@@ -221,12 +221,16 @@ off-by-one. *Verify it's a real API in the pinned Flutter and leave a comment.*
 ## F. Deliberately fragile — DOCUMENT ONLY, do NOT refactor
 This machinery is intentionally shaped to fix real crashes/bugs; "cleaning" it
 reintroduces them. Listed so nobody innocently refactors it:
-- **`playerIsFullscreen`** — a **non-subscribing** `getElementForInheritedWidget
-  OfExactType` read (`player_controls.dart`). Must never become a subscribing
-  `dependOn…` (would trip `_dependents.isEmpty` on fullscreen-exit).
-- **`TooltipDismissingRouteObserver`** (`tooltip_dismiss_observer.dart`, root
-  navigator) — the single guard against the `size == theater.size` fullscreen-exit
-  tooltip crash. Covers ⛶ / Escape / native-exit in one place.
+- ~~**`playerIsFullscreen`**~~ — **removed (Slice 2).** It existed only because
+  media_kit's fullscreen was a route; fullscreen is now state and the route is
+  gone, so the `_dependents.isEmpty` precondition can't be assembled. The
+  standing rule is now "don't reintroduce a fullscreen ROUTE", enforced by
+  `test/player_fullscreen_is_state_test.dart`.
+- **The tooltip guard — TWO hooks, both required** (`tooltip_dismiss_observer
+  .dart`): `TooltipDismissingRouteObserver` (root navigator) AND
+  `TooltipDismissOnResize` (window metrics). Since fullscreen stopped being a
+  route it produces no navigator transition, so the resize hook is what covers
+  ⛶ / Escape now; the toggle also dismisses synchronously before resizing.
 - **Cursor wake-on-move on `Listener.onPointerHover`, NOT `MouseRegion.onHover`**,
   and the visible cursor is a concrete `SystemMouseCursors.basic` (not `defer`) —
   `player_control_bar.dart`. Both fix "cursor won't come back."

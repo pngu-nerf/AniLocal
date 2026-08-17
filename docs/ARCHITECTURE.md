@@ -119,16 +119,20 @@ each shape fixes a real crash or input bug. **Do not "clean it up" without first
 reading the warnings and reproducing the bug it fixes.** The traps (all warned
 at the code site with the exact crash/symptom):
 
-- **`playerIsFullscreen`** — a *non-subscribing* inherited read
-  (`player_controls.dart`). Never make it a `dependOn…` (red-screen crash on
-  fullscreen exit).
+- ~~**`playerIsFullscreen`**~~ — **GONE (Slice 2).** Fullscreen is state, not a
+  route, so there is no route-scoped inherited widget to read non-subscribing.
+  Don't reintroduce a route-based fullscreen: that route was the precondition
+  for the `_dependents.isEmpty` red screen. Guarded by
+  `test/player_fullscreen_is_state_test.dart`.
 - **Cursor wake-on-move** on `Listener.onPointerHover`, NOT the `MouseRegion`
   (`player_control_bar.dart`) — a `cursor:none` MouseRegion stops firing
   `onHover`.
 - **Focus ownership** — the overlay owns its `FocusNode`; the bar is
   `canRequestFocus:false` so controls can't swallow shortcuts.
-- **Tooltip-dismiss observer** (`tooltip_dismiss_observer.dart`, root navigator)
-  — guards the fullscreen-exit tooltip crash.
+- **Tooltip-dismiss guard** (`tooltip_dismiss_observer.dart`) — now TWO hooks
+  and both are load-bearing: the root-navigator observer, plus
+  `TooltipDismissOnResize` (window-metrics). Fullscreen resizes the window with
+  no route transition, so the observer alone no longer covers it.
 - **Overflow clamps** (`theater_layout.dart`) and **watched-marking guards**
   (`video_zone.dart`: `_thresholdLoaded`, `_markedWatched`, the >2000ms
   seek-vs-playback heuristic).

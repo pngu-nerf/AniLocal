@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart' show toggleFullscreen;
 
 import 'control_bar_config.dart';
 import 'player_controls.dart';
@@ -13,9 +12,10 @@ import 'seek_bar.dart';
 
 /// THE control bar — one implementation, rendered in BOTH windowed and
 /// fullscreen. It arranges controls into slots from a [ControlBarConfig],
-/// choosing the windowed vs fullscreen config purely by [isFullscreen] — never
-/// a different control set. (media_kit's fullscreen route reuses the same
-/// `controls` builder + controller, so this same widget is what renders there.)
+/// choosing the windowed vs fullscreen config purely from the shared state's
+/// `fullscreen` flag — never a different control set. (Fullscreen is a state
+/// toggle on this same widget now, not a second route with a second Video, so
+/// "the same bar in both modes" is literally the same element.)
 class PlayerControlBar extends StatelessWidget {
   const PlayerControlBar({
     super.key,
@@ -48,7 +48,10 @@ class PlayerControlBar extends StatelessWidget {
     PlayerControl.volume => VolumeControl(player: player, compact: compact),
     PlayerControl.subtitles => SubtitlesControl(player: player),
     PlayerControl.settings => SettingsControl(player: player),
-    PlayerControl.fullscreen => const FullscreenButton(),
+    PlayerControl.fullscreen => FullscreenButton(
+      state: state,
+      onPressed: actions.toggleFullscreen,
+    ),
     PlayerControl.skipIntro => SkipButton(
       state: state,
       intro: true,
@@ -68,9 +71,17 @@ class PlayerControlBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Non-subscribing read (see playerIsFullscreen): picks the config without
-    // registering this bar as a dependent of FullscreenInheritedWidget.
-    final config = playerIsFullscreen(context) ? fullscreen : windowed;
+    // The mode is plain state now — no inherited-widget probe, nothing
+    // route-scoped to depend on. Listened to (not read once) so a mode change
+    // actually re-picks the config; the old probe got its rebuild for free from
+    // the route push, which no longer happens.
+    return ValueListenableBuilder<PlayerControlsState>(
+      valueListenable: state,
+      builder: (context, s, _) => _bar(s.fullscreen ? fullscreen : windowed),
+    );
+  }
+
+  Widget _bar(ControlBarConfig config) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -203,14 +214,12 @@ class _PlayerControlsState extends State<PlayerControls> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-    // Escape exits OS fullscreen back to the theater layout — via the SAME
-    // toggleFullscreen the ⛶ button uses (so it rides the hardened exit
-    // transition), guarded to only exit. No-op when not in fullscreen.
+    // Escape exits fullscreen back to the theater layout — via the SAME
+    // action the ⛶ button uses, guarded to only exit. No-op when not in
+    // fullscreen (so Escape never swallows anything else).
     if (key == LogicalKeyboardKey.escape) {
-      if (playerIsFullscreen(context)) {
-        // Tooltip dismissal on this transition is handled centrally by
-        // TooltipDismissingRouteObserver (root navigator), not here.
-        toggleFullscreen(context);
+      if (widget.state.value.fullscreen) {
+        widget.actions.toggleFullscreen();
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;

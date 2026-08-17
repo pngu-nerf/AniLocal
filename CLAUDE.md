@@ -56,7 +56,7 @@ The test for every change: *"to change X, how many places must I edit?"* — the
 - **Prefer live reads over snapshots** for anything that can change while a screen is open. A deliberate snapshot MUST carry a comment saying why it can't go stale.
 - **A heuristic that assumes runtime behavior states its assumption at the call site** (stream cadence, event ordering, timing — e.g. "a jump > 2s is a seek"), so an unrelated change can't silently break it.
 - **Delete code a migration orphans** in the same change — no leftover stubs/dead helpers.
-- **Do NOT refactor the documented fragile player machinery** (`docs/player-regression-checklist.md`; audit §F: non-subscribing fullscreen read, tooltip-dismiss observer, `Listener`-not-`MouseRegion` cursor wiring, fullscreen guards, focus ownership, layout clamps) without first reproducing the bug it fixes.
+- **Do NOT refactor the documented fragile player machinery** (`docs/player-regression-checklist.md`; audit §F: the tooltip-dismiss guard — BOTH the route observer and the resize hook, `Listener`-not-`MouseRegion` cursor wiring, focus ownership, layout clamps; fullscreen-as-state must not go back to being a route) without first reproducing the bug it fixes.
 
 ## OUT of scope — do NOT build (feature-creep guard)
 Trackers / AniList list-sync (needs per-user OAuth — deferred) · server-side transcoding · download/torrent automation · watch-together · multi-user accounts · re-adding Shoko or any bundled server. Each is a separate product. If a task drifts toward these, STOP and flag it.

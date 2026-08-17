@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit_video/media_kit_video.dart'
+    show defaultEnterNativeFullscreen, defaultExitNativeFullscreen;
 
 import '../../domain/models/episode.dart';
 import '../../domain/models/series.dart';
@@ -85,6 +87,15 @@ class _TheaterScreenState extends State<TheaterScreen> {
   /// then overwritten by the persisted value (clamped) once it loads.
   late double _railFraction;
 
+  /// FULLSCREEN IS STATE. Not a route — this single bool is the whole mode.
+  ///
+  /// media_kit's `toggleFullscreen(context)` used to push a root-navigator route
+  /// holding a SECOND Video over the SAME VideoState, whose duplicated inherited
+  /// widgets are what tripped `_dependents.isEmpty` on the way back out. Nothing
+  /// pushes or pops now: the flag hides the chrome (via the layout config) and
+  /// we ask the OS to fullscreen the window ourselves.
+  bool _fullscreen = false;
+
   @override
   void initState() {
     super.initState();
@@ -106,6 +117,34 @@ class _TheaterScreenState extends State<TheaterScreen> {
   Future<void> _loadEpisodes() async {
     final eps = await widget.repository.episodesFor(widget.series.anilistId);
     if (mounted) setState(() => _episodes = eps);
+  }
+
+  /// Enter/exit fullscreen. The ONE fullscreen path — the ⛶ button and the
+  /// Escape shortcut both land here via [PlayerControlsActions.toggleFullscreen].
+  ///
+  /// Two separable things, which media_kit bundled into one route push and we
+  /// keep apart:
+  ///  1. LAYOUT — [_fullscreen] drives the layout config (video only, chrome
+  ///     hidden). Pure setState; the widget tree keeps its shape so the video
+  ///     zone is never rebuilt (see TheaterLayout's shape-invariance note).
+  ///  2. THE OS WINDOW — the publicly-overridable native hooks media_kit exposes
+  ///     (a MethodChannel `Utils.Enter/ExitNativeFullscreen` on desktop). Same
+  ///     native behaviour as before, just called directly instead of as a side
+  ///     effect of pushing a route.
+  ///
+  /// Tooltips are dismissed FIRST, synchronously, before the OS resizes the
+  /// window: a tooltip mounted across an overlay-size change is the
+  /// `size == theater.size` crash. TooltipDismissOnResize is the general net;
+  /// this is the deterministic one for the path we control.
+  void _toggleFullscreen() {
+    final next = !_fullscreen;
+    Tooltip.dismissAllToolTips();
+    setState(() => _fullscreen = next);
+    if (next) {
+      defaultEnterNativeFullscreen();
+    } else {
+      defaultExitNativeFullscreen();
+    }
   }
 
   /// The host-driven swap (a list tap): point the video at [episode]. The
@@ -138,6 +177,8 @@ class _TheaterScreenState extends State<TheaterScreen> {
         watchOrder: widget.watchOrder,
         playback: widget.playback,
         settings: widget.settings,
+        fullscreen: _fullscreen,
+        onToggleFullscreen: _toggleFullscreen,
         onEpisodeChanged: _onAdvanced,
       ),
       TheaterZone.seriesInfo: SeriesInfoZone(
@@ -152,7 +193,14 @@ class _TheaterScreenState extends State<TheaterScreen> {
       ),
     };
 
-    final config = widget.config.copyWith(railFraction: _railFraction);
+    // FULLSCREEN IS JUST A CONFIG. Video only, rail + info hidden — exactly the
+    // "hide a zone is a config change" seam TheaterLayoutConfig was built for.
+    // The zone WIDGETS are identical in both modes (same map, same instances),
+    // and the layout is shape-invariant, so toggling repositions the video
+    // rather than rebuilding it.
+    final config = _fullscreen
+        ? widget.config.copyWith(visibleZones: const {TheaterZone.video})
+        : widget.config.copyWith(railFraction: _railFraction);
 
     return Scaffold(
       // The theater keeps its Material Scaffold and its own SHELL (NOT XpWindow
@@ -162,38 +210,48 @@ class _TheaterScreenState extends State<TheaterScreen> {
       // itself is the SAME XpTitleBar every other screen uses, in its standard
       // layout — serif brand mark, window-centred VFD screen, the same
       // label/abbreviation collapse — so the player's chrome reads identically
-      // to the rest of the app. Windowed only; media_kit's fullscreen route
-      // replaces the whole view, so this chrome never shows there.
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(Xp.titleBarHeight),
-        child: XpTitleBar(
-          caption: title,
-          captionWidget: HeaderReadout(title: title),
-          leading: XpTitleTab(
-            icon: Icons.arrow_back,
-            label: 'Back',
-            tooltip: 'Back',
-            showLabel: XpTitleBar.showsLabels(context),
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          trailing: HeaderActionsBar(
-            // Sync runs quietly from the theater (no local spinner), like detail.
-            scanning: false,
-            unmatchedCount: widget.unmatchedCount,
-            onFolders: widget.onFolders,
-            onScan: widget.onScan,
-            onUnmatched: widget.onUnmatched,
-            onSettings: widget.onSettings,
-          ),
-        ),
-      ),
+      // to the rest of the app.
+      //
+      // Hidden in fullscreen: no header at all. Scaffold slots its children by
+      // id, so dropping the appBar does not disturb the body's element — the
+      // video keeps playing straight through the toggle.
+      appBar: _fullscreen
+          ? null
+          : PreferredSize(
+              preferredSize: const Size.fromHeight(Xp.titleBarHeight),
+              child: XpTitleBar(
+                caption: title,
+                captionWidget: HeaderReadout(title: title),
+                leading: XpTitleTab(
+                  icon: Icons.arrow_back,
+                  label: 'Back',
+                  tooltip: 'Back',
+                  showLabel: XpTitleBar.showsLabels(context),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+                trailing: HeaderActionsBar(
+                  // Sync runs quietly from the theater (no local spinner), like detail.
+                  scanning: false,
+                  unmatchedCount: widget.unmatchedCount,
+                  onFolders: widget.onFolders,
+                  onScan: widget.onScan,
+                  onUnmatched: widget.onUnmatched,
+                  onSettings: widget.onSettings,
+                ),
+              ),
+            ),
       body: TheaterLayout(
         config: config,
         zones: zones,
         // The rail is always resizable (settings persists its width); live-drag
-        // updates the fraction, drag-end persists it.
-        onRailResize: (f) => setState(() => _railFraction = f),
-        onRailResizeEnd: () => widget.settings.setRailFraction(_railFraction),
+        // updates the fraction, drag-end persists it. No rail in fullscreen, so
+        // no divider either.
+        onRailResize: _fullscreen
+            ? null
+            : (f) => setState(() => _railFraction = f),
+        onRailResizeEnd: _fullscreen
+            ? null
+            : () => widget.settings.setRailFraction(_railFraction),
       ),
     );
   }

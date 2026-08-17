@@ -47,6 +47,8 @@ class VideoZone extends StatefulWidget {
     required this.watchState,
     required this.watchOrder,
     required this.settings,
+    required this.fullscreen,
+    required this.onToggleFullscreen,
     this.onEpisodeChanged,
   });
 
@@ -61,6 +63,15 @@ class VideoZone extends StatefulWidget {
   /// App-wide settings (one injected object); this zone reads auto-play, skip
   /// mode, and the watched-threshold from it per episode.
   final SettingsRepository settings;
+
+  /// Whether the theater is in fullscreen. Owned by the THEATER (it's a layout
+  /// mode, not a playback fact); this zone only relays it into the shared
+  /// control state so the bar can render the right ⛶ icon and pick its config.
+  final bool fullscreen;
+
+  /// The one fullscreen toggle, owned by the theater — relayed to the bar as
+  /// [PlayerControlsActions.toggleFullscreen] for both ⛶ and Escape.
+  final VoidCallback onToggleFullscreen;
 
   final ValueChanged<Episode>? onEpisodeChanged;
 
@@ -137,6 +148,7 @@ class _VideoZoneState extends State<VideoZone> {
       upNext: _next,
       preRollShowing: _preRollShowing,
       preRollSeconds: _preRollSeconds,
+      fullscreen: widget.fullscreen,
     );
   }
 
@@ -150,6 +162,10 @@ class _VideoZoneState extends State<VideoZone> {
       skipOutro: _skipOutro,
       playNext: _goToNext,
       cancelPreRoll: _cancelPreRoll,
+      // Indirection, not a direct tear-off: the theater's callback is read at
+      // CALL time, so this bundle (built once in initState) can't pin a stale
+      // one if the host rebuilds with a different closure.
+      toggleFullscreen: () => widget.onToggleFullscreen(),
     );
     // System media-remote (AirPods pinch / media keys / Bluetooth). Commands
     // route to the SAME paths the on-screen controls use — never a parallel
@@ -208,6 +224,8 @@ class _VideoZoneState extends State<VideoZone> {
   @override
   void didUpdateWidget(VideoZone oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // The mode lives on the host; republish so the bar's icon/config follow it.
+    if (widget.fullscreen != oldWidget.fullscreen) _pushControls();
     if (!_sameEpisode(widget.episode, _shown)) {
       _switchTo(widget.episode);
     }

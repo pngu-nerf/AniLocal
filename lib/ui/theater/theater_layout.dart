@@ -56,14 +56,20 @@ class TheaterLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // DEFENSIVE: a transient UNBOUNDED height/width can reach us during the
-        // fullscreen-exit route pop. Sizing the video to `maxHeight *
-        // videoFraction` would then be infinite and overflow (~100k "BOTTOM
-        // OVERFLOWED"). Clamp to a bounded size (falling back to the view size)
-        // and pin the whole arrangement to it, so NO descendant — the video
+        // DEFENSIVE: clamp to a bounded size (falling back to the view size) and
+        // pin the whole arrangement to it, so NO descendant — the video
         // SizedBox, the info Expanded, the rail — can ever be handed an
-        // unbounded dimension, whatever the transition timing. A no-op under
-        // normal bounded layout (the clamp equals the incoming max).
+        // unbounded dimension. A no-op under normal bounded layout (the clamp
+        // equals the incoming max).
+        //
+        // KEPT DELIBERATELY after fullscreen stopped being a route. Its known
+        // trigger — a transient unbounded constraint during the fullscreen-exit
+        // route POP, which overflowed the video by ~100k — genuinely cannot
+        // happen any more: there is no pop. But "the one cause I knew about is
+        // gone" is not "no cause exists", this guard costs nothing (it's
+        // already a no-op whenever constraints are bounded, which is always,
+        // under Scaffold.body), and the failure it prevents is a hard crash.
+        // Removing it would trade zero gain for a re-crash risk, so it stays.
         final view = MediaQuery.maybeOf(context)?.size;
         final maxWidth = constraints.hasBoundedWidth
             ? constraints.maxWidth
@@ -77,65 +83,65 @@ class TheaterLayout extends StatelessWidget {
             config.shows(TheaterZone.episodeList) &&
             zones[TheaterZone.episodeList] != null;
 
-        final Widget content;
-        if (!showRail) {
-          content = _mainColumn(maxHeight);
-        } else {
-          // Pixel widths from the fraction, so a future drag-to-resize just maps
-          // a drag position back into [railFraction] — no structural change.
-          final railWidth = maxWidth * config.railFraction;
-          final rail = SizedBox(
-            width: railWidth,
-            child: zones[TheaterZone.episodeList],
-          );
-          final mainBox = SizedBox(
-            width: maxWidth - railWidth,
-            child: _mainColumn(maxHeight),
-          );
-          final ordered = config.railSide == TheaterSide.left
-              ? [rail, mainBox]
-              : [mainBox, rail];
-          final row = Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: ordered,
-          );
+        // SHAPE-INVARIANT: the arrangement below is the SAME widget structure
+        // for every config — hiding the rail collapses it to zero width rather
+        // than switching to a different tree, and the divider is a trailing
+        // Stack child. That matters because FULLSCREEN IS NOW A CONFIG (video
+        // only): if the tree shape changed between modes, the video zone's
+        // element would not reconcile, its State would be rebuilt, and toggling
+        // fullscreen would tear down and re-open playback (black flash, resume
+        // jump). Keeping the chain identical — Stack > Positioned > Row >
+        // SizedBox > Column > Expanded > video — is what makes the toggle
+        // seamless. Move the video, don't re-parent it.
+        //
+        // Pixel widths from the fraction, so a future drag-to-resize just maps
+        // a drag position back into [railFraction] — no structural change.
+        final railWidth = showRail ? maxWidth * config.railFraction : 0.0;
+        final rail = SizedBox(
+          width: railWidth,
+          child: showRail ? zones[TheaterZone.episodeList] : null,
+        );
+        final mainBox = SizedBox(
+          width: maxWidth - railWidth,
+          child: _mainColumn(maxHeight),
+        );
+        final railOnLeft = config.railSide == TheaterSide.left;
+        final row = Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: railOnLeft ? [rail, mainBox] : [mainBox, rail],
+        );
 
-          if (onRailResize == null) {
-            content = row;
-          } else {
-            // The seam between main column and rail. Drag here resizes the rail
-            // (and so, by reflow, the video). Overlaid — not a Row child — so
-            // the width math above is untouched.
-            final railOnLeft = config.railSide == TheaterSide.left;
-            final boundaryX = railOnLeft ? railWidth : maxWidth - railWidth;
-            content = Stack(
-              children: [
-                Positioned.fill(child: row),
-                Positioned(
-                  left: boundaryX - kResizeDividerHitWidth / 2,
-                  top: 0,
-                  bottom: 0,
-                  width: kResizeDividerHitWidth,
-                  child: ResizeDivider(
-                    key: kRailDividerKey,
-                    onDragDelta: (dx) {
-                      // Dragging toward the rail's outer edge shrinks it;
-                      // toward the video grows it. Sign depends on which side
-                      // the rail is on.
-                      final signed = railOnLeft ? dx : -dx;
-                      final next = ((railWidth + signed) / maxWidth).clamp(
-                        TheaterLayoutConfig.railFractionMin,
-                        TheaterLayoutConfig.railFractionMax,
-                      );
-                      onRailResize!(next);
-                    },
-                    onDragEnd: onRailResizeEnd,
-                  ),
+        // The seam between main column and rail. Drag here resizes the rail
+        // (and so, by reflow, the video). Overlaid — not a Row child — so the
+        // width math above is untouched. Absent when there's no rail to drag.
+        final boundaryX = railOnLeft ? railWidth : maxWidth - railWidth;
+        final content = Stack(
+          children: [
+            Positioned.fill(child: row),
+            if (showRail && onRailResize != null)
+              Positioned(
+                left: boundaryX - kResizeDividerHitWidth / 2,
+                top: 0,
+                bottom: 0,
+                width: kResizeDividerHitWidth,
+                child: ResizeDivider(
+                  key: kRailDividerKey,
+                  onDragDelta: (dx) {
+                    // Dragging toward the rail's outer edge shrinks it; toward
+                    // the video grows it. Sign depends on which side the rail
+                    // is on.
+                    final signed = railOnLeft ? dx : -dx;
+                    final next = ((railWidth + signed) / maxWidth).clamp(
+                      TheaterLayoutConfig.railFractionMin,
+                      TheaterLayoutConfig.railFractionMax,
+                    );
+                    onRailResize!(next);
+                  },
+                  onDragEnd: onRailResizeEnd,
                 ),
-              ],
-            );
-          }
-        }
+              ),
+          ],
+        );
 
         return SizedBox(width: maxWidth, height: maxHeight, child: content);
       },

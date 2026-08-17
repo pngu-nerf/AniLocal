@@ -89,6 +89,7 @@ Widget _app(Player player) => MaterialApp(
           skipOutro: () {},
           playNext: () {},
           cancelPreRoll: () {},
+          toggleFullscreen: () {},
         ),
       ),
     ),

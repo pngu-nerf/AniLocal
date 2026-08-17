@@ -1,34 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart'
-    show FullscreenInheritedWidget, toggleFullscreen;
-
 import '../../theme/vfd_readout.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
 import 'player_controls_state.dart';
 
-/// True if an inherited widget of type [T] exists above [context], read WITHOUT
-/// subscribing — [getElementForInheritedWidgetOfExactType] is a one-time lookup
-/// that registers NO dependency (unlike `dependOnInheritedWidgetOfExactType`).
-///
-/// The player must never SUBSCRIBE to a route-scoped inherited widget: media_kit
-/// reuses the windowed VideoState (and this same controls builder) across the
-/// fullscreen route, so a control registered as a dependent of the fullscreen
-/// route's inherited widget can outlive it and trip `_dependents.isEmpty`
-/// (InheritedElement.debugDeactivated) on back-navigation. A non-subscribing
-/// read makes that cross-route dependent-survival structurally impossible.
-bool hasInheritedAncestorWithoutSubscribing<T extends InheritedWidget>(
-  BuildContext context,
-) => context.getElementForInheritedWidgetOfExactType<T>() != null;
-
-/// Whether the player is in media_kit's fullscreen route — read non-subscribing
-/// (see [hasInheritedAncestorWithoutSubscribing]). Fullscreen only changes via a
-/// route push/pop, which rebuilds the controls anyway, so a reactive dependency
-/// on [FullscreenInheritedWidget] is both unnecessary and the cause of the crash.
-bool playerIsFullscreen(BuildContext context) =>
-    hasInheritedAncestorWithoutSubscribing<FullscreenInheritedWidget>(context);
+// NOTE: `playerIsFullscreen` + `hasInheritedAncestorWithoutSubscribing` used to
+// live here — a non-subscribing read of media_kit's route-scoped
+// `FullscreenInheritedWidget`, written to dodge `_dependents.isEmpty` on
+// fullscreen exit. Both are GONE: fullscreen is no longer a route, so there is
+// no route-scoped inherited widget to read, subscribe to, or outlive. The mode
+// now arrives as ordinary state on `PlayerControlsState.fullscreen`.
 
 /// The individual, position-agnostic player controls. Each takes only what it
 /// needs (the player for engine state/actions; the shared state notifier for
@@ -235,19 +218,30 @@ class SettingsControl extends StatelessWidget {
   }
 }
 
+/// The ⛶ toggle. Reads the mode from the shared state notifier and calls the
+/// one fullscreen action — no [BuildContext] probing, no route.
 class FullscreenButton extends StatelessWidget {
-  const FullscreenButton({super.key});
+  const FullscreenButton({
+    super.key,
+    required this.state,
+    required this.onPressed,
+  });
+
+  final ValueListenable<PlayerControlsState> state;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final full = playerIsFullscreen(context);
-    return IconButton(
-      color: _iconColor,
-      tooltip: full ? 'Exit fullscreen' : 'Fullscreen',
-      icon: Icon(full ? Icons.fullscreen_exit : Icons.fullscreen),
-      // Tooltip dismissal on the fullscreen transition is handled centrally by
-      // TooltipDismissingRouteObserver (root navigator), not per-path here.
-      onPressed: () => toggleFullscreen(context),
+    return ValueListenableBuilder<PlayerControlsState>(
+      valueListenable: state,
+      builder: (context, s, _) => IconButton(
+        color: _iconColor,
+        tooltip: s.fullscreen ? 'Exit fullscreen' : 'Fullscreen',
+        icon: Icon(s.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+        // Tooltips are dismissed before the window resizes — see the toggle in
+        // TheaterScreen and TooltipDismissOnResize.
+        onPressed: onPressed,
+      ),
     );
   }
 }
