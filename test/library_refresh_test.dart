@@ -21,6 +21,7 @@ import 'support/fake_settings.dart';
 import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:anilocal/domain/models/show_preferences.dart';
 import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
+import 'package:anilocal/playback/playback_controller.dart';
 
 const _summary = SyncSummary(
   filesScanned: 1,
@@ -159,6 +160,7 @@ void main() {
         showPreferences: repo,
         settings: const FakeSettings(),
         watchOrder: repo,
+        playback: PlaybackController(resolver: repo),
         onScan: (_) async {
           // A scan that adds a new series to the cache.
           repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];

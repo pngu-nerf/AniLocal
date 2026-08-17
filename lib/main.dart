@@ -16,6 +16,7 @@ import 'data/scanner/folder_scanner.dart';
 import 'data/scanner/heuristic_filename_parser.dart';
 import 'data/scanner/series_matcher.dart';
 import 'domain/models/sync_summary.dart';
+import 'playback/playback_controller.dart';
 import 'sync/fix_match_service.dart';
 import 'sync/library_sync.dart';
 import 'ui/app.dart';
@@ -142,6 +143,14 @@ void main() {
     showPreferences: repository,
   );
 
+  // The playback engine is APP-LIFETIME: built once here, injected, and kept
+  // alive across navigation. Leaving the theater now stops it instead of
+  // destroying it, so libmpv is constructed once per app run rather than once
+  // per visit — see PlaybackController's doc and
+  // docs/player-architecture-research.md. `repository` is the WatchOrder
+  // resolver (the single "what's next" source) the advance path routes through.
+  final playback = PlaybackController(resolver: repository);
+
   runApp(
     AniLocalApp(
       repository: repository,
@@ -158,6 +167,7 @@ void main() {
       // …and ShowPreferencesRepository (per-show cover/next-episode prefs).
       showPreferences: repository,
       settings: settings,
+      playback: playback,
       onScan: scan,
       onRefreshMetadata: sync.refreshMetadata,
       onAddFolder: addFolder,

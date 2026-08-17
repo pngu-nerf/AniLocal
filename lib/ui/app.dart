@@ -13,6 +13,7 @@ import '../domain/repositories/watch_state_repository.dart';
 import 'library_screen.dart';
 import 'theme/xp_theme.dart';
 import 'tooltip_dismiss_observer.dart';
+import '../playback/playback_controller.dart';
 
 /// Dismisses tooltips on every root-navigator transition — the single guard that
 /// keeps a mounted tooltip from crashing during media_kit's fullscreen
@@ -36,6 +37,7 @@ class AniLocalApp extends StatelessWidget {
     required this.missing,
     required this.showPreferences,
     required this.settings,
+    required this.playback,
     required this.onScan,
     required this.onRefreshMetadata,
     required this.onAddFolder,
@@ -62,6 +64,11 @@ class AniLocalApp extends StatelessWidget {
   /// load*/set* functions). Passed down like the other repositories; screens +
   /// the settings dialog read/write through it.
   final SettingsRepository settings;
+
+  /// The APP-LIFETIME playback engine, built once at the composition root.
+  /// Injected (not constructed per route) so leaving the theater stops the
+  /// player instead of destroying it — see [PlaybackController].
+  final PlaybackController playback;
 
   /// Fill path. [onDiscovered] fires mid-scan once newly-seen files have been
   /// written as pending placeholders (before identification), so the UI can
@@ -92,6 +99,10 @@ class AniLocalApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _PlaybackEngineOwner(playback: playback, child: _buildApp(context));
+  }
+
+  Widget _buildApp(BuildContext context) {
     return MaterialApp(
       title: 'AniLocal',
       debugShowCheckedModeBanner: false,
@@ -120,6 +131,7 @@ class AniLocalApp extends StatelessWidget {
         missing: missing,
         showPreferences: showPreferences,
         settings: settings,
+        playback: playback,
         onScan: onScan,
         onRefreshMetadata: onRefreshMetadata,
         onAddFolder: onAddFolder,
@@ -130,4 +142,41 @@ class AniLocalApp extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Holds the ONE app-lifetime [PlaybackController] and releases it when the app
+/// tree is torn down — the single `dispose()` in the whole app.
+///
+/// Why a widget rather than a line in `main()`: `main` has no teardown hook, and
+/// the engine's owner should be the thing whose lifetime it matches. Mounted at
+/// the very top (above `MaterialApp`), so route pushes/pops can't reach it —
+/// which is the entire point of the rearchitecture: navigation stops playback
+/// ([PlaybackController.stop]); only app teardown ends the engine.
+///
+/// **Honest limit:** on a hard process exit (macOS Cmd-Q, a kill) Flutter does
+/// not unmount the tree, so this will not run and the OS reclaims instead —
+/// which is fine, and is also the case where invoking libmpv teardown is most
+/// likely to trip the known media_kit FFI race. It DOES run on hot restart and
+/// on any graceful teardown, which is where a leaked engine would actually hurt.
+class _PlaybackEngineOwner extends StatefulWidget {
+  const _PlaybackEngineOwner({required this.playback, required this.child});
+
+  final PlaybackController playback;
+  final Widget child;
+
+  @override
+  State<_PlaybackEngineOwner> createState() => _PlaybackEngineOwnerState();
+}
+
+class _PlaybackEngineOwnerState extends State<_PlaybackEngineOwner> {
+  @override
+  void dispose() {
+    // The ONLY PlaybackController.dispose() call in the app. A route pop must
+    // never reach this — it calls stop() instead (see VideoZone.dispose).
+    widget.playback.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

@@ -31,6 +31,7 @@ import 'unmatched_screen.dart';
 import 'widgets/header_actions.dart';
 import 'widgets/show_cover.dart';
 import 'widgets/xp_screen.dart';
+import '../playback/playback_controller.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -67,6 +68,7 @@ class LibraryScreen extends StatefulWidget {
     required this.watchState,
     required this.sourceSelection,
     required this.watchOrder,
+    required this.playback,
     required this.missing,
     required this.showPreferences,
     required this.settings,
@@ -84,6 +86,9 @@ class LibraryScreen extends StatefulWidget {
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
+
+  /// App-lifetime playback engine, forwarded to the theater.
+  final PlaybackController playback;
 
   /// Hidden-episode store (missing-episodes feature); passed through to the
   /// detail screen and read here to exclude hidden episodes from card counts.
@@ -294,6 +299,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           repository: widget.repository,
           watchState: widget.watchState,
           watchOrder: widget.watchOrder,
+          playback: widget.playback,
           settings: widget.settings,
           // Same header actions as the library — so the theater header matches.
           unmatchedCount: _unmatchedCount,
@@ -605,6 +611,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         watchState: widget.watchState,
                         sourceSelection: widget.sourceSelection,
                         watchOrder: widget.watchOrder,
+                        playback: widget.playback,
                         // `missing` (local) is the missing-FOLDER set above;
                         // the repository is `widget.missing`.
                         missingRepo: widget.missing,
@@ -745,6 +752,7 @@ class _SeriesCard extends StatefulWidget {
     required this.watchState,
     required this.sourceSelection,
     required this.watchOrder,
+    required this.playback,
     required this.missingRepo,
     required this.showPreferences,
     required this.settings,
@@ -767,6 +775,9 @@ class _SeriesCard extends StatefulWidget {
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
+
+  /// App-lifetime playback engine, forwarded to the theater.
+  final PlaybackController playback;
   final MissingEpisodesRepository missingRepo;
   final ShowPreferencesRepository showPreferences;
   final SettingsRepository settings;
@@ -828,6 +839,7 @@ class _SeriesCardState extends State<_SeriesCard> {
           watchState: widget.watchState,
           sourceSelection: widget.sourceSelection,
           watchOrder: widget.watchOrder,
+          playback: widget.playback,
           missing: widget.missingRepo,
           settings: widget.settings,
           onRefreshMetadata: widget.onRefreshMetadata,

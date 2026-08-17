@@ -15,6 +15,7 @@ import 'theater_layout_config.dart';
 import 'zones/episode_list_zone.dart';
 import 'zones/series_info_zone.dart';
 import 'zones/video_zone.dart';
+import '../../playback/playback_controller.dart';
 
 /// The theater watch screen: video, episode list, and series info as three
 /// self-contained zones arranged by [TheaterLayout] from a [TheaterLayoutConfig].
@@ -32,6 +33,7 @@ class TheaterScreen extends StatefulWidget {
     required this.repository,
     required this.watchState,
     required this.watchOrder,
+    required this.playback,
     required this.settings,
     required this.unmatchedCount,
     required this.onFolders,
@@ -46,6 +48,11 @@ class TheaterScreen extends StatefulWidget {
   final LibraryRepository repository;
   final WatchStateRepository watchState;
   final WatchOrderRepository watchOrder;
+
+  /// The app-lifetime playback engine (composition root), handed to the
+  /// VideoZone. The theater CONSUMES it; popping this route stops playback
+  /// but leaves the engine alive.
+  final PlaybackController playback;
 
   /// ALL app-wide settings behind ONE injected object — the theater reads the
   /// player prefs (auto-play / skip / watched-threshold, forwarded to VideoZone)
@@ -129,6 +136,7 @@ class _TheaterScreenState extends State<TheaterScreen> {
         episode: _current,
         watchState: widget.watchState,
         watchOrder: widget.watchOrder,
+        playback: widget.playback,
         settings: widget.settings,
         onEpisodeChanged: _onAdvanced,
       ),

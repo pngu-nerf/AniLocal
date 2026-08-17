@@ -29,6 +29,7 @@ import 'widgets/show_cover.dart';
 import 'widgets/xp_dialog.dart';
 import 'widgets/xp_screen.dart';
 import 'widgets/multi_select_list.dart';
+import '../playback/playback_controller.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -72,6 +73,7 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.watchState,
     required this.sourceSelection,
     required this.watchOrder,
+    required this.playback,
     required this.missing,
     required this.settings,
     required this.onRefreshMetadata,
@@ -88,6 +90,9 @@ class SeriesDetailScreen extends StatefulWidget {
   final WatchStateRepository watchState;
   final SourceSelectionRepository sourceSelection;
   final WatchOrderRepository watchOrder;
+
+  /// App-lifetime playback engine, forwarded to the theater.
+  final PlaybackController playback;
 
   /// Hidden-episode store (read + hide/unhide). Sacred across rescans (seam #5).
   final MissingEpisodesRepository missing;
@@ -283,6 +288,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           repository: widget.repository,
           watchState: widget.watchState,
           watchOrder: widget.watchOrder,
+          playback: widget.playback,
           settings: widget.settings,
           // Same header actions as this screen — so the theater header matches.
           unmatchedCount: widget.unmatchedCount,

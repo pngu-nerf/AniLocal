@@ -20,6 +20,7 @@ import 'support/fake_settings.dart';
 import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:anilocal/domain/models/show_preferences.dart';
 import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
+import 'package:anilocal/playback/playback_controller.dart';
 
 const _emptySummary = SyncSummary(
   filesScanned: 0,
@@ -164,6 +165,7 @@ void main() {
         watchState: repo,
         sourceSelection: repo,
         watchOrder: repo,
+        playback: PlaybackController(resolver: repo),
         missing: repo,
         showPreferences: repo,
         settings: const FakeSettings(),

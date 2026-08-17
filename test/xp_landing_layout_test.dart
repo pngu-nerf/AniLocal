@@ -20,6 +20,7 @@ import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:anilocal/domain/models/show_preferences.dart';
 import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
+import 'package:anilocal/playback/playback_controller.dart';
 
 /// A library with several shows + a couple of in-progress entries, so a pump
 /// exercises every XP zone at once: toolbar, search, the continue-watching side
@@ -184,6 +185,7 @@ Widget _app() {
     showPreferences: repo,
     settings: const FakeSettings(),
     watchOrder: repo,
+    playback: PlaybackController(resolver: repo),
     onScan: (_) async => const SyncSummary(
       filesScanned: 0,
       unchanged: 0,

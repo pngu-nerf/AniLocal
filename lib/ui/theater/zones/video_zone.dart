@@ -32,10 +32,18 @@ import '../controls/player_controls_state.dart';
 ///
 /// Swap-in-place: when [episode] changes (list tap, or auto-advance) it re-opens
 /// in the same frame on the same controller — no navigation, no duplicate player.
+///
+/// **Consumes the engine, does not own it.** [playback] is the app-lifetime
+/// [PlaybackController] built at the composition root. This zone opens episodes
+/// on it and [PlaybackController.stop]s it on the way out; it must NEVER dispose
+/// it. Everything else here — resume, the watched-threshold guards, skip
+/// detection, the up-next pre-roll, progress persistence, the media remote — is
+/// unchanged and still lives in this zone.
 class VideoZone extends StatefulWidget {
   const VideoZone({
     super.key,
     required this.episode,
+    required this.playback,
     required this.watchState,
     required this.watchOrder,
     required this.settings,
@@ -43,6 +51,10 @@ class VideoZone extends StatefulWidget {
   });
 
   final Episode episode;
+
+  /// The app-lifetime playback engine, injected — see the class doc.
+  final PlaybackController playback;
+
   final WatchStateRepository watchState;
   final WatchOrderRepository watchOrder;
 
@@ -68,7 +80,11 @@ class _VideoZoneState extends State<VideoZone> {
   bool _thresholdLoaded = false;
   bool get _autoWatchedOn => _watchedThreshold > Duration.zero;
 
-  late final PlaybackController _playback;
+  /// The injected, app-lifetime engine. A getter (not a stored field) so there
+  /// is no second reference to keep in sync and no way to mistake it for
+  /// something this State owns.
+  PlaybackController get _playback => widget.playback;
+
   late final ValueNotifier<PlayerControlsState> _controls;
   late final PlayerControlsActions _actions;
   late final MediaRemote _remote;
@@ -128,7 +144,6 @@ class _VideoZoneState extends State<VideoZone> {
   void initState() {
     super.initState();
     _shown = widget.episode;
-    _playback = PlaybackController(resolver: widget.watchOrder);
     _controls = ValueNotifier(PlayerControlsState(episode: _shown));
     _actions = PlayerControlsActions(
       skipIntro: _skipIntro,
@@ -439,7 +454,12 @@ class _VideoZoneState extends State<VideoZone> {
     _persist();
     _remote.dispose(); // relinquish now-playing + stop receiving commands
     _controls.dispose();
-    _playback.dispose();
+    // STOP, never dispose: the engine is app-lifetime and injected (see
+    // VideoZone's doc). Playback ends exactly as it did before — but the Player
+    // survives for the next visit instead of being destroyed and rebuilt, which
+    // is what removes the per-visit native teardown race. The composition root
+    // owns the one dispose(), at app shutdown.
+    _playback.stop();
     super.dispose();
   }
 

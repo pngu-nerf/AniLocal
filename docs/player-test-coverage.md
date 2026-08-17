@@ -19,8 +19,15 @@ one to fill the gap.
   with a native-free stand-in (`implements Player` + a real `PlayerState` and
   empty `PlayerStream`, `noSuchMethod` for the rest). This is how the tests below
   reach the real production widget tree.
-- `VideoZone` **cannot** be pumped: it constructs `PlaybackController(resolver:)`
-  → `Player()` in `initState` with no injection point.
+- `VideoZone` **still cannot** be pumped — but the reason narrowed after the
+  Slice-1 ownership move. It no longer constructs `PlaybackController` in
+  `initState`; the controller is now injected (app-lifetime, from the
+  composition root), and constructing one is itself harmless in the harness
+  because its `Player`/`VideoController` are built lazily on first use. What
+  still blocks pumping is the **`Video` widget**, which needs a real
+  `VideoController` → a real `Player` → libmpv. So the blocker moved from "no
+  injection point" to "the video surface needs the native engine"; a future
+  seam that renders the surface behind an interface would unblock it.
 - The engine-level behaviors media_kit drives (real fullscreen route; a
   `cursor:none` MouseRegion suppressing its own `onHover`) are **not reproduced**
   by the widget tester regardless.
@@ -71,7 +78,9 @@ crossing the threshold marks; an episode shorter than the threshold marks on
 open.
 
 **Why there is no genuine test:** the logic is private State on `_VideoZoneState`,
-which can't be pumped (constructs a real `Player` in `initState`, no injection),
+which can't be pumped (its `Video` surface needs a real `VideoController` →
+libmpv; see the harness note above — the engine is injected now, the surface
+still isn't),
 and the decision is inline (no pure seam to call directly, unlike
 `PlaybackController.resumeStartFor`, which *was* extracted and *is* tested in
 `test/playback_resume_start_test.dart`). Re-implementing the rule in the test
