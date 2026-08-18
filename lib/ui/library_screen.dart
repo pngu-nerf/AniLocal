@@ -28,10 +28,11 @@ import 'theater/theater_screen.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
-import 'widgets/header_actions.dart';
 import 'widgets/show_cover.dart';
-import 'widgets/xp_screen.dart';
 import '../playback/playback_controller.dart';
+import 'shell/header_scope.dart';
+import 'shell/header_spec.dart';
+import 'shell/header_controller.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -135,7 +136,7 @@ class LibraryScreen extends StatefulWidget {
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends State<LibraryScreen> {
+class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   late Future<List<Series>> _series;
   // Continue-watching entries held in state (not a Future) so the layout knows
   // synchronously whether to allocate the side panel (no entries → no panel).
@@ -292,7 +293,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _play(Episode episode, Series series) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      // Chromeless: the theater draws its own header, so the shell collapses
+      // its chrome for this route instead of stacking a second one above it.
+      ChromelessPageRoute<void>(
         builder: (_) => TheaterScreen(
           series: series,
           initialEpisode: episode,
@@ -463,114 +466,116 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // tab (showBack: false); the app actions ride the header's trailing slot —
     // the SAME HeaderActionsBar as detail/theater. The VFD readout reads
     // "AniLocal LIBRARY". Theme is applied app-wide, so no per-screen wrap.
-    return XpScreen(
-      title: 'Library',
-      showBack: false,
-      trailing: HeaderActionsBar(
-        scanning: _scanning,
-        unmatchedCount: _unmatchedCount,
-        onFolders: _openFolders,
-        onUnmatched: _openUnmatched,
-        onScan: _scan,
-        onSettings: _openSettings,
-      ),
-      child: Column(
-        children: [
-          // Permission-denied banner (Settings recovery).
-          ValueListenableBuilder<List<String>>(
-            valueListenable: widget.accessIssues,
-            builder: (context, labels, _) => labels.isEmpty
-                ? const SizedBox.shrink()
-                : AccessBanner(
-                    labels: labels,
-                    onOpenSettings: widget.onOpenAccessSettings,
-                    onRescan: _scanning ? () {} : _scan,
-                  ),
-          ),
-          // Offline drive/mount banner (reconnect — NOT a permission issue).
-          ValueListenableBuilder<List<String>>(
-            valueListenable: widget.missingFolders,
-            builder: (context, labels, _) => labels.isEmpty
-                ? const SizedBox.shrink()
-                : ReconnectBanner(
-                    labels: labels,
-                    onRescan: _scanning ? () {} : _scan,
-                  ),
-          ),
-          // Search + continue-watching panel + grid share the page via the
-          // composable landing layout (the seam analogous to the theater
-          // zones): search pinned full-width on top, panel on the left,
-          // grid filling the rest. The one FutureBuilder resolves the
-          // cached library once; search filters that in-memory list.
-          Expanded(
-            child: FutureBuilder<List<Series>>(
-              future: _series,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final all = snapshot.data ?? const <Series>[];
-                if (all.isEmpty) {
-                  // Truly empty library — no search/panel, just onboarding.
-                  return _EmptyState(
-                    scanning: _scanning,
-                    onAddFolder: _addFolder,
-                  );
-                }
-                final filtered = [
-                  for (final s in all)
-                    if (seriesMatchesQuery(s, _query)) s,
-                ];
-                return LibraryLayout(
-                  config: LibraryLayoutConfig(
-                    panelCollapsed: _continueCollapsed,
-                    panelFraction: _panelFraction,
-                  ),
-                  // Same divider mechanism as the theater rail: live-resize
-                  // updates the fraction; drag-end persists it.
-                  onPanelResize: (f) => setState(() => _panelFraction = f),
-                  onPanelResizeEnd: () =>
-                      widget.settings.setPanelFraction(_panelFraction),
-                  zones: {
-                    // Search bar — hidden by the global homepage toggle.
-                    if (_showSearchBar)
-                      LibraryZone.search: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-                        child: LibrarySearchBar(
-                          controller: _searchController,
-                          onChanged: (v) => setState(() => _query = v),
-                          onClear: () {
-                            _searchController.clear();
-                            setState(() => _query = '');
-                          },
-                        ),
-                      ),
-                    // Continue-watching sidebar — present only when there
-                    // are entries AND the global homepage toggle allows it.
-                    if (_continueEntries.isNotEmpty && _showContinueWatching)
-                      LibraryZone.continueWatching: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 4, 4, 8),
-                        child: ContinueWatchingPanel(
-                          entries: _continueEntries,
-                          onPlay: _playFromContinue,
-                          onDismiss: _dismissFromContinue,
-                          collapsed: _continueCollapsed,
-                          onToggleCollapsed: _toggleContinueCollapsed,
-                        ),
-                      ),
-                    LibraryZone.grid: Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
-                      child: _buildGrid(filtered),
-                    ),
-                  },
+    publishHeader();
+    return Column(
+      children: [
+        // Permission-denied banner (Settings recovery).
+        ValueListenableBuilder<List<String>>(
+          valueListenable: widget.accessIssues,
+          builder: (context, labels, _) => labels.isEmpty
+              ? const SizedBox.shrink()
+              : AccessBanner(
+                  labels: labels,
+                  onOpenSettings: widget.onOpenAccessSettings,
+                  onRescan: _scanning ? () {} : _scan,
+                ),
+        ),
+        // Offline drive/mount banner (reconnect — NOT a permission issue).
+        ValueListenableBuilder<List<String>>(
+          valueListenable: widget.missingFolders,
+          builder: (context, labels, _) => labels.isEmpty
+              ? const SizedBox.shrink()
+              : ReconnectBanner(
+                  labels: labels,
+                  onRescan: _scanning ? () {} : _scan,
+                ),
+        ),
+        // Search + continue-watching panel + grid share the page via the
+        // composable landing layout (the seam analogous to the theater
+        // zones): search pinned full-width on top, panel on the left,
+        // grid filling the rest. The one FutureBuilder resolves the
+        // cached library once; search filters that in-memory list.
+        Expanded(
+          child: FutureBuilder<List<Series>>(
+            future: _series,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final all = snapshot.data ?? const <Series>[];
+              if (all.isEmpty) {
+                // Truly empty library — no search/panel, just onboarding.
+                return _EmptyState(
+                  scanning: _scanning,
+                  onAddFolder: _addFolder,
                 );
-              },
-            ),
+              }
+              final filtered = [
+                for (final s in all)
+                  if (seriesMatchesQuery(s, _query)) s,
+              ];
+              return LibraryLayout(
+                config: LibraryLayoutConfig(
+                  panelCollapsed: _continueCollapsed,
+                  panelFraction: _panelFraction,
+                ),
+                // Same divider mechanism as the theater rail: live-resize
+                // updates the fraction; drag-end persists it.
+                onPanelResize: (f) => setState(() => _panelFraction = f),
+                onPanelResizeEnd: () =>
+                    widget.settings.setPanelFraction(_panelFraction),
+                zones: {
+                  // Search bar — hidden by the global homepage toggle.
+                  if (_showSearchBar)
+                    LibraryZone.search: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                      child: LibrarySearchBar(
+                        controller: _searchController,
+                        onChanged: (v) => setState(() => _query = v),
+                        onClear: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                      ),
+                    ),
+                  // Continue-watching sidebar — present only when there
+                  // are entries AND the global homepage toggle allows it.
+                  if (_continueEntries.isNotEmpty && _showContinueWatching)
+                    LibraryZone.continueWatching: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 4, 8),
+                      child: ContinueWatchingPanel(
+                        entries: _continueEntries,
+                        onPlay: _playFromContinue,
+                        onDismiss: _dismissFromContinue,
+                        collapsed: _continueCollapsed,
+                        onToggleCollapsed: _toggleContinueCollapsed,
+                      ),
+                    ),
+                  LibraryZone.grid: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
+                    child: _buildGrid(filtered),
+                  ),
+                },
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+
+  @override
+  HeaderSpec buildHeaderSpec() => HeaderSpec(
+    title: 'Library',
+    actions: AppActions(
+      scanning: _scanning,
+      unmatchedCount: _unmatchedCount,
+      onFolders: _openFolders,
+      onUnmatched: _openUnmatched,
+      onScan: _scan,
+      onSettings: _openSettings,
+    ),
+  );
 
   /// The library grid for the given (already search-filtered) series. Greying
   /// re-evaluates live with the missing-folder set, using the cached per-series

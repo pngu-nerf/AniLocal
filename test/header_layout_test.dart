@@ -6,9 +6,11 @@ import 'package:anilocal/ui/theme/header_readout.dart';
 import 'package:anilocal/ui/theme/vfd_readout.dart';
 import 'package:anilocal/ui/theme/xp_tokens.dart';
 import 'package:anilocal/ui/theme/xp_widgets.dart';
+import 'package:anilocal/ui/shell/header_spec.dart';
 import 'package:anilocal/ui/widgets/header_actions.dart';
-import 'package:anilocal/ui/widgets/xp_screen.dart';
 import 'package:anilocal/ui/window_chrome.dart';
+
+import 'support/shell_harness.dart';
 
 /// A show title long enough to overflow the screen at a narrow window but not
 /// at a wide one — which is what makes "fit is decided against the CURRENT
@@ -34,25 +36,31 @@ const String _title = 'Dragon Ball Z Battle of Gods';
 /// are font-independent; the CHROME tab labels are not, and the test font is
 /// wider than the real one, so the assertions below are about relationships
 /// (symmetry, ordering, no overlap) rather than absolute pixel widths.
-Widget _screen({
-  bool showBack = true,
-  int unmatched = 0,
-  String title = 'Library',
-}) => MaterialApp(
-  home: XpScreen(
-    title: title,
-    showBack: showBack,
-    trailing: HeaderActionsBar(
-      scanning: false,
-      unmatchedCount: unmatched,
-      onFolders: () async {},
-      onUnmatched: () {},
-      onScan: () async {},
-      onSettings: () {},
-    ),
-    child: const SizedBox.shrink(),
+/// The header is hoisted now, so a "screen" is the shell plus a page that
+/// publishes a spec. `showBack` maps to whether a second route is pushed —
+/// back visibility is derived from the navigator's canPop, not from the spec.
+late ShellHarness _harness;
+
+HeaderSpec _spec({int unmatched = 0, String title = 'Library'}) => HeaderSpec(
+  title: title,
+  actions: AppActions(
+    scanning: false,
+    unmatchedCount: unmatched,
+    onFolders: () async {},
+    onUnmatched: () {},
+    onScan: () async {},
+    onSettings: () {},
   ),
 );
+
+Widget _screen({int unmatched = 0, String title = 'Library'}) {
+  _harness = ShellHarness();
+  return _harness.app(
+    home: SpecPage(
+      spec: _spec(unmatched: unmatched, title: title),
+    ),
+  );
+}
 
 Future<void> _pumpAt(WidgetTester tester, Widget app, double width) async {
   tester.view.physicalSize = Size(width, 600);
@@ -60,7 +68,10 @@ Future<void> _pumpAt(WidgetTester tester, Widget app, double width) async {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(app);
-  // Bounded pumps, never pumpAndSettle: a scrolling title never settles.
+  // Bounded pumps, never pumpAndSettle: a scrolling title never settles. Two
+  // pumps: the page publishes its spec on its first build, and the hoisted
+  // header renders it on the following frame.
+  await tester.pump();
   await tester.pump();
 }
 
@@ -150,15 +161,21 @@ void main() {
   testWidgets('home reserves the back slot, so the screen does not shift', (
     tester,
   ) async {
-    await _pumpAt(tester, _screen(showBack: true), 700);
-    final withBack = tester.getRect(find.byType(HeaderReadout));
-
-    await _pumpAt(tester, _screen(showBack: false), 700);
+    await _pumpAt(tester, _screen(), 700);
     final noBack = tester.getRect(find.byType(HeaderReadout));
-    expect(noBack, withBack);
 
-    // The reserved slot is the real tab, laid out but neither painted nor
+    // Push a second page: back becomes real, the readout must not move.
+    _harness.push(const SpecPage(spec: HeaderSpec(title: 'Pushed')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final withBack = tester.getRect(find.byType(HeaderReadout));
+    expect(withBack, noBack);
+
+    // Back on home is the real tab, laid out but neither painted nor
     // hit-testable — that's what makes it exactly the right width.
+    _harness.pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     final reserved = tester.widget<Visibility>(
       find
           .ancestor(

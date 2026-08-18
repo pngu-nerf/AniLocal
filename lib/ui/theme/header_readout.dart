@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'vfd_readout.dart';
@@ -21,19 +23,51 @@ import 'xp_tokens.dart';
 /// text is clipped to the black screen, so it appears/disappears cleanly at the
 /// edges and never spills onto the chrome.
 class HeaderReadout extends StatelessWidget {
-  const HeaderReadout({super.key, required this.title});
+  const HeaderReadout({super.key, this.title, this.spinning = false});
 
   /// The context word/title in the screen: "Library" on the home library, or
-  /// the show title.
-  final String title;
+  /// the show title. NULL means there is no valid content to show — see
+  /// [spinning].
+  final String? title;
 
-  static const double _pitch = 2; // glyph height = 7 * pitch = 14
+  /// Show the seeking spinner instead of a title.
+  ///
+  /// The readout's fail state, and it exists to be NON-MISLEADING. A stale
+  /// specific title is worse than no title: it tells the user they are on a
+  /// page they are not on. So when the header has no valid content — a missing
+  /// or superseded spec, or a title that genuinely hasn't resolved yet — the
+  /// screen shows a rotating `- \ | /` instead, which can't be mistaken for
+  /// content and reads as an instrument seeking.
+  ///
+  /// [title] null with [spinning] false renders BLANK. That combination is the
+  /// grace window during navigation: for the sub-frame gap between one page's
+  /// title going away and the next page's arriving, a blank screen is invisible,
+  /// whereas a spinner would flash on every push. The caller
+  /// (`HeaderController`) owns that timing; this widget just renders the state.
+  final bool spinning;
+
+  /// Dot pitch of the readout's glyphs; the spinner matches it.
+  static const double pitch = 2;
+  static const double _pitch = pitch; // glyph height = 7 * pitch = 14
   static const double _screenPadH = 6;
   static const double _screenPadV = 3;
   static const double _glyphH = 7 * _pitch;
 
   @override
   Widget build(BuildContext context) {
+    final text = title;
+    // No valid content: spinner, or blank during the grace window. Never the
+    // last-known title — see [spinning].
+    if (text == null) {
+      return _screen(
+        child: SizedBox(
+          height: _glyphH,
+          child: spinning
+              ? const Center(child: _SeekSpinner())
+              : const SizedBox.shrink(),
+        ),
+      );
+    }
     // Fill the width the parent allotted, and decide fit against THAT — the
     // allotment shrinks as the window narrows, so the marquee kicks in exactly
     // when the title stops fitting.
@@ -41,7 +75,7 @@ class HeaderReadout extends StatelessWidget {
       child: SizedBox(
         height: _glyphH,
         child: LayoutBuilder(
-          builder: (context, constraints) => _title(constraints.maxWidth),
+          builder: (context, constraints) => _title(text, constraints.maxWidth),
         ),
       ),
     );
@@ -66,7 +100,7 @@ class HeaderReadout extends StatelessWidget {
 
   /// The lit title inside [regionW] of screen: centred when it fits, scrolling
   /// when it doesn't. Clipped either way.
-  Widget _title(double regionW) {
+  Widget _title(String title, double regionW) {
     final textW = VfdReadout.widthFor(title, dotPitch: _pitch);
     final overflow = textW > regionW + 0.5;
     return ClipRect(
@@ -167,4 +201,43 @@ class _MarqueeState extends State<_Marquee>
       ),
     );
   }
+}
+
+/// The readout's "no valid content" mark: the classic ASCII spinner `- \ | /`
+/// rotating in one direction, drawn in the same dot-matrix phosphor as the
+/// title, centred and inside the same clip.
+///
+/// One character wide, so it always fits and never engages the marquee path.
+class _SeekSpinner extends StatefulWidget {
+  const _SeekSpinner();
+
+  @override
+  State<_SeekSpinner> createState() => _SeekSpinnerState();
+}
+
+class _SeekSpinnerState extends State<_SeekSpinner> {
+  /// One consistent direction of rotation.
+  static const List<String> _frames = ['-', '\\', '|', '/'];
+  static const Duration _frameDuration = Duration(milliseconds: 100);
+
+  Timer? _timer;
+  int _frame = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(_frameDuration, (_) {
+      if (mounted) setState(() => _frame = (_frame + 1) % _frames.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      VfdReadout(_frames[_frame], dotPitch: HeaderReadout.pitch);
 }

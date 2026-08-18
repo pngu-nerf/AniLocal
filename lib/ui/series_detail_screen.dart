@@ -24,12 +24,13 @@ import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 import 'widgets/episode_row.dart';
 import 'widgets/episode_tile.dart';
-import 'widgets/header_actions.dart';
 import 'widgets/show_cover.dart';
 import 'widgets/xp_dialog.dart';
-import 'widgets/xp_screen.dart';
 import 'widgets/multi_select_list.dart';
 import '../playback/playback_controller.dart';
+import 'shell/header_scope.dart';
+import 'shell/header_spec.dart';
+import 'shell/header_controller.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -116,7 +117,8 @@ class SeriesDetailScreen extends StatefulWidget {
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
 }
 
-class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
+class _SeriesDetailScreenState extends State<SeriesDetailScreen>
+    with HeaderPublisher {
   List<Episode> _episodes = const [];
   Set<int> _hidden = {};
   bool _missingEnabled = true;
@@ -281,7 +283,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      // Chromeless: the theater draws its own header, so the shell collapses
+      // its chrome for this route instead of stacking a second one above it.
+      ChromelessPageRoute<void>(
         builder: (_) => TheaterScreen(
           series: widget.series,
           initialEpisode: e,
@@ -822,20 +826,23 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     // The ONE shared screen shell (XpScreen): a VFD back tab + the SAME
     // HeaderActionsBar as home/theater, readout reading "AniLocal <TITLE>".
     // Theme is applied app-wide, so no per-screen wrap.
-    return XpScreen(
-      title: title,
-      trailing: HeaderActionsBar(
-        // No local spinner on the detail screen — sync runs quietly.
-        scanning: false,
-        unmatchedCount: widget.unmatchedCount,
-        onFolders: widget.onFolders,
-        onScan: _sync,
-        onUnmatched: widget.onUnmatched,
-        onSettings: _openSettings,
-      ),
-      child: _content(series, title),
-    );
+    publishHeader();
+    return _content(series, title);
   }
+
+  @override
+  HeaderSpec buildHeaderSpec() => HeaderSpec(
+    title: widget.series.displayTitle,
+    actions: AppActions(
+      // No local spinner on the detail screen — sync runs quietly.
+      scanning: false,
+      unmatchedCount: widget.unmatchedCount,
+      onFolders: widget.onFolders,
+      onScan: _sync,
+      onUnmatched: widget.onUnmatched,
+      onSettings: _openSettings,
+    ),
+  );
 
   Widget _content(Series series, String title) {
     final art = series.coverImageRef;

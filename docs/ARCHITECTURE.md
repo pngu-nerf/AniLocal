@@ -72,7 +72,8 @@ glance" + the five seams). Working rules for making changes: **`CLAUDE.md`**.
 | **The player UI** (video, controls, seek bar, rail) | `lib/ui/theater/` — `zones/` + `controls/`. ⚠️ see "Here be dragons" below |
 | **Screens** (home/library, detail, folders, unmatched, fix-match, settings) | `lib/ui/` (+ `lib/ui/library/`) |
 | **The instrument look** (VFD "fine-instrument" theme, Technics SC-CH900) | `lib/ui/theme/` — tokens (`xp_tokens`), widgets (`xp_widgets`), theme (`xp_theme`), readouts (`vfd_readout`, `header_readout`), brand mark (`brand_wordmark`) |
-| **Shared UI shells/components** | `lib/ui/widgets/` — `xp_screen`, `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list` |
+| **The app shell / persistent header** | `lib/ui/shell/` — `app_shell` (the ONE window chrome, mounted above the Navigator in `MaterialApp.builder`), `header_controller` (route-keyed spec stack + spinner grace), `header_scope` (`HeaderPublisher` mixin), `header_spec` |
+| **Shared UI shells/components** | `lib/ui/widgets/` — `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list` |
 
 ---
 
@@ -90,8 +91,10 @@ The governing test for any change: **"to change X, how many places must I edit?"
 - **Cross-cutting config is ONE injected object, not threaded:** all settings go
   through the injected `SettingsRepository` — never a fan of `load*/set*`
   functions passed screen-to-screen.
-- **Reuse before you build.** Shared shells/components are the model: `XpScreen`
-  (the one screen shell — every non-theater screen; theater is the exception),
+- **Reuse before you build.** Shared shells/components are the model: `AppShell`
+  (the ONE window chrome — mounted once above the Navigator, so pages publish a
+  `HeaderSpec` instead of building their own header; the theater opts out via
+  `ChromelessPageRoute` and draws its own),
   `XpChassis` (the Material surface content sits on), `XpWindow`/`XpTitleBar`
   (window chrome), `EpisodeTile`/`EpisodeRow` (episode rows), `ShowCover` (every
   cover), `BrandWordmark`/`HeaderReadout`/`HeaderActionsBar` (the header).

@@ -11,6 +11,9 @@ import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'library_screen.dart';
+import 'shell/app_shell.dart';
+import 'shell/header_controller.dart';
+import 'shell/header_scope.dart';
 import 'theme/xp_theme.dart';
 import 'tooltip_dismiss_observer.dart';
 import '../playback/playback_controller.dart';
@@ -20,6 +23,13 @@ import '../playback/playback_controller.dart';
 /// enter/exit resize, whatever path triggered it (⛶ / Escape / native). One
 /// stable instance so app rebuilds don't churn the navigator's observer list.
 final _tooltipDismissObserver = TooltipDismissingRouteObserver();
+
+/// The ONE navigator the shell wraps, and the header state derived from it.
+/// App-lifetime, like the playback engine — the header must outlive every route
+/// or it isn't hoisted at all.
+final _navigatorKey = GlobalKey<NavigatorState>();
+final _headerController = HeaderController(navigatorKey: _navigatorKey);
+final _headerRouteObserver = HeaderRouteObserver(_headerController);
 
 /// Root of the AniLocal UI.
 ///
@@ -116,7 +126,10 @@ class AniLocalApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       // Dismiss tooltips on every route transition (fullscreen enter/exit is a
       // root-navigator push/pop) — see TooltipDismissingRouteObserver.
-      navigatorObservers: [_tooltipDismissObserver],
+      navigatorKey: _navigatorKey,
+      // The header observer is typed to PageRoute, so dialogs never register as
+      // "the top page" — see HeaderController.
+      navigatorObservers: [_tooltipDismissObserver, _headerRouteObserver],
       // The VFD "fine-instrument" theme, applied app-wide so EVERY screen
       // (theater, folders, fix-match, settings, dialogs) inherits the phosphor
       // palette and legible sans — one cohesive instrument, not per-subtree.
@@ -126,9 +139,16 @@ class AniLocalApp extends StatelessWidget {
       // even any subtree that isn't under a Material. The single source for the
       // body role (the display role is VfdReadout); no widget sets the body
       // font itself. (Material still overrides its own chrome text as usual.)
+      // ABOVE the Navigator: the window chrome is mounted once here, and the
+      // Navigator lives inside its chassis. A route transition therefore
+      // animates only content — the header never re-mounts, so it reads as part
+      // of the app rather than part of the page.
       builder: (context, child) => DefaultTextStyle(
         style: Theme.of(context).textTheme.bodyMedium!,
-        child: child!,
+        child: HeaderScope(
+          controller: _headerController,
+          child: AppShell(child: child!),
+        ),
       ),
       home: LibraryScreen(
         repository: repository,

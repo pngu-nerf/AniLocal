@@ -5,7 +5,8 @@ import '../domain/repositories/library_repository.dart';
 import 'access_recovery.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
-import 'widgets/xp_screen.dart';
+import 'shell/header_scope.dart';
+import 'shell/header_spec.dart';
 
 /// Manage the watched library folders. Adding goes through [onAddFolder] (the
 /// native open-panel, supplied by the composition root — the UI never imports
@@ -29,7 +30,7 @@ class FoldersScreen extends StatefulWidget {
   State<FoldersScreen> createState() => _FoldersScreenState();
 }
 
-class _FoldersScreenState extends State<FoldersScreen> {
+class _FoldersScreenState extends State<FoldersScreen> with HeaderPublisher {
   // Held in state (not a FutureBuilder) so drag-reorder can update optimistically.
   // null = still loading.
   List<LibraryFolder>? _folders;
@@ -78,112 +79,106 @@ class _FoldersScreenState extends State<FoldersScreen> {
   @override
   Widget build(BuildContext context) {
     final folders = _folders;
-    return XpScreen(
-      title: 'Sources',
-      trailing: XpTitleTab(
-        icon: Icons.create_new_folder_outlined,
-        label: 'Add',
-        tooltip: 'Add source',
-        showLabel: XpTitleBar.showsLabels(context),
-        onPressed: _add,
-      ),
-      child: folders == null
-          ? const Center(child: CircularProgressIndicator())
-          : folders.isEmpty
-          ? Center(
-              child: XpButton(
-                icon: Icons.add,
-                label: 'Add a source',
-                onPressed: _add,
-              ),
-            )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.low_priority,
-                        size: 16,
-                        color: Xp.textDim,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Drag to set priority — the top source is preferred '
-                          'for episodes found in more than one source.',
-                          style: const TextStyle(
-                            color: Xp.textDim,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ReorderableListView(
-                    buildDefaultDragHandles: false,
-                    onReorderItem: _onReorder,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    children: [
-                      for (var i = 0; i < folders.length; i++)
-                        Padding(
-                          key: ValueKey(folders[i].path),
-                          padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
-                          child: XpPanel(
-                            padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
-                            child: Row(
-                              children: [
-                                ReorderableDragStartListener(
-                                  index: i,
-                                  child: const Icon(
-                                    Icons.drag_handle,
-                                    color: Xp.textDim,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      ChromeLabel(
-                                        folders[i].path,
-                                        upper: false,
-                                        fontSize: 13,
-                                        letterSpacing: 1,
-                                      ),
-                                      if (i == 0) ...[
-                                        const SizedBox(height: 2),
-                                        const Text(
-                                          'Preferred source',
-                                          style: TextStyle(
-                                            color: Xp.textDim,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                XpButton(
-                                  dense: true,
-                                  icon: Icons.delete_outline,
-                                  tooltip: 'Remove (drops its cached files)',
-                                  onPressed: () => _remove(folders[i]),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+    publishHeader();
+    return folders == null
+        ? const Center(child: CircularProgressIndicator())
+        : folders.isEmpty
+        ? Center(
+            child: XpButton(
+              icon: Icons.add,
+              label: 'Add a source',
+              onPressed: _add,
             ),
-    );
+          )
+        : Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.low_priority, size: 16, color: Xp.textDim),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Drag to set priority — the top source is preferred '
+                        'for episodes found in more than one source.',
+                        style: const TextStyle(color: Xp.textDim, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ReorderableListView(
+                  buildDefaultDragHandles: false,
+                  onReorderItem: _onReorder,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  children: [
+                    for (var i = 0; i < folders.length; i++)
+                      Padding(
+                        key: ValueKey(folders[i].path),
+                        padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
+                        child: XpPanel(
+                          padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+                          child: Row(
+                            children: [
+                              ReorderableDragStartListener(
+                                index: i,
+                                child: const Icon(
+                                  Icons.drag_handle,
+                                  color: Xp.textDim,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    ChromeLabel(
+                                      folders[i].path,
+                                      upper: false,
+                                      fontSize: 13,
+                                      letterSpacing: 1,
+                                    ),
+                                    if (i == 0) ...[
+                                      const SizedBox(height: 2),
+                                      const Text(
+                                        'Preferred source',
+                                        style: TextStyle(
+                                          color: Xp.textDim,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              XpButton(
+                                dense: true,
+                                icon: Icons.delete_outline,
+                                tooltip: 'Remove (drops its cached files)',
+                                onPressed: () => _remove(folders[i]),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
   }
+
+  @override
+  HeaderSpec buildHeaderSpec() => HeaderSpec(
+    title: 'Sources',
+    actions: SingleAction(
+      icon: Icons.create_new_folder_outlined,
+      label: 'Add',
+      tooltip: 'Add source',
+      onPressed: _add,
+    ),
+  );
 }

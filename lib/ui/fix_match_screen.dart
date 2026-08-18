@@ -6,7 +6,8 @@ import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
-import 'widgets/xp_screen.dart';
+import 'shell/header_scope.dart';
+import 'shell/header_spec.dart';
 
 /// Minimal manual fix-match: search AniList → pick from ranked candidates →
 /// assign. For a split (multiple files), an optional toggle chooses continuous
@@ -35,7 +36,7 @@ class FixMatchScreen extends StatefulWidget {
   State<FixMatchScreen> createState() => _FixMatchScreenState();
 }
 
-class _FixMatchScreenState extends State<FixMatchScreen> {
+class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
   late final TextEditingController _query = TextEditingController(
     text: widget.prefillQuery,
   );
@@ -97,61 +98,67 @@ class _FixMatchScreenState extends State<FixMatchScreen> {
   @override
   Widget build(BuildContext context) {
     final count = widget.filePaths.length;
-    return XpScreen(
-      title: widget.isSplit ? 'Reassign $count files' : 'Fix match',
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _query,
-                    decoration: const InputDecoration(
-                      labelText: 'Search AniList',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _search(),
+    publishHeader();
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _query,
+                  decoration: const InputDecoration(
+                    labelText: 'Search AniList',
+                    border: OutlineInputBorder(),
                   ),
+                  onSubmitted: (_) => _search(),
                 ),
-                const SizedBox(width: 8),
-                XpButton(
-                  icon: Icons.search,
-                  tooltip: 'Search',
-                  onPressed: _search,
-                ),
-              ],
+              ),
+              const SizedBox(width: 8),
+              XpButton(
+                icon: Icons.search,
+                tooltip: 'Search',
+                onPressed: _search,
+              ),
+            ],
+          ),
+        ),
+        if (widget.isSplit && count > 1)
+          SwitchListTile(
+            value: _continuous,
+            onChanged: (v) => setState(() => _continuous = v),
+            title: const Text('Continuous numbering'),
+            subtitle: Text(
+              _continuous
+                  ? 'Show ${widget.priorEpisodeCount + 1}, ${widget.priorEpisodeCount + 2}… '
+                        '(prior season had ${widget.priorEpisodeCount})'
+                  : 'Show AniList episodes 1, 2, 3…',
             ),
           ),
-          if (widget.isSplit && count > 1)
-            SwitchListTile(
-              value: _continuous,
-              onChanged: (v) => setState(() => _continuous = v),
-              title: const Text('Continuous numbering'),
-              subtitle: Text(
-                _continuous
-                    ? 'Show ${widget.priorEpisodeCount + 1}, ${widget.priorEpisodeCount + 2}… '
-                          '(prior season had ${widget.priorEpisodeCount})'
-                    : 'Show AniList episodes 1, 2, 3…',
-              ),
-            ),
-          const Divider(height: 1, color: Xp.divider),
-          Expanded(child: _candidates()),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: XpButton(
-                lit: _selected != null && !_busy,
-                label: _busy
-                    ? 'Assigning…'
-                    : (_selected == null ? 'Pick a match' : 'Assign'),
-                onPressed: (_selected == null || _busy) ? null : _assign,
-              ),
+        const Divider(height: 1, color: Xp.divider),
+        Expanded(child: _candidates()),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: XpButton(
+              lit: _selected != null && !_busy,
+              label: _busy
+                  ? 'Assigning…'
+                  : (_selected == null ? 'Pick a match' : 'Assign'),
+              onPressed: (_selected == null || _busy) ? null : _assign,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  HeaderSpec buildHeaderSpec() {
+    final count = widget.filePaths.length;
+    return HeaderSpec(
+      title: widget.isSplit ? 'Reassign $count files' : 'Fix match',
     );
   }
 
