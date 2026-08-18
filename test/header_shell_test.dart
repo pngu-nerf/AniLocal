@@ -276,4 +276,79 @@ void main() {
     );
     expect(_spinnerGlyph(), findsNothing, reason: 'and must not spin either');
   });
+
+  testWidgets('the FIRST publish reaches the header with no nudge — correct '
+      'title on the first painted frame', (tester) async {
+    // The regression this pins: the shell used to read HeaderScope from inside
+    // its OverlayEntry, and that dependency did not fire across the overlay
+    // boundary. Home rendered with no title and only corrected itself when a
+    // window RESIZE rebuilt the entry through its unrelated MediaQuery
+    // dependency. The shell now subscribes to the controller explicitly.
+    final h = ShellHarness();
+    await _pumpShell(
+      tester,
+      h.app(
+        home: const SpecPage(spec: HeaderSpec(title: 'Library')),
+      ),
+    );
+    // Exactly ONE frame after mount — no resize, no metrics change, no extra
+    // settle. (Frame 1 is the mount itself; the publish lands on frame 2.)
+    await tester.pump();
+    expect(
+      _readoutText('Library'),
+      findsOneWidget,
+      reason: 'the first publish must propagate like every other one',
+    );
+    expect(_spinnerGlyph(), findsNothing);
+  });
+
+  testWidgets('a header change repaints with NO metrics change', (
+    tester,
+  ) async {
+    // Complements the above: proves the repaint comes from the subscription,
+    // not from something incidentally rebuilding the overlay entry. Nothing
+    // here touches MediaQuery, the window size, or the route stack.
+    final h = ShellHarness();
+    await _pumpShell(
+      tester,
+      h.app(
+        home: const SpecPage(spec: HeaderSpec(title: 'Before')),
+      ),
+    );
+    await _pumpPastGrace(tester);
+    expect(_readoutText('Before'), findsOneWidget);
+
+    tester
+        .state<SpecPageState>(find.byType(SpecPage))
+        .update(const HeaderSpec(title: 'After'));
+    await tester.pump();
+    await tester.pump();
+    expect(_readoutText('After'), findsOneWidget);
+    expect(_readoutText('Before'), findsNothing);
+  });
+
+  testWidgets('the chrome collapse is SAME-FRAME with the chromeless push — '
+      'the player never renders under a header it then loses', (tester) async {
+    final h = ShellHarness();
+    await _pumpShell(
+      tester,
+      h.app(
+        home: const SpecPage(spec: HeaderSpec(title: 'Library')),
+      ),
+    );
+    await _pumpPastGrace(tester);
+    expect(find.byType(XpTitleBar), findsOneWidget);
+
+    h.pushChromeless(const SilentPage());
+    // ONE frame. If the collapse lagged, the player would mount with the header
+    // still there and then shift up into the reclaimed space.
+    await tester.pump();
+    expect(
+      find.byType(XpTitleBar),
+      findsNothing,
+      reason:
+          'the header must be gone on the very first frame the chromeless '
+          'route is on top',
+    );
+  });
 }

@@ -115,8 +115,10 @@ class HeaderController extends ChangeNotifier {
   /// Restart the grace clock whenever what we'd display changes.
   void _onContentChanged() {
     _graceTimer?.cancel();
-    if (title != null) {
-      // Valid content: cancel any pending spinner outright.
+    if (title != null || !chromeVisible) {
+      // Valid content — or no readout on screen at all (a chromeless route like
+      // the theater). Either way there is nothing to spin, so don't arm a timer
+      // that would tick away behind the player for no reason.
       _spinning = false;
     } else if (!_spinning) {
       _graceTimer = Timer(spinnerGrace, () {

@@ -133,7 +133,19 @@ class AniLocalApp extends StatelessWidget {
       // The VFD "fine-instrument" theme, applied app-wide so EVERY screen
       // (theater, folders, fix-match, settings, dialogs) inherits the phosphor
       // palette and legible sans — one cohesive instrument, not per-subtree.
-      theme: XpTheme.data(),
+      theme: XpTheme.data().copyWith(
+        // NO page transition, on every platform. With the header hoisted and
+        // constant, content that slid in underneath it read as inconsistent —
+        // and the slide is also what made entering the player look like it
+        // swiped in and then settled. Navigation is now an instant swap, which
+        // is what "the chrome is the app, the page is the content" should feel
+        // like.
+        pageTransitionsTheme: PageTransitionsTheme(
+          builders: {
+            for (final p in TargetPlatform.values) p: const _NoPageTransition(),
+          },
+        ),
+      ),
       // A root DefaultTextStyle from the theme's body role, so ALL body Text
       // inherits the matte-cream Helvetica-Neue treatment by construction —
       // even any subtree that isn't under a Material. The single source for the
@@ -147,7 +159,7 @@ class AniLocalApp extends StatelessWidget {
         style: Theme.of(context).textTheme.bodyMedium!,
         child: HeaderScope(
           controller: _headerController,
-          child: AppShell(child: child!),
+          child: AppShell(controller: _headerController, child: child!),
         ),
       ),
       home: LibraryScreen(
@@ -207,4 +219,18 @@ class _PlaybackEngineOwnerState extends State<_PlaybackEngineOwner> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// A page transition that doesn't transition — the new route simply IS there.
+class _NoPageTransition extends PageTransitionsBuilder {
+  const _NoPageTransition();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => child;
 }

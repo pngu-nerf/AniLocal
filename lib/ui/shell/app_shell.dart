@@ -35,8 +35,22 @@ import 'header_spec.dart';
 /// widget found"). The shell therefore hosts its own, created ONCE from
 /// `initialEntries` so it is never rebuilt structurally; the whole shell —
 /// header and content — renders inside that single entry.
+///
+/// **Why the controller is passed in, not read from [HeaderScope].** The header
+/// renders inside that OverlayEntry, and an entry's builder runs in its own
+/// element subtree. Depending on an InheritedWidget across that boundary proved
+/// unreliable: the first publish did not repaint the header, and the title only
+/// appeared once a window RESIZE happened to rebuild the entry through its
+/// unrelated MediaQuery dependency — a stale header until the user shook the
+/// window. The chrome collapse for the theater was late for the same reason.
+/// So the shell now subscribes EXPLICITLY, with a [ListenableBuilder]. Same
+/// data, but the rebuild is guaranteed rather than inferred. [HeaderScope]
+/// remains, purely so PAGES can find the controller to publish to.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.child});
+  const AppShell({super.key, required this.controller, required this.child});
+
+  /// The header state. Subscribed to directly — see the class doc.
+  final HeaderController controller;
 
   /// The Navigator, from `MaterialApp.builder`.
   final Widget child;
@@ -59,10 +73,15 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) => Overlay(initialEntries: [_entry]);
 
-  Widget _buildShell(BuildContext context) {
-    // Read INSIDE the entry: the entry's context is below HeaderScope, so this
-    // registers the dependency that rebuilds the header on every change.
-    final header = HeaderScope.of(context);
+  Widget _buildShell(BuildContext context) => ListenableBuilder(
+    // EXPLICIT subscription — the guarantee the inherited read could not give
+    // across the Overlay boundary. Every publish and every route change
+    // repaints the header, including the very first one.
+    listenable: widget.controller,
+    builder: (context, _) => _chrome(context, widget.controller),
+  );
+
+  Widget _chrome(BuildContext context, HeaderController header) {
     final chrome = header.chromeVisible;
 
     return Scaffold(

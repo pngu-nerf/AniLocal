@@ -3,6 +3,7 @@ import 'package:anilocal/ui/shell/header_controller.dart';
 import 'package:anilocal/ui/shell/header_scope.dart';
 import 'package:anilocal/ui/shell/header_spec.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 /// Mirrors `AniLocalApp`'s shell wiring for tests: one hoisted header above a
 /// Navigator, fed by pages that publish a [HeaderSpec].
@@ -14,18 +15,32 @@ class ShellHarness {
   ShellHarness() {
     controller = HeaderController(navigatorKey: navigatorKey);
     observer = HeaderRouteObserver(controller);
+    // The controller outlives the widget tree (it's app-lifetime in production),
+    // so a test must dispose it or its grace timer is left pending at teardown.
+    addTearDown(controller.dispose);
   }
 
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   late final HeaderController controller;
   late final HeaderRouteObserver observer;
 
+  /// Mirrors AniLocalApp: the controller is handed to the shell directly (the
+  /// shell subscribes to it), while HeaderScope exists so PAGES can publish.
+  /// The no-transition theme is part of the wiring too, so tests see the same
+  /// instant navigation the app does.
   Widget app({required Widget home}) => MaterialApp(
     navigatorKey: navigatorKey,
     navigatorObservers: [observer],
+    theme: ThemeData(
+      pageTransitionsTheme: PageTransitionsTheme(
+        builders: {
+          for (final p in TargetPlatform.values) p: const _NoPageTransition(),
+        },
+      ),
+    ),
     builder: (context, child) => HeaderScope(
       controller: controller,
-      child: AppShell(child: child!),
+      child: AppShell(controller: controller, child: child!),
     ),
     home: home,
   );
@@ -81,4 +96,17 @@ class SilentPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+class _NoPageTransition extends PageTransitionsBuilder {
+  const _NoPageTransition();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => child;
 }
