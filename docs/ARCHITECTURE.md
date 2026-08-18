@@ -136,6 +136,19 @@ at the code site with the exact crash/symptom):
 - **Overflow clamps** (`theater_layout.dart`) and **watched-marking guards**
   (`video_zone.dart`: `_thresholdLoaded`, `_markedWatched`, the >2000ms
   seek-vs-playback heuristic).
+- **The fullscreen window's style mask** (`macos/Runner/MainFlutterWindow.swift`)
+  — never assign it in the fullscreen toggle. Doing so rebuilds the window's
+  frame view, the window loses key status, and Flutter stops receiving BOTH key
+  events and `mouseMoved`: first Escape swallowed, hidden cursor unwakeable.
+  This regressed twice. `canBecomeKey` does not save you — it grants
+  eligibility, not key status.
+  **Accepted limitation:** consequently the fullscreen window keeps macOS's
+  ROUNDED CORNERS (the desktop shows through four small arcs). Known, accepted,
+  not a bug to fix. The only alternatives are the style mask above (kills input)
+  or oversizing the window past the screen (crops the video and the control
+  bar) — both trade a cosmetic quirk for a functional cost. The corner-squaring
+  call in the runner is a documented no-op on current macOS; read the comment
+  there before touching it.
 
 **Before touching the theater, read:**
 - `docs/player-regression-checklist.md` — behavior checklist to re-verify after

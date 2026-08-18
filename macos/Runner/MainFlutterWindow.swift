@@ -11,6 +11,15 @@ class MainFlutterWindow: NSWindow {
   // fullscreen state now, so these are authoritative rather than inferred.
   private var windowedFrame: NSRect?
   private var savedPresentationOptions: NSApplication.PresentationOptions?
+  // Window chrome saved on the way in and put back on the way out. A normal
+  // NSWindow keeps its shadow and its rounded corners at any size, so resizing
+  // one to the screen still LOOKS like a window; native fullscreen used to strip
+  // these for us. Saved rather than assumed so windowed mode can never be left
+  // shadowless or square-cornered.
+  private var savedCornerRadius: CGFloat?
+  private var savedHasShadow: Bool?
+  private var savedIsOpaque: Bool?
+  private var savedBackgroundColor: NSColor?
   private var isBorderlessFullscreen = false
 
   override func awakeFromNib() {
@@ -105,21 +114,98 @@ class MainFlutterWindow: NSWindow {
     if on {
       windowedFrame = frame
       savedPresentationOptions = NSApp.presentationOptions
+      savedHasShadow = hasShadow
+      savedIsOpaque = isOpaque
+      savedBackgroundColor = backgroundColor
+
       // hideMenuBar REQUIRES hideDock (AppKit rejects it alone).
       NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+      // Hide the buttons while the window is still `.titled` — the accessors
+      // only exist on a titled window.
       setTrafficLightsHidden(true)
+
+      // ATTEMPT to square the corners — WITHOUT touching the style mask.
+      //
+      // ⚠️⚠️ KNOWN, ACCEPTED LIMITATION: THIS IS A NO-OP ON CURRENT macOS.
+      // It runs, it is harmless, and the fullscreen window STILL HAS ROUNDED
+      // CORNERS — the desktop peeks through four small corner arcs. That is a
+      // deliberately accepted cosmetic quirk, not an open bug. Everything else
+      // about fullscreen works: instant transition, first-press keyboard, cursor
+      // wake, no shadow, full screen coverage.
+      //
+      // WHY WE ACCEPT IT — read this before "fixing" the corners. There are only
+      // two ways to square them further, and both cost something real:
+      //
+      //   1. `styleMask = .borderless`. This DOES square them, and it was tried
+      //      and reverted. Assigning the style mask rebuilds the window's frame
+      //      view; the window does not re-acquire key status; a non-key window
+      //      delivers neither key events nor mouseMoved to Flutter. Result: the
+      //      first Escape is swallowed and the hidden cursor cannot be woken by
+      //      moving the mouse. This regression bit us TWICE. `canBecomeKey` does
+      //      not prevent it — that grants eligibility, not key status.
+      //   2. Oversizing the window past the screen so the rounded corners fall
+      //      off-screen. This crops the video and pushes the bottom of the
+      //      control bar out of view.
+      //
+      // A minor cosmetic quirk beats dead keyboard + cursor input, and beats
+      // cropping the picture. Rounded corners are the chosen lesser evil.
+      // **DO NOT reach for `.borderless` to fix this** without re-reading the
+      // above — it is the obvious-looking fix, and it is the one that broke
+      // input. The style mask is never touched anywhere in this toggle.
+      //
+      // The call below is kept rather than deleted because it is free, it is the
+      // correct shape if Apple's hierarchy ever makes it effective again, and
+      // deleting it would lose this explanation.
+      //
+      // ⚠️ UNSUPPORTED API. `contentView?.superview` is AppKit's private
+      // NSThemeFrame. Zeroing its layer's corner radius cannot disturb key
+      // status, the first responder, or tracking areas — which is the whole
+      // reason this shape was chosen over the style mask. On this macOS the
+      // rounding evidently comes from somewhere this does not reach (a mask
+      // layer, or the window server), hence the no-op.
+      //
+      // `wantsLayer` is deliberately NOT forced: if there is no layer, this
+      // no-ops rather than changing how the window is backed.
+      if let frameLayer = contentView?.superview?.layer {
+        savedCornerRadius = frameLayer.cornerRadius
+        frameLayer.cornerRadius = 0
+      }
+      // KILL THE EDGE SHEEN. Window shadows are independent of the style mask,
+      // so a borderless window still casts one around the screen edge.
+      hasShadow = false
+      // Opaque black backing, so if anything ever fails to cover a pixel at the
+      // edge it reads as letterboxing rather than as the desktop.
+      isOpaque = true
+      backgroundColor = .black
+
       // `frame`, not `visibleFrame`: with the menu bar hidden the whole screen
       // is ours. A single instant setFrame — no animator, no animation group.
       setFrame(screen?.frame ?? NSScreen.main?.frame ?? frame, display: true)
     } else {
-      // Restore what was there before rather than assuming "no options", so we
-      // can't strand the menu bar or Dock hidden.
+      // Restore what was there before rather than assuming defaults, so we can
+      // never strand the menu bar hidden, the window shadowless, or the corners
+      // squared. The window stayed `.titled` throughout, so there is no frame
+      // view to rebuild and no titlebar config to re-assert — which is exactly
+      // why keyboard and cursor survive the toggle now.
       NSApp.presentationOptions = savedPresentationOptions ?? []
-      savedPresentationOptions = nil
+      if let radius = savedCornerRadius,
+        let frameLayer = contentView?.superview?.layer
+      {
+        frameLayer.cornerRadius = radius
+      }
+      if let shadow = savedHasShadow { hasShadow = shadow }
+      if let opaque = savedIsOpaque { isOpaque = opaque }
+      if let colour = savedBackgroundColor { backgroundColor = colour }
       setTrafficLightsHidden(false)
       if let restored = windowedFrame {
         setFrame(restored, display: true)
       }
+
+      savedPresentationOptions = nil
+      savedCornerRadius = nil
+      savedHasShadow = nil
+      savedIsOpaque = nil
+      savedBackgroundColor = nil
     }
 
     windowChannel?.invokeMethod("fullscreenChanged", arguments: on)
@@ -146,6 +232,15 @@ class MainFlutterWindow: NSWindow {
   override func toggleFullScreen(_ sender: Any?) {
     setBorderlessFullscreen(!isBorderlessFullscreen)
   }
+
+  // Belt-and-braces, no longer load-bearing. These were added when fullscreen
+  // assigned `.borderless` (such a window is not key-eligible unless the
+  // subclass says so). That approach is gone — the window stays `.titled`, which
+  // already answers true — so these now change nothing. Kept as cheap insurance
+  // against any future change that makes the window non-titled: without them,
+  // such a window silently stops accepting keyboard input.
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { true }
 }
 
 /// Bridges macOS system media-remote events to Flutter and claims now-playing
