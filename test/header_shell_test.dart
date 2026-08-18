@@ -253,8 +253,10 @@ void main() {
     );
   });
 
-  testWidgets('a frameless route keeps the ONE header and drops only the '
-      'frame — there is no second header anywhere', (tester) async {
+  testWidgets('the player route shares the ONE header — no second header '
+      'anywhere, and nothing to toggle now every screen is frameless', (
+    tester,
+  ) async {
     final h = ShellHarness();
     await _pumpShell(
       tester,
@@ -265,15 +267,13 @@ void main() {
     await _pumpPastGrace(tester);
     expect(find.byType(XpTitleBar), findsOneWidget);
 
-    // The player: shares the header, loses the frame.
-    h.pushFrameless(const SpecPage(spec: HeaderSpec(title: 'Dragon Ball')));
+    // The player is now an ordinary route — there is no frame to opt out of.
+    h.push(const SpecPage(spec: HeaderSpec(title: 'Dragon Ball')));
     await _pumpPastGrace(tester);
     expect(
       find.byType(XpTitleBar),
       findsOneWidget,
-      reason:
-          'exactly ONE header — the player must not bring its own, and the '
-          'shell must not hide the shared one',
+      reason: 'exactly ONE header — the player brings none of its own',
     );
     expect(_readoutText('Dragon Ball'), findsOneWidget);
   });

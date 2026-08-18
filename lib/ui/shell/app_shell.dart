@@ -12,7 +12,7 @@ import 'header_spec.dart';
 /// The ONE window chrome, mounted above the Navigator and never rebuilt by
 /// navigation.
 ///
-/// Every non-theater screen used to build its own `XpScreen` → `XpWindow` →
+/// Every non-theater screen used to build its own `XpScreen` → window frame →
 /// `XpTitleBar`, so pushing a route re-mounted the whole header and the default
 /// page transition animated it along with the content — the header read as part
 /// of the page rather than part of the app. Here the frame, the title bar and
@@ -24,9 +24,8 @@ import 'header_spec.dart';
 /// `HeaderPublisher`) and this reads it.
 ///
 /// **Shape-invariant by construction.** The tree is always
-/// `Scaffold > frame > Column[header slot, Expanded(chassis > content)]`. The
-/// header slot collapses to zero height and the frame to zero width for a
-/// [ChromelessPageRoute] (the theater, which draws its own header) — the
+/// `Scaffold > Column[header slot, Expanded(chassis > content)]`. The header
+/// slot collapses to ZERO HEIGHT in fullscreen rather than being removed — the
 /// widgets change, the SHAPE does not. That matters because this sits above the
 /// Navigator: a shape change here would re-parent it, rebuilding every route.
 /// For the theater that means remounting `VideoZone` and restarting playback —
@@ -89,64 +88,41 @@ class _AppShellState extends State<AppShell> {
   );
 
   Widget _chrome(BuildContext context, HeaderController header) {
-    // TWO independent questions, deliberately not one flag:
-    //  - HEADER: shown unless the window is fullscreen. Fullscreen means
-    //    fullscreen, on every screen, not just the player.
-    //  - FRAME: shown unless the route opted out (the player), and never in
-    //    fullscreen. So the windowed player keeps the one shared header but
-    //    stays immersive — no blue edge, no rounded top, no chassis tint.
+    // ONE question now that the frame is gone everywhere: is the header shown?
+    // Not in fullscreen — fullscreen means fullscreen, on every screen.
     final headerVisible = !WindowChrome.fullscreen.value;
-    final frame = header.frameVisible && headerVisible;
 
     return Scaffold(
       // The ONE Scaffold for the shell pages. Snackbars therefore surface here,
       // app-level, instead of dying with the page that raised them.
       backgroundColor: Xp.desktop,
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          color: frame ? Xp.frameBlue : Colors.transparent,
-          borderRadius: frame
-              ? const BorderRadius.vertical(
-                  top: Radius.circular(Xp.windowRadius),
-                )
-              : BorderRadius.zero,
-        ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            frame ? Xp.frameWidth : 0,
-            0,
-            frame ? Xp.frameWidth : 0,
-            frame ? Xp.frameWidth : 0,
+      // NO WINDOW FRAME, anywhere. There used to be a blue `frameBlue` border
+      // with a rounded top and a 2px inset around every screen except the
+      // player — which meant the content rect changed width between the library
+      // and the player, so entering the theater shifted everything by the frame
+      // width. Removing the frame removes the delta at its source, and the
+      // edge-to-edge look is the one we want. The macOS window's own rounded
+      // corners clip the content, so nothing square pokes into a round window.
+      //
+      // The SURFACE is kept: content still sits on the chassis (XpChassis
+      // below). Frame gone, background unchanged.
+      body: Column(
+        children: [
+          // Fixed slot: zero-height when hidden, NEVER removed. This is the
+          // shape-invariance that lets the player's chrome collapse
+          // mid-playback — the Column keeps two children of the same types, so
+          // the Navigator below stays at index 1 and its element (and VideoZone
+          // with it) is never re-parented.
+          SizedBox(
+            height: headerVisible ? Xp.titleBarHeight : 0,
+            child: headerVisible
+                ? _TitleBar(header: header)
+                : const SizedBox.shrink(),
           ),
-          child: ClipRRect(
-            borderRadius: frame
-                ? const BorderRadius.vertical(
-                    top: Radius.circular(Xp.windowRadius),
-                  )
-                : BorderRadius.zero,
-            child: Column(
-              children: [
-                // Fixed slot: zero-height when hidden, NEVER removed. This is
-                // the shape-invariance that lets the player's chrome collapse
-                // mid-playback — the Column keeps two children of the same
-                // types, so the Navigator below stays at index 1 and its
-                // element (and VideoZone with it) is never re-parented.
-                SizedBox(
-                  height: headerVisible ? Xp.titleBarHeight : 0,
-                  child: headerVisible
-                      ? _TitleBar(header: header)
-                      : const SizedBox.shrink(),
-                ),
-                Expanded(
-                  child: XpChassis(
-                    color: frame ? Xp.frame : Xp.desktop,
-                    child: _ContentRegion(child: widget.child),
-                  ),
-                ),
-              ],
-            ),
+          Expanded(
+            child: XpChassis(child: _ContentRegion(child: widget.child)),
           ),
-        ),
+        ],
       ),
     );
   }

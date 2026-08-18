@@ -30,7 +30,6 @@ import 'widgets/multi_select_list.dart';
 import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
-import 'shell/header_controller.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -283,9 +282,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       return;
     }
     await Navigator.of(context).push(
-      // Frameless: the player shares the one hoisted header, but the window frame
-      // is dropped for it so it still reads as an immersive player.
-      FramelessPageRoute<void>(
+      MaterialPageRoute<void>(
         builder: (_) => TheaterScreen(
           series: widget.series,
           initialEpisode: e,

@@ -54,20 +54,6 @@ class HeaderController extends ChangeNotifier {
   /// because a stale action still fires its side effect.
   HeaderActions get actions => spec?.actions ?? const NoActions();
 
-  /// Whether the shell draws its window FRAME (blue edge, rounded top, chassis
-  /// tint) for the current route. False for the player, which stays immersive.
-  ///
-  /// Route-derived on purpose, not spec-derived: the route type is known at
-  /// PUSH time, before anything builds, so the frame is already gone on the
-  /// player's first frame. Publishing it in the spec would arrive a frame later
-  /// and flash a frame around the video on entry — the same lateness that made
-  /// the chrome collapse visible before.
-  ///
-  /// Note this is only the FRAME. Whether the HEADER shows is a separate
-  /// question, answered by the fullscreen signal in `AppShell` — the header
-  /// itself is now shared by every screen including the player.
-  bool get frameVisible => _top is! FramelessPageRoute;
-
   /// GROUND TRUTH for the back button — the navigator itself, never a spec.
   /// If the navigator can't be reached, this answers TRUE: an inert back button
   /// is a mild oddity, a missing one is a dead end.
@@ -144,24 +130,6 @@ class HeaderController extends ChangeNotifier {
     _graceTimer?.cancel();
     super.dispose();
   }
-}
-
-/// A route the shell renders WITHOUT its window frame.
-///
-/// The player is pushed with this. It shares the one hoisted header like every
-/// other screen — it no longer supplies a header of its own — but the blue
-/// frame, rounded top and chassis tint would make an immersive video page look
-/// like a framed document, so the frame is dropped for it. Header yes, frame
-/// no.
-///
-/// (This is narrower than it once was: while the theater still had its own
-/// header, this type suppressed the shell's chrome ENTIRELY to avoid two
-/// headers. Now only the frame is at stake.)
-///
-/// A type, not a magic string in `RouteSettings.name`, so a rename can't
-/// silently re-frame the player.
-class FramelessPageRoute<T> extends MaterialPageRoute<T> {
-  FramelessPageRoute({required super.builder, super.settings});
 }
 
 /// Feeds [HeaderController] from the navigator. Typed to [PageRoute] so dialogs

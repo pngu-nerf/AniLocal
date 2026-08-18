@@ -4,7 +4,7 @@ import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 
 /// The ONE dialog shell for the whole app: the same blue window-frame + chassis
-/// title bar as [XpWindow], the content on the chassis, and a trailing actions
+/// title bar as the app shell, the content on the chassis, and a trailing actions
 /// row (pass [XpButton]s). Every `showDialog` routes through this so dialogs are
 /// consistent and new ones get the instrument look for free.
 ///

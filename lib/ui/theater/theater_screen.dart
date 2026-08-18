@@ -242,7 +242,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
 
     return Scaffold(
       // The theater keeps its Material Scaffold and its own SHELL (NOT
-      // XpWindow), but it no longer builds a HEADER. There is exactly ONE
+      // the app shell's), but it no longer builds a HEADER. There is exactly ONE
       // header in the app now — the hoisted AppShell one — and this screen
       // feeds it like every other page, by publishing a HeaderSpec. Previously
       // this appBar was a SECOND header widget that traded places with the

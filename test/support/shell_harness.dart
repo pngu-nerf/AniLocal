@@ -56,12 +56,6 @@ class ShellHarness {
     navigatorKey.currentState!.push(MaterialPageRoute(builder: (_) => page));
   }
 
-  /// Push a page the shell renders WITHOUT its frame (what the player does).
-  /// It still shares the one hoisted header.
-  void pushFrameless(Widget page) {
-    navigatorKey.currentState!.push(FramelessPageRoute(builder: (_) => page));
-  }
-
   /// Drive the REAL fullscreen signal the way the runner does — a
   /// `fullscreenChanged` call on the window channel — rather than poking a
   /// private field, so tests exercise the same path production uses.

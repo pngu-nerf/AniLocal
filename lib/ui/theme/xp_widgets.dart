@@ -72,7 +72,7 @@ class ChromeLabel extends StatelessWidget {
 ///
 /// Square corners by design — the authentic chunky look, and it sidesteps
 /// Flutter's "no per-side colors with a border radius" limit. Rounded corners
-/// (the window) are handled separately by [XpWindow].
+/// (dialogs) are handled separately by [XpDialog].
 class XpBevel extends StatelessWidget {
   const XpBevel({
     super.key,
@@ -146,7 +146,7 @@ class XpPanel extends StatelessWidget {
 }
 
 /// The chassis SURFACE that content sits on inside the instrument chrome
-/// ([XpWindow], [XpDialog]). It's a flat [Material] carrying the chassis
+/// (`AppShell`, [XpDialog]). It's a flat [Material] carrying the chassis
 /// [color], NOT a bare [ColoredBox] — so `ListTile`/ink widgets inside have a
 /// real [Material] to paint their background + splashes on. (A [ColoredBox]
 /// between a `ListTile` and the far Material hid that paint and tripped the
@@ -574,62 +574,6 @@ class _HeaderCenterDelegate extends MultiChildLayoutDelegate {
   // relayout: their children are laid out inside performLayout.
   @override
   bool shouldRelayout(_HeaderCenterDelegate old) => false;
-}
-
-/// The window-chrome look: a blue active-window frame with rounded top corners,
-/// an [XpTitleBar] on top, and the content below sitting on the chrome base.
-class XpWindow extends StatelessWidget {
-  const XpWindow({
-    super.key,
-    required this.caption,
-    required this.child,
-    this.captionWidget,
-    this.titleLeading,
-    this.titleTrailing,
-  });
-
-  final String caption;
-  final Widget child;
-
-  /// Overrides the default caption rendering (e.g. the `HeaderReadout`).
-  final Widget? captionWidget;
-  final Widget? titleLeading;
-  final Widget? titleTrailing;
-
-  @override
-  Widget build(BuildContext context) {
-    const topRadius = Radius.circular(Xp.windowRadius);
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Xp.frameBlue,
-        borderRadius: BorderRadius.vertical(top: topRadius),
-      ),
-      // The blue frame shows as a slim border on the sides + bottom; the title
-      // bar covers the top, so no top padding.
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          Xp.frameWidth,
-          0,
-          Xp.frameWidth,
-          Xp.frameWidth,
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: topRadius),
-          child: Column(
-            children: [
-              XpTitleBar(
-                caption: caption,
-                captionWidget: captionWidget,
-                leading: titleLeading,
-                trailing: titleTrailing,
-              ),
-              Expanded(child: XpChassis(child: child)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// One binder-style tab for the title bar: an icon + optional title on a raised

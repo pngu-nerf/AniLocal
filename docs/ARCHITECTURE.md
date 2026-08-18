@@ -102,8 +102,10 @@ The governing test for any change: **"to change X, how many places must I edit?"
   don't fork it. (The header is the worked example, and it is now literally ONE
   widget: `AppShell` constructs the only `XpTitleBar` in the app, above the
   Navigator, and every screen — the player included — feeds it by publishing a
-  `HeaderSpec`. The player is a `FramelessPageRoute`, which drops the window
-  frame but keeps the shared header; fullscreen hides the header everywhere.)
+  `HeaderSpec`. There is no window frame on any screen — content is edge-to-edge
+  on the chassis — so nothing shifts between the library and the player;
+  fullscreen hides the header everywhere. Dialogs keep their own frame, which is
+  what makes them read as floating.)
 - **One getter for a shared value:** e.g. `Series.displayTitle` (title fallback
   policy in one place). New shared value/format → one getter/util, not inlined
   twice.

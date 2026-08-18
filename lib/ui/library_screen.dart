@@ -32,7 +32,6 @@ import 'widgets/show_cover.dart';
 import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
-import 'shell/header_controller.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -293,9 +292,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   Future<void> _play(Episode episode, Series series) async {
     await Navigator.of(context).push(
-      // Frameless: the player shares the one hoisted header, but the window frame
-      // is dropped for it so it still reads as an immersive player.
-      FramelessPageRoute<void>(
+      MaterialPageRoute<void>(
         builder: (_) => TheaterScreen(
           series: series,
           initialEpisode: episode,
