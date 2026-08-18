@@ -1,5 +1,3 @@
-import 'dart:ui' show Size;
-
 import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
@@ -15,7 +13,7 @@ import 'package:anilocal/domain/repositories/source_selection_repository.dart';
 import 'package:anilocal/domain/repositories/watch_order_repository.dart';
 import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/fake_settings.dart';
 import 'package:anilocal/domain/models/picture_mode.dart';
@@ -188,5 +186,65 @@ void main() {
       reason: 'grid must reflect the post-scan cache',
     );
     expect(find.text('Alpha'), findsOneWidget);
+  });
+
+  testWidgets('a refresh NEVER blanks the grid — content stays on screen and '
+      'no spinner appears', (tester) async {
+    // The flash: _reload() used to re-assign the FutureBuilder's future, which
+    // reset it to `waiting`, so the whole layout — grid, panel, search field —
+    // was replaced by a centred spinner for a frame and rebuilt. That also
+    // dropped the grid's scroll position. A refresh must update in place.
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repo = _MutableLib()..series = [_s(1, 'Alpha')];
+    await tester.pumpWidget(
+      AniLocalApp(
+        repository: repo,
+        fixMatch: _FakeFixMatch(),
+        watchState: repo,
+        sourceSelection: repo,
+        missing: repo,
+        showPreferences: repo,
+        settings: const FakeSettings(),
+        watchOrder: repo,
+        playback: PlaybackController(resolver: repo),
+        onScan: (_) async {
+          repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];
+          return _summary;
+        },
+        onRefreshMetadata: () async => (seriesRefreshed: 0, skipsFetched: 0),
+        onAddFolder: () async => (added: false, deniedLabel: null),
+        accessIssues: ValueNotifier<List<String>>(const []),
+        missingFolders: ValueNotifier<List<String>>(const []),
+        missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+        onOpenAccessSettings: () async => true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha'), findsOneWidget);
+
+    // Kick off a refresh and watch EVERY frame until it settles. At no point
+    // may the existing content vanish or a spinner take its place.
+    await tester.tap(find.byTooltip('Sync metadata'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.text('Alpha'),
+        findsOneWidget,
+        reason: 'the grid was blanked mid-refresh at frame $i',
+      );
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsNothing,
+        reason:
+            'a refresh must not fall back to the first-load spinner '
+            '(frame $i)',
+      );
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Bravo'), findsOneWidget, reason: 'and it did refresh');
   });
 }

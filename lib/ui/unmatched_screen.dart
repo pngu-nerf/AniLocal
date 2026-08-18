@@ -27,7 +27,11 @@ class UnmatchedScreen extends StatefulWidget {
 
 class _UnmatchedScreenState extends State<UnmatchedScreen>
     with HeaderPublisher {
-  late Future<List<IdentifiedEpisode>> _files;
+  /// NULL only until the first load arrives. A re-scan after a fix-match
+  /// assigns the new list on arrival rather than clearing this, so the list
+  /// isn't torn down to a spinner and back. See CLAUDE.md, "never clear known
+  /// content to show a loading state".
+  List<IdentifiedEpisode>? _files;
 
   @override
   void initState() {
@@ -36,8 +40,8 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
   }
 
   void _reload() {
-    setState(() {
-      _files = widget.repository.unmatchedFiles();
+    widget.repository.unmatchedFiles().then((f) {
+      if (mounted) setState(() => _files = f);
     });
   }
 
@@ -57,13 +61,13 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
   @override
   Widget build(BuildContext context) {
     publishHeader();
-    return FutureBuilder<List<IdentifiedEpisode>>(
-      future: _files,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
+    return Builder(
+      builder: (context) {
+        final files = _files;
+        // Spinner ONLY before the first load has ever arrived.
+        if (files == null) {
           return const Center(child: CircularProgressIndicator());
         }
-        final files = snapshot.data ?? const [];
         if (files.isEmpty) {
           return const Center(
             child: Text(

@@ -136,7 +136,13 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
-  late Future<List<Series>> _series;
+  /// The cached library. NULL only until the FIRST load arrives — a refresh
+  /// assigns the new list on arrival and never clears this, so the grid, the
+  /// panel and the search field are never torn down and rebuilt. (This used to
+  /// be a `Future` re-assigned in [_reload], which reset the FutureBuilder to
+  /// `waiting`, flashed the whole layout through a spinner and dropped the
+  /// grid's scroll position. See CLAUDE.md, "never clear known content".)
+  List<Series>? _series;
   // Continue-watching entries held in state (not a Future) so the layout knows
   // synchronously whether to allocate the side panel (no entries → no panel).
   List<ContinueWatching> _continueEntries = const [];
@@ -210,8 +216,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   }
 
   void _reload() {
-    setState(() {
-      _series = widget.repository.allSeries();
+    // Assign ON ARRIVAL, exactly like the three fields below — nothing is
+    // cleared, so the current library stays on screen while the new one loads.
+    widget.repository.allSeries().then((s) {
+      if (!mounted) return;
+      setState(() => _series = s);
+      _loadSeriesStats(s);
     });
     // Continue-watching: resolved off the cache into state so the panel's
     // presence (and thus the layout) is known without a FutureBuilder.
@@ -226,15 +236,13 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     widget.repository.unmatchedFiles().then((u) {
       if (mounted) setState(() => _unmatchedCount = u.length);
     });
-    _loadSeriesStats();
   }
 
   /// Per-series stats derived from one `episodesFor` read each: the library
   /// folders each show's sources occupy (for greying), and the downloaded-
   /// episode tally (in-range vs out-of-range) for the card's "⬇N of M +X" line.
   /// Reads existing cached domain state only — pure display, no schema change.
-  Future<void> _loadSeriesStats() async {
-    final series = await _series;
+  Future<void> _loadSeriesStats(List<Series> series) async {
     // Hidden episodes are excluded from the completeness count when the feature
     // is on (consistent with the show page); off → no exclusion. One read for
     // the whole grid (a series absent from the map has nothing hidden).
@@ -490,16 +498,17 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         // Search + continue-watching panel + grid share the page via the
         // composable landing layout (the seam analogous to the theater
         // zones): search pinned full-width on top, panel on the left,
-        // grid filling the rest. The one FutureBuilder resolves the
-        // cached library once; search filters that in-memory list.
+        // grid filling the rest. The cached library is held in state and
+        // updated in place; search filters that in-memory list.
         Expanded(
-          child: FutureBuilder<List<Series>>(
-            future: _series,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
+          child: Builder(
+            builder: (context) {
+              final all = _series;
+              // Spinner ONLY before the first load has ever arrived; a
+              // refresh keeps the current list on screen.
+              if (all == null) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final all = snapshot.data ?? const <Series>[];
               if (all.isEmpty) {
                 // Truly empty library — no search/panel, just onboarding.
                 return _EmptyState(
