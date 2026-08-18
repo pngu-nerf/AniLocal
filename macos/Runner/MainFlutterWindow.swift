@@ -7,6 +7,9 @@ class MainFlutterWindow: NSWindow {
   private var mediaRemote: MediaRemoteHandler?
   // Strong ref so the window-chrome channel keeps handling while the window lives.
   private var windowChannel: FlutterMethodChannel?
+  // The windowed frame to snap back to when leaving fullscreen — captured on the
+  // way in, because the custom exit animation below has to supply it itself.
+  private var preFullScreenFrame: NSRect?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -24,6 +27,11 @@ class MainFlutterWindow: NSWindow {
     self.titlebarAppearsTransparent = true
     self.titleVisibility = .hidden
     self.styleMask.insert(.fullSizeContentView)
+
+    // Own the fullscreen transition so it can be INSTANT — see the
+    // NSWindowDelegate extension below. Nothing else in the app sets a window
+    // delegate (FlutterViewController doesn't need one), so this is free.
+    self.delegate = self
 
     // Minimum window size in LOGICAL POINTS (AppKit's coordinate space is
     // points, scaled by the display's backing factor — so this is identical on
@@ -67,6 +75,64 @@ class MainFlutterWindow: NSWindow {
       messenger: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
+  }
+}
+
+/// INSTANT fullscreen transition.
+///
+/// **The problem this removes.** macOS's default `toggleFullScreen(_:)` animates
+/// the window into a new Space over roughly half a second, and it does that by
+/// showing a SNAPSHOT of the window while it animates. The live Flutter view
+/// isn't presenting for the duration, so the video sits on a held frame while
+/// libmpv keeps decoding and the audio keeps playing — then the live view comes
+/// back and the picture jumps forward to catch up. That freeze-then-jump is the
+/// system animation, not anything in our layout: the Dart side of the mode
+/// change is a plain `setState` with no animated widget anywhere in the theater
+/// layout path, so it already completes in one frame.
+///
+/// **The fix.** AppKit lets a window's delegate take over the fullscreen
+/// animation: return the window from `customWindowsTo…FullScreen(for:)` and
+/// AppKit hands us `startCustomAnimationTo…` instead of running its own. Apple's
+/// own sample animates the frame there; we simply SET it, so the window arrives
+/// at its final size in a single step and there is no window of time for the
+/// video to freeze through.
+///
+/// This keeps real native fullscreen — its own Space, menu-bar auto-hide, the
+/// green traffic light, Mission Control. Only the animation is gone.
+///
+/// The exit side has to restore the windowed frame itself (that's the deal when
+/// you take over the animation), hence [preFullScreenFrame], captured in
+/// `windowWillEnterFullScreen`.
+extension MainFlutterWindow: NSWindowDelegate {
+  func windowWillEnterFullScreen(_ notification: Notification) {
+    // Captured BEFORE the style mask changes, so it's the true windowed frame.
+    preFullScreenFrame = frame
+  }
+
+  func customWindowsToEnterFullScreen(for window: NSWindow) -> [NSWindow]? {
+    [window]
+  }
+
+  func window(
+    _ window: NSWindow,
+    startCustomAnimationToEnterFullScreenWithDuration duration: TimeInterval
+  ) {
+    // No NSAnimationContext, no `window.animator` — a direct, undecorated
+    // setFrame is the whole point. `duration` is deliberately ignored.
+    window.setFrame(window.screen?.frame ?? window.frame, display: true)
+  }
+
+  func customWindowsToExitFullScreen(for window: NSWindow) -> [NSWindow]? {
+    [window]
+  }
+
+  func window(
+    _ window: NSWindow,
+    startCustomAnimationToExitFullScreenWithDuration duration: TimeInterval
+  ) {
+    // Fall back to the current frame if we somehow never recorded one, so a
+    // missing value can never strand the window at screen size.
+    window.setFrame(preFullScreenFrame ?? window.frame, display: true)
   }
 }
 
