@@ -20,6 +20,7 @@ import 'playback/playback_controller.dart';
 import 'sync/fix_match_service.dart';
 import 'sync/library_sync.dart';
 import 'ui/app.dart';
+import 'ui/window_chrome.dart';
 
 /// Episodic formats for the AniList candidate search (cut MUSIC false-positives).
 const List<String> kEpisodicAnimeFormats = [
@@ -35,6 +36,11 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Initialize libmpv before any Player is constructed (library playback).
   MediaKit.ensureInitialized();
+  // Start listening for native window-state callbacks (fullscreen enter/exit).
+  // Installed here, once, so the signal is live before any screen reads it —
+  // WindowChrome.fullscreen is the single source of truth the theater derives
+  // its layout AND its keyboard-focus reclaim from.
+  WindowChrome.ensureInitialized();
 
   // Composition root. Read path (cache) and fill path (sync) are built
   // separately; the UI gets the repository + scan/add-folder callbacks only.

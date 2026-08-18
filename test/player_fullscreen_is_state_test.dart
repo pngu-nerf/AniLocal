@@ -172,4 +172,43 @@ void main() {
     expect(state.value.fullscreen, isFalse);
     expect(routes.pops, 0, reason: 'exiting fullscreen pops nothing');
   });
+
+  testWidgets('a fullscreen change RECLAIMS keyboard focus, so the next '
+      'Escape lands on the first press', (tester) async {
+    // The bug this guards: the macOS fullscreen transition moves the window to
+    // another Space, the NSWindow resigns/regains key, and Flutter drops the
+    // overlay's primary focus. Every other reclaim path is a pointer or mount
+    // event, so a user who toggled fullscreen and then hit Escape got nothing —
+    // the first press was swallowed and a second was needed. The reclaim now
+    // rides the fullscreen signal itself.
+    await tester.pumpWidget(app());
+    await tester.pump(); // autofocus settles
+
+    FocusNode? ownedNode() => tester
+        .widgetList<Focus>(find.byType(Focus))
+        .firstWhere((w) => w.focusNode?.debugLabel == 'AniLocal player')
+        .focusNode;
+
+    expect(ownedNode()?.hasPrimaryFocus, isTrue);
+
+    // Simulate the transition stealing focus (what the Space switch does).
+    tester.binding.focusManager.primaryFocus?.unfocus();
+    await tester.pump();
+    expect(ownedNode()?.hasPrimaryFocus, isFalse);
+
+    // The window reports it is now fullscreen -> the flag reaches the overlay.
+    state.value = state.value.copyWith(fullscreen: true);
+    await tester.pump();
+    expect(
+      ownedNode()?.hasPrimaryFocus,
+      isTrue,
+      reason: 'the fullscreen change must reclaim focus',
+    );
+
+    // …and the behavioural consequence: ONE Escape exits.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(toggles, 1, reason: 'a single Escape must exit fullscreen');
+    expect(state.value.fullscreen, isFalse);
+  });
 }

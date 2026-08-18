@@ -9,6 +9,7 @@ import '../../domain/repositories/settings_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
 import '../theme/header_readout.dart';
+import '../window_chrome.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 import '../widgets/header_actions.dart';
@@ -92,8 +93,15 @@ class _TheaterScreenState extends State<TheaterScreen> {
   /// media_kit's `toggleFullscreen(context)` used to push a root-navigator route
   /// holding a SECOND Video over the SAME VideoState, whose duplicated inherited
   /// widgets are what tripped `_dependents.isEmpty` on the way back out. Nothing
-  /// pushes or pops now: the flag hides the chrome (via the layout config) and
-  /// we ask the OS to fullscreen the window ourselves.
+  /// pushes or pops now.
+  ///
+  /// **MIRRORED FROM THE WINDOW, never predicted.** This is set only from
+  /// [WindowChrome.fullscreen] — the `NSWindowDidEnter/ExitFullScreen` signal —
+  /// so the layout changes when the window has ACTUALLY changed. Flipping it
+  /// next to the native call (what this used to do) repainted the new layout a
+  /// frame or two before the window resized, which read as a two-step
+  /// transition, and it went stale whenever the OS drove the change instead of
+  /// us (green traffic light, Ctrl-Cmd-F).
   bool _fullscreen = false;
 
   @override
@@ -101,8 +109,26 @@ class _TheaterScreenState extends State<TheaterScreen> {
     super.initState();
     _current = widget.initialEpisode;
     _railFraction = widget.config.railFraction;
+    // Follow the REAL window state. Seeded from it too, so entering the theater
+    // while the window is already fullscreen renders correctly on frame one.
+    _fullscreen = WindowChrome.fullscreen.value;
+    WindowChrome.fullscreen.addListener(_onWindowFullscreenChanged);
     _loadRailFraction();
     _loadEpisodes();
+  }
+
+  @override
+  void dispose() {
+    WindowChrome.fullscreen.removeListener(_onWindowFullscreenChanged);
+    super.dispose();
+  }
+
+  /// The window finished entering or leaving fullscreen — from ANY cause (our
+  /// ⛶ / Escape, the green traffic light, Ctrl-Cmd-F, Mission Control). One
+  /// path for all of them, which is what keeps OS-initiated changes in sync.
+  void _onWindowFullscreenChanged() {
+    if (!mounted) return;
+    setState(() => _fullscreen = WindowChrome.fullscreen.value);
   }
 
   Future<void> _loadRailFraction() async {
@@ -137,13 +163,15 @@ class _TheaterScreenState extends State<TheaterScreen> {
   /// `size == theater.size` crash. TooltipDismissOnResize is the general net;
   /// this is the deterministic one for the path we control.
   void _toggleFullscreen() {
-    final next = !_fullscreen;
+    // Ask the OS, then wait to be told. No optimistic setState: the layout must
+    // not move until the window has, or the intermediate frame shows the wrong
+    // layout at the wrong size (the two-step exit). The reply arrives on
+    // WindowChrome.fullscreen -> _onWindowFullscreenChanged.
     Tooltip.dismissAllToolTips();
-    setState(() => _fullscreen = next);
-    if (next) {
-      defaultEnterNativeFullscreen();
-    } else {
+    if (_fullscreen) {
       defaultExitNativeFullscreen();
+    } else {
+      defaultEnterNativeFullscreen();
     }
   }
 

@@ -184,6 +184,41 @@ class _PlayerControlsState extends State<PlayerControls> {
   /// rail's items are canRequestFocus:false.)
   final FocusNode _focus = FocusNode(debugLabel: 'AniLocal player');
 
+  /// Last seen fullscreen flag, to spot the TRANSITION (not the value). Seeded
+  /// EAGERLY in initState, never as a `late` initializer: a late field is
+  /// evaluated on first READ, which is inside the listener — by then it would
+  /// initialise to the NEW value and every change would compare equal, so the
+  /// reclaim would silently never fire.
+  bool _wasFullscreen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _wasFullscreen = widget.state.value.fullscreen;
+    widget.state.addListener(_onControlsState);
+  }
+
+  /// ADDITIONAL focus-reclaim path — alongside `autofocus`, `onPointerDown` and
+  /// `MouseRegion.onEnter`, none of which are removed.
+  ///
+  /// Entering or leaving fullscreen moves the window to another Space, so the
+  /// NSWindow resigns and regains key and Flutter drops the overlay's primary
+  /// focus. Every other reclaim path is a POINTER or MOUNT event, so a user who
+  /// toggles fullscreen and then reaches for the keyboard has no focused node —
+  /// the first Escape went nowhere and a second was needed. (The old
+  /// route-based fullscreen hid this by remounting the subtree, which re-ran
+  /// `autofocus`; Slice 2 removed the route, so the gap became reachable.)
+  ///
+  /// The flag now arrives from `NSWindowDidEnter/ExitFullScreen` via
+  /// WindowChrome, i.e. AFTER the window has settled — which is precisely when
+  /// a `requestFocus` sticks rather than being dropped by the transition.
+  void _onControlsState() {
+    final isFullscreen = widget.state.value.fullscreen;
+    if (isFullscreen == _wasFullscreen) return;
+    _wasFullscreen = isFullscreen;
+    if (mounted) _focus.requestFocus();
+  }
+
   void _show() {
     if (!_visible) setState(() => _visible = true);
     _idle?.cancel();
@@ -196,7 +231,18 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   @override
+  void didUpdateWidget(PlayerControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.state != oldWidget.state) {
+      oldWidget.state.removeListener(_onControlsState);
+      widget.state.addListener(_onControlsState);
+      _wasFullscreen = widget.state.value.fullscreen;
+    }
+  }
+
+  @override
   void dispose() {
+    widget.state.removeListener(_onControlsState);
     _idle?.cancel();
     _focus.dispose();
     super.dispose();

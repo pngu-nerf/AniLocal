@@ -109,6 +109,25 @@ extension MainFlutterWindow: NSWindowDelegate {
     preFullScreenFrame = frame
   }
 
+  // MARK: - The fullscreen-state signal (single source of truth for Dart)
+  //
+  // These two fire when the window has ACTUALLY finished changing state — from
+  // any cause: our ⛶ / Escape path, the green traffic light, Ctrl-Cmd-F, or
+  // Mission Control. Dart derives its layout and focus from this rather than
+  // predicting it, so:
+  //   • the layout follows the window instead of leading it (no mismatched
+  //     intermediate frame — the old two-step exit), and
+  //   • OS-initiated changes can't desync us (the green-button gap).
+  // Sent on the app's OWN channel; no new channel, no new dependency.
+
+  func windowDidEnterFullScreen(_ notification: Notification) {
+    windowChannel?.invokeMethod("fullscreenChanged", arguments: true)
+  }
+
+  func windowDidExitFullScreen(_ notification: Notification) {
+    windowChannel?.invokeMethod("fullscreenChanged", arguments: false)
+  }
+
   func customWindowsToEnterFullScreen(for window: NSWindow) -> [NSWindow]? {
     [window]
   }
