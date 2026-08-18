@@ -169,8 +169,15 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
 
   Future<void> _reload() async {
     try {
-      final enabled = await widget.settings.loadMissingEnabled();
-      final eps = await widget.repository.episodesFor(widget.series.anilistId);
+      // Independent — the missing-episodes setting doesn't gate WHICH episodes
+      // exist, only whether gaps are surfaced — so they wait together instead of
+      // one after the other. `hiddenEpisodes` below is NOT parallelised with
+      // them: it genuinely depends on `enabled`, and asking for hidden episodes
+      // we may not use would trade a real read for a saved hop.
+      final (enabled, eps) = await (
+        widget.settings.loadMissingEnabled(),
+        widget.repository.episodesFor(widget.series.anilistId),
+      ).wait;
       // The feature never applies to a not-yet-identified placeholder (no
       // AniList count, synthetic negative id) — treat it as nothing hidden.
       final hidden = (!enabled || widget.series.pending)
@@ -194,9 +201,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         _bundleSelection.clear();
         _hiddenSelection = {};
         if (hidden.isEmpty) _viewingHidden = false;
-      });
-      widget.watchOrder.upNextBySeries().then((m) {
-        if (mounted) setState(() => _next = m[widget.series.anilistId]);
+        _next = _deriveNext(eps);
       });
     } catch (_) {
       // Don't hang on the spinner — surface an error state with retry.
@@ -207,6 +212,46 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       });
     }
   }
+
+  /// The next episode to watch, derived from the list we just loaded — no
+  /// extra query.
+  ///
+  /// This mirrors `upNextBySeries()` exactly, which is: take the FURTHEST
+  /// watched anchored position, resolve the episode at `anchored + 1`
+  /// (`_resolveNext` in the repository is literally that lookup), and show it
+  /// only if it exists and is itself unwatched. A series with nothing watched
+  /// has no "next". Because `episodesFor` returns precisely those logical
+  /// episodes, built by the same `_toEpisode` with the same watch/skip lookups,
+  /// the derived Episode is the same object the query would have produced —
+  /// while the query rebuilt the WHOLE library's logical-episode map, plus every
+  /// watch and skip row, to read one entry.
+  ///
+  /// KNOWN divergence, deliberately accepted: watch-state outlives a deleted
+  /// file (it's sacred across rescans), so if the furthest-watched episode's
+  /// file is gone it isn't in `eps` and the derivation starts from the furthest
+  /// watched episode you still HAVE. The library card, still using the query,
+  /// could then suggest a later episode than this page does. The derived answer
+  /// is arguably the better one — it points at something you can actually play —
+  /// and closing the gap would cost the round-trip this removes.
+  static Episode? _deriveNext(List<Episode> eps) {
+    int? latestWatched;
+    for (final e in eps) {
+      if (!e.watched) continue;
+      if (latestWatched == null || e.anchoredNumber > latestWatched) {
+        latestWatched = e.anchoredNumber;
+      }
+    }
+    if (latestWatched == null) return null; // never started -> nothing "next"
+    for (final e in eps) {
+      if (e.anchoredNumber != latestWatched + 1) continue;
+      return e.watched ? null : e; // already watched -> caught up
+    }
+    return null; // no episode at anchored+1
+  }
+
+  /// Test hook for the derived value — see test/detail_first_load_test.dart.
+  @visibleForTesting
+  Episode? get debugNextEpisode => _next;
 
   /// Update the live search query. Also drops transient selection/expansion
   /// state so a checked bundle/hidden selection can't outlive the filtered list
