@@ -253,8 +253,8 @@ void main() {
     );
   });
 
-  testWidgets('a chromeless route collapses the shell chrome (no double '
-      'header for the theater)', (tester) async {
+  testWidgets('a frameless route keeps the ONE header and drops only the '
+      'frame — there is no second header anywhere', (tester) async {
     final h = ShellHarness();
     await _pumpShell(
       tester,
@@ -265,16 +265,17 @@ void main() {
     await _pumpPastGrace(tester);
     expect(find.byType(XpTitleBar), findsOneWidget);
 
-    h.pushChromeless(const SilentPage());
+    // The player: shares the header, loses the frame.
+    h.pushFrameless(const SpecPage(spec: HeaderSpec(title: 'Dragon Ball')));
     await _pumpPastGrace(tester);
     expect(
       find.byType(XpTitleBar),
-      findsNothing,
+      findsOneWidget,
       reason:
-          'the theater draws its own header; the shell must not stack a '
-          'second one above it',
+          'exactly ONE header — the player must not bring its own, and the '
+          'shell must not hide the shared one',
     );
-    expect(_spinnerGlyph(), findsNothing, reason: 'and must not spin either');
+    expect(_readoutText('Dragon Ball'), findsOneWidget);
   });
 
   testWidgets('the FIRST publish reaches the header with no nudge — correct '
@@ -327,8 +328,9 @@ void main() {
     expect(_readoutText('Before'), findsNothing);
   });
 
-  testWidgets('the chrome collapse is SAME-FRAME with the chromeless push — '
-      'the player never renders under a header it then loses', (tester) async {
+  testWidgets('fullscreen hides the header SAME-FRAME, everywhere', (
+    tester,
+  ) async {
     final h = ShellHarness();
     await _pumpShell(
       tester,
@@ -339,16 +341,56 @@ void main() {
     await _pumpPastGrace(tester);
     expect(find.byType(XpTitleBar), findsOneWidget);
 
-    h.pushChromeless(const SilentPage());
-    // ONE frame. If the collapse lagged, the player would mount with the header
-    // still there and then shift up into the reclaimed space.
+    await h.setFullscreen(true);
+    // ONE frame. A late collapse is what made the player mount under a header
+    // it then lost, and shift up into the reclaimed space.
     await tester.pump();
     expect(
       find.byType(XpTitleBar),
       findsNothing,
+      reason: 'fullscreen means fullscreen — no chrome, on any screen',
+    );
+
+    await h.setFullscreen(false);
+    await tester.pump();
+    expect(find.byType(XpTitleBar), findsOneWidget);
+  });
+
+  testWidgets('THE ACCEPTANCE CRITERION: collapsing the header mid-route does '
+      'NOT re-parent the content — the page State survives', (tester) async {
+    // This is the property the whole deferral was about. The player's video
+    // lives in a StatefulWidget inside the Navigator; if toggling the header
+    // re-parented the Navigator, that State would be rebuilt — which for the
+    // real theater means VideoZone remounting and playback restarting.
+    final h = ShellHarness();
+    await _pumpShell(
+      tester,
+      h.app(
+        home: const SpecPage(spec: HeaderSpec(title: 'Library')),
+      ),
+    );
+    await _pumpPastGrace(tester);
+    final pageState = tester.state(find.byType(SpecPage));
+    final contentElement = tester.element(find.byType(Navigator).last);
+
+    for (var i = 0; i < 3; i++) {
+      await h.setFullscreen(true);
+      await tester.pump();
+      await h.setFullscreen(false);
+      await tester.pump();
+    }
+
+    expect(
+      tester.state(find.byType(SpecPage)),
+      same(pageState),
+      reason: 'the page State must survive repeated header collapses',
+    );
+    expect(
+      tester.element(find.byType(Navigator).last),
+      same(contentElement),
       reason:
-          'the header must be gone on the very first frame the chromeless '
-          'route is on top',
+          'the Navigator element must never be re-parented — that is what '
+          'would remount VideoZone and restart playback',
     );
   });
 }

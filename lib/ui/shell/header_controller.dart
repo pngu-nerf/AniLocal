@@ -54,9 +54,19 @@ class HeaderController extends ChangeNotifier {
   /// because a stale action still fires its side effect.
   HeaderActions get actions => spec?.actions ?? const NoActions();
 
-  /// Whether the header should draw chrome at all. False for routes that own
-  /// their own (the theater) — see [ChromelessPageRoute].
-  bool get chromeVisible => _top is! ChromelessPageRoute;
+  /// Whether the shell draws its window FRAME (blue edge, rounded top, chassis
+  /// tint) for the current route. False for the player, which stays immersive.
+  ///
+  /// Route-derived on purpose, not spec-derived: the route type is known at
+  /// PUSH time, before anything builds, so the frame is already gone on the
+  /// player's first frame. Publishing it in the spec would arrive a frame later
+  /// and flash a frame around the video on entry — the same lateness that made
+  /// the chrome collapse visible before.
+  ///
+  /// Note this is only the FRAME. Whether the HEADER shows is a separate
+  /// question, answered by the fullscreen signal in `AppShell` — the header
+  /// itself is now shared by every screen including the player.
+  bool get frameVisible => _top is! FramelessPageRoute;
 
   /// GROUND TRUTH for the back button — the navigator itself, never a spec.
   /// If the navigator can't be reached, this answers TRUE: an inert back button
@@ -115,10 +125,8 @@ class HeaderController extends ChangeNotifier {
   /// Restart the grace clock whenever what we'd display changes.
   void _onContentChanged() {
     _graceTimer?.cancel();
-    if (title != null || !chromeVisible) {
-      // Valid content — or no readout on screen at all (a chromeless route like
-      // the theater). Either way there is nothing to spin, so don't arm a timer
-      // that would tick away behind the player for no reason.
+    if (title != null) {
+      // Valid content, so nothing to spin.
       _spinning = false;
     } else if (!_spinning) {
       _graceTimer = Timer(spinnerGrace, () {
@@ -138,18 +146,22 @@ class HeaderController extends ChangeNotifier {
   }
 }
 
-/// A route that draws its OWN chrome, so the shell collapses for it.
+/// A route the shell renders WITHOUT its window frame.
 ///
-/// The theater is pushed with this. It lives on the same navigator as the five
-/// shell pages, so without an opt-out the shell would render its header above
-/// the theater's — two headers. Marking the ROUTE (rather than having the
-/// theater publish an opt-out from `initState`) means the shell knows before
-/// the first frame, so no chrome ever flashes over the player.
+/// The player is pushed with this. It shares the one hoisted header like every
+/// other screen — it no longer supplies a header of its own — but the blue
+/// frame, rounded top and chassis tint would make an immersive video page look
+/// like a framed document, so the frame is dropped for it. Header yes, frame
+/// no.
+///
+/// (This is narrower than it once was: while the theater still had its own
+/// header, this type suppressed the shell's chrome ENTIRELY to avoid two
+/// headers. Now only the frame is at stake.)
 ///
 /// A type, not a magic string in `RouteSettings.name`, so a rename can't
-/// silently reconnect the header.
-class ChromelessPageRoute<T> extends MaterialPageRoute<T> {
-  ChromelessPageRoute({required super.builder, super.settings});
+/// silently re-frame the player.
+class FramelessPageRoute<T> extends MaterialPageRoute<T> {
+  FramelessPageRoute({required super.builder, super.settings});
 }
 
 /// Feeds [HeaderController] from the navigator. Typed to [PageRoute] so dialogs

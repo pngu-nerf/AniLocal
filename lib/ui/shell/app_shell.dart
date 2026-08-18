@@ -4,6 +4,7 @@ import '../theme/header_readout.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 import '../widgets/header_actions.dart';
+import '../window_chrome.dart';
 import 'header_controller.dart';
 import 'header_scope.dart';
 import 'header_spec.dart';
@@ -74,15 +75,28 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) => Overlay(initialEntries: [_entry]);
 
   Widget _buildShell(BuildContext context) => ListenableBuilder(
-    // EXPLICIT subscription — the guarantee the inherited read could not give
+    // EXPLICIT subscriptions — the guarantee the inherited read could not give
     // across the Overlay boundary. Every publish and every route change
     // repaints the header, including the very first one.
-    listenable: widget.controller,
+    //
+    // The fullscreen signal is merged in DIRECTLY rather than routed through a
+    // published spec: it is the same `NSWindowDidEnter/ExitFullScreen` signal
+    // that moved the window, so the header collapses on the same frame the
+    // window changes. Going via a page (setState -> publish -> notify) would
+    // land a frame later and the player would visibly shift.
+    listenable: Listenable.merge([widget.controller, WindowChrome.fullscreen]),
     builder: (context, _) => _chrome(context, widget.controller),
   );
 
   Widget _chrome(BuildContext context, HeaderController header) {
-    final chrome = header.chromeVisible;
+    // TWO independent questions, deliberately not one flag:
+    //  - HEADER: shown unless the window is fullscreen. Fullscreen means
+    //    fullscreen, on every screen, not just the player.
+    //  - FRAME: shown unless the route opted out (the player), and never in
+    //    fullscreen. So the windowed player keeps the one shared header but
+    //    stays immersive — no blue edge, no rounded top, no chassis tint.
+    final headerVisible = !WindowChrome.fullscreen.value;
+    final frame = header.frameVisible && headerVisible;
 
     return Scaffold(
       // The ONE Scaffold for the shell pages. Snackbars therefore surface here,
@@ -90,8 +104,8 @@ class _AppShellState extends State<AppShell> {
       backgroundColor: Xp.desktop,
       body: DecoratedBox(
         decoration: BoxDecoration(
-          color: chrome ? Xp.frameBlue : Colors.transparent,
-          borderRadius: chrome
+          color: frame ? Xp.frameBlue : Colors.transparent,
+          borderRadius: frame
               ? const BorderRadius.vertical(
                   top: Radius.circular(Xp.windowRadius),
                 )
@@ -99,29 +113,33 @@ class _AppShellState extends State<AppShell> {
         ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            chrome ? Xp.frameWidth : 0,
+            frame ? Xp.frameWidth : 0,
             0,
-            chrome ? Xp.frameWidth : 0,
-            chrome ? Xp.frameWidth : 0,
+            frame ? Xp.frameWidth : 0,
+            frame ? Xp.frameWidth : 0,
           ),
           child: ClipRRect(
-            borderRadius: chrome
+            borderRadius: frame
                 ? const BorderRadius.vertical(
                     top: Radius.circular(Xp.windowRadius),
                   )
                 : BorderRadius.zero,
             child: Column(
               children: [
-                // Fixed slot: zero-height when chromeless, never removed.
+                // Fixed slot: zero-height when hidden, NEVER removed. This is
+                // the shape-invariance that lets the player's chrome collapse
+                // mid-playback — the Column keeps two children of the same
+                // types, so the Navigator below stays at index 1 and its
+                // element (and VideoZone with it) is never re-parented.
                 SizedBox(
-                  height: chrome ? Xp.titleBarHeight : 0,
-                  child: chrome
+                  height: headerVisible ? Xp.titleBarHeight : 0,
+                  child: headerVisible
                       ? _TitleBar(header: header)
                       : const SizedBox.shrink(),
                 ),
                 Expanded(
                   child: XpChassis(
-                    color: chrome ? Xp.frame : Xp.desktop,
+                    color: frame ? Xp.frame : Xp.desktop,
                     child: _ContentRegion(child: widget.child),
                   ),
                 ),

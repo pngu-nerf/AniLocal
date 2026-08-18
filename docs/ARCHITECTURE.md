@@ -99,10 +99,11 @@ The governing test for any change: **"to change X, how many places must I edit?"
   (window chrome), `EpisodeTile`/`EpisodeRow` (episode rows), `ShowCover` (every
   cover), `BrandWordmark`/`HeaderReadout`/`HeaderActionsBar` (the header).
   Before adding a UI element, find the existing one and make it configurable —
-  don't fork it. (The header is the worked example: **all six screens including
-  the theater** mount the same `XpTitleBar` in its one layout — the theater
-  differs only in its *shell*, never in its header content, so there has never
-  been a second header to drift.)
+  don't fork it. (The header is the worked example, and it is now literally ONE
+  widget: `AppShell` constructs the only `XpTitleBar` in the app, above the
+  Navigator, and every screen — the player included — feeds it by publishing a
+  `HeaderSpec`. The player is a `FramelessPageRoute`, which drops the window
+  frame but keeps the shared header; fullscreen hides the header everywhere.)
 - **One getter for a shared value:** e.g. `Series.displayTitle` (title fallback
   policy in one place). New shared value/format → one getter/util, not inlined
   twice.

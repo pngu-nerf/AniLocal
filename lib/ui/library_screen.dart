@@ -293,9 +293,9 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   Future<void> _play(Episode episode, Series series) async {
     await Navigator.of(context).push(
-      // Chromeless: the theater draws its own header, so the shell collapses
-      // its chrome for this route instead of stacking a second one above it.
-      ChromelessPageRoute<void>(
+      // Frameless: the player shares the one hoisted header, but the window frame
+      // is dropped for it so it still reads as an immersive player.
+      FramelessPageRoute<void>(
         builder: (_) => TheaterScreen(
           series: series,
           initialEpisode: episode,

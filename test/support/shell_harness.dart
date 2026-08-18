@@ -2,7 +2,9 @@ import 'package:anilocal/ui/shell/app_shell.dart';
 import 'package:anilocal/ui/shell/header_controller.dart';
 import 'package:anilocal/ui/shell/header_scope.dart';
 import 'package:anilocal/ui/shell/header_spec.dart';
+import 'package:anilocal/ui/window_chrome.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Mirrors `AniLocalApp`'s shell wiring for tests: one hoisted header above a
@@ -54,10 +56,31 @@ class ShellHarness {
     navigatorKey.currentState!.push(MaterialPageRoute(builder: (_) => page));
   }
 
-  /// Push a page that opts OUT of the shell chrome (what the theater does).
-  void pushChromeless(Widget page) {
-    navigatorKey.currentState!.push(ChromelessPageRoute(builder: (_) => page));
+  /// Push a page the shell renders WITHOUT its frame (what the player does).
+  /// It still shares the one hoisted header.
+  void pushFrameless(Widget page) {
+    navigatorKey.currentState!.push(FramelessPageRoute(builder: (_) => page));
   }
+
+  /// Drive the REAL fullscreen signal the way the runner does — a
+  /// `fullscreenChanged` call on the window channel — rather than poking a
+  /// private field, so tests exercise the same path production uses.
+  Future<void> setFullscreen(bool value) async {
+    WindowChrome.ensureInitialized();
+    addTearDown(() => _sendFullscreen(false));
+    await _sendFullscreen(value);
+  }
+
+  Future<void> _sendFullscreen(bool value) => TestDefaultBinaryMessengerBinding
+      .instance
+      .defaultBinaryMessenger
+      .handlePlatformMessage(
+        'anilocal/window',
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('fullscreenChanged', value),
+        ),
+        (_) {},
+      );
 
   void pop() => navigatorKey.currentState!.pop();
 }

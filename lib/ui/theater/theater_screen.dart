@@ -6,17 +6,15 @@ import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/settings_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
-import '../theme/header_readout.dart';
 import '../window_chrome.dart';
-import '../theme/xp_tokens.dart';
-import '../theme/xp_widgets.dart';
-import '../widgets/header_actions.dart';
 import 'theater_layout.dart';
 import 'theater_layout_config.dart';
 import 'zones/episode_list_zone.dart';
 import 'zones/series_info_zone.dart';
 import 'zones/video_zone.dart';
 import '../../playback/playback_controller.dart';
+import '../shell/header_scope.dart';
+import '../shell/header_spec.dart';
 
 /// The theater watch screen: video, episode list, and series info as three
 /// self-contained zones arranged by [TheaterLayout] from a [TheaterLayoutConfig].
@@ -78,7 +76,7 @@ class TheaterScreen extends StatefulWidget {
   State<TheaterScreen> createState() => _TheaterScreenState();
 }
 
-class _TheaterScreenState extends State<TheaterScreen> {
+class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   late Episode _current;
   List<Episode>? _episodes; // null while first loading
 
@@ -188,8 +186,22 @@ class _TheaterScreenState extends State<TheaterScreen> {
   }
 
   @override
+  HeaderSpec buildHeaderSpec() => HeaderSpec(
+    title: widget.series.displayTitle,
+    actions: AppActions(
+      // Sync runs quietly from the theater (no local spinner), like detail.
+      scanning: false,
+      unmatchedCount: widget.unmatchedCount,
+      onFolders: widget.onFolders,
+      onScan: widget.onScan,
+      onUnmatched: widget.onUnmatched,
+      onSettings: widget.onSettings,
+    ),
+  );
+
+  @override
   Widget build(BuildContext context) {
-    final title = widget.series.displayTitle;
+    publishHeader();
 
     final episodes = _episodes ?? const <Episode>[];
 
@@ -229,43 +241,15 @@ class _TheaterScreenState extends State<TheaterScreen> {
         : widget.config.copyWith(railFraction: _railFraction);
 
     return Scaffold(
-      // The theater keeps its Material Scaffold and its own SHELL (NOT XpWindow
-      // — it's a pushed route, not the root window frame, and re-shelling it
-      // would drag in the fullscreen/focus/cursor machinery: see
-      // docs/header-architecture-audit.md). Only the shell differs. The header
-      // itself is the SAME XpTitleBar every other screen uses, in its standard
-      // layout — serif brand mark, window-centred VFD screen, the same
-      // label/abbreviation collapse — so the player's chrome reads identically
-      // to the rest of the app.
-      //
-      // Hidden in fullscreen: no header at all. Scaffold slots its children by
-      // id, so dropping the appBar does not disturb the body's element — the
-      // video keeps playing straight through the toggle.
-      appBar: _fullscreen
-          ? null
-          : PreferredSize(
-              preferredSize: const Size.fromHeight(Xp.titleBarHeight),
-              child: XpTitleBar(
-                caption: title,
-                captionWidget: HeaderReadout(title: title),
-                leading: XpTitleTab(
-                  icon: Icons.arrow_back,
-                  label: 'Back',
-                  tooltip: 'Back',
-                  showLabel: XpTitleBar.showsLabels(context),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                ),
-                trailing: HeaderActionsBar(
-                  // Sync runs quietly from the theater (no local spinner), like detail.
-                  scanning: false,
-                  unmatchedCount: widget.unmatchedCount,
-                  onFolders: widget.onFolders,
-                  onScan: widget.onScan,
-                  onUnmatched: widget.onUnmatched,
-                  onSettings: widget.onSettings,
-                ),
-              ),
-            ),
+      // The theater keeps its Material Scaffold and its own SHELL (NOT
+      // XpWindow), but it no longer builds a HEADER. There is exactly ONE
+      // header in the app now — the hoisted AppShell one — and this screen
+      // feeds it like every other page, by publishing a HeaderSpec. Previously
+      // this appBar was a SECOND header widget that traded places with the
+      // hoisted one on entry and exit, which is what read as "two headers
+      // swapping". The shell drops its FRAME for this route (see
+      // FramelessPageRoute) so the player still looks immersive rather than
+      // like a framed page, and hides the header outright in fullscreen.
       body: TheaterLayout(
         config: config,
         zones: zones,

@@ -10,6 +10,9 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 
 ## A. Screen shell & chrome
 - [ ] Theater opens from the detail page; shows video + series-info + episode rail (`theater_screen.dart`).
+- [ ] **The player uses the ONE hoisted header** — it builds no header of its own. Exactly one header widget is on screen entering and leaving the player, with no second bar spawning in or sliding away. The player is pushed as a `FramelessPageRoute`, so windowed it keeps the shared header but NOT the blue frame / rounded top / chassis tint — still immersive.
+- [ ] **Fullscreen hides the header everywhere** (not just in the player), driven straight from the window's fullscreen signal.
+- [ ] **Toggling fullscreen mid-playback does not restart playback** — no blink, no resume jump, no post-toggle shift. The header slot collapses to zero height rather than being removed, so the Navigator (and `VideoZone` inside it) is never re-parented. This is the acceptance criterion for the player joining the shared header.
 - [ ] Back button clears the macOS traffic lights and pops back to detail.
 - [ ] Header title reflects the series (english→romaji→native→fallback).
 - [ ] Video "stage" background stays true/near-black behind letterboxing — reads as theater, not a gap.
