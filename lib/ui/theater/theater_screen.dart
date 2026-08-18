@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:media_kit_video/media_kit_video.dart'
-    show defaultEnterNativeFullscreen, defaultExitNativeFullscreen;
 
 import '../../domain/models/episode.dart';
 import '../../domain/models/series.dart';
@@ -153,26 +151,26 @@ class _TheaterScreenState extends State<TheaterScreen> {
   ///  1. LAYOUT — [_fullscreen] drives the layout config (video only, chrome
   ///     hidden). Pure setState; the widget tree keeps its shape so the video
   ///     zone is never rebuilt (see TheaterLayout's shape-invariance note).
-  ///  2. THE OS WINDOW — the publicly-overridable native hooks media_kit exposes
-  ///     (a MethodChannel `Utils.Enter/ExitNativeFullscreen` on desktop). Same
-  ///     native behaviour as before, just called directly instead of as a side
-  ///     effect of pushing a route.
+  ///  2. THE WINDOW — [WindowChrome.setFullscreen], our own runner call. It is
+  ///     BORDERLESS fullscreen (resize to the screen, hide the menu bar + Dock),
+  ///     not a macOS fullscreen Space: the Space transition was a fixed ~400ms
+  ///     system animation that made the window change and the layout change read
+  ///     as two separate steps. Borderless has no transition, so both land
+  ///     within a frame of each other.
   ///
   /// Tooltips are dismissed FIRST, synchronously, before the OS resizes the
   /// window: a tooltip mounted across an overlay-size change is the
   /// `size == theater.size` crash. TooltipDismissOnResize is the general net;
   /// this is the deterministic one for the path we control.
   void _toggleFullscreen() {
-    // Ask the OS, then wait to be told. No optimistic setState: the layout must
-    // not move until the window has, or the intermediate frame shows the wrong
-    // layout at the wrong size (the two-step exit). The reply arrives on
+    // Ask the window, then wait to be told. No optimistic setState: the layout
+    // must not move until the window has. That used to cost a visible step
+    // because native fullscreen put a ~400ms Space transition in between;
+    // borderless fullscreen has no transition, so the reply lands within a
+    // frame and the two changes read as one motion. The reply arrives on
     // WindowChrome.fullscreen -> _onWindowFullscreenChanged.
     Tooltip.dismissAllToolTips();
-    if (_fullscreen) {
-      defaultExitNativeFullscreen();
-    } else {
-      defaultEnterNativeFullscreen();
-    }
+    WindowChrome.setFullscreen(!_fullscreen);
   }
 
   /// The host-driven swap (a list tap): point the video at [episode]. The

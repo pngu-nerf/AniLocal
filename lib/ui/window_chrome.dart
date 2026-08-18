@@ -39,23 +39,31 @@ abstract final class WindowChrome {
   static Future<void> toggleMaximize() =>
       _channel.invokeMethod<void>('toggleMaximize');
 
-  /// **THE** fullscreen truth: whether the OS window is actually fullscreen
-  /// right now, reported by `NSWindowDidEnter/ExitFullScreen` (see
-  /// `MainFlutterWindow.swift`).
+  /// **THE** fullscreen truth: whether the window is fullscreen right now,
+  /// reported by the runner every time it changes (see
+  /// `MainFlutterWindow.setBorderlessFullscreen`).
   ///
   /// Read this; never predict it. Callers used to flip their own flag next to
-  /// the native call, which meant the UI changed a frame or two BEFORE the
-  /// window did (a visibly mismatched intermediate layout, worst on exit) and
-  /// went stale entirely when the change came from the OS instead of from us
-  /// (green traffic light, Ctrl-Cmd-F, Mission Control). Deriving from this
-  /// notifier makes app-initiated and OS-initiated changes the same path.
+  /// the platform call, which meant the UI changed before the window did — a
+  /// visibly mismatched intermediate layout — and went stale when something
+  /// other than the ⛶ button drove the change. Everything now funnels through
+  /// here, including the Cmd-Ctrl-F system shortcut (the runner intercepts
+  /// `toggleFullScreen` and routes it into the same path).
   ///
-  /// It is also the moment to reclaim keyboard focus: the transition moves the
-  /// window to another Space, so the NSWindow resigns and regains key and
-  /// Flutter drops primary focus. This fires once the window has settled, which
-  /// is exactly when re-focusing sticks.
+  /// Fullscreen is BORDERLESS, not a macOS fullscreen Space: the runner resizes
+  /// the window to the screen and hides the menu bar + Dock. There is therefore
+  /// no ~400ms Space transition between the window moving and this notifier
+  /// firing — the two land within a frame of each other, which is what makes
+  /// the toggle read as one motion.
+  ///
+  /// It is also the moment to reclaim keyboard focus (see the player overlay).
   static ValueListenable<bool> get fullscreen => _fullscreen;
   static final ValueNotifier<bool> _fullscreen = ValueNotifier<bool>(false);
+
+  /// Enter or leave borderless fullscreen. Fire-and-forget: the resulting state
+  /// comes back on [fullscreen], so callers never set it themselves.
+  static Future<void> setFullscreen(bool value) =>
+      _channel.invokeMethod<void>('setFullscreen', value);
 
   static bool _initialized = false;
 

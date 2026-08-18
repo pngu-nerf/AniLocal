@@ -7,9 +7,11 @@ class MainFlutterWindow: NSWindow {
   private var mediaRemote: MediaRemoteHandler?
   // Strong ref so the window-chrome channel keeps handling while the window lives.
   private var windowChannel: FlutterMethodChannel?
-  // The windowed frame to snap back to when leaving fullscreen — captured on the
-  // way in, because the custom exit animation below has to supply it itself.
-  private var preFullScreenFrame: NSRect?
+  // Borderless-fullscreen bookkeeping. We are the ONLY actor that changes
+  // fullscreen state now, so these are authoritative rather than inferred.
+  private var windowedFrame: NSRect?
+  private var savedPresentationOptions: NSApplication.PresentationOptions?
+  private var isBorderlessFullscreen = false
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -27,11 +29,6 @@ class MainFlutterWindow: NSWindow {
     self.titlebarAppearsTransparent = true
     self.titleVisibility = .hidden
     self.styleMask.insert(.fullSizeContentView)
-
-    // Own the fullscreen transition so it can be INSTANT — see the
-    // NSWindowDelegate extension below. Nothing else in the app sets a window
-    // delegate (FlutterViewController doesn't need one), so this is free.
-    self.delegate = self
 
     // Minimum window size in LOGICAL POINTS (AppKit's coordinate space is
     // points, scaled by the display's backing factor — so this is identical on
@@ -60,6 +57,9 @@ class MainFlutterWindow: NSWindow {
       case "toggleMaximize":
         self?.zoom(nil)
         result(nil)
+      case "setFullscreen":
+        self?.setBorderlessFullscreen((call.arguments as? Bool) ?? false)
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -76,82 +76,75 @@ class MainFlutterWindow: NSWindow {
 
     super.awakeFromNib()
   }
-}
 
-/// INSTANT fullscreen transition.
-///
-/// **The problem this removes.** macOS's default `toggleFullScreen(_:)` animates
-/// the window into a new Space over roughly half a second, and it does that by
-/// showing a SNAPSHOT of the window while it animates. The live Flutter view
-/// isn't presenting for the duration, so the video sits on a held frame while
-/// libmpv keeps decoding and the audio keeps playing — then the live view comes
-/// back and the picture jumps forward to catch up. That freeze-then-jump is the
-/// system animation, not anything in our layout: the Dart side of the mode
-/// change is a plain `setState` with no animated widget anywhere in the theater
-/// layout path, so it already completes in one frame.
-///
-/// **The fix.** AppKit lets a window's delegate take over the fullscreen
-/// animation: return the window from `customWindowsTo…FullScreen(for:)` and
-/// AppKit hands us `startCustomAnimationTo…` instead of running its own. Apple's
-/// own sample animates the frame there; we simply SET it, so the window arrives
-/// at its final size in a single step and there is no window of time for the
-/// video to freeze through.
-///
-/// This keeps real native fullscreen — its own Space, menu-bar auto-hide, the
-/// green traffic light, Mission Control. Only the animation is gone.
-///
-/// The exit side has to restore the windowed frame itself (that's the deal when
-/// you take over the animation), hence [preFullScreenFrame], captured in
-/// `windowWillEnterFullScreen`.
-extension MainFlutterWindow: NSWindowDelegate {
-  func windowWillEnterFullScreen(_ notification: Notification) {
-    // Captured BEFORE the style mask changes, so it's the true windowed frame.
-    preFullScreenFrame = frame
+  // MARK: - Borderless "presentation" fullscreen
+
+  /// Fullscreen WITHOUT macOS's native fullscreen.
+  ///
+  /// `toggleFullScreen(_:)` moves the window into its own Space, and that Space
+  /// switch is a fixed ~400ms system animation we cannot shorten — long enough
+  /// that the window and our Dart layout visibly changed as two separate steps
+  /// no matter which one we drove first. Borderless has no Space and no system
+  /// transition: one `setFrame`, and Dart's repaint lands within a frame of it,
+  /// so enter and exit are a single instant motion. This is the trade mpv and
+  /// IINA make for the same reason — a player wants instant over Spaces.
+  ///
+  /// We are the ONLY actor that can change this state (there is no OS-initiated
+  /// borderless fullscreen), so `isBorderlessFullscreen` is authoritative rather
+  /// than inferred from delegate callbacks — which is why the whole
+  /// NSWindowDelegate that used to observe native transitions is gone.
+  ///
+  /// Dart is still told through the SAME `fullscreenChanged` message as before,
+  /// so `WindowChrome.fullscreen` remains the single source of truth and paths
+  /// that don't go through the ⛶ button — notably Cmd-Ctrl-F, see
+  /// `toggleFullScreen` below — stay in sync for free.
+  func setBorderlessFullscreen(_ on: Bool) {
+    guard on != isBorderlessFullscreen else { return }
+    isBorderlessFullscreen = on
+
+    if on {
+      windowedFrame = frame
+      savedPresentationOptions = NSApp.presentationOptions
+      // hideMenuBar REQUIRES hideDock (AppKit rejects it alone).
+      NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+      setTrafficLightsHidden(true)
+      // `frame`, not `visibleFrame`: with the menu bar hidden the whole screen
+      // is ours. A single instant setFrame — no animator, no animation group.
+      setFrame(screen?.frame ?? NSScreen.main?.frame ?? frame, display: true)
+    } else {
+      // Restore what was there before rather than assuming "no options", so we
+      // can't strand the menu bar or Dock hidden.
+      NSApp.presentationOptions = savedPresentationOptions ?? []
+      savedPresentationOptions = nil
+      setTrafficLightsHidden(false)
+      if let restored = windowedFrame {
+        setFrame(restored, display: true)
+      }
+    }
+
+    windowChannel?.invokeMethod("fullscreenChanged", arguments: on)
   }
 
-  // MARK: - The fullscreen-state signal (single source of truth for Dart)
-  //
-  // These two fire when the window has ACTUALLY finished changing state — from
-  // any cause: our ⛶ / Escape path, the green traffic light, Ctrl-Cmd-F, or
-  // Mission Control. Dart derives its layout and focus from this rather than
-  // predicting it, so:
-  //   • the layout follows the window instead of leading it (no mismatched
-  //     intermediate frame — the old two-step exit), and
-  //   • OS-initiated changes can't desync us (the green-button gap).
-  // Sent on the app's OWN channel; no new channel, no new dependency.
-
-  func windowDidEnterFullScreen(_ notification: Notification) {
-    windowChannel?.invokeMethod("fullscreenChanged", arguments: true)
+  /// The traffic lights float over our content (we hid the title bar but kept
+  /// the buttons), so unlike native fullscreen — where AppKit hides them for us
+  /// — borderless has to hide them itself or they sit on top of the video.
+  private func setTrafficLightsHidden(_ hidden: Bool) {
+    standardWindowButton(.closeButton)?.isHidden = hidden
+    standardWindowButton(.miniaturizeButton)?.isHidden = hidden
+    standardWindowButton(.zoomButton)?.isHidden = hidden
   }
 
-  func windowDidExitFullScreen(_ notification: Notification) {
-    windowChannel?.invokeMethod("fullscreenChanged", arguments: false)
-  }
-
-  func customWindowsToEnterFullScreen(for window: NSWindow) -> [NSWindow]? {
-    [window]
-  }
-
-  func window(
-    _ window: NSWindow,
-    startCustomAnimationToEnterFullScreenWithDuration duration: TimeInterval
-  ) {
-    // No NSAnimationContext, no `window.animator` — a direct, undecorated
-    // setFrame is the whole point. `duration` is deliberately ignored.
-    window.setFrame(window.screen?.frame ?? window.frame, display: true)
-  }
-
-  func customWindowsToExitFullScreen(for window: NSWindow) -> [NSWindow]? {
-    [window]
-  }
-
-  func window(
-    _ window: NSWindow,
-    startCustomAnimationToExitFullScreenWithDuration duration: TimeInterval
-  ) {
-    // Fall back to the current frame if we somehow never recorded one, so a
-    // missing value can never strand the window at screen size.
-    window.setFrame(preFullScreenFrame ?? window.frame, display: true)
+  /// Intercept EVERY route into AppKit's native fullscreen and redirect it to
+  /// ours. `super` is deliberately never called.
+  ///
+  /// This one override covers Cmd-Ctrl-F, the View ▸ Enter Full Screen menu
+  /// item, and option-clicking the green button — all of which call
+  /// `toggleFullScreen(_:)`. Without it the system shortcut would drop the
+  /// window into a native fullscreen Space behind our back, with our Dart state
+  /// none the wiser. Because it funnels into [setBorderlessFullscreen], the
+  /// shortcut also notifies Dart, so it behaves exactly like pressing ⛶.
+  override func toggleFullScreen(_ sender: Any?) {
+    setBorderlessFullscreen(!isBorderlessFullscreen)
   }
 }
 

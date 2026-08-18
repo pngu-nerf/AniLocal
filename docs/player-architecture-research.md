@@ -1,5 +1,16 @@
 # Player architecture research: persistent player + fullscreen-as-state
 
+> **Outcome note (added after the work shipped).** Slices 1 and 2 were built as
+> recommended, and the crash classes behaved as predicted. One recommendation
+> was superseded in practice: §3.3 assumed fullscreen-as-state would keep
+> calling macOS's *native* fullscreen. It did at first, but the native Space
+> transition is a fixed ~400ms system animation that made the window change and
+> the layout change read as two separate steps. Fullscreen is now **borderless**
+> (resize to the screen + hide menu bar/Dock, no Space) — see
+> `MainFlutterWindow.setBorderlessFullscreen`. The §4 finding about the native
+> FFI teardown race, and the §3 analysis of why the route caused the crash, both
+> stand.
+
 **Read-only research. No code was changed.** Commissioned to answer whether our
 recurring player crash class is architectural, and whether a persistent-player /
 fullscreen-as-state design is a media_kit-supported path with bounded rework.

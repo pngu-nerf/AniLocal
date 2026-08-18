@@ -132,16 +132,17 @@ re-hooked rather than deleted — three layers now:
 several attempts, tooltip definitely showing at the moment of exit, both ⛶ and
 Escape, and exiting via the macOS green button too (see the known gap below).
 
-### Known gap: exiting fullscreen from the OS
+### ~~Known gap: exiting fullscreen from the OS~~ — CLOSED
 
-media_kit has no native→Dart fullscreen callback (its macOS plugin only calls
-back for `VideoOutput.Resize`), and it never had one — the old route-based path
-had the same gap. So if you leave fullscreen via the **green traffic light** or
-**Ctrl-Cmd-F**, the window un-fullscreens while our state still says fullscreen,
-leaving the chrome hidden. Recoverable: press ⛶ or Escape once. This is parity
-with the old behaviour, not a Slice-2 regression, and the fix (an
-`NSWindowDidExitFullScreen` observer on our own `anilocal/window` channel) is a
-small follow-up in our runner — deliberately not bundled into this slice.
+This used to say the green traffic light / Ctrl-Cmd-F could un-fullscreen the
+window while our state still said fullscreen. That gap is gone, twice over:
+
+- **Cmd-Ctrl-F** and View ▸ Enter Full Screen are intercepted — the runner
+  overrides `toggleFullScreen(_:)` and routes them into our own toggle, so they
+  behave exactly like ⛶ and notify Dart.
+- **There is no OS-initiated fullscreen left to desync from.** Fullscreen is
+  borderless (resize + hide menu bar/Dock), so the app is the only actor. The
+  green button now zooms the window, which is correct borderless behaviour.
 
 > ### ⚠️ Slice 1 does NOT fix either crash. That is the design, not a failure.
 > Slice 1 only moves *who owns the player* (composition root instead of a
