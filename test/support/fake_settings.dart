@@ -53,7 +53,7 @@ class FakeSettings implements SettingsRepository {
   Future<void> setRailFraction(double fraction) async {}
 
   @override
-  Future<double> loadPanelFraction() async => 0.22;
+  Future<double> loadPanelWidth() async => 300;
   @override
-  Future<void> setPanelFraction(double fraction) async {}
+  Future<void> setPanelWidth(double width) async {}
 }

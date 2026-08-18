@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../resize_divider.dart';
@@ -15,7 +17,7 @@ const Key kContinuePanelDividerKey = Key('continue-panel-divider');
 ///
 /// Arrangement: the search field pinned full-width at the top (below the app's
 /// top bar), and below it a row of the collapsible continue-watching panel
-/// (a [LibraryLayoutConfig.panelFraction] of the width, or [collapsedPanelWidth]
+/// ([LibraryLayoutConfig.panelWidth] in points, or [collapsedPanelWidth]
 /// when collapsed, on [LibraryLayoutConfig.panelSide]) beside the grid filling
 /// the remaining space. When expanded, a draggable [ResizeDivider] — the very
 /// one the theater rail uses — sits on the boundary. Landing-page analogue of
@@ -37,7 +39,7 @@ class LibraryLayout extends StatelessWidget {
   final Map<LibraryZone, Widget> zones;
 
   /// Live-resize callback: fires continuously as the panel divider is dragged,
-  /// with the new clamped [LibraryLayoutConfig.panelFraction]. Null (or a
+  /// with the new clamped [LibraryLayoutConfig.panelWidth]. Null (or a
   /// collapsed panel) → no divider (the panel is a fixed width). Mirrors the
   /// theater's `onRailResize` and drives the same [ResizeDivider].
   final ValueChanged<double>? onPanelResize;
@@ -70,13 +72,25 @@ class LibraryLayout extends StatelessWidget {
             : [Expanded(child: grid), panelBox],
       );
     } else {
-      // Expanded: width is a fraction of the total, with the SAME overlaid
-      // draggable divider the theater uses — dragging maps the pointer back into
-      // a clamped panelFraction (so "resize the panel" stays a config change).
+      // Expanded: an ABSOLUTE width in points, with the SAME overlaid
+      // draggable divider the theater uses — dragging maps the pointer back
+      // into a clamped panelWidth. The grid takes whatever is left, so a
+      // window resize moves the GRID's edge and never the panel's width.
       below = LayoutBuilder(
         builder: (context, constraints) {
           final maxWidth = constraints.maxWidth;
-          final panelWidth = maxWidth * config.panelFraction;
+          // SAFETY ONLY, and provably inert in the real app: the panel can
+          // never eat the whole row. panelWidthMax (480) + this floor (120)
+          // is exactly the 600pt minimum WINDOW the runner enforces, so at
+          // any size the user can actually produce this clamp does nothing
+          // and the panel keeps its exact width. It exists so a window forced
+          // narrower than that minimum — only reachable in tests — degrades
+          // instead of handing the grid a negative width.
+          const minGrid = 120.0;
+          final double panelWidth = config.panelWidth.clamp(
+            0.0,
+            math.max(LibraryLayoutConfig.panelWidthMin, maxWidth - minGrid),
+          );
           final panelBox = SizedBox(width: panelWidth, child: panel);
           final panelOnLeft = config.panelSide == LibrarySide.left;
           final row = Row(
@@ -103,9 +117,9 @@ class LibraryLayout extends StatelessWidget {
                     // Dragging toward the panel's outer edge shrinks it; toward
                     // the grid grows it. Sign depends on which side it's on.
                     final signed = panelOnLeft ? dx : -dx;
-                    final next = ((panelWidth + signed) / maxWidth).clamp(
-                      LibraryLayoutConfig.panelFractionMin,
-                      LibraryLayoutConfig.panelFractionMax,
+                    final next = (panelWidth + signed).clamp(
+                      LibraryLayoutConfig.panelWidthMin,
+                      LibraryLayoutConfig.panelWidthMax,
                     );
                     onPanelResize!(next);
                   },

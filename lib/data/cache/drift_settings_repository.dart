@@ -25,12 +25,20 @@ class DriftSettingsRepository implements SettingsRepository {
   static const _showContinueWatchingKey = 'show_continue_watching';
   static const _showSearchBarKey = 'show_search_bar';
   static const _railFractionKey = 'theater_rail_fraction';
-  static const _panelFractionKey = 'continue_panel_fraction';
+
+  /// Points, not a fraction. A NEW key on purpose: the old
+  /// `continue_panel_fraction` held values like 0.15, and 0.15 read as points is
+  /// an invisible panel. Rather than guess a conversion — a fraction has no
+  /// meaning in points without a reference window width, and inventing one would
+  /// silently give people a width they never chose — the old key is simply no
+  /// longer read, so an existing install falls back to the default width once
+  /// and can drag from there. Nothing interprets the stale row; it is inert.
+  static const _panelWidthKey = 'continue_panel_width';
 
   // Default rail width matches TheaterLayoutConfig.theaterDefault; default panel
   // width matches LibraryLayoutConfig. Each screen clamps to its own drag bounds.
   static const _railFractionDefault = 0.30;
-  static const _panelFractionDefault = 0.22;
+  static const _panelWidthDefault = 300.0;
 
   @override
   Future<bool> loadContinueCollapsed() async =>
@@ -114,10 +122,10 @@ class DriftSettingsRepository implements SettingsRepository {
       _db.setSetting(_railFractionKey, '$fraction');
 
   @override
-  Future<double> loadPanelFraction() async =>
-      double.tryParse(await _db.getSetting(_panelFractionKey) ?? '') ??
-      _panelFractionDefault;
+  Future<double> loadPanelWidth() async =>
+      double.tryParse(await _db.getSetting(_panelWidthKey) ?? '') ??
+      _panelWidthDefault;
   @override
-  Future<void> setPanelFraction(double fraction) =>
-      _db.setSetting(_panelFractionKey, '$fraction');
+  Future<void> setPanelWidth(double width) =>
+      _db.setSetting(_panelWidthKey, '$width');
 }

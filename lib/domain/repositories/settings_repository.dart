@@ -57,6 +57,8 @@ abstract interface class SettingsRepository {
   Future<void> setRailFraction(double fraction);
 
   /// Continue-watching panel width (fraction); the library clamps to its bounds.
-  Future<double> loadPanelFraction();
-  Future<void> setPanelFraction(double fraction);
+  /// Continue-watching panel width in LOGICAL POINTS (absolute, not a fraction
+  /// of the window — see `LibraryLayoutConfig.panelWidth`).
+  Future<double> loadPanelWidth();
+  Future<void> setPanelWidth(double width);
 }

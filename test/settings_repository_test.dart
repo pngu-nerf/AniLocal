@@ -52,7 +52,7 @@ void main() {
     expect(await settings.loadShowContinueWatching(), isTrue);
     expect(await settings.loadShowSearchBar(), isTrue);
     expect(await settings.loadRailFraction(), 0.30);
-    expect(await settings.loadPanelFraction(), 0.22);
+    expect(await settings.loadPanelWidth(), 300);
   });
 
   test('each setting round-trips', () async {
@@ -63,7 +63,7 @@ void main() {
     await settings.setShowSearchBar(false);
     await settings.setContinueCollapsed(true);
     await settings.setRailFraction(0.45);
-    await settings.setPanelFraction(0.15);
+    await settings.setPanelWidth(260);
     await settings.setWatchedThreshold(const Duration(minutes: 2, seconds: 30));
 
     expect(await settings.loadAutoPlayNext(), isFalse);
@@ -73,7 +73,7 @@ void main() {
     expect(await settings.loadShowSearchBar(), isFalse);
     expect(await settings.loadContinueCollapsed(), isTrue);
     expect(await settings.loadRailFraction(), 0.45);
-    expect(await settings.loadPanelFraction(), 0.15);
+    expect(await settings.loadPanelWidth(), 260);
     expect(
       await settings.loadWatchedThreshold(),
       const Duration(minutes: 2, seconds: 30),

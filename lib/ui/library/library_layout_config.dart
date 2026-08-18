@@ -29,9 +29,9 @@ enum LibrarySide { left, right }
 ///  - **Collapse / expand the panel**: set [panelCollapsed] (the layout swaps to
 ///    [collapsedPanelWidth]); the panel widget reads the same flag to render a
 ///    header-only strip. Persisted across launches (reuses the old row's toggle).
-///  - **Resize the panel**: set [panelFraction] — the expanded panel is a
-///    fraction of the total width, dragged by the same [ResizeDivider] the
-///    theater rail uses and clamped to [panelFractionMin]/[panelFractionMax].
+///  - **Resize the panel**: set [panelWidth] — an absolute width in logical
+///    points, dragged by the same [ResizeDivider] the theater rail uses and
+///    clamped to [panelWidthMin]/[panelWidthMax].
 ///  - **Hide / add a zone** (e.g. no continue-watching entries): change
 ///    [visibleZones] / omit the zone from the layout's zone map.
 ///
@@ -42,14 +42,14 @@ class LibraryLayoutConfig {
   const LibraryLayoutConfig({
     this.panelSide = LibrarySide.left,
     this.panelCollapsed = false,
-    this.panelFraction = 0.22,
+    this.panelWidth = 300,
     this.collapsedPanelWidth = 44,
     this.visibleZones = const {
       LibraryZone.search,
       LibraryZone.continueWatching,
       LibraryZone.grid,
     },
-  }) : assert(panelFraction > 0 && panelFraction < 1);
+  }) : assert(panelWidth > 0);
 
   /// The side the continue-watching panel sits on (left by default).
   final LibrarySide panelSide;
@@ -58,16 +58,28 @@ class LibraryLayoutConfig {
   /// the persisted toggle relocated from the old "Continue watching" row.
   final bool panelCollapsed;
 
-  /// Expanded panel width as a fraction of the total landing width (0–1) — the
-  /// same knob shape as [TheaterLayoutConfig.railFraction], turned by the same
-  /// draggable [ResizeDivider].
-  final double panelFraction;
+  /// Expanded panel width in LOGICAL POINTS — an absolute size, not a fraction
+  /// of the window.
+  ///
+  /// It used to be a fraction, which had two faults that were really one: the
+  /// panel rescaled on every window resize (a sidebar has a natural reading
+  /// width; it shouldn't grow because you widened the window), and the
+  /// fraction-clamp guaranteed nothing real — "15% at minimum" is a usable
+  /// column on a wide display and an unreadable sliver on a narrow one. Sizing
+  /// in points fixes both: the panel keeps the width you gave it and the GRID
+  /// absorbs window resizes, and the clamp below is a genuine minimum.
+  final double panelWidth;
 
-  /// Drag bounds for the panel. The divider clamps [panelFraction] to this range
-  /// so the panel can neither shrink to nothing nor crowd out the grid; a
-  /// persisted value is clamped to this on load too.
-  static const double panelFractionMin = 0.15;
-  static const double panelFractionMax = 0.4;
+  /// Drag bounds, in points. The divider clamps to this range and a persisted
+  /// value is clamped on load too.
+  ///
+  /// The minimum is deliberately modest. The app enforces a 600pt minimum WINDOW
+  /// width (`contentMinSize` in the runner), so a 220pt sidebar still leaves
+  /// ~380pt of grid at the tightest window the user can make — no proportional
+  /// cap or collapse-below-threshold rule needed, because the window minimum is
+  /// already the safety net.
+  static const double panelWidthMin = 220;
+  static const double panelWidthMax = 480;
 
   /// Panel width (logical px) when collapsed (just the expand affordance).
   final double collapsedPanelWidth;
@@ -82,13 +94,13 @@ class LibraryLayoutConfig {
   LibraryLayoutConfig copyWith({
     LibrarySide? panelSide,
     bool? panelCollapsed,
-    double? panelFraction,
+    double? panelWidth,
     double? collapsedPanelWidth,
     Set<LibraryZone>? visibleZones,
   }) => LibraryLayoutConfig(
     panelSide: panelSide ?? this.panelSide,
     panelCollapsed: panelCollapsed ?? this.panelCollapsed,
-    panelFraction: panelFraction ?? this.panelFraction,
+    panelWidth: panelWidth ?? this.panelWidth,
     collapsedPanelWidth: collapsedPanelWidth ?? this.collapsedPanelWidth,
     visibleZones: visibleZones ?? this.visibleZones,
   );

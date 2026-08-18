@@ -173,7 +173,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   int _unmatchedCount = 0;
   // Live continue-watching panel width. Seeded from the config so the first
   // frame is correct, then overwritten by the persisted (clamped) value.
-  double _panelFraction = LibraryLayoutConfig.landingDefault.panelFraction;
+  double _panelWidth = LibraryLayoutConfig.landingDefault.panelWidth;
 
   @override
   void initState() {
@@ -183,12 +183,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     widget.settings.loadContinueCollapsed().then((c) {
       if (mounted) setState(() => _continueCollapsed = c);
     });
-    widget.settings.loadPanelFraction().then((f) {
+    widget.settings.loadPanelWidth().then((f) {
       final clamped = f.clamp(
-        LibraryLayoutConfig.panelFractionMin,
-        LibraryLayoutConfig.panelFractionMax,
+        LibraryLayoutConfig.panelWidthMin,
+        LibraryLayoutConfig.panelWidthMax,
       );
-      if (mounted) setState(() => _panelFraction = clamped);
+      if (mounted) setState(() => _panelWidth = clamped);
     });
   }
 
@@ -514,13 +514,13 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               return LibraryLayout(
                 config: LibraryLayoutConfig(
                   panelCollapsed: _continueCollapsed,
-                  panelFraction: _panelFraction,
+                  panelWidth: _panelWidth,
                 ),
                 // Same divider mechanism as the theater rail: live-resize
                 // updates the fraction; drag-end persists it.
-                onPanelResize: (f) => setState(() => _panelFraction = f),
+                onPanelResize: (w) => setState(() => _panelWidth = w),
                 onPanelResizeEnd: () =>
-                    widget.settings.setPanelFraction(_panelFraction),
+                    widget.settings.setPanelWidth(_panelWidth),
                 zones: {
                   // Search bar — hidden by the global homepage toggle.
                   if (_showSearchBar)
