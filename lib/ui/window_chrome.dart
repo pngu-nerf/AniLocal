@@ -65,6 +65,19 @@ abstract final class WindowChrome {
   static Future<void> setFullscreen(bool value) =>
       _channel.invokeMethod<void>('setFullscreen', value);
 
+  /// Declare whether a surface that can EXIT fullscreen is on screen.
+  ///
+  /// Only the player is. Borderless fullscreen hides the header and the traffic
+  /// lights, so entering it from a browsing page leaves nothing to click — the
+  /// user is trapped. Rather than crippling the green button everywhere, the
+  /// runner refuses to ENGAGE fullscreen unless this is true, and does the
+  /// ordinary macOS zoom instead.
+  ///
+  /// Turning this off while fullscreen is active exits immediately (enforced in
+  /// the runner), so a player that disappears can't strand the window.
+  static Future<void> setFullscreenAllowed(bool value) =>
+      _channel.invokeMethod<void>('setFullscreenAllowed', value);
+
   static bool _initialized = false;
 
   /// Start listening for native window-state callbacks. Call once, from the

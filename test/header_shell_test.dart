@@ -4,6 +4,7 @@ import 'package:anilocal/ui/theme/vfd_readout.dart';
 import 'package:anilocal/ui/theme/xp_widgets.dart';
 import 'package:anilocal/ui/widgets/header_actions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/shell_harness.dart';
@@ -391,6 +392,63 @@ void main() {
       reason:
           'the Navigator element must never be re-parented — that is what '
           'would remount VideoZone and restart playback',
+    );
+  });
+
+  testWidgets('ESCAPE ALWAYS EXITS FULLSCREEN, even on a page with no player '
+      'and no way back', (tester) async {
+    // The trap this closes: fullscreen hides the header AND the traffic
+    // lights, so on a browsing page there was no ⛶, no player shortcut and no
+    // window buttons — nothing left to click. Escape is the universal exit,
+    // and it is registered app-wide rather than in the player, so it works on
+    // any page and even when nothing holds focus.
+    final h = ShellHarness();
+    h.captureWindowCalls();
+    await _pumpShell(
+      tester,
+      h.app(
+        home: const SpecPage(spec: HeaderSpec(title: 'Library')),
+      ),
+    );
+    await _pumpPastGrace(tester);
+
+    await h.setFullscreen(true);
+    await tester.pump();
+    expect(find.byType(XpTitleBar), findsNothing, reason: 'no header to click');
+
+    h.windowCalls.clear();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+
+    expect(
+      h.windowCalls.map((c) => '${c.method}:${c.arguments}'),
+      contains('setFullscreen:false'),
+      reason: 'Escape must ask the window to leave fullscreen from ANY page',
+    );
+  });
+
+  testWidgets('Escape is not swallowed when we are NOT fullscreen', (
+    tester,
+  ) async {
+    final h = ShellHarness();
+    h.captureWindowCalls();
+    await _pumpShell(
+      tester,
+      h.app(
+        home: const SpecPage(spec: HeaderSpec(title: 'Library')),
+      ),
+    );
+    await _pumpPastGrace(tester);
+
+    h.windowCalls.clear();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(
+      h.windowCalls,
+      isEmpty,
+      reason:
+          'the backstop must only act while fullscreen — otherwise it '
+          'would eat Escape from dialogs and text fields',
     );
   });
 }

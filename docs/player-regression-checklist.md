@@ -13,6 +13,9 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] **The player uses the ONE hoisted header** — it builds no header of its own. Exactly one header widget is on screen entering and leaving the player, with no second bar spawning in or sliding away.
 - [ ] **No window frame anywhere** — every screen is edge-to-edge on the chassis: no blue border, no rounded-top clip, no inset. Entering/leaving the player must therefore produce NO horizontal shift (there is no frame-width delta left to cause one). Content is clipped by the macOS window's own rounded corners.
 - [ ] **Fullscreen hides the header everywhere** (not just in the player), driven straight from the window's fullscreen signal.
+- [ ] **Fullscreen only ENGAGES in the player.** On the library/detail/Sources/Unmatched/Fix-match pages the green button and `Cmd-Ctrl-F` must NOT go fullscreen — they zoom the window instead, traffic lights intact. Entering fullscreen there would hide the header AND the traffic lights, leaving no way out.
+- [ ] **Escape always exits fullscreen, from any page** — the app-wide backstop, not the player's shortcut. Verify it works with nothing focused. Escape must NOT be swallowed when not fullscreen.
+- [ ] **Leaving the player while fullscreen exits fullscreen** (the runner force-exits when the player withdraws permission), so a popped player can't strand the window.
 - [ ] **Toggling fullscreen mid-playback does not restart playback** — no blink, no resume jump, no post-toggle shift. The header slot collapses to zero height rather than being removed, so the Navigator (and `VideoZone` inside it) is never re-parented. This is the acceptance criterion for the player joining the shared header.
 - [ ] Back button clears the macOS traffic lights and pops back to detail.
 - [ ] Header title reflects the series (english→romaji→native→fallback).

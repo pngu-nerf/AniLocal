@@ -22,6 +22,8 @@ import 'package:media_kit/media_kit.dart';
 const Stream<Never> _empty = Stream<Never>.empty();
 
 class _StubPlayer implements Player {
+  int playOrPauseCalls = 0;
+
   @override
   final PlayerState state = const PlayerState();
 
@@ -55,7 +57,10 @@ class _StubPlayer implements Player {
   );
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => Future<void>.value();
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #playOrPause) playOrPauseCalls++;
+    return Future<void>.value();
+  }
 }
 
 /// Counts route pushes/pops so a fullscreen toggle can be proven route-free.
@@ -153,24 +158,31 @@ void main() {
     expect(routes.pushes + routes.pops, baseline);
   });
 
-  testWidgets('Escape exits fullscreen through the SAME action, and is a '
-      'no-op when windowed', (tester) async {
+  testWidgets('the player no longer handles Escape itself — exiting is the '
+      "app-wide backstop's job, in ONE place", (tester) async {
+    // Escape used to be handled here too. It isn't any more: `AppShell`
+    // registers a HardwareKeyboard handler that exits fullscreen before focus
+    // dispatch even reaches this overlay, so a copy here would be dead code
+    // that looks load-bearing. What this pins is that the player doesn't
+    // quietly re-acquire it — and, importantly, that Escape is not swallowed
+    // here when windowed.
     await tester.pumpWidget(app());
-    await tester.pump(); // let the overlay's owned focus settle
+    await tester.pump();
 
-    // Windowed: Escape must not toggle (and must not swallow the key).
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
-    expect(toggles, 0, reason: 'Escape only EXITS fullscreen');
+    expect(toggles, 0);
 
     state.value = state.value.copyWith(fullscreen: true);
     await tester.pump();
-
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
-    expect(toggles, 1, reason: 'Escape routes through the one toggle action');
-    expect(state.value.fullscreen, isFalse);
-    expect(routes.pops, 0, reason: 'exiting fullscreen pops nothing');
+    expect(
+      toggles,
+      0,
+      reason: 'the player must not duplicate the global Escape rule',
+    );
+    expect(routes.pops, 0, reason: 'and Escape never pops a route');
   });
 
   testWidgets('a fullscreen change RECLAIMS keyboard focus, so the next '
@@ -205,10 +217,17 @@ void main() {
       reason: 'the fullscreen change must reclaim focus',
     );
 
-    // …and the behavioural consequence: ONE Escape exits.
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    // …and the behavioural consequence: a shortcut lands on the FIRST press.
+    // (Space rather than Escape — Escape is the app-wide backstop's now, but
+    // the focus-reclaim this guards is what makes every player shortcut work.)
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump();
-    expect(toggles, 1, reason: 'a single Escape must exit fullscreen');
-    expect(state.value.fullscreen, isFalse);
+    expect(
+      (tester.widget<PlayerControls>(find.byType(PlayerControls)).player
+              as _StubPlayer)
+          .playOrPauseCalls,
+      1,
+      reason: 'a single keypress must reach the player after a mode change',
+    );
   });
 }

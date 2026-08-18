@@ -56,6 +56,29 @@ class ShellHarness {
     navigatorKey.currentState!.push(MaterialPageRoute(builder: (_) => page));
   }
 
+  /// Records `setFullscreen` / `setFullscreenAllowed` calls the app makes to
+  /// the runner, so tests can assert on the REQUEST as well as the resulting
+  /// state.
+  final List<MethodCall> windowCalls = [];
+
+  /// Intercept the window channel. Call before pumping.
+  void captureWindowCalls() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('anilocal/window'), (
+          call,
+        ) async {
+          windowCalls.add(call);
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('anilocal/window'),
+            null,
+          ),
+    );
+  }
+
   /// Drive the REAL fullscreen signal the way the runner does — a
   /// `fullscreenChanged` call on the window channel — rather than poking a
   /// private field, so tests exercise the same path production uses.

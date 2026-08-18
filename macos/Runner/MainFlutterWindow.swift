@@ -21,6 +21,10 @@ class MainFlutterWindow: NSWindow {
   private var savedIsOpaque: Bool?
   private var savedBackgroundColor: NSColor?
   private var isBorderlessFullscreen = false
+  /// Whether borderless fullscreen may be ENTERED right now. Dart sets this
+  /// true only while the player is on screen — see the toggleFullScreen
+  /// override for why entering anywhere else is a trap.
+  private var fullscreenAllowed = false
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -68,6 +72,9 @@ class MainFlutterWindow: NSWindow {
         result(nil)
       case "setFullscreen":
         self?.setBorderlessFullscreen((call.arguments as? Bool) ?? false)
+        result(nil)
+      case "setFullscreenAllowed":
+        self?.setFullscreenAllowed((call.arguments as? Bool) ?? false)
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
@@ -223,14 +230,46 @@ class MainFlutterWindow: NSWindow {
   /// Intercept EVERY route into AppKit's native fullscreen and redirect it to
   /// ours. `super` is deliberately never called.
   ///
-  /// This one override covers Cmd-Ctrl-F, the View ▸ Enter Full Screen menu
-  /// item, and option-clicking the green button — all of which call
-  /// `toggleFullScreen(_:)`. Without it the system shortcut would drop the
-  /// window into a native fullscreen Space behind our back, with our Dart state
-  /// none the wiser. Because it funnels into [setBorderlessFullscreen], the
-  /// shortcut also notifies Dart, so it behaves exactly like pressing ⛶.
+  /// This one override covers the green button, Cmd-Ctrl-F and the View ▸ Enter
+  /// Full Screen menu item — all of which call `toggleFullScreen(_:)`. Without
+  /// it the system would drop the window into a native fullscreen Space behind
+  /// our back, with our Dart state none the wiser.
+  ///
+  /// **Entering is SCOPED to the player; exiting never is.** Borderless
+  /// fullscreen hides the header AND the traffic lights, which is right in the
+  /// player (⛶ and Escape are both there) and a TRAP anywhere else: on a
+  /// browsing page there would be no ⛶, no player shortcuts and no traffic
+  /// lights, so nothing left to click. Rather than disable the green button
+  /// globally, the fix is that fullscreen simply does not ENGAGE where it has
+  /// no exit — outside the player the green button does the ordinary macOS
+  /// thing (zoom) and the window stays windowed with its buttons intact.
+  ///
+  /// Exit is deliberately unconditional and checked FIRST, so no state and no
+  /// ordering can ever make the window impossible to leave.
   override func toggleFullScreen(_ sender: Any?) {
-    setBorderlessFullscreen(!isBorderlessFullscreen)
+    if isBorderlessFullscreen {
+      setBorderlessFullscreen(false)
+      return
+    }
+    guard fullscreenAllowed else {
+      // Standard behaviour where standard behaviour is expected.
+      zoom(sender)
+      return
+    }
+    setBorderlessFullscreen(true)
+  }
+
+  /// Dart tells us when a fullscreen-capable surface (the player) is on screen.
+  ///
+  /// Turning permission OFF while fullscreen is active EXITS immediately. That
+  /// enforces the invariant structurally rather than asking every caller to
+  /// remember it: if the player goes away — popped, replaced, anything — the
+  /// window cannot be left fullscreen with no way out.
+  func setFullscreenAllowed(_ allowed: Bool) {
+    fullscreenAllowed = allowed
+    if !allowed && isBorderlessFullscreen {
+      setBorderlessFullscreen(false)
+    }
   }
 
   // Belt-and-braces, no longer load-bearing. These were added when fullscreen

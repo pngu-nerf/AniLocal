@@ -260,16 +260,11 @@ class _PlayerControlsState extends State<PlayerControls> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-    // Escape exits fullscreen back to the theater layout — via the SAME
-    // action the ⛶ button uses, guarded to only exit. No-op when not in
-    // fullscreen (so Escape never swallows anything else).
-    if (key == LogicalKeyboardKey.escape) {
-      if (widget.state.value.fullscreen) {
-        widget.actions.toggleFullscreen();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
+    // NOTE: Escape is deliberately NOT handled here any more. It exits
+    // fullscreen from ONE place — the app-wide backstop in `AppShell`, which
+    // runs before focus dispatch and therefore works even when nothing is
+    // focused (the state this player has historically fallen into). Handling it
+    // here as well would be dead code that looks load-bearing.
     final p = widget.player;
     if (key == LogicalKeyboardKey.space) {
       p.playOrPause();

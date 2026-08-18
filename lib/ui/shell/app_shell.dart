@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/header_readout.dart';
 import '../theme/xp_tokens.dart';
@@ -61,6 +62,38 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   late final OverlayEntry _entry = OverlayEntry(builder: _buildShell);
+
+  @override
+  void initState() {
+    super.initState();
+    // GLOBAL ESCAPE BACKSTOP — the "never trap the user" guarantee.
+    //
+    // Fullscreen hides the header and the traffic lights, so if the window is
+    // ever fullscreen with no ⛶ in reach, Escape must still get you out. The
+    // player has its own Escape, but that only exists while the player is on
+    // screen; this one exists always. Registered on HardwareKeyboard rather
+    // than in the focus tree deliberately: a focus-tree handler only sees keys
+    // that bubble up from a focused node, and "nothing is focused" is exactly
+    // the broken state a backstop has to survive.
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
+    super.dispose();
+  }
+
+  bool _onKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    if (!WindowChrome.fullscreen.value) return false;
+    // Dismiss first, then resize — a tooltip mounted across an overlay-size
+    // change is the `size == theater.size` crash (see TooltipDismissOnResize).
+    Tooltip.dismissAllToolTips();
+    WindowChrome.setFullscreen(false);
+    return true;
+  }
 
   @override
   void didUpdateWidget(AppShell oldWidget) {

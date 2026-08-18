@@ -109,6 +109,10 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     // while the window is already fullscreen renders correctly on frame one.
     _fullscreen = WindowChrome.fullscreen.value;
     WindowChrome.fullscreen.addListener(_onWindowFullscreenChanged);
+    // The player is the ONLY place fullscreen has an exit (⛶ / Escape), so it
+    // is the only place the window is allowed to enter it. Scoped to exactly
+    // this screen's lifetime; the runner force-exits when it goes away.
+    WindowChrome.setFullscreenAllowed(true);
     _loadRailFraction();
     _loadEpisodes();
   }
@@ -116,6 +120,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   @override
   void dispose() {
     WindowChrome.fullscreen.removeListener(_onWindowFullscreenChanged);
+    WindowChrome.setFullscreenAllowed(false);
     super.dispose();
   }
 
