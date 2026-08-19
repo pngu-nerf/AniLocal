@@ -17,6 +17,7 @@ class XpDialog extends StatelessWidget {
     required this.content,
     this.actions = const [],
     this.maxWidth = 460,
+    this.contentPadding = const EdgeInsets.fromLTRB(16, 14, 16, 10),
   });
 
   final String title;
@@ -25,6 +26,11 @@ class XpDialog extends StatelessWidget {
   /// Trailing action buttons (typically [XpButton]s), laid out right-aligned.
   final List<Widget> actions;
   final double maxWidth;
+
+  /// Inset around [content]. Configurable so a body that paints its own edges
+  /// (the Settings window's sidebar runs flush to the chassis) can opt out,
+  /// instead of a second dialog shell existing for that one case.
+  final EdgeInsetsGeometry contentPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -53,10 +59,7 @@ class XpDialog extends StatelessWidget {
                   // SingleChildScrollView) scrolls instead of overflowing.
                   Flexible(
                     child: XpChassis(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-                        child: content,
-                      ),
+                      child: Padding(padding: contentPadding, child: content),
                     ),
                   ),
                   if (actions.isNotEmpty)

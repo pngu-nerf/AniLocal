@@ -1,5 +1,5 @@
 import 'package:anilocal/domain/repositories/settings_repository.dart';
-import 'package:anilocal/ui/settings_dialog.dart';
+import 'package:anilocal/ui/settings/watched_threshold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The watched-threshold min:sec parser is the single gate that keeps a
