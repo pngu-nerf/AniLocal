@@ -17,7 +17,6 @@ import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'access_recovery.dart';
-import 'folders_screen.dart';
 import 'library/continue_watching_panel.dart';
 import 'library/library_layout.dart';
 import 'library/library_layout_config.dart';
@@ -34,6 +33,8 @@ import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
+import 'settings/panels/sources_panel.dart';
+import 'settings/sources_actions.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -76,11 +77,10 @@ class LibraryScreen extends StatefulWidget {
     required this.settings,
     required this.onScan,
     required this.onRefreshMetadata,
-    required this.onAddFolder,
+    required this.sources,
     required this.accessIssues,
     required this.missingFolders,
     required this.missingFolderPaths,
-    required this.onOpenAccessSettings,
   });
 
   final LibraryRepository repository;
@@ -117,7 +117,9 @@ class LibraryScreen extends StatefulWidget {
 
   /// Opens the native folder picker; reports whether a folder was added and the
   /// denied TCC category label (if the folder's category access was refused).
-  final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
+  /// Sources (folders) dependencies, as ONE object — used by this screen's
+  /// add-folder affordances and handed to the settings window's Sources tab.
+  final SourcesActions sources;
 
   /// Shared denied-state (category labels) — drives the banner; the add-dialog
   /// reads the same source via [onAddFolder]'s result.
@@ -130,8 +132,6 @@ class LibraryScreen extends StatefulWidget {
   /// Paths of those missing folders — used to grey out shows whose only
   /// sources live there.
   final ValueListenable<Set<String>> missingFolderPaths;
-
-  final Future<bool> Function() onOpenAccessSettings;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -343,29 +343,42 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     }
   }
 
-  /// The homepage entry to the shared app Settings dialog (identical to the one
+  /// The homepage entry to the shared app Settings window (identical to the one
   /// the detail page opens from its title bar).
-  Future<void> _openSettings() async {
-    await showAppSettingsDialog(
+  Future<void> _openSettings({String? category}) async {
+    final outcome = await showAppSettingsDialog(
       context,
       settings: widget.settings,
-      actions: SettingsDialogActions(
-        onRefreshMetadata: widget.onRefreshMetadata,
-        onRefreshed: _reload,
-        loadUnmatchedCount: () async => _unmatchedCount,
-        onOpenUnmatched: _openUnmatched,
-        onOpenSources: _openFolders,
-      ),
+      actions: _settingsActions(),
+      initialCategory: category,
     );
-    // Reflect any change made in the dialog: homepage-toggle visibility, and a
+    if (!mounted) return;
+    // Reflect any change made in the window: homepage-toggle visibility, and a
     // reload (the global "hide next episode" apply-to-all rewrote per-show prefs
     // that the cards render).
     await _loadHomepageToggles();
-    _reload();
+    if (!mounted) return;
+    // Sources live in the window now, so the folders page's old on-pop decision
+    // is made here instead — and it is the SAME decision. A folder added or
+    // removed means files to discover or drop, so it needs a SCAN; a pure
+    // reorder only re-ranks which copy of a duplicated episode is the default,
+    // which the next read re-resolves with no scan and no network.
+    if (outcome.sourceSetChanged) {
+      await _scan();
+    } else {
+      _reload();
+    }
   }
 
-  Future<Set<String>> _folderPaths() async =>
-      (await widget.repository.watchedFolders()).map((f) => f.path).toSet();
+  /// The per-screen hooks the settings window needs, built in ONE place so the
+  /// header's Sources action and the ⚙ action cannot drift apart.
+  SettingsDialogActions _settingsActions() => SettingsDialogActions(
+    sources: widget.sources,
+    onRefreshMetadata: widget.onRefreshMetadata,
+    onRefreshed: _reload,
+    loadUnmatchedCount: () async => _unmatchedCount,
+    onOpenUnmatched: _openUnmatched,
+  );
 
   Future<void> _scan() async {
     setState(() => _scanning = true);
@@ -415,13 +428,13 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   }
 
   Future<void> _addFolder() async {
-    final result = await widget.onAddFolder();
+    final result = await widget.sources.onAddFolder();
     if (!mounted) return;
     if (result.deniedLabel != null) {
       await showAccessDeniedDialog(
         context,
         result.deniedLabel!,
-        widget.onOpenAccessSettings,
+        widget.sources.onOpenAccessSettings,
       );
     }
     if (result.added && mounted) {
@@ -435,28 +448,10 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       '${s.unchanged} unchanged · ${s.removed} removed · '
       '${s.anilistLookups} AniList lookups';
 
-  /// Open the folders manager, then rescan iff the folder SET changed (a pure
-  /// reorder just reloads to re-resolve default sources — no scan, no network).
-  Future<void> _openFolders() async {
-    final before = await _folderPaths();
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      InstantPageRoute<void>(
-        builder: (_) => FoldersScreen(
-          repository: widget.repository,
-          onAddFolder: widget.onAddFolder,
-          onOpenAccessSettings: widget.onOpenAccessSettings,
-        ),
-      ),
-    );
-    if (!mounted) return;
-    final after = await _folderPaths();
-    if (!setEquals(before, after)) {
-      await _scan();
-    } else {
-      _reload();
-    }
-  }
+  /// The header's Sources action. Sources used to be a pushed page; it is a
+  /// settings category now, so this and the ⚙ action land in the same window —
+  /// this one just opens it already on the Sources tab.
+  Future<void> _openFolders() => _openSettings(category: sourcesCategoryId);
 
   void _openUnmatched() => Navigator.of(context).push(
     InstantPageRoute<void>(
@@ -483,7 +478,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               ? const SizedBox.shrink()
               : AccessBanner(
                   labels: labels,
-                  onOpenSettings: widget.onOpenAccessSettings,
+                  onOpenSettings: widget.sources.onOpenAccessSettings,
                   onRescan: _scanning ? () {} : _scan,
                 ),
         ),
@@ -636,7 +631,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                         unavailable: unavailable,
                         onPlay: _play,
                         onReturn: _reload,
-                        onFolders: _openFolders,
+                        sources: widget.sources,
                         onScan: _scan,
                         onUnmatched: _openUnmatched,
                         unmatchedCount: _unmatchedCount,
@@ -776,7 +771,7 @@ class _SeriesCard extends StatefulWidget {
     required this.onPlay,
     required this.onReturn,
     // Header actions forwarded to the detail screen so its header matches home.
-    required this.onFolders,
+    required this.sources,
     required this.onScan,
     required this.onUnmatched,
     required this.unmatchedCount,
@@ -814,9 +809,11 @@ class _SeriesCard extends StatefulWidget {
   final Future<void> Function(Episode, Series) onPlay;
   final VoidCallback onReturn;
 
-  /// Header actions forwarded to the detail screen (Sources / Sync / Unmatched)
-  /// so its header matches the home header. [unmatchedCount] is a snapshot.
-  final Future<void> Function() onFolders;
+  /// Forwarded so the detail screen's settings window has the Sources tab too.
+  final SourcesActions sources;
+
+  /// Header actions forwarded to the detail screen (Sync / Unmatched) so its
+  /// header matches the home header. [unmatchedCount] is a snapshot.
   final Future<void> Function() onScan;
   final VoidCallback onUnmatched;
   final int unmatchedCount;
@@ -856,7 +853,7 @@ class _SeriesCardState extends State<_SeriesCard> {
           missing: widget.missingRepo,
           settings: widget.settings,
           onRefreshMetadata: widget.onRefreshMetadata,
-          onFolders: widget.onFolders,
+          sources: widget.sources,
           onScan: widget.onScan,
           onUnmatched: widget.onUnmatched,
           unmatchedCount: widget.unmatchedCount,

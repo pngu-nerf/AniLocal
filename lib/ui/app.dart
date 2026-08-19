@@ -17,6 +17,7 @@ import 'shell/header_scope.dart';
 import 'theme/xp_theme.dart';
 import 'tooltip_dismiss_observer.dart';
 import '../playback/playback_controller.dart';
+import 'settings/sources_actions.dart';
 
 /// Dismisses tooltips on every root-navigator transition — the single guard that
 /// keeps a mounted tooltip from crashing during media_kit's fullscreen
@@ -174,11 +175,14 @@ class AniLocalApp extends StatelessWidget {
         playback: playback,
         onScan: onScan,
         onRefreshMetadata: onRefreshMetadata,
-        onAddFolder: onAddFolder,
+        sources: SourcesActions(
+          repository: repository,
+          onAddFolder: onAddFolder,
+          onOpenAccessSettings: onOpenAccessSettings,
+        ),
         accessIssues: accessIssues,
         missingFolders: missingFolders,
         missingFolderPaths: missingFolderPaths,
-        onOpenAccessSettings: onOpenAccessSettings,
       ),
     );
   }

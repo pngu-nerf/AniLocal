@@ -4,6 +4,8 @@ import '../../theme/xp_tokens.dart';
 import '../setting_row.dart';
 import '../settings_actions.dart';
 import '../settings_model.dart';
+import '../settings_shell.dart';
+import 'sources_panel.dart';
 
 /// Library: what the app knows about the collection, and its health.
 class LibraryPanel extends StatelessWidget {
@@ -78,10 +80,9 @@ class LibraryPanel extends StatelessWidget {
                 'exists in more than one folder, the highest one wins.\n\n'
                 'Reordering re-resolves which copy plays; it never moves or '
                 'deletes files, and it leaves per-episode source pins alone.',
-            onTap: () {
-              Navigator.of(context).pop();
-              actions.onOpenSources();
-            },
+            // Sources is a tab in this same window now, so this moves the
+            // window rather than closing it and pushing a page.
+            onTap: () => SettingsNavigation.goTo(context, sourcesCategoryId),
             control: const _Chevron(),
           ),
         ],

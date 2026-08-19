@@ -190,6 +190,15 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     _loadEpisodes();
   }
 
+  /// Sources opens the settings window (over the player); reordering there can
+  /// change which copy of an episode plays, and this screen holds a resolved
+  /// episode list, so it re-reads once the window closes. The caller already
+  /// refreshes the screen BELOW us — this covers the one we are on.
+  Future<void> _openSources() async {
+    await widget.onFolders();
+    if (mounted) _loadEpisodes();
+  }
+
   @override
   HeaderSpec buildHeaderSpec() => HeaderSpec(
     title: widget.series.displayTitle,
@@ -197,7 +206,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
       // Sync runs quietly from the theater (no local spinner), like detail.
       scanning: false,
       unmatchedCount: widget.unmatchedCount,
-      onFolders: widget.onFolders,
+      onFolders: _openSources,
       onScan: widget.onScan,
       onUnmatched: widget.onUnmatched,
       onSettings: widget.onSettings,

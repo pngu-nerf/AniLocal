@@ -20,6 +20,7 @@ class SettingsCategory {
     required this.label,
     required this.icon,
     required this.builder,
+    this.scrollable = true,
   });
 
   /// Stable identity for the selection. NOT an index — the list is filtered by
@@ -30,6 +31,15 @@ class SettingsCategory {
   final String label;
   final IconData icon;
   final WidgetBuilder builder;
+
+  /// False for a panel that fills the pane and scrolls ITSELF.
+  ///
+  /// Most panels are a short column and let the shell scroll them. Sources is
+  /// a reorderable list, which needs bounded height and owns its own scrolling
+  /// — nesting it inside the shell's scroll view would be an unbounded-height
+  /// error and would fight drag-autoscroll. One flag, handled generically; the
+  /// shell still has no per-category knowledge.
+  final bool scrollable;
 }
 
 /// Two-pane settings: a fixed sidebar of categories, and the selected
@@ -40,10 +50,15 @@ class SettingsCategory {
 /// out of reach. Here the panel length is bounded by its category, and the
 /// sidebar stays put no matter how far the panel scrolls.
 class SettingsShell extends StatefulWidget {
-  const SettingsShell({super.key, required this.categories})
+  const SettingsShell({super.key, required this.categories, this.initialId})
     : assert(categories.length > 0, 'the shell needs at least one category');
 
   final List<SettingsCategory> categories;
+
+  /// Category to open on. Unknown or null falls back to the first, so a
+  /// deep-link that names a category which no longer exists still opens a
+  /// valid page instead of throwing.
+  final String? initialId;
 
   /// Sidebar width, and the window size the dialog asks for. Kept here so the
   /// shell's proportions live with the shell.
@@ -56,7 +71,10 @@ class SettingsShell extends StatefulWidget {
 }
 
 class _SettingsShellState extends State<SettingsShell> {
-  late String _selectedId = widget.categories.first.id;
+  late String _selectedId =
+      widget.categories.any((c) => c.id == widget.initialId)
+      ? widget.initialId!
+      : widget.categories.first.id;
   final ScrollController _scroll = ScrollController();
 
   @override
@@ -73,12 +91,49 @@ class _SettingsShellState extends State<SettingsShell> {
     orElse: () => widget.categories.first,
   );
 
-  void _select(SettingsCategory c) {
-    if (c.id == _selectedId) return;
-    setState(() => _selectedId = c.id);
+  void _selectById(String id) {
+    if (id == _selectedId) return;
+    if (!widget.categories.any((c) => c.id == id)) return;
+    setState(() => _selectedId = id);
     // A new panel starts at its top; carrying the old scroll offset across
     // would open the next category part-way down.
     if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  Widget _panel(BuildContext context, SettingsCategory selected) {
+    const padding = EdgeInsets.fromLTRB(22, 18, 22, 18);
+    final heading = Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: ChromeLabel(
+        selected.label,
+        color: Xp.text,
+        fontSize: 13,
+        letterSpacing: 2,
+      ),
+    );
+    if (!selected.scrollable) {
+      return Padding(
+        padding: padding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            heading,
+            Expanded(child: selected.builder(context)),
+          ],
+        ),
+      );
+    }
+    return XpScrollbar(
+      controller: _scroll,
+      child: SingleChildScrollView(
+        controller: _scroll,
+        padding: padding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [heading, selected.builder(context)],
+        ),
+      ),
+    );
   }
 
   @override
@@ -98,7 +153,7 @@ class _SettingsShellState extends State<SettingsShell> {
                   _SidebarItem(
                     category: c,
                     selected: c.id == selected.id,
-                    onTap: () => _select(c),
+                    onTap: () => _selectById(c.id),
                   ),
               ],
             ),
@@ -106,29 +161,13 @@ class _SettingsShellState extends State<SettingsShell> {
         ),
         const VerticalDivider(width: 1, thickness: 1, color: Xp.divider),
         Expanded(
-          child: XpScrollbar(
-            controller: _scroll,
-            child: SingleChildScrollView(
-              controller: _scroll,
-              padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                // Keyed by category so switching pages rebuilds the panel from
-                // scratch instead of reusing the previous one's element state.
-                key: ValueKey(selected.id),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: ChromeLabel(
-                      selected.label,
-                      color: Xp.text,
-                      fontSize: 13,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  selected.builder(context),
-                ],
-              ),
+          child: SettingsNavigation(
+            select: _selectById,
+            // Keyed by category so switching pages rebuilds the panel from
+            // scratch instead of reusing the previous one's element state.
+            child: KeyedSubtree(
+              key: ValueKey(selected.id),
+              child: _panel(context, selected),
             ),
           ),
         ),
@@ -181,4 +220,27 @@ class _SidebarItem extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Lets a panel move the window to another category — the "Edit sources" row
+/// jumping to the Sources tab, for instance.
+///
+/// An inherited handle rather than a callback threaded into every panel, so
+/// [SettingsCategory] stays a plain `WidgetBuilder` and the shell keeps no
+/// per-category wiring.
+class SettingsNavigation extends InheritedWidget {
+  const SettingsNavigation({
+    super.key,
+    required this.select,
+    required super.child,
+  });
+
+  final void Function(String categoryId) select;
+
+  static void goTo(BuildContext context, String categoryId) => context
+      .dependOnInheritedWidgetOfExactType<SettingsNavigation>()
+      ?.select(categoryId);
+
+  @override
+  bool updateShouldNotify(SettingsNavigation oldWidget) => false;
 }

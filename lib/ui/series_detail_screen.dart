@@ -32,6 +32,8 @@ import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
+import 'settings/panels/sources_panel.dart';
+import 'settings/sources_actions.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -79,8 +81,8 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.missing,
     required this.settings,
     required this.onRefreshMetadata,
+    required this.sources,
     // Shared header actions, so the detail header matches the home header.
-    required this.onFolders,
     required this.onScan,
     required this.onUnmatched,
     required this.unmatchedCount,
@@ -107,9 +109,13 @@ class SeriesDetailScreen extends StatefulWidget {
   final Future<({int seriesRefreshed, int skipsFetched})> Function()
   onRefreshMetadata;
 
-  /// Shared header actions (Sources / Sync / Unmatched), forwarded so the detail
-  /// header is identical to the home header. [unmatchedCount] is a snapshot.
-  final Future<void> Function() onFolders;
+  /// Sources (folders) dependencies, forwarded so this screen's settings window
+  /// carries the same Sources tab the home one does.
+  final SourcesActions sources;
+
+  /// Shared header actions (Sync / Unmatched), forwarded so the detail header
+  /// is identical to the home header. [unmatchedCount] is a snapshot. Sources
+  /// is NOT among them any more — it opens this screen's own settings window.
   final Future<void> Function() onScan;
   final VoidCallback onUnmatched;
   final int unmatchedCount;
@@ -275,26 +281,42 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     await _reload();
   }
 
-  void _openSettings() => showAppSettingsDialog(
-    context,
-    settings: widget.settings,
-    actions: SettingsDialogActions(
-      onRefreshMetadata: widget.onRefreshMetadata,
-      onRefreshed: _reload,
-      loadUnmatchedCount: () async =>
-          (await widget.repository.unmatchedFiles()).length,
-      onOpenUnmatched: () => Navigator.of(context).push(
-        InstantPageRoute<void>(
-          builder: (_) => UnmatchedScreen(
-            repository: widget.repository,
-            fixMatch: widget.fixMatch,
+  /// The ⚙ action, and — via [_openSources] — the header's Sources action.
+  ///
+  /// AWAITED, unlike before. Sources live in this window now, and reordering
+  /// them changes which copy of a duplicated episode plays; this screen renders
+  /// those paths, so it has to re-read once the window closes. Fire-and-forget
+  /// would leave the page showing the old source until you navigated away and
+  /// back.
+  Future<void> _openSettings({String? category}) async {
+    final outcome = await showAppSettingsDialog(
+      context,
+      settings: widget.settings,
+      actions: SettingsDialogActions(
+        sources: widget.sources,
+        onRefreshMetadata: widget.onRefreshMetadata,
+        onRefreshed: _reload,
+        loadUnmatchedCount: () async =>
+            (await widget.repository.unmatchedFiles()).length,
+        onOpenUnmatched: () => Navigator.of(context).push(
+          InstantPageRoute<void>(
+            builder: (_) => UnmatchedScreen(
+              repository: widget.repository,
+              fixMatch: widget.fixMatch,
+            ),
           ),
         ),
       ),
-      // Edit Sources opens the same folders page the header does.
-      onOpenSources: widget.onFolders,
-    ),
-  );
+      initialCategory: category,
+    );
+    if (!mounted) return;
+    // A rescan is the library screen's job (it owns the scan); this screen just
+    // needs its episode list re-resolved against the new priority order.
+    if (outcome.sourcesChanged) await _reload();
+  }
+
+  /// The header's Sources action — the same window, opened on the Sources tab.
+  Future<void> _openSources() => _openSettings(category: sourcesCategoryId);
 
   /// Header "Sync" on the detail screen: run the home-provided sync, then reload
   /// this screen's data. No local spinner — the sync runs quietly.
@@ -340,7 +362,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           settings: widget.settings,
           // Same header actions as this screen — so the theater header matches.
           unmatchedCount: widget.unmatchedCount,
-          onFolders: widget.onFolders,
+          onFolders: _openSources,
           onScan: _sync,
           onUnmatched: widget.onUnmatched,
           onSettings: _openSettings,
@@ -881,7 +903,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       // No local spinner on the detail screen — sync runs quietly.
       scanning: false,
       unmatchedCount: widget.unmatchedCount,
-      onFolders: widget.onFolders,
+      onFolders: _openSources,
       onScan: _sync,
       onUnmatched: widget.onUnmatched,
       onSettings: _openSettings,

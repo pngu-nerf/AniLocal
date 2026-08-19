@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'sources_actions.dart';
+
 /// The few NON-setting, per-screen hooks the Settings window needs (the settings
 /// themselves come from the injected `SettingsRepository`). These genuinely
 /// differ per entry point — "reload THIS screen", this screen's unmatched count,
@@ -7,12 +9,16 @@ import 'package:flutter/material.dart';
 /// actual setting is single-source.
 class SettingsDialogActions {
   const SettingsDialogActions({
+    required this.sources,
     required this.onRefreshMetadata,
     required this.onRefreshed,
     required this.loadUnmatchedCount,
     required this.onOpenUnmatched,
-    required this.onOpenSources,
   });
+
+  /// Everything the Sources tab needs. One object rather than three more
+  /// threaded callbacks — see [SourcesActions].
+  final SourcesActions sources;
 
   /// Re-fetch metadata (idMal + skip data) for cached series. Returns counts.
   final Future<({int seriesRefreshed, int skipsFetched})> Function()
@@ -26,9 +32,6 @@ class SettingsDialogActions {
 
   /// Navigate to the unmatched-files screen (the window is closed first).
   final VoidCallback onOpenUnmatched;
-
-  /// Open the Sources (library folders) page — the same page the header opens.
-  final VoidCallback onOpenSources;
 }
 
 /// Re-fetch metadata + skip data for cached series (no scan, no data loss).

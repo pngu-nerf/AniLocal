@@ -23,6 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_settings.dart';
 import 'support/shell_harness.dart';
+import 'package:anilocal/ui/settings/sources_actions.dart';
 
 /// The detail page's FIRST FRAME.
 ///
@@ -176,7 +177,11 @@ Widget _app(_Repo repo) {
       missing: repo,
       settings: const FakeSettings(),
       onRefreshMetadata: () async => (seriesRefreshed: 0, skipsFetched: 0),
-      onFolders: () async {},
+      sources: SourcesActions(
+        repository: repo,
+        onAddFolder: () async => (added: false, deniedLabel: null),
+        onOpenAccessSettings: () async => false,
+      ),
       onScan: () async {},
       onUnmatched: () {},
       unmatchedCount: 0,

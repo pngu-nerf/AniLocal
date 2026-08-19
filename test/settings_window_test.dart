@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_settings.dart';
+import 'support/fake_sources.dart';
 
 /// The Settings window was rebuilt from one scrolling list of collapsibles into
 /// a two-pane sidebar shell. That was a STRUCTURAL and PRESENTATIONAL change
@@ -44,14 +45,16 @@ class _Recorder extends FakeSettings {
       writes.add('threshold=${v.inSeconds}');
 }
 
-SettingsDialogActions _actions({VoidCallback? onUnmatched}) =>
-    SettingsDialogActions(
-      onRefreshMetadata: () async => (seriesRefreshed: 0, skipsFetched: 0),
-      onRefreshed: () {},
-      loadUnmatchedCount: () async => 3,
-      onOpenUnmatched: onUnmatched ?? () {},
-      onOpenSources: () {},
-    );
+SettingsDialogActions _actions({
+  VoidCallback? onUnmatched,
+  FakeSourcesRepository? sources,
+}) => SettingsDialogActions(
+  sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
+  onRefreshMetadata: () async => (seriesRefreshed: 0, skipsFetched: 0),
+  onRefreshed: () {},
+  loadUnmatchedCount: () async => 3,
+  onOpenUnmatched: onUnmatched ?? () {},
+);
 
 Future<_Recorder> _openSettings(
   WidgetTester tester, {
