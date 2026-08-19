@@ -1,5 +1,6 @@
 import 'package:anilocal/ui/shell/app_shell.dart';
 import 'package:anilocal/ui/shell/header_controller.dart';
+import 'package:anilocal/ui/shell/instant_page_route.dart';
 import 'package:anilocal/ui/shell/header_scope.dart';
 import 'package:anilocal/ui/shell/header_spec.dart';
 import 'package:anilocal/ui/window_chrome.dart';
@@ -53,7 +54,7 @@ class ShellHarness {
   /// completes when the route is POPPED, so awaiting it in a test hangs
   /// forever. Making that un-awaitable removes the trap.
   void push(Widget page) {
-    navigatorKey.currentState!.push(MaterialPageRoute(builder: (_) => page));
+    navigatorKey.currentState!.push(InstantPageRoute(builder: (_) => page));
   }
 
   /// Records `setFullscreen` / `setFullscreenAllowed` calls the app makes to

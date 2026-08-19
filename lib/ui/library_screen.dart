@@ -32,6 +32,7 @@ import 'widgets/show_cover.dart';
 import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
+import 'shell/instant_page_route.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -300,7 +301,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   Future<void> _play(Episode episode, Series series) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      InstantPageRoute<void>(
         builder: (_) => TheaterScreen(
           series: series,
           initialEpisode: episode,
@@ -439,7 +440,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     final before = await _folderPaths();
     if (!mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      InstantPageRoute<void>(
         builder: (_) => FoldersScreen(
           repository: widget.repository,
           onAddFolder: widget.onAddFolder,
@@ -457,7 +458,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   }
 
   void _openUnmatched() => Navigator.of(context).push(
-    MaterialPageRoute<void>(
+    InstantPageRoute<void>(
       builder: (_) => UnmatchedScreen(
         repository: widget.repository,
         fixMatch: widget.fixMatch,
@@ -842,7 +843,7 @@ class _SeriesCardState extends State<_SeriesCard> {
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      InstantPageRoute<void>(
         builder: (_) => SeriesDetailScreen(
           series: widget.series,
           repository: widget.repository,

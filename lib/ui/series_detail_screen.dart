@@ -30,6 +30,7 @@ import 'widgets/multi_select_list.dart';
 import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
+import 'shell/instant_page_route.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -282,7 +283,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       loadUnmatchedCount: () async =>
           (await widget.repository.unmatchedFiles()).length,
       onOpenUnmatched: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
+        InstantPageRoute<void>(
           builder: (_) => UnmatchedScreen(
             repository: widget.repository,
             fixMatch: widget.fixMatch,
@@ -327,7 +328,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      InstantPageRoute<void>(
         builder: (_) => TheaterScreen(
           series: widget.series,
           initialEpisode: e,
@@ -356,7 +357,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
 
   Future<void> _reassignOne(Episode e) async {
     final done = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+      InstantPageRoute<bool>(
         builder: (_) => FixMatchScreen(
           fixMatch: widget.fixMatch,
           filePaths: [e.fileRef],
@@ -448,7 +449,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     // the split point minus one). Never hardcoded.
     final prior = widget.series.episodeCount ?? (from.number - 1);
     final done = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+      InstantPageRoute<bool>(
         builder: (_) => FixMatchScreen(
           fixMatch: widget.fixMatch,
           filePaths: range,

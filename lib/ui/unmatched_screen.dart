@@ -8,6 +8,7 @@ import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
+import 'shell/instant_page_route.dart';
 
 /// Lists files that matched no AniList entry (kept on record across rescans).
 /// Tapping one opens fix-match to assign it (the OPM Specials case).
@@ -47,7 +48,7 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
 
   Future<void> _fix(IdentifiedEpisode f) async {
     final done = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+      InstantPageRoute<bool>(
         builder: (_) => FixMatchScreen(
           fixMatch: widget.fixMatch,
           filePaths: [f.filePath],
