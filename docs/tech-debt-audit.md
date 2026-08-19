@@ -188,7 +188,8 @@ write may not flush. This is the intended trade-off (documented in code) — not
 so it isn't "rediscovered" as a bug.
 
 ### F4 — `ReorderableListView.onReorderItem` (folders) is a non-obvious API
-`folders_screen.dart:129` uses `onReorderItem` (index already adjusted, no `-1`)
+`settings/panels/sources_panel.dart` (was `folders_screen.dart:129`, moved into
+the settings window) uses `onReorderItem` (index already adjusted, no `-1`)
 rather than the usual `onReorder`. It compiles and works, but it's unusual enough
 that a future edit could "fix" it back to `onReorder` and reintroduce the
 off-by-one. *Verify it's a real API in the pinned Flutter and leave a comment.*

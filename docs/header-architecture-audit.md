@@ -65,7 +65,9 @@ detail** (home has none).
   already applied app-wide in `AniLocalApp`); `XpScreen` omits it and is fine.
 
 ## Approach 2 — `XpScreen` wrapper (folders, unmatched, fix-match)
-**Screens:** `folders_screen.dart`, `unmatched_screen.dart`, `fix_match_screen.dart`.
+**Screens:** `folders_screen.dart` (since REMOVED — Sources became a settings
+tab, `lib/ui/settings/panels/sources_panel.dart`), `unmatched_screen.dart`,
+`fix_match_screen.dart`.
 **Construction:** `XpScreen(title, [trailing], child)` →
 `Scaffold(backgroundColor: Xp.desktop) → body: XpWindow(captionWidget:
 HeaderReadout(title), titleLeading: back tab, titleTrailing: trailing, child)`.
