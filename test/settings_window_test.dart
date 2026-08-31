@@ -105,7 +105,11 @@ void main() {
   ) async {
     await _openSettings(tester);
 
-    // Playback is the landing panel.
+    // Sources is the landing panel (it leads the sidebar); this fake has no
+    // folders, so it shows its empty state.
+    expect(find.text('ADD A SOURCE'), findsOneWidget);
+
+    await _openCategory(tester, 'Playback');
     expect(find.text('Autoplay next episode'), findsOneWidget);
     expect(find.text('Skip intro / outro'), findsOneWidget);
     for (final mode in SkipMode.values) {
@@ -138,6 +142,7 @@ void main() {
     tester,
   ) async {
     await _openSettings(tester);
+    await _openCategory(tester, 'Playback');
     expect(find.text('Autoplay next episode'), findsOneWidget);
     expect(find.text('Search bar'), findsNothing);
 
@@ -154,6 +159,7 @@ void main() {
     tester,
   ) async {
     final settings = await _openSettings(tester);
+    await _openCategory(tester, 'Playback');
 
     await tester.tap(_switchIn('Autoplay next episode'));
     await tester.pumpAndSettle();
@@ -181,6 +187,7 @@ void main() {
 
   testWidgets('the m:ss field still gates what gets persisted', (tester) async {
     final settings = await _openSettings(tester);
+    await _openCategory(tester, 'Playback');
     final field = find.byType(TextField);
 
     await tester.enterText(field, '2:15');
@@ -217,6 +224,7 @@ void main() {
     tester,
   ) async {
     await _openSettings(tester);
+    await _openCategory(tester, 'Playback');
     const detail = '0:00 turns off automatic watched-marking entirely.';
 
     expect(

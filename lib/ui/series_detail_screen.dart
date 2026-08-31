@@ -32,7 +32,6 @@ import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
-import 'settings/panels/sources_panel.dart';
 import 'settings/sources_actions.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
@@ -281,14 +280,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     await _reload();
   }
 
-  /// The ⚙ action, and — via [_openSources] — the header's Sources action.
+  /// The header's ⚙ action — the one door to every setting, Sources included.
   ///
   /// AWAITED, unlike before. Sources live in this window now, and reordering
   /// them changes which copy of a duplicated episode plays; this screen renders
   /// those paths, so it has to re-read once the window closes. Fire-and-forget
   /// would leave the page showing the old source until you navigated away and
   /// back.
-  Future<void> _openSettings({String? category}) async {
+  Future<void> _openSettings() async {
     final outcome = await showAppSettingsDialog(
       context,
       settings: widget.settings,
@@ -307,16 +306,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           ),
         ),
       ),
-      initialCategory: category,
     );
     if (!mounted) return;
     // A rescan is the library screen's job (it owns the scan); this screen just
     // needs its episode list re-resolved against the new priority order.
     if (outcome.sourcesChanged) await _reload();
   }
-
-  /// The header's Sources action — the same window, opened on the Sources tab.
-  Future<void> _openSources() => _openSettings(category: sourcesCategoryId);
 
   /// Header "Sync" on the detail screen: run the home-provided sync, then reload
   /// this screen's data. No local spinner — the sync runs quietly.
@@ -362,7 +357,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           settings: widget.settings,
           // Same header actions as this screen — so the theater header matches.
           unmatchedCount: widget.unmatchedCount,
-          onFolders: _openSources,
           onScan: _sync,
           onUnmatched: widget.onUnmatched,
           onSettings: _openSettings,
@@ -903,7 +897,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       // No local spinner on the detail screen — sync runs quietly.
       scanning: false,
       unmatchedCount: widget.unmatchedCount,
-      onFolders: _openSources,
       onScan: _sync,
       onUnmatched: widget.onUnmatched,
       onSettings: _openSettings,

@@ -183,20 +183,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Sources is a tab in the settings window now, not a pushed page, so the
-    // header action opens the window and Done closes it. The DECISION under
-    // test is unchanged: rescan only when the folder SET moved.
+    // Sources is a tab in the settings window now, not a pushed page and no
+    // longer a header action of its own: ⚙ opens the window, which lands on
+    // Sources, and Done closes it. The DECISION under test is unchanged:
+    // rescan only when the folder SET moved.
 
-    // 1) Open Sources and close it WITHOUT changing the set.
-    await tester.tap(find.byTooltip('Media sources'));
+    // 1) Open settings and close it WITHOUT changing the set.
+    await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Sources'), findsWidgets, reason: 'opens on the tab');
+    expect(find.text('Sources'), findsWidgets, reason: 'lands on the tab');
     await tester.tap(find.text('DONE'));
     await tester.pumpAndSettle();
     expect(scans, 0, reason: 'no-op dismissal must not scan');
 
     // 2) Open it, change the set (simulate an add), then close.
-    await tester.tap(find.byTooltip('Media sources'));
+    await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     repo.folders = ['/a', '/b'];
     await tester.tap(find.text('DONE'));

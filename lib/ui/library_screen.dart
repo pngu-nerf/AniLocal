@@ -33,7 +33,6 @@ import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
-import 'settings/panels/sources_panel.dart';
 import 'settings/sources_actions.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
@@ -313,7 +312,6 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
           settings: widget.settings,
           // Same header actions as the library — so the theater header matches.
           unmatchedCount: _unmatchedCount,
-          onFolders: _openFolders,
           onScan: _scan,
           onUnmatched: _openUnmatched,
           onSettings: _openSettings,
@@ -343,14 +341,14 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     }
   }
 
-  /// The homepage entry to the shared app Settings window (identical to the one
-  /// the detail page opens from its title bar).
-  Future<void> _openSettings({String? category}) async {
+  /// The homepage ⚙ action — the shared app Settings window, identical to the
+  /// one the detail page opens from its title bar. Sources is a category in it,
+  /// so this is the only header door into it.
+  Future<void> _openSettings() async {
     final outcome = await showAppSettingsDialog(
       context,
       settings: widget.settings,
       actions: _settingsActions(),
-      initialCategory: category,
     );
     if (!mounted) return;
     // Reflect any change made in the window: homepage-toggle visibility, and a
@@ -447,11 +445,6 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       '(${s.matched} matched / ${s.unmatched} unmatched) · '
       '${s.unchanged} unchanged · ${s.removed} removed · '
       '${s.anilistLookups} AniList lookups';
-
-  /// The header's Sources action. Sources used to be a pushed page; it is a
-  /// settings category now, so this and the ⚙ action land in the same window —
-  /// this one just opens it already on the Sources tab.
-  Future<void> _openFolders() => _openSettings(category: sourcesCategoryId);
 
   void _openUnmatched() => Navigator.of(context).push(
     InstantPageRoute<void>(
@@ -573,7 +566,6 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     actions: AppActions(
       scanning: _scanning,
       unmatchedCount: _unmatchedCount,
-      onFolders: _openFolders,
       onUnmatched: _openUnmatched,
       onScan: _scan,
       onSettings: _openSettings,

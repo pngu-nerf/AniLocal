@@ -35,7 +35,6 @@ class TheaterScreen extends StatefulWidget {
     required this.playback,
     required this.settings,
     required this.unmatchedCount,
-    required this.onFolders,
     required this.onScan,
     required this.onUnmatched,
     required this.onSettings,
@@ -58,15 +57,17 @@ class TheaterScreen extends StatefulWidget {
   /// and the persisted rail-width fraction from it.
   final SettingsRepository settings;
 
-  /// The shared header actions (Sources / Sync / Unmatched / Settings), forwarded
-  /// from the launching screen so the theater header is IDENTICAL to home/detail
-  /// — same [HeaderActionsBar], only the back button differs. Sync runs quietly
-  /// here (no local spinner), like the detail screen.
+  /// The shared header actions (Sync / Unmatched / Settings), forwarded from the
+  /// launching screen so the theater header is IDENTICAL to home/detail — same
+  /// [HeaderActionsBar], only the back button differs. Sync runs quietly here
+  /// (no local spinner), like the detail screen.
+  ///
+  /// [onSettings] returns a Future so this screen can await the window: Sources
+  /// is a category inside it, and reordering sources changes which copy plays.
   final int unmatchedCount;
-  final Future<void> Function() onFolders;
   final Future<void> Function() onScan;
   final VoidCallback onUnmatched;
-  final VoidCallback onSettings;
+  final Future<void> Function() onSettings;
 
   /// The arrangement. Defaults to the YouTube-style theater; a future Settings
   /// or drag-to-resize just supplies a different config — the zones are unchanged.
@@ -190,12 +191,15 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     _loadEpisodes();
   }
 
-  /// Sources opens the settings window (over the player); reordering there can
-  /// change which copy of an episode plays, and this screen holds a resolved
-  /// episode list, so it re-reads once the window closes. The caller already
-  /// refreshes the screen BELOW us — this covers the one we are on.
-  Future<void> _openSources() async {
-    await widget.onFolders();
+  /// Settings opens over the player, and Sources is a category inside it:
+  /// reordering there can change which copy of an episode plays, and this
+  /// screen holds a resolved episode list, so it re-reads once the window
+  /// closes. The caller already refreshes the screen BELOW us — this covers the
+  /// one we are on. (The theater cannot see the window's outcome through the
+  /// forwarded callback, so it always re-reads; that is one cached query, no
+  /// scan and no network.)
+  Future<void> _openSettings() async {
+    await widget.onSettings();
     if (mounted) _loadEpisodes();
   }
 
@@ -206,10 +210,9 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
       // Sync runs quietly from the theater (no local spinner), like detail.
       scanning: false,
       unmatchedCount: widget.unmatchedCount,
-      onFolders: _openSources,
       onScan: widget.onScan,
       onUnmatched: widget.onUnmatched,
-      onSettings: widget.onSettings,
+      onSettings: _openSettings,
     ),
   );
 

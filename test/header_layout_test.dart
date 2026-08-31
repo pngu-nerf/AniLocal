@@ -46,7 +46,6 @@ HeaderSpec _spec({int unmatched = 0, String title = 'Library'}) => HeaderSpec(
   actions: AppActions(
     scanning: false,
     unmatchedCount: unmatched,
-    onFolders: () async {},
     onUnmatched: () {},
     onScan: () async {},
     onSettings: () {},
@@ -119,43 +118,35 @@ void main() {
     });
   });
 
-  testWidgets('the constraining cluster flips at the label collapse, and the '
-      'screen stays centred through it', (tester) async {
-    // Just above the threshold: labelled tabs, so the RIGHT cluster is wider
-    // and sets the half-width.
+  testWidgets('the screen stays centred and clear across the label collapse', (
+    tester,
+  ) async {
+    // The centring is symmetric about the WINDOW, so whichever cluster is
+    // wider sets the half-width — and which one that is changes with the tab
+    // labels (and with the font: the test font is wider than the real one, so
+    // this asserts the relationship, never which side happens to win).
+
+    // Just above the threshold: labelled tabs.
     await _pumpAt(tester, _screen(), Xp.headerLabelWidth + 1);
     final labelled = tester.getRect(find.byType(HeaderReadout));
-    final labelledLeftW = _leftClusterEdge(tester);
-    final labelledRightW = Xp.headerLabelWidth + 1 - _rightClusterEdge(tester);
-    expect(
-      labelledRightW,
-      greaterThan(labelledLeftW),
-      reason: 'with labels the right cluster should be the wider one',
-    );
     expect(
       labelled.left,
       moreOrLessEquals(Xp.headerLabelWidth + 1 - labelled.right, epsilon: 0.5),
     );
+    expect(labelled.left, greaterThanOrEqualTo(_leftClusterEdge(tester)));
+    expect(labelled.right, lessThanOrEqualTo(_rightClusterEdge(tester)));
 
-    // Just below: the tabs collapse to icons, the right cluster shrinks past
-    // the left one, and the LEFT cluster takes over as the constraint.
+    // Just below: the tabs collapse to icons, the constraint can swap sides,
+    // and the screen must still be centred and clear of BOTH clusters.
     await _pumpAt(tester, _screen(), Xp.headerLabelWidth - 1);
     final icons = tester.getRect(find.byType(HeaderReadout));
-    final iconLeftW = _leftClusterEdge(tester);
-    final iconRightW = Xp.headerLabelWidth - 1 - _rightClusterEdge(tester);
-    expect(
-      iconLeftW,
-      greaterThan(iconRightW),
-      reason: 'collapsed to icons, the left cluster should be the wider one',
-    );
     expect(
       icons.left,
       moreOrLessEquals(Xp.headerLabelWidth - 1 - icons.right, epsilon: 0.5),
       reason: 'the screen must stay centred through the collapse',
     );
-
-    // Either side of the flip it still clears whichever cluster now constrains.
-    expect(icons.left, greaterThanOrEqualTo(iconLeftW));
+    expect(icons.left, greaterThanOrEqualTo(_leftClusterEdge(tester)));
+    expect(icons.right, lessThanOrEqualTo(_rightClusterEdge(tester)));
   });
 
   testWidgets('home reserves the back slot, so the screen does not shift', (

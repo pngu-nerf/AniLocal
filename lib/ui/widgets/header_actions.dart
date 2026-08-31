@@ -4,16 +4,17 @@ import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 
 /// The app actions at the TOP-RIGHT of the title bar, as labelled tabs (icon +
-/// title) that hang to the bar's bottom edge — Sources, Sync, Unmatched (only
-/// when [unmatchedCount] > 0), Settings. Shared by EVERY screen with the header
-/// (home + detail) so the header looks identical everywhere; only the back
-/// button (a title-bar leading) differs between screens.
+/// title) that hang to the bar's bottom edge — Sync, Unmatched (only when
+/// [unmatchedCount] > 0), Settings. Sources is deliberately NOT here: it is a
+/// settings category now, reached through ⚙ like every other setting, so the
+/// header keeps ONE door into configuration rather than two. Shared by EVERY
+/// screen with the header (home + detail + theater) so the header looks
+/// identical everywhere; only the back button (a title-bar leading) differs.
 class HeaderActionsBar extends StatelessWidget {
   const HeaderActionsBar({
     super.key,
     required this.scanning,
     required this.unmatchedCount,
-    required this.onFolders,
     required this.onUnmatched,
     required this.onScan,
     required this.onSettings,
@@ -21,7 +22,6 @@ class HeaderActionsBar extends StatelessWidget {
 
   final bool scanning;
   final int unmatchedCount;
-  final Future<void> Function() onFolders;
   final VoidCallback onUnmatched;
   final Future<void> Function() onScan;
   // VoidCallback so both home's (Future-returning) and detail's (void) settings
@@ -52,13 +52,6 @@ class HeaderActionsBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
         ],
-        XpTitleTab(
-          icon: Icons.folder_open,
-          label: 'Sources',
-          tooltip: 'Media sources',
-          showLabel: showLabel,
-          onPressed: onFolders,
-        ),
         XpTitleTab(
           icon: Icons.sync,
           label: 'Sync',

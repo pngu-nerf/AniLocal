@@ -107,12 +107,10 @@ class _SettingsWindow extends StatelessWidget {
   ///
   /// Only categories with content are listed; there are no placeholder pages.
   List<SettingsCategory> _categories(BuildContext context) => [
-    SettingsCategory(
-      id: 'playback',
-      label: 'Playback',
-      icon: Icons.play_circle_outline,
-      builder: (_) => PlaybackPanel(model: model),
-    ),
+    // Sources leads, and so is the landing panel: it is the only category that
+    // decides what the library CONTAINS (and, by its order, which copy plays)
+    // rather than how it behaves — and with no Sources tab in the header, this
+    // window is the only way to it.
     SettingsCategory(
       id: sourcesCategoryId,
       label: 'Sources',
@@ -120,6 +118,12 @@ class _SettingsWindow extends StatelessWidget {
       // Fills the pane and scrolls itself: it hosts a reorderable list.
       scrollable: false,
       builder: (_) => SourcesPanel(sources: actions.sources),
+    ),
+    SettingsCategory(
+      id: 'playback',
+      label: 'Playback',
+      icon: Icons.play_circle_outline,
+      builder: (_) => PlaybackPanel(model: model),
     ),
     SettingsCategory(
       id: 'library',

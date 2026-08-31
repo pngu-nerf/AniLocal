@@ -28,9 +28,10 @@ fullscreen machinery into it? Diagnosis only — nothing changed.
   bar from the SAME pieces: `XpTitleBar` (chassis + gloss hairline + traffic-
   light inset + draggable middle), `HeaderReadout` (the VFD "AniLocal <context>"
   readout), `XpTitleTab` (back / action tabs), and `HeaderActionsBar` (the
-  Sources/Sync/Unmatched/Settings tab row). None of these is duplicated. The
-  original off-screen-buttons bug was a *bespoke* player header that predated
-  this; it's already gone (the theater now uses the same `XpTitleBar` +
+  Sync/Unmatched/Settings tab row — Sources left it when Sources became a
+  settings category, so ⚙ is the one door to configuration). None of these is
+  duplicated. The original off-screen-buttons bug was a *bespoke* player header
+  that predated this; it's already gone (the theater uses the same `XpTitleBar` +
   `HeaderActionsBar`).
 - **The divergence is the SCREEN SHELL** that mounts those pieces — and there are
   really only **two** shells, not three:
@@ -110,7 +111,7 @@ frame, and the bar sits in `appBar` rather than in `body`.
 | `XpTitleBar` chassis (gradient, gloss hairline, traffic-light inset, drag region) | ✓ | ✓ | ✓ | ✓ |
 | `HeaderReadout` (VFD "AniLocal <context>") | ✓ | ✓ | ✓ | ✓ |
 | Back tab (`XpTitleTab` leading) | — (root) | ✓ | ✓ | ✓ |
-| `HeaderActionsBar` (Sources/Sync/Unmatched/Settings) | ✓ | ✓ | — | ✓ |
+| `HeaderActionsBar` (Sync/Unmatched/Settings) | ✓ | ✓ | — | ✓ |
 | Custom trailing tab(s) | — | — | folders: "Add" | — |
 | `XpWindow` blue frame | ✓ | ✓ | ✓ | — (frameless) |
 | Mounted in | body | body | body | appBar |

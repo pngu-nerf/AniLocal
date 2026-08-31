@@ -234,7 +234,6 @@ class _TitleBar extends StatelessWidget {
     AppActions(
       :final scanning,
       :final unmatchedCount,
-      :final onFolders,
       :final onScan,
       :final onUnmatched,
       :final onSettings,
@@ -242,7 +241,6 @@ class _TitleBar extends StatelessWidget {
       HeaderActionsBar(
         scanning: scanning,
         unmatchedCount: unmatchedCount,
-        onFolders: onFolders,
         onScan: onScan,
         onUnmatched: onUnmatched,
         onSettings: onSettings,

@@ -64,7 +64,6 @@ void main() {
             actions: AppActions(
               scanning: false,
               unmatchedCount: 3,
-              onFolders: () async {},
               onScan: () async {},
               onUnmatched: () {},
               onSettings: () {},
@@ -107,7 +106,6 @@ void main() {
     AppActions actions({required bool scanning}) => AppActions(
       scanning: scanning,
       unmatchedCount: 0,
-      onFolders: () async {},
       onScan: () async {},
       onUnmatched: () {},
       onSettings: () {},
