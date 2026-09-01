@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../../../domain/models/episode.dart';
 import '../../theme/vfd_readout.dart';
+import '../../theme/xp_tokens.dart';
 import 'player_controls_state.dart';
+import 'segmented_meter.dart';
 import 'vfd_control.dart';
 
 // NOTE: `playerIsFullscreen` + `hasInheritedAncestorWithoutSubscribing` used to
@@ -35,11 +37,14 @@ class PlayPauseButton extends StatelessWidget {
       initialData: player.state.playing,
       builder: (context, snap) {
         final playing = snap.data ?? false;
+        // Both transport legends are etched, and the CURRENT state is the lit
+        // one — a deck's play/pause pair, not a button whose glyph swaps. The
+        // tooltip still names the ACTION, and the tap is unchanged.
         return VfdIconButton(
-          // Lit while playing: the transport's own state, read at a glance.
-          lit: playing,
+          lit: true,
           tooltip: playing ? 'Pause' : 'Play',
-          icon: playing ? Icons.pause : Icons.play_arrow,
+          icon: playing ? Icons.play_arrow : Icons.pause,
+          ghost: playing ? Icons.pause : Icons.play_arrow,
           onPressed: player.playOrPause,
         );
       },
@@ -119,13 +124,19 @@ class VolumeControl extends StatelessWidget {
             if (!compact)
               SizedBox(
                 width: 84,
-                child: SliderTheme(
-                  data: vfdSliderTheme(),
-                  child: Slider(
-                    value: volume,
-                    max: 100,
-                    onChanged: player.setVolume,
-                  ),
+                // The level is the SEEK BAR's meter, cell for cell (shared
+                // painter) — it was the last stock Material widget on the
+                // panel, and a smooth continuous slider among quantized lit
+                // cells is what read as app UI dropped onto a display. Same
+                // footprint, same live-set-on-drag contract the Slider had, so
+                // volume behaves exactly as before; mute now shows as a meter
+                // with nothing lit, which is what a deck does.
+                child: VfdLevelMeter(
+                  fraction: volume / 100,
+                  semanticLabel: 'Volume',
+                  color: Xp.accent,
+                  peakColor: Xp.accentBright,
+                  onChanged: (f) => player.setVolume(f * 100),
                 ),
               ),
           ],
@@ -157,18 +168,36 @@ class SubtitlesControl extends StatelessWidget {
       builder: (context, _) {
         final tracks = player.state.tracks.subtitle;
         final current = player.state.track.subtitle;
-        return PopupMenuButton<SubtitleTrack>(
-          tooltip: 'Subtitles',
-          icon: const VfdGlyph(Icons.closed_caption_outlined),
-          onSelected: player.setSubtitleTrack,
-          itemBuilder: (context) => [
-            for (final t in tracks)
-              CheckedPopupMenuItem<SubtitleTrack>(
-                value: t,
-                checked: t == current,
-                child: Text(_label(t)),
-              ),
-          ],
+        // CC is a legend with a real on/off state: lit while a track is
+        // showing, dark when subtitles are off. Display state only — the tap
+        // still opens the same track menu.
+        final on = current.id != 'no';
+        // PopupMenuButton builds its own IconButton, so its Material ink can't
+        // be styled through our own button. Zeroing the overlay colours for
+        // this subtree is the narrow way to keep the panel free of the grey
+        // ripple, which on true black reads as a smudge rather than feedback.
+        return Theme(
+          data: Theme.of(context).copyWith(
+            hoverColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            splashColor: Colors.transparent,
+          ),
+          child: PopupMenuButton<SubtitleTrack>(
+            tooltip: 'Subtitles',
+            icon: VfdGlyph(
+              Icons.closed_caption_outlined,
+              color: on ? Xp.accentBright : Xp.accent.withValues(alpha: 0.35),
+            ),
+            onSelected: player.setSubtitleTrack,
+            itemBuilder: (context) => [
+              for (final t in tracks)
+                CheckedPopupMenuItem<SubtitleTrack>(
+                  value: t,
+                  checked: t == current,
+                  child: Text(_label(t)),
+                ),
+            ],
+          ),
         );
       },
     );

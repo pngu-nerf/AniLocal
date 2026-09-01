@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/vfd_readout.dart';
 import '../../theme/xp_tokens.dart';
+import 'segmented_meter.dart';
 
 /// Phosphor levels for the panel. Lit = an armed/active legend; rest = a
 /// control at idle, still clearly lit (this is a display, not a dimmed toolbar);
@@ -32,6 +33,14 @@ import '../../theme/xp_tokens.dart';
 const Color _lit = Xp.accentBright;
 const Color _rest = Xp.accent;
 const Color _dead = Xp.textFaint;
+
+/// A legend that is etched but NOT lit — the display's "off" state.
+///
+/// Deliberately the same level the segmented meter uses for an unlit cell
+/// ([VfdMeter.unlitAlpha]), because it is the same idea: the element is
+/// physically there, it just isn't energised. Sharing the number is what makes
+/// a dark play glyph and a dark meter cell read as the same display.
+const double _ghostAlpha = VfdMeter.unlitAlpha;
 
 /// The dot pitch every readout on the bar uses — time, EP, button legends.
 /// ONE constant so the display's "type size" can't drift between them.
@@ -72,19 +81,35 @@ class VfdGlyph extends StatelessWidget {
 /// changes. Only the paint differs: a phosphor glyph, and hover/press feedback
 /// as a faint accent wash instead of Material's grey ink, which on a black
 /// display reads as smudge.
-class VfdIconButton extends StatelessWidget {
+class VfdIconButton extends StatefulWidget {
   const VfdIconButton({
     super.key,
     required this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.ghost,
     this.lit = false,
     this.size = 20,
   });
 
+  /// The LIT legend — for a state pair (see [ghost]) this is the state the
+  /// player is in, not the action the tap performs.
   final IconData icon;
+
+  /// Names the ACTION, always — a state pair lights what is true, but pressing
+  /// it still does the other thing, and the tooltip is where that is said.
   final String tooltip;
+
   final VoidCallback? onPressed;
+
+  /// The dark twin, drawn beside [icon] at [_ghostAlpha].
+  ///
+  /// This is the state language a display has and a toolbar doesn't: a deck
+  /// etches both ▶ and ‖ and lights the one that is true, instead of swapping a
+  /// single glyph. Only controls with a real either/or pass it; a control whose
+  /// state is elsewhere (the volume meter's cells, the ⛶ mode) doesn't invent
+  /// a twin. Purely visual — the tap and the tooltip are unaffected.
+  final IconData? ghost;
 
   /// Brightest phosphor — for a control that is currently doing something.
   final bool lit;
@@ -92,17 +117,53 @@ class VfdIconButton extends StatelessWidget {
   final double size;
 
   @override
+  State<VfdIconButton> createState() => _VfdIconButtonState();
+}
+
+class _VfdIconButtonState extends State<VfdIconButton> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
-    final color = onPressed == null ? _dead : (lit ? _lit : _rest);
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onPressed,
-      style: IconButton.styleFrom(
-        foregroundColor: color,
-        hoverColor: Xp.accent.withValues(alpha: 0.10),
-        highlightColor: Xp.accent.withValues(alpha: 0.16),
+    final enabled = widget.onPressed != null;
+    final color = !enabled
+        ? _dead
+        : (widget.lit || _hover)
+        ? _lit
+        : _rest;
+    final glyph = VfdGlyph(widget.icon, size: widget.size, color: color);
+    return MouseRegion(
+      // Hover BRIGHTENS the phosphor instead of washing a grey Material
+      // rectangle over it — a lit element responds by getting brighter, and on
+      // true black the ink overlay reads as a smudge. Cursor is left to defer:
+      // the IconButton inside still sets the click cursor, and the overlay's
+      // cursor-hide (which owns the video area) must stay in charge.
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: IconButton(
+        tooltip: widget.tooltip,
+        onPressed: widget.onPressed,
+        style: IconButton.styleFrom(
+          foregroundColor: color,
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashFactory: NoSplash.splashFactory,
+        ),
+        icon: widget.ghost == null
+            ? glyph
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  glyph,
+                  const SizedBox(width: 3),
+                  VfdGlyph(
+                    widget.ghost!,
+                    size: widget.size,
+                    color: color.withValues(alpha: _ghostAlpha),
+                  ),
+                ],
+              ),
       ),
-      icon: VfdGlyph(icon, size: size, color: color),
     );
   }
 }
@@ -187,18 +248,3 @@ class _VfdActionButtonState extends State<VfdActionButton> {
     );
   }
 }
-
-/// Phosphor styling for the bar's one [Slider] (volume).
-///
-/// A theme, not a replacement widget: the [Slider] — and therefore its drag
-/// behavior, its value mapping and its callback — is untouched. Lit track
-/// behind the thumb, unlit ahead of it, matching how the seek meter reads a
-/// filled span (that meter is its own painter and is NOT touched by this).
-SliderThemeData vfdSliderTheme() => SliderThemeData(
-  trackHeight: 3,
-  activeTrackColor: _rest,
-  inactiveTrackColor: Xp.accent.withValues(alpha: 0.22),
-  thumbColor: _lit,
-  overlayShape: SliderComponentShape.noOverlay,
-  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-);

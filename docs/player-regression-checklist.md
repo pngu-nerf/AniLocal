@@ -35,10 +35,12 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] Empty-episode state renders ("No episodes here yet.").
 
 **Control bar + every control** (`player_control_bar.dart`, `player_controls.dart`, `vfd_control.dart`)
-- [ ] **The bar is ONE VFD display**: a solid true-black panel edge-to-edge (top bezel hairline), phosphor glyphs and dot-matrix legends throughout — no bone-white Material icons, no chassis keys, no gradient ramp. Styling lives in `vfd_control.dart` only.
-- [ ] Play/Pause (icon reflects state; lit while playing) · Seek bar · Time readout (`m:ss / m:ss`, dropped when compact `<520`).
+- [ ] **The bar is ONE VFD display**: a solid true-black panel edge-to-edge (top bezel hairline), phosphor glyphs and dot-matrix legends throughout — no bone-white Material icons, no chassis keys, no gradient ramp. Styling lives in `vfd_control.dart` only; meter cells in `segmented_meter.dart` only.
+- [ ] **Lit/unlit state language** — the transport etches BOTH ▶ and ‖ and lights the one that is TRUE (playing → ▶ lit, ‖ dark at the same level an unlit meter cell uses); the tooltip still names the action. Hovering BRIGHTENS the phosphor; there is no grey Material ripple anywhere on the panel.
+- [ ] Play/Pause (tap toggles playback regardless of which legend is lit) · Seek bar · Time readout (`m:ss / m:ss`, dropped when compact `<520`).
 - [ ] **Centred EP readout** — "EP 12" in dot matrix, present in BOTH modes (one shared config); a special/extra (position ≤ 0) reads "SPECIAL" rather than "EP 0"; dropped when compact `<520`.
-- [ ] Volume (mute icon + slider; slider folds to icon when compact) · Subtitles popup (Off/Auto/tracks, current checked).
+- [ ] **Volume is a segmented meter, not a slider** — the SEEK BAR's cells exactly (shared painter: same 3/1.5 pitch, lit + bloom, faint unlit ahead, brighter peak cell at the level). Click anywhere sets it; drag sets live; mute reads as a meter with nothing lit. Folds to the mute glyph alone when compact `<520`.
+- [ ] Volume mute glyph toggles 0↔100 · Subtitles popup (Off/Auto/tracks, current checked); the CC legend is LIT while a track is showing and dark when subtitles are off.
 - [ ] Settings → Playback-speed submenu (0.5–2.0, current checked) · Fullscreen toggle (rightmost).
 - [ ] Skip Intro / Skip Outro transient buttons (above the timeline, lit segment frames) · Up-next control (transient: lit "PLAY NEXT ns" segment + glyph cancel; next title in the tooltip).
 - [ ] Right slot order volume → subtitles → settings → fullscreen; adapts at `<520` without overflow.
@@ -52,7 +54,7 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] Play/Pause button toggles playback.
 - [ ] Click empty video area toggles play/pause **and** reveals the bar.
 - [ ] Seek bar: tap-to-seek and drag-to-scrub both seek; scrubbing shows the dragged position.
-- [ ] Volume slider changes volume; mute icon toggles 0↔100.
+- [ ] Volume meter: click-to-set and drag-to-set both change volume live; mute glyph toggles 0↔100 and the meter empties/fills to match.
 - [ ] Subtitles selection switches track; Settings→speed changes rate.
 - [ ] Skip Intro/Outro seek (intro→window end; outro→credits end, clamped to file end — never advances).
 - [ ] Up next: "Play now" advances immediately; "Cancel" dismisses.

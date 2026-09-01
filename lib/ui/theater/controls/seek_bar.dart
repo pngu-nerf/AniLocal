@@ -3,6 +3,7 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../../domain/models/skip_range.dart';
 import '../../theme/xp_tokens.dart';
+import 'segmented_meter.dart';
 
 /// Custom, paintable seek/timeline bar — replaces media_kit's default seek bar
 /// (which can't be painted on). Rendered as a VFD **segmented level meter**
@@ -89,7 +90,6 @@ class _SeekBarState extends State<SeekBar> {
             child: CustomPaint(
               painter: _SeekBarPainter(
                 fraction: _fraction,
-                trackColor: Xp.accent,
                 playedColor: Xp.accent,
                 thumbColor: Xp.accentBright,
                 scrubbing: _dragFraction != null,
@@ -111,7 +111,6 @@ class _SeekBarState extends State<SeekBar> {
 class _SeekBarPainter extends CustomPainter {
   _SeekBarPainter({
     required this.fraction,
-    required this.trackColor,
     required this.playedColor,
     required this.thumbColor,
     required this.scrubbing,
@@ -121,7 +120,6 @@ class _SeekBarPainter extends CustomPainter {
   });
 
   final double fraction;
-  final Color trackColor;
   final Color playedColor;
   final Color thumbColor;
   final bool scrubbing;
@@ -134,16 +132,11 @@ class _SeekBarPainter extends CustomPainter {
   // read apart by position (start vs end); one hue keeps the two-color rule.
   static const _skipColor = Color(0x80FFB43C);
 
-  // Segmented-meter geometry (spectrum-analyzer cells).
-  static const _cellWidth = 3.0;
-  static const _cellGap = 1.5;
-
   @override
   void paint(Canvas canvas, Size size) {
-    const meterHeight = 8.0;
     final cy = size.height / 2;
-    final top = cy - meterHeight / 2;
-    final bottom = cy + meterHeight / 2;
+    final top = cy - VfdMeter.cellHeight / 2;
+    final bottom = cy + VfdMeter.cellHeight / 2;
 
     // Discrete cells: lit cyan (with bloom) up to the play position, faint
     // unlit cells ahead — the resting spectrum-analyzer look. The position
@@ -152,25 +145,19 @@ class _SeekBarPainter extends CustomPainter {
     // brighter "peak" that marks the position (no separate playhead line).
     // Seeking stays precise/continuous: the gesture handlers seek to the exact
     // fraction; only this DRAW is quantized.
-    const pitch = _cellWidth + _cellGap;
-    final count = (size.width / pitch).floor().clamp(1, 100000);
-    final unlit = Paint()..color = trackColor.withValues(alpha: 0.12);
-    final lit = Paint()..color = playedColor;
-    final peak = Paint()..color = thumbColor;
-    final bloom = Paint()
-      ..color = playedColor.withValues(alpha: 0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
-    final peakBloom = Paint()
-      ..color = thumbColor.withValues(alpha: scrubbing ? 0.6 : 0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-    final litCount = (fraction * count).round().clamp(0, count);
-    for (var i = 0; i < count; i++) {
-      final rect = Rect.fromLTWH(i * pitch, top, _cellWidth, meterHeight);
-      final isLit = i < litCount;
-      final isPeak = isLit && i == litCount - 1;
-      if (isLit) canvas.drawRect(rect, isPeak ? peakBloom : bloom);
-      canvas.drawRect(rect, isLit ? (isPeak ? peak : lit) : unlit);
-    }
+    //
+    // The cells themselves are painted by the SHARED meter (`segmented_meter`),
+    // which the volume level uses too — this bar's look is the definition, and
+    // extracting it is what keeps the two from drifting apart. Everything below
+    // (the skip shading) is the timeline's own and stays here.
+    paintMeterCells(
+      canvas,
+      size,
+      fraction: fraction,
+      color: playedColor,
+      peakColor: thumbColor,
+      peakBloomAlpha: scrubbing ? 0.6 : 0.4,
+    );
 
     // Skip-region markers, on the real timeline. Positioned by skipSpanFraction
     // against the file duration and CLAMPED to [0,1] — an overhanging outro
