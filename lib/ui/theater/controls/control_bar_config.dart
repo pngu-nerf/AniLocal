@@ -12,6 +12,7 @@ enum PlayerControl {
   playPause,
   seekBar,
   timeLabel,
+  episode,
   skipIntro,
   skipOutro,
   upNext,
@@ -69,8 +70,9 @@ class ControlBarConfig {
   /// location. Only one is ever relevant at a time (skip inside its window;
   /// up-next in the last ~5s, with the outro button suppressed during the
   /// pre-roll), so they don't collide. Right slot is left-to-right `volume,
-  /// subtitles, settings, fullscreen` (fullscreen pinned rightmost); the empty
-  /// center just holds the flex spacer between the left and right button groups.
+  /// subtitles, settings, fullscreen` (fullscreen pinned rightmost); [episode]
+  /// holds the center — it inherits the flex the empty spacer had, so the EP
+  /// readout centres on the BAR, not on the gap between the button groups.
   static const ControlBarConfig windowedDefault = ControlBarConfig(
     slots: {
       ControlSlot.aboveBar: [
@@ -80,6 +82,7 @@ class ControlBarConfig {
       ],
       ControlSlot.scrubber: [PlayerControl.seekBar],
       ControlSlot.left: [PlayerControl.playPause, PlayerControl.timeLabel],
+      ControlSlot.center: [PlayerControl.episode],
       ControlSlot.right: [
         PlayerControl.volume,
         PlayerControl.subtitles,
@@ -91,7 +94,8 @@ class ControlBarConfig {
 
   /// Fullscreen arrangement. Deliberately the SAME control set as windowed —
   /// this is the whole point: fullscreen is a config of the one bar, so every
-  /// control (including skip intro/outro) is present in both modes. Diverge it
-  /// later (e.g. denser spacing, extra controls) by editing only this map.
+  /// control (including skip intro/outro and the centred EP readout) is present
+  /// in both modes. Diverge it later (e.g. denser spacing, extra controls) by
+  /// editing only this map.
   static const ControlBarConfig fullscreenDefault = windowedDefault;
 }

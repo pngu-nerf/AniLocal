@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../theme/xp_tokens.dart';
 import 'control_bar_config.dart';
 import 'player_controls.dart';
 import 'player_controls_state.dart';
@@ -45,6 +46,7 @@ class PlayerControlBar extends StatelessWidget {
       ),
     ),
     PlayerControl.timeLabel => TimeLabel(player: player),
+    PlayerControl.episode => EpisodeReadout(state: state, compact: compact),
     PlayerControl.volume => VolumeControl(player: player, compact: compact),
     PlayerControl.subtitles => SubtitlesControl(player: player),
     PlayerControl.settings => SettingsControl(player: player),
@@ -368,27 +370,26 @@ class _PlayerControlsState extends State<PlayerControls> {
                   duration: const Duration(milliseconds: 200),
                   child: IgnorePointer(
                     ignoring: !_visible,
-                    // The bottom scrim so the controls pop against bright video.
-                    // It's a child of the SAME AnimatedOpacity + IgnorePointer as
-                    // the bar, so it fades in/out in lockstep — controls hidden
-                    // (idle while playing) ⇒ scrim fully clears ⇒ pristine video.
-                    // Strong deep-black gradient over a tall ramp (NOT a second
-                    // scrim — the existing one, deepened).
+                    // The bar's SURFACE: one solid true-black display panel,
+                    // edge to edge — the header readout's screen, run the full
+                    // width of the video. It replaces the old transparent→black
+                    // scrim, which was legibility backing rather than a surface
+                    // and left the controls looking laid ON the picture instead
+                    // of lit on an instrument.
+                    //
+                    // It is a child of the SAME AnimatedOpacity + IgnorePointer
+                    // as the bar, so it fades in lockstep — controls hidden
+                    // (idle while playing) ⇒ panel clears too ⇒ pristine video.
+                    // Nothing permanent is ever drawn over the picture.
                     child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.55),
-                            Colors.black,
-                          ],
-                          stops: const [0.0, 0.55, 1.0],
-                        ),
+                      decoration: const BoxDecoration(
+                        color: Xp.well,
+                        // The screen's top bezel edge, the one line that
+                        // separates panel from picture.
+                        border: Border(top: BorderSide(color: Xp.bevelHiSoft)),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 48),
+                        padding: const EdgeInsets.only(top: 6),
                         // The bar's controls must NEVER hold keyboard focus, so a
                         // focused slider/button can't swallow space/←/→ — the
                         // player's shortcuts always win. They stay fully

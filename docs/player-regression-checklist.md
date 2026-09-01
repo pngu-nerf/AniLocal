@@ -34,11 +34,13 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] Now-playing row highlighted (fill + accent left border).
 - [ ] Empty-episode state renders ("No episodes here yet.").
 
-**Control bar + every control** (`player_control_bar.dart`, `player_controls.dart`)
-- [ ] Play/Pause (icon reflects state) · Seek bar · Time readout (`m:ss / m:ss`, dropped when compact `<520`).
+**Control bar + every control** (`player_control_bar.dart`, `player_controls.dart`, `vfd_control.dart`)
+- [ ] **The bar is ONE VFD display**: a solid true-black panel edge-to-edge (top bezel hairline), phosphor glyphs and dot-matrix legends throughout — no bone-white Material icons, no chassis keys, no gradient ramp. Styling lives in `vfd_control.dart` only.
+- [ ] Play/Pause (icon reflects state; lit while playing) · Seek bar · Time readout (`m:ss / m:ss`, dropped when compact `<520`).
+- [ ] **Centred EP readout** — "EP 12" in dot matrix, present in BOTH modes (one shared config); a special/extra (position ≤ 0) reads "SPECIAL" rather than "EP 0"; dropped when compact `<520`.
 - [ ] Volume (mute icon + slider; slider folds to icon when compact) · Subtitles popup (Off/Auto/tracks, current checked).
 - [ ] Settings → Playback-speed submenu (0.5–2.0, current checked) · Fullscreen toggle (rightmost).
-- [ ] Skip Intro / Skip Outro transient buttons (above the timeline) · Up-next control (centered, transient).
+- [ ] Skip Intro / Skip Outro transient buttons (above the timeline, lit segment frames) · Up-next control (transient: lit "PLAY NEXT ns" segment + glyph cancel; next title in the tooltip).
 - [ ] Right slot order volume → subtitles → settings → fullscreen; adapts at `<520` without overflow.
 
 **Seek bar** (`seek_bar.dart`)
@@ -87,12 +89,12 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] **Up-next / auto-advance** (pre-roll last ~5s, countdown, cancelable; completion advances when enabled & not cancelled; season boundary stops cleanly; single `advanceToNext()`).
 - [ ] **Resume position** (`open(startAt: resumePosition)`; persists on 5s timer / episode switch / dispose; skips saving once watched or at zero; watched at 0.90).
 - [ ] **Swap-in-place** (`VideoZone` `ValueKey(series.anilistId)`) — episodes swap on the same controller; a different series gets a fresh frame.
-- [ ] **Bottom scrim** (transparent→dark gradient) stays for legibility; controls fade (`AnimatedOpacity` 200ms).
+- [ ] **Bar surface fades WITH the controls** — the solid VFD panel is inside the same `AnimatedOpacity` (200ms) + `IgnorePointer` as the bar, so idle-while-playing clears panel *and* controls and the picture is left pristine. It must never become a permanent strip over the video.
 
 ## E. States
 - [ ] **Playing** — controls auto-hide after 3s; cursor hides with them.
 - [ ] **Paused** — controls + cursor stay (no auto-hide).
-- [ ] **Controls visible vs hidden** — fade; hidden = non-interactive + cursor none.
+- [ ] **Controls visible vs hidden** — fade (panel included); hidden = non-interactive + cursor none.
 - [ ] **Windowed vs fullscreen** — identical control set/behavior; enter/exit clean (no overflow, no red screen); shortcuts + skip buttons work in both.
 - [ ] **Loading** — rail empty until episodes load; video opens at resume position.
 - [ ] **Up-next countdown** — "Up next: … · Ns", Cancel/Play-now; outro skip suppressed during it.

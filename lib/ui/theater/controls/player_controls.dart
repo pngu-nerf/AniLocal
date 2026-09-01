@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
+import '../../../domain/models/episode.dart';
 import '../../theme/vfd_readout.dart';
-import '../../theme/xp_tokens.dart';
-import '../../theme/xp_widgets.dart';
 import 'player_controls_state.dart';
+import 'vfd_control.dart';
 
 // NOTE: `playerIsFullscreen` + `hasInheritedAncestorWithoutSubscribing` used to
 // live here — a non-subscribing read of media_kit's route-scoped
@@ -19,9 +19,10 @@ import 'player_controls_state.dart';
 /// config — none knows which slot it's in. Engine-reactive controls read player
 /// streams directly (so they update identically in windowed and fullscreen).
 
-// Player-control icons/labels sit on the bottom scrim over video — a soft
-// cyan-white keeps them cohesive with the panel while staying legible.
-const _iconColor = Xp.text;
+// Every control below is a DISPLAY element on the bar's VFD panel, so none of
+// them styles itself: icons go through [VfdIconButton], legends through
+// [VfdActionButton], readouts through [VfdReadout] at [kVfdBarPitch]. The look
+// lives in `vfd_control.dart`; this file stays about what each control DOES.
 
 class PlayPauseButton extends StatelessWidget {
   const PlayPauseButton({super.key, required this.player});
@@ -34,10 +35,11 @@ class PlayPauseButton extends StatelessWidget {
       initialData: player.state.playing,
       builder: (context, snap) {
         final playing = snap.data ?? false;
-        return IconButton(
-          color: _iconColor,
+        return VfdIconButton(
+          // Lit while playing: the transport's own state, read at a glance.
+          lit: playing,
           tooltip: playing ? 'Pause' : 'Play',
-          icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+          icon: playing ? Icons.pause : Icons.play_arrow,
           onPressed: player.playOrPause,
         );
       },
@@ -72,9 +74,13 @@ class TimeLabel extends StatelessWidget {
           final dur = durSnap.data ?? Duration.zero;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            // A dot-matrix time readout — the shared display role (canonical
-            // VfdReadout defaults: cyan phosphor + bloom, no per-call styling).
-            child: VfdReadout('${_fmt(pos)} / ${_fmt(dur)}'),
+            // A dot-matrix time readout — the shared display role, at the
+            // bar's one readout pitch so it and the EP readout are the same
+            // size by construction.
+            child: VfdReadout(
+              '${_fmt(pos)} / ${_fmt(dur)}',
+              dotPitch: kVfdBarPitch,
+            ),
           );
         },
       ),
@@ -101,29 +107,20 @@ class VolumeControl extends StatelessWidget {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              color: _iconColor,
+            VfdIconButton(
               tooltip: muted ? 'Unmute' : 'Mute',
-              icon: Icon(
-                muted
-                    ? Icons.volume_off
-                    : volume < 50
-                    ? Icons.volume_down
-                    : Icons.volume_up,
-              ),
+              icon: muted
+                  ? Icons.volume_off
+                  : volume < 50
+                  ? Icons.volume_down
+                  : Icons.volume_up,
               onPressed: () => player.setVolume(muted ? 100 : 0),
             ),
             if (!compact)
               SizedBox(
                 width: 84,
                 child: SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 3,
-                    overlayShape: SliderComponentShape.noOverlay,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 6,
-                    ),
-                  ),
+                  data: vfdSliderTheme(),
                   child: Slider(
                     value: volume,
                     max: 100,
@@ -162,7 +159,7 @@ class SubtitlesControl extends StatelessWidget {
         final current = player.state.track.subtitle;
         return PopupMenuButton<SubtitleTrack>(
           tooltip: 'Subtitles',
-          icon: const Icon(Icons.closed_caption_outlined, color: _iconColor),
+          icon: const VfdGlyph(Icons.closed_caption_outlined),
           onSelected: player.setSubtitleTrack,
           itemBuilder: (context) => [
             for (final t in tracks)
@@ -191,10 +188,9 @@ class SettingsControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MenuAnchor(
-      builder: (context, controller, child) => IconButton(
-        color: _iconColor,
+      builder: (context, controller, child) => VfdIconButton(
         tooltip: 'Settings',
-        icon: const Icon(Icons.settings_outlined),
+        icon: Icons.settings_outlined,
         onPressed: () =>
             controller.isOpen ? controller.close() : controller.open(),
       ),
@@ -234,10 +230,9 @@ class FullscreenButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<PlayerControlsState>(
       valueListenable: state,
-      builder: (context, s, _) => IconButton(
-        color: _iconColor,
+      builder: (context, s, _) => VfdIconButton(
         tooltip: s.fullscreen ? 'Exit fullscreen' : 'Fullscreen',
-        icon: Icon(s.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+        icon: s.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
         // Tooltips are dismissed before the window resizes — see the toggle in
         // TheaterScreen and TooltipDismissOnResize.
         onPressed: onPressed,
@@ -268,15 +263,15 @@ class SkipButton extends StatelessWidget {
       builder: (context, s, _) {
         final show = intro ? s.showSkipIntro : s.showSkipOutro;
         if (!show) return const SizedBox.shrink();
-        // VFD physical button: matte chassis, lit cyan while ARMED (it only
-        // shows inside the skip window). Full-size (NOT dense) so it stands the
-        // same height as the header/top-menu buttons.
+        // A lit display segment — armed by definition, since it only shows
+        // inside its skip window. It reads as part of the panel it sits on
+        // rather than a chassis key laid over the screen.
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: XpButton(
+          child: VfdActionButton(
             lit: true,
             icon: intro ? Icons.fast_forward : Icons.skip_next,
-            label: intro ? 'Skip Intro' : 'Skip Outro',
+            label: intro ? 'SKIP INTRO' : 'SKIP OUTRO',
             onPressed: onPressed,
           ),
         );
@@ -308,34 +303,77 @@ class UpNextControl extends StatelessWidget {
         final next = s.upNext;
         if (!s.preRollShowing || next == null) return const SizedBox.shrink();
         final title = next.title ?? 'Episode ${next.number}';
-        // A compact pair of VFD physical buttons — the armed "Play next" (lit
-        // cyan, carrying the countdown) + a matte "cancel" — so the up-next
-        // reads as the same button family as Skip Intro/Outro. The next-episode
-        // title moves to the Play-next tooltip so the affordance stays compact
-        // enough to share the skip anchor without overflowing a narrow bar.
+        // A compact pair of display controls — the armed "play next" segment
+        // (lit, carrying the countdown) + a glyph-only cancel — so the up-next
+        // reads as the same family as Skip Intro/Outro. The next-episode title
+        // stays in the tooltip: it is running text, which the dot-matrix legend
+        // deliberately cannot render, and it would overflow a narrow bar.
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Full-size (NOT dense) so the up-next buttons match the
-              // header/top-menu button height, same as Skip Intro/Outro.
-              XpButton(
+              VfdActionButton(
                 lit: true,
                 icon: Icons.play_arrow,
-                label: 'Play next · ${s.preRollSeconds}s',
+                // Legend charset is the dot-matrix font's (no interpunct), so
+                // the countdown reads as plain segments.
+                label: 'PLAY NEXT ${s.preRollSeconds}S',
                 tooltip: 'Play next: $title',
                 onPressed: onPlayNow,
               ),
               const SizedBox(width: 6),
-              XpButton(
+              VfdIconButton(
                 icon: Icons.close,
                 tooltip: 'Cancel',
                 onPressed: onCancel,
+                size: 16,
               ),
             ],
           ),
         );
+      },
+    );
+  }
+}
+
+/// The centered EP readout — "EP 12" in dot matrix, the panel's one piece of
+/// pure information.
+///
+/// It reads the episode straight off the shared state notifier, like every
+/// other domain-aware control here, so it is correct in both modes and updates
+/// on swap-in-place without the bar knowing anything about episodes.
+///
+/// Graceful by construction: a standard position renders "EP n"; a non-standard
+/// one (a special or extra, which the library models as position ≤ 0) has no
+/// meaningful number, so it renders the label alone rather than "EP 0" or a
+/// negative. No episode at all renders nothing. It is DROPPED in [compact] —
+/// the same width rule the time label follows — because a dot-matrix readout
+/// cannot ellipsize, so at narrow widths it yields the room instead of
+/// squeezing the transport.
+class EpisodeReadout extends StatelessWidget {
+  const EpisodeReadout({super.key, required this.state, this.compact = false});
+
+  final ValueListenable<PlayerControlsState> state;
+  final bool compact;
+
+  /// The legend for an episode position. Kept as a pure static so the rule is
+  /// testable without pumping the bar.
+  static String? labelFor(Episode? episode) {
+    if (episode == null) return null;
+    final n = episode.number;
+    return n >= 1 ? 'EP $n' : 'SPECIAL';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (compact) return const SizedBox.shrink();
+    return ValueListenableBuilder<PlayerControlsState>(
+      valueListenable: state,
+      builder: (context, s, _) {
+        final label = labelFor(s.episode);
+        if (label == null) return const SizedBox.shrink();
+        return VfdReadout(label, dotPitch: kVfdBarPitch);
       },
     );
   }
