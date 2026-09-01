@@ -23,6 +23,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/header_readout.dart';
 import '../../theme/vfd_readout.dart';
 import '../../theme/xp_tokens.dart';
 import 'segmented_meter.dart';
@@ -42,13 +43,16 @@ const Color _dead = Xp.textFaint;
 /// a dark play glyph and a dark meter cell read as the same display.
 const double _ghostAlpha = VfdMeter.unlitAlpha;
 
-/// The dot pitch every readout on the bar uses — time, EP, button legends.
-/// ONE constant so the display's "type size" can't drift between them.
-const double kVfdBarPitch = 3;
-
-/// Legend pitch: one step down from the primary readouts, so a button's label
-/// reads as a legend beside them rather than competing with the timer.
-const double kVfdLegendPitch = 2;
+/// The dot pitch EVERY readout on the bar uses — time, EP, button legends.
+///
+/// ONE constant, so the panel has one type size and it can't drift between
+/// them. It is 2 because a glyph is 7 dots tall: 14pt, which is what the
+/// Material glyphs beside it actually DRAW inside their 20pt boxes (those
+/// shapes fill roughly 12–15pt of the box). At pitch 3 the text stood 21pt and
+/// towered over the icons it shares a row with. It is also the header
+/// readout's pitch ([HeaderReadout.pitch]), so a line of text on a screen is
+/// one size everywhere in the app.
+const double kVfdBarPitch = 2;
 
 /// A phosphor glyph with its bloom — the icon half of every display control.
 ///
@@ -232,7 +236,7 @@ class _VfdActionButtonState extends State<VfdActionButton> {
           children: [
             VfdGlyph(widget.icon, size: 14, color: color),
             const SizedBox(width: 7),
-            VfdReadout(widget.label, dotPitch: kVfdLegendPitch, color: color),
+            VfdReadout(widget.label, dotPitch: kVfdBarPitch, color: color),
           ],
         ),
       ),

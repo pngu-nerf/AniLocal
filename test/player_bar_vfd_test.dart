@@ -6,6 +6,7 @@ import 'package:anilocal/ui/theater/controls/player_controls_state.dart';
 import 'package:anilocal/ui/theater/controls/seek_bar.dart';
 import 'package:anilocal/ui/theater/controls/segmented_meter.dart';
 import 'package:anilocal/ui/theater/controls/vfd_control.dart';
+import 'package:anilocal/ui/theme/header_readout.dart';
 import 'package:anilocal/ui/theme/xp_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -299,6 +300,18 @@ void volumeGroup() {
         );
       },
     );
+
+    test('one readout size, sitting level with the glyphs beside it', () {
+      // 7 dots tall, so the pitch IS the type size. It has to stay in the band
+      // the Material glyphs actually draw inside their 20pt boxes (~12-15pt) —
+      // at pitch 3 the text stood 21pt and towered over the icon row.
+      expect(kVfdBarPitch * 7, inInclusiveRange(12, 16));
+      expect(
+        kVfdBarPitch,
+        HeaderReadout.pitch,
+        reason: 'a line of text on a screen is one size app-wide',
+      );
+    });
 
     test('one cell geometry, shared by both meters', () {
       // The numbers ARE the look; a second copy is how two meters drift apart.
