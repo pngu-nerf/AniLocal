@@ -10,6 +10,9 @@ import '../../domain/models/titles.dart';
 /// it's unit-testable from a captured response.
 Series seriesFromMediaJson(Map<String, dynamic> media) {
   return Series(
+    seriesId: media['id'] as int,
+    // Same value today — this response came FROM AniList — but recorded
+    // separately because the two diverge as soon as another provider answers.
     anilistId: media['id'] as int,
     idMal: media['idMal'] as int?,
     titles: _titlesFrom(media['title'] as Map<String, dynamic>?),
@@ -53,6 +56,8 @@ List<RelatedSeries> _relationsFrom(Map<String, dynamic>? relations) {
     if (node == null) continue;
     result.add(
       RelatedSeries(
+        // Genuinely an AniList id: this is AniList's own relation payload, not
+        // our surrogate identity. Deliberately NOT renamed with the rest.
         anilistId: node['id'] as int,
         relationType: (map['relationType'] as String?) ?? 'UNKNOWN',
         titles: _titlesFrom(node['title'] as Map<String, dynamic>?),

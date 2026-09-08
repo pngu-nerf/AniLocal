@@ -183,13 +183,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       // we may not use would trade a real read for a saved hop.
       final (enabled, eps) = await (
         widget.settings.loadMissingEnabled(),
-        widget.repository.episodesFor(widget.series.anilistId),
+        widget.repository.episodesFor(widget.series.seriesId),
       ).wait;
       // The feature never applies to a not-yet-identified placeholder (no
       // AniList count, synthetic negative id) — treat it as nothing hidden.
       final hidden = (!enabled || widget.series.pending)
           ? <int>{}
-          : await widget.missing.hiddenEpisodes(widget.series.anilistId);
+          : await widget.missing.hiddenEpisodes(widget.series.seriesId);
       // The show's files are "unavailable" when NO source of any present
       // episode exists on disk (the drive/mount is gone). `any` short-circuits
       // on the first reachable file, so the connected case is cheap.
@@ -271,12 +271,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   });
 
   Future<void> _hide(List<int> numbers) async {
-    await widget.missing.hideEpisodes(widget.series.anilistId, numbers);
+    await widget.missing.hideEpisodes(widget.series.seriesId, numbers);
     await _reload();
   }
 
   Future<void> _unhide(List<int> numbers) async {
-    await widget.missing.unhideEpisodes(widget.series.anilistId, numbers);
+    await widget.missing.unhideEpisodes(widget.series.seriesId, numbers);
     await _reload();
   }
 
@@ -1022,7 +1022,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                                     if (series.format != null) series.format,
                                     if (series.episodeCount != null)
                                       '${series.episodeCount} episodes',
-                                    'AniList #${series.anilistId}',
+                                    if (series.anilistId != null)
+                                      'AniList #${series.anilistId}',
                                   ].join(' · '),
                             style: const TextStyle(
                               color: Xp.textDim,
@@ -1042,7 +1043,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                     alignment: Alignment.centerLeft,
                     child: XpButton(
                       icon: Icons.play_arrow,
-                      label: _next!.seriesAnilistId == series.anilistId
+                      label: _next!.seriesId == series.seriesId
                           ? 'Play next: Episode ${_next!.number}'
                           : 'Play next: Episode ${_next!.number} (sequel)',
                       onPressed: () => _play(_next!),

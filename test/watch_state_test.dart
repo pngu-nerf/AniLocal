@@ -47,8 +47,8 @@ void main() {
     return f;
   }
 
-  Future<Episode> episode(int anilistId, int number) async =>
-      (await repo.episodesFor(anilistId)).firstWhere((e) => e.number == number);
+  Future<Episode> episode(int seriesId, int number) async =>
+      (await repo.episodesFor(seriesId)).firstWhere((e) => e.number == number);
 
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('anilocal_watch_');
@@ -107,7 +107,7 @@ void main() {
         duration: const Duration(minutes: 24),
       );
 
-      // Move (rename): new path, SAME episode identity (anilistId 1, ep 3).
+      // Move (rename): new path, SAME episode identity (seriesId 1, ep 3).
       final moved = await Directory('${dir.path}/moved').create();
       final b = await a.rename('${moved.path}/Cowboy Bebop - 03.mkv');
       await sync.sync([dir.path]); // re-scan; sync never touches watch_state
@@ -250,7 +250,7 @@ void main() {
       );
 
       final cw = await repo.continueWatching();
-      expect(cw.single.series.anilistId, 1);
+      expect(cw.single.series.seriesId, 1);
       expect(cw.single.episode.number, 5);
       expect(cw.single.episode.resumePosition, const Duration(minutes: 5));
     },

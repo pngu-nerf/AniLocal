@@ -11,7 +11,8 @@ import 'titles.dart';
 /// lives in `lib/data/cache`. This type carries no JSON or DB annotations.
 class Series extends Equatable {
   const Series({
-    required this.anilistId,
+    required this.seriesId,
+    this.anilistId,
     required this.titles,
     this.format,
     this.coverImageRef,
@@ -27,7 +28,16 @@ class Series extends Equatable {
   /// placeholder (a show discovered on disk but not yet identified) it is a
   /// stable NEGATIVE synthetic id derived from the parsed title — never a real
   /// AniList id, so it can't collide with one. See [pending].
-  final int anilistId;
+  final int seriesId;
+
+  /// The id ANILIST knows this show by, when it knows it at all.
+  ///
+  /// Distinct from [seriesId], which is AniLocal's own opaque surrogate. They
+  /// happen to be equal for every show identified through AniList, but a show
+  /// that only another provider knows has a minted [seriesId] and NO AniList
+  /// id — so anything rendering "AniList #…" must read this and omit the label
+  /// when it is null, rather than printing the surrogate and lying.
+  final int? anilistId;
 
   /// MyAnimeList id (AniList's `idMal` cross-reference). Used only to query
   /// AniSkip (keyed by MAL id); null when AniList has no MAL mapping.
@@ -73,10 +83,11 @@ class Series extends Equatable {
   /// *display* title — a search-query seed deliberately differs (romaji-first,
   /// empty fallback) and is not this.
   String get displayTitle =>
-      titles.english ?? titles.romaji ?? titles.native ?? '#$anilistId';
+      titles.english ?? titles.romaji ?? titles.native ?? '#$seriesId';
 
   @override
   List<Object?> get props => [
+    seriesId,
     anilistId,
     titles,
     format,

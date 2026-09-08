@@ -7,7 +7,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 CachedSeriesRow _series(int id) => CachedSeriesRow(
-  anilistId: id,
+  seriesId: id,
   romaji: 'Series $id',
   english: null,
   nativeTitle: null,
@@ -22,7 +22,7 @@ CachedFileRow _file(int id) => CachedFileRow(
   relativePath: 'ep1.mkv',
   fileSize: 1,
   modifiedAtMs: 1,
-  anilistId: id,
+  seriesId: id,
   episodeNumber: 1,
   parsedTitle: 'Series $id',
   matchScore: 1,

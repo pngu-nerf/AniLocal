@@ -34,7 +34,7 @@ import 'package:anilocal/ui/settings/sources_actions.dart';
 /// the page asks the data layer for as little as it can.
 
 Series _series() => const Series(
-  anilistId: 7,
+  seriesId: 7,
   titles: Titles(romaji: 'Dragon Ball', native: 'ドラゴンボール'),
 );
 
@@ -44,7 +44,7 @@ List<Episode> _episodes() => [
     Episode(
       number: i,
       fileRef: '/tmp/ep$i.mkv',
-      seriesAnilistId: 7,
+      seriesId: 7,
       anchoredNumber: i,
       watched: i <= 2,
     ),
@@ -71,7 +71,7 @@ class _Repo
   final List<String> calls = [];
 
   @override
-  Future<List<Episode>> episodesFor(int anilistId) {
+  Future<List<Episode>> episodesFor(int seriesId) {
     calls.add('episodesFor');
     return episodesCompleter?.future ??
         Future.value(_episodesOverride ?? _episodes());
@@ -84,7 +84,7 @@ class _Repo
   }
 
   @override
-  Future<Set<int>> hiddenEpisodes(int anilistId) async {
+  Future<Set<int>> hiddenEpisodes(int seriesId) async {
     calls.add('hiddenEpisodes');
     return const {};
   }
@@ -279,7 +279,7 @@ void main() {
     Episode ep(int n, {bool watched = false}) => Episode(
       number: n,
       fileRef: '/tmp/ep$n.mkv',
-      seriesAnilistId: 7,
+      seriesId: 7,
       anchoredNumber: n,
       watched: watched,
     );

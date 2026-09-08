@@ -4,7 +4,7 @@ import '../data/anilist/anilist_client.dart';
 import '../data/aniskip/aniskip_client.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
-import '../data/cache/placeholder_identity.dart';
+import '../data/cache/series_identity.dart';
 import '../data/crossmap/cross_map_store.dart';
 import '../data/folders/volume_resolver.dart';
 import '../data/scanner/filename_parser.dart';
@@ -28,7 +28,7 @@ import '../domain/models/titles.dart';
 ///   placeholder up front (phase 1, no network) and surfaced via [onDiscovered]
 ///   BEFORE identification runs — so the library shows it (named, blank art)
 ///   instantly, even offline. Identification (phase 2) then upgrades the row
-///   in place: a match sets its anilistId; a genuine no-match flips it to
+///   in place: a match sets its seriesId; a genuine no-match flips it to
 ///   confirmed-unmatched; a transient lookup error LEAVES it pending (retried
 ///   next scan). A failed/absent AniList never drops a file — at worst it
 ///   stays a named placeholder.
@@ -124,17 +124,17 @@ class LibrarySync {
         (r.folderPath, r.relativePath): r,
     };
     final cachedSeries = {
-      for (final r in await cache.allSeriesRows()) r.anilistId: r,
+      for (final r in await cache.allSeriesRows()) r.seriesId: r,
     };
 
     // Map a known title -> its cached series, so a delta of an already-known
     // series never hits AniList.
     final knownTitleToId = <String, int>{};
     for (final r in cachedFiles.values) {
-      if (r.anilistId != null && r.parsedTitle.isNotEmpty) {
+      if (r.seriesId != null && r.parsedTitle.isNotEmpty) {
         knownTitleToId.putIfAbsent(
           normalizeTitle(r.parsedTitle),
-          () => r.anilistId!,
+          () => r.seriesId!,
         );
       }
     }
@@ -143,7 +143,7 @@ class LibrarySync {
     // "unchanged" (skipped) when its bytes match AND it isn't a PENDING
     // placeholder — a pending row is unidentified, so it's re-attempted every
     // scan (this is how it auto-resolves once back online) even though the file
-    // on disk hasn't changed. A confirmed-unmatched row (anilistId null,
+    // on disk hasn't changed. A confirmed-unmatched row (seriesId null,
     // pending false) is NOT retried — it stays put until fix-match, as before.
     final toIdentify = <(String, String)>[];
     var unchanged = 0;
@@ -155,7 +155,7 @@ class LibrarySync {
           c.fileSize == s.size &&
           c.modifiedAtMs == s.modified.millisecondsSinceEpoch;
       final isPending =
-          c != null && c.anilistId == null && c.pendingIdentification;
+          c != null && c.seriesId == null && c.pendingIdentification;
       if (bytesUnchanged && !isPending) {
         unchanged++;
       } else {
@@ -203,7 +203,7 @@ class LibrarySync {
               relativePath: key.$2,
               fileSize: s.size,
               modifiedAtMs: s.modified.millisecondsSinceEpoch,
-              anilistId: null,
+              seriesId: null,
               episodeNumber: pf.episodeNumber,
               parsedTitle: pf.title,
               matchScore: 0,
@@ -232,14 +232,14 @@ class LibrarySync {
         final score = row == null
             ? 1.0
             : rankCandidates(sample, [_seriesFromRow(row)]).score;
-        resolved[norm] = _Resolved(anilistId: knownId, score: score);
+        resolved[norm] = _Resolved(seriesId: knownId, score: score);
         continue;
       }
       try {
         anilistLookups++;
         final result = await matcher.match(sample);
         resolved[norm] = _Resolved(
-          anilistId: result.series?.anilistId,
+          seriesId: result.series?.seriesId,
           score: result.score,
           freshSeries: result.series,
         );
@@ -272,7 +272,7 @@ class LibrarySync {
       final fresh = r.freshSeries;
       if (fresh == null) continue;
       final artPath = await art.ensureCover(
-        fresh.anilistId,
+        fresh.seriesId,
         fresh.coverImageRef,
       );
       seriesUpserts.add(_seriesRow(fresh, artPath));
@@ -282,8 +282,8 @@ class LibrarySync {
     // scan is NOT written here, so it KEEPS whatever it already is — a new file
     // stays the pending placeholder from phase 1 (retried next scan), an
     // already-matched changed file keeps its match. Everything else is written
-    // with pendingIdentification=false: a match (anilistId set) or a genuine
-    // no-match (anilistId null = confirmed-unmatched, the fix-match screen).
+    // with pendingIdentification=false: a match (seriesId set) or a genuine
+    // no-match (seriesId null = confirmed-unmatched, the fix-match screen).
     final fileUpserts = <CachedFileRow>[];
     var matched = 0;
     var unmatched = 0;
@@ -296,7 +296,7 @@ class LibrarySync {
         continue;
       }
       final res = norm == null ? null : resolved[norm];
-      final anilistId = res?.anilistId;
+      final seriesId = res?.seriesId;
       final s = stats[key]!;
       fileUpserts.add(
         CachedFileRow(
@@ -304,7 +304,7 @@ class LibrarySync {
           relativePath: key.$2,
           fileSize: s.size,
           modifiedAtMs: s.modified.millisecondsSinceEpoch,
-          anilistId: anilistId,
+          seriesId: seriesId,
           episodeNumber: pf.episodeNumber,
           parsedTitle: pf.title,
           matchScore: res?.score ?? 0,
@@ -312,7 +312,7 @@ class LibrarySync {
           pendingIdentification: false,
         ),
       );
-      if (anilistId != null) {
+      if (seriesId != null) {
         matched++;
       } else {
         unmatched++;
@@ -325,28 +325,28 @@ class LibrarySync {
     // already incremental (fileUpserts are only the deltas). Failures/no-data
     // are skipped silently; partial AniSkip coverage is normal.
     final idMalById = <int, int?>{
-      for (final r in cachedSeries.values) r.anilistId: r.idMal,
+      for (final r in cachedSeries.values) r.seriesId: r.idMal,
     };
     for (final r in resolved.values) {
       final fresh = r.freshSeries;
-      if (fresh != null) idMalById[fresh.anilistId] = fresh.idMal;
+      if (fresh != null) idMalById[fresh.seriesId] = fresh.idMal;
     }
     final skipKeys = <(int, int)>{
       for (final f in fileUpserts)
-        if (f.anilistId != null && f.episodeNumber != null)
-          (f.anilistId!, f.episodeNumber!),
+        if (f.seriesId != null && f.episodeNumber != null)
+          (f.seriesId!, f.episodeNumber!),
     };
     final malIds = await _resolveMalIds(idMalById, skipKeys.map((k) => k.$1));
     final skipUpserts = <SkipSegmentRow>[];
-    for (final (anilistId, episode) in skipKeys) {
-      final mal = malIds[anilistId];
+    for (final (seriesId, episode) in skipKeys) {
+      final mal = malIds[seriesId];
       if (mal == null) continue;
       try {
         final skips = await aniSkip.fetchSkips(mal, episode);
         if (skips == null) continue; // no data -> no row (graceful)
         skipUpserts.add(
           SkipSegmentRow(
-            anilistId: anilistId,
+            seriesId: seriesId,
             episode: episode,
             introStartMs: skips.intro?.start.inMilliseconds,
             introEndMs: skips.intro?.end.inMilliseconds,
@@ -366,8 +366,8 @@ class LibrarySync {
     // for titles that never had a placeholder watched.
     final promotions = <(int, int)>[
       for (final entry in resolved.entries)
-        if (entry.value.anilistId != null)
-          (placeholderSeriesId(entry.key), entry.value.anilistId!),
+        if (entry.value.seriesId != null)
+          (placeholderSeriesId(entry.key), entry.value.seriesId!),
     ];
 
     await cache.applySync(
@@ -411,8 +411,8 @@ class LibrarySync {
     // Every AniList entry the library references (auto-matched files + overrides).
     final ids = <int>{
       for (final f in files)
-        if (f.anilistId != null) f.anilistId!,
-      for (final o in overrides.values) o.anilistId,
+        if (f.seriesId != null) f.seriesId!,
+      for (final o in overrides.values) o.seriesId,
     };
 
     // Re-fetch by id and upsert (no prune). idMal becomes available here.
@@ -421,7 +421,7 @@ class LibrarySync {
     // offline (before this, an unreachable AniList left the map empty and no
     // skip was ever fetched, even for shows whose idMal was already known).
     final idMalById = <int, int?>{
-      for (final r in await cache.allSeriesRows()) r.anilistId: r.idMal,
+      for (final r in await cache.allSeriesRows()) r.seriesId: r.idMal,
     };
     var seriesRefreshed = 0;
     MetadataFailure? failure;
@@ -433,9 +433,9 @@ class LibrarySync {
         // or a cover download that failed, leaves the existing row's fields
         // intact — the no-wipe guarantee this method promises. Pinned by
         // test/metadata_refresh_failure_test.dart.
-        final artPath = await art.ensureCover(s.anilistId, s.coverImageRef);
+        final artPath = await art.ensureCover(s.seriesId, s.coverImageRef);
         await cache.upsertSeries(_seriesRow(s, artPath));
-        idMalById[s.anilistId] = s.idMal;
+        idMalById[s.seriesId] = s.idMal;
         seriesRefreshed++;
       }
     } on AniListException catch (e) {
@@ -445,34 +445,34 @@ class LibrarySync {
       failure = e.failure;
     }
 
-    // Effective (anilistId, anchored) per matched file — overrides win, so
+    // Effective (seriesId, anchored) per matched file — overrides win, so
     // fix-matched episodes get skips keyed to their corrected identity.
     final identities = <(int, int)>{};
     for (final f in files) {
       final o = overrides[(f.fileSize, f.modifiedAtMs)];
       if (o != null) {
-        identities.add((o.anilistId, o.anchoredEpisode ?? 0));
-      } else if (f.anilistId != null) {
-        identities.add((f.anilistId!, f.episodeNumber ?? 0));
+        identities.add((o.seriesId, o.anchoredEpisode ?? 0));
+      } else if (f.seriesId != null) {
+        identities.add((f.seriesId!, f.episodeNumber ?? 0));
       }
     }
 
     // Fetch AniSkip only for identities missing a cached skip row.
     final haveSkips = {
-      for (final s in await cache.allSkipRows()) (s.anilistId, s.episode),
+      for (final s in await cache.allSkipRows()) (s.seriesId, s.episode),
     };
     final malIds = await _resolveMalIds(idMalById, identities.map((i) => i.$1));
     var skipsFetched = 0;
-    for (final (anilistId, episode) in identities) {
-      if (haveSkips.contains((anilistId, episode))) continue;
-      final mal = malIds[anilistId];
+    for (final (seriesId, episode) in identities) {
+      if (haveSkips.contains((seriesId, episode))) continue;
+      final mal = malIds[seriesId];
       if (mal == null) continue;
       try {
         final skips = await aniSkip.fetchSkips(mal, episode);
         if (skips == null) continue;
         await cache.upsertSkipSegment(
           SkipSegmentRow(
-            anilistId: anilistId,
+            seriesId: seriesId,
             episode: episode,
             introStartMs: skips.intro?.start.inMilliseconds,
             introEndMs: skips.intro?.end.inMilliseconds,
@@ -524,7 +524,7 @@ class LibrarySync {
   }
 
   CachedSeriesRow _seriesRow(Series s, String? artPath) => CachedSeriesRow(
-    anilistId: s.anilistId,
+    seriesId: s.seriesId,
     idMal: s.idMal,
     romaji: s.titles.romaji,
     english: s.titles.english,
@@ -536,7 +536,7 @@ class LibrarySync {
   );
 
   Series _seriesFromRow(CachedSeriesRow r) => Series(
-    anilistId: r.anilistId,
+    seriesId: r.seriesId,
     titles: Titles(romaji: r.romaji, english: r.english, native: r.nativeTitle),
   );
 
@@ -548,9 +548,9 @@ class LibrarySync {
 
 /// Per-title resolution result during a sync.
 class _Resolved {
-  _Resolved({required this.anilistId, required this.score, this.freshSeries});
+  _Resolved({required this.seriesId, required this.score, this.freshSeries});
 
-  final int? anilistId;
+  final int? seriesId;
   final double score;
 
   /// Non-null only when freshly fetched from AniList (needs caching + art).

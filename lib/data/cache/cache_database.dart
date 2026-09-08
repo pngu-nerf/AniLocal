@@ -9,7 +9,7 @@ part 'cache_database.g.dart';
 /// local art file so offline browse shows art, not broken images.
 @DataClassName('CachedSeriesRow')
 class SeriesCache extends Table {
-  IntColumn get anilistId => integer()();
+  IntColumn get seriesId => integer()();
 
   /// MyAnimeList id (AniList `idMal`) — the key AniSkip needs. Nullable: not
   /// every entry has a MAL mapping, and pre-v8 rows backfill on re-fetch.
@@ -24,7 +24,7 @@ class SeriesCache extends Table {
   TextColumn get coverImagePath => text().nullable()();
 
   @override
-  Set<Column> get primaryKey => {anilistId};
+  Set<Column> get primaryKey => {seriesId};
 
   @override
   String get tableName => 'series_cache';
@@ -37,7 +37,7 @@ class SeriesCache extends Table {
 /// folder is re-found by its volume UUID (see [LibraryFolders.volumeId]) and the
 /// relative paths still resolve, so a remount does NOT churn the cache (no
 /// re-identify, no AniList refetch). [fileSize] + [modifiedAtMs] remain the
-/// "unchanged" key for incremental rescans. A null [anilistId] is a
+/// "unchanged" key for incremental rescans. A null [seriesId] is a
 /// known-unmatched file — it persists across rescans (Stage 5 fixes it).
 @DataClassName('CachedFileRow')
 class FileCache extends Table {
@@ -45,13 +45,13 @@ class FileCache extends Table {
   TextColumn get relativePath => text()();
   IntColumn get fileSize => integer()();
   IntColumn get modifiedAtMs => integer()();
-  IntColumn get anilistId => integer().nullable()();
+  IntColumn get seriesId => integer().nullable()();
   IntColumn get episodeNumber => integer().nullable()();
   TextColumn get parsedTitle => text()();
   RealColumn get matchScore => real().withDefault(const Constant(0))();
   TextColumn get releaseGroup => text().nullable()();
 
-  /// Identification lifecycle, meaningful ONLY while [anilistId] is null. This
+  /// Identification lifecycle, meaningful ONLY while [seriesId] is null. This
   /// is the THIRD state (besides matched / confirmed-unmatched): true = PENDING
   /// — the file was discovered on disk and parsed, but AniList hasn't yet
   /// resolved it (offline, not-yet-tried, or a transient lookup failure). A
@@ -63,7 +63,7 @@ class FileCache extends Table {
   ///
   /// Defaulting to false makes the v9->v10 migration exact: every pre-v10
   /// unmatched row keeps its old meaning (confirmed-unmatched), and matched
-  /// rows are unaffected (the flag is ignored when [anilistId] is set).
+  /// rows are unaffected (the flag is ignored when [seriesId] is set).
   BoolColumn get pendingIdentification =>
       boolean().withDefault(const Constant(false))();
 
@@ -114,7 +114,7 @@ class LibraryFolders extends Table {
 /// override follows a file across a move/rename without the sync ever touching
 /// this table. (Distinct real media don't share a byte-exact size + mtime.)
 ///
-/// [anchoredEpisode] is the episode position WITHIN [anilistId] (file "12" of a
+/// [anchoredEpisode] is the episode position WITHIN [seriesId] (file "12" of a
 /// continuously-numbered show = Season-2-entry episode 1). The displayed number
 /// is derived: `displayContinuous ? anchoredEpisode + continuousOffset
 /// : anchoredEpisode`, where [continuousOffset] is the real prior-season episode
@@ -123,7 +123,7 @@ class LibraryFolders extends Table {
 class MatchOverrides extends Table {
   IntColumn get fileSize => integer()();
   IntColumn get modifiedAtMs => integer()();
-  IntColumn get anilistId => integer()();
+  IntColumn get seriesId => integer()();
   IntColumn get anchoredEpisode => integer().nullable()();
   IntColumn get continuousOffset => integer().withDefault(const Constant(0))();
   BoolColumn get displayContinuous =>
@@ -136,13 +136,13 @@ class MatchOverrides extends Table {
   String get tableName => 'match_overrides';
 }
 
-/// Local watch state (Stage 6). Keyed by EPISODE IDENTITY — [anilistId] + the
+/// Local watch state (Stage 6). Keyed by EPISODE IDENTITY — [seriesId] + the
 /// anchored (AniList-faithful) [episode] position — NOT by file path or player
 /// session. This is what survives a file move and what the future multi-source
 /// stage needs: "resume episode 5" is episode 5 whatever file played it.
 @DataClassName('WatchStateRow')
 class WatchStates extends Table {
-  IntColumn get anilistId => integer()();
+  IntColumn get seriesId => integer()();
   IntColumn get episode => integer()();
   IntColumn get resumePositionMs => integer().withDefault(const Constant(0))();
   IntColumn get durationMs => integer().withDefault(const Constant(0))();
@@ -158,14 +158,14 @@ class WatchStates extends Table {
   IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 
   @override
-  Set<Column> get primaryKey => {anilistId, episode};
+  Set<Column> get primaryKey => {seriesId, episode};
 
   @override
   String get tableName => 'watch_state';
 }
 
 /// Manual SOURCE override (multi-source episodes). One logical episode = the
-/// files sharing an episode identity `(anilistId, anchored episode)` across
+/// files sharing an episode identity `(seriesId, anchored episode)` across
 /// library folders; by default it plays from the highest-priority folder
 /// (lowest `library_folders.sortOrder`) that has it. This table pins a specific
 /// source instead — keyed by that SAME episode identity (so it is shared across
@@ -178,13 +178,13 @@ class WatchStates extends Table {
 /// and the row sits inert (re-applies if that folder returns).
 @DataClassName('SourceOverrideRow')
 class SourceOverrides extends Table {
-  IntColumn get anilistId => integer()();
+  IntColumn get seriesId => integer()();
   IntColumn get episode => integer()();
   TextColumn get folderPath => text()();
   IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 
   @override
-  Set<Column> get primaryKey => {anilistId, episode};
+  Set<Column> get primaryKey => {seriesId, episode};
 
   @override
   String get tableName => 'source_overrides';
@@ -192,14 +192,14 @@ class SourceOverrides extends Table {
 
 /// Cached OP/ED skip windows (the auto-skip feature). Fetched from AniSkip at
 /// scan time and read OFFLINE during playback — the player never hits the
-/// network. Keyed by EPISODE IDENTITY ([anilistId] + the anchored [episode]
+/// network. Keyed by EPISODE IDENTITY ([seriesId] + the anchored [episode]
 /// position), consistent with watch_state / source_overrides. A row exists only
 /// when AniSkip had data; absence = no skip affordance (partial coverage is
 /// normal). Either window may be null (intro-only or outro-only). Times are ms
 /// from the start of the file.
 @DataClassName('SkipSegmentRow')
 class SkipSegments extends Table {
-  IntColumn get anilistId => integer()();
+  IntColumn get seriesId => integer()();
   IntColumn get episode => integer()();
   IntColumn get introStartMs => integer().nullable()();
   IntColumn get introEndMs => integer().nullable()();
@@ -207,14 +207,14 @@ class SkipSegments extends Table {
   IntColumn get outroEndMs => integer().nullable()();
 
   @override
-  Set<Column> get primaryKey => {anilistId, episode};
+  Set<Column> get primaryKey => {seriesId, episode};
 
   @override
   String get tableName => 'skip_segments';
 }
 
 /// User-hidden MISSING episodes (the missing-episodes feature). Keyed by EPISODE
-/// IDENTITY ([anilistId] + the anchored [episode] position), consistent with
+/// IDENTITY ([seriesId] + the anchored [episode] position), consistent with
 /// watch_state / source_overrides / skip_segments. A hidden episode is removed
 /// from the show's episode list (no ghost tile) and excluded from completeness
 /// counts. Hiding is always per-episode, even when the action targets a bundle.
@@ -225,12 +225,12 @@ class SkipSegments extends Table {
 /// fix-match or a source pin. The only writers are the hide/unhide UI actions.
 @DataClassName('HiddenEpisodeRow')
 class HiddenEpisodes extends Table {
-  IntColumn get anilistId => integer()();
+  IntColumn get seriesId => integer()();
   IntColumn get episode => integer()();
   IntColumn get hiddenAtMs => integer().withDefault(const Constant(0))();
 
   @override
-  Set<Column> get primaryKey => {anilistId, episode};
+  Set<Column> get primaryKey => {seriesId, episode};
 
   @override
   String get tableName => 'hidden_episodes';
@@ -250,7 +250,7 @@ class AppSettings extends Table {
   String get tableName => 'app_settings';
 }
 
-/// PER-SHOW preferences, keyed by show identity ([anilistId]). Sacred user data:
+/// PER-SHOW preferences, keyed by show identity ([seriesId]). Sacred user data:
 /// written ONLY by the per-show menu actions; the fill path (applySync) and
 /// refreshMetadata never touch it, so a rescan/refresh can't wipe it (seam #5) —
 /// like watch_state / source_overrides / hidden_episodes. Extensible: a new
@@ -258,7 +258,7 @@ class AppSettings extends Table {
 /// NOT a parallel store. Absent row = all defaults.
 @DataClassName('ShowPreferenceRow')
 class ShowPrefs extends Table {
-  IntColumn get anilistId => integer()();
+  IntColumn get seriesId => integer()();
 
   /// Cover display mode token (see PictureMode): 'normal' / 'blur' / 'removed'.
   TextColumn get pictureMode => text().withDefault(const Constant('normal'))();
@@ -268,10 +268,45 @@ class ShowPrefs extends Table {
       boolean().withDefault(const Constant(false))();
 
   @override
-  Set<Column> get primaryKey => {anilistId};
+  Set<Column> get primaryKey => {seriesId};
 
   @override
   String get tableName => 'show_preferences';
+}
+
+/// A show's ids on OTHER databases, keyed by our own [SeriesCache.seriesId].
+///
+/// Exists because `series_id` is now an OPAQUE LOCAL SURROGATE, not any
+/// provider's id — sources are user-reorderable, and 4,655 anime on Kitsu have
+/// no AniList id at all, so no single provider's id could serve as the key
+/// without stranding user data. External ids are ATTRIBUTES of a show here,
+/// never its identity.
+///
+/// [externalId] is TEXT so a future provider with a non-numeric id needs no
+/// migration. The UNIQUE (provider, external_id) index is load-bearing: it
+/// turns "the same show got minted twice under two ids" from a silent fork
+/// that strands watch progress into a loud constraint failure.
+class SeriesExternalIds extends Table {
+  IntColumn get seriesId => integer()();
+
+  /// Which database the id belongs to: 'anilist', 'mal', 'kitsu', 'anidb'.
+  TextColumn get provider => text()();
+
+  TextColumn get externalId => text()();
+
+  @override
+  Set<Column> get primaryKey => {seriesId, provider};
+
+  /// Load-bearing: two series claiming the same provider id is the shape that
+  /// silently forks a show and strands watch progress under an orphaned id.
+  /// This turns it into a loud constraint failure instead.
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {provider, externalId},
+  ];
+
+  @override
+  String get tableName => 'series_external_ids';
 }
 
 @DriftDatabase(
@@ -286,13 +321,14 @@ class ShowPrefs extends Table {
     HiddenEpisodes,
     AppSettings,
     ShowPrefs,
+    SeriesExternalIds,
   ],
 )
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
@@ -380,6 +416,9 @@ class CacheDatabase extends _$CacheDatabase {
         // an override until the user sets one).
         await m.createTable(showPrefs);
       }
+      if (from < 14) {
+        await _migrateToSurrogateIdentityV14(m, from);
+      }
     },
   );
 
@@ -391,6 +430,83 @@ class CacheDatabase extends _$CacheDatabase {
   /// re-identify, no AniList refetch). Watch-state / overrides aren't touched
   /// (they're fingerprint/identity keyed). Volume UUIDs are NOT resolved here
   /// (that needs diskutil + a mounted volume) — they backfill on the next scan.
+  /// v13 -> v14: `anilist_id` becomes `series_id` everywhere, and external ids
+  /// move into their own table.
+  ///
+  /// The column was never really "AniList's id" in role — it is the app's
+  /// universal primary key across eight tables, four of them holding sacred
+  /// user data. Renaming it stops the name lying now that a show can come from
+  /// a provider other than AniList (or from none of them: 4,655 Kitsu entries
+  /// have no AniList id).
+  ///
+  /// SAFETY: `ALTER TABLE ... RENAME COLUMN` is a SCHEMA-TEXT-ONLY operation —
+  /// SQLite rewrites the stored CREATE TABLE (primary-key clause included) and
+  /// touches ZERO rows. There is no copy, no INSERT loop, no table rebuild. The
+  /// whole onUpgrade runs inside drift's migration transaction, so the only two
+  /// outcomes are "every rename applied" or "rolled back, database byte-for-byte
+  /// unchanged". That is a stronger guarantee than the v9 migration shipped
+  /// with, which did rebuild a table row by row.
+  ///
+  /// Identity is PRESERVED: series_id is seeded with the exact value anilist_id
+  /// held, so nothing is re-keyed and cover-art files (named by id on disk)
+  /// still resolve. No file is touched.
+  Future<void> _migrateToSurrogateIdentityV14(Migrator m, int from) async {
+    // THE RULE, and it is not obvious: only rename a table that ALREADY EXISTED
+    // when this upgrade started. `m.createTable` always emits the table in its
+    // CURRENT generated shape, so any table created by an earlier step of this
+    // same onUpgrade run was born with `series_id` and has no `anilist_id` to
+    // rename — attempting it fails with "no such column". Each entry below is
+    // therefore paired with the schema version that CREATES that table.
+    //
+    // Get this wrong and it only bites users upgrading from an older version,
+    // which is exactly the case a single-hop migration test never covers.
+    Future<void> renameIfPreExisting(
+      int createdAtVersion,
+      TableInfo<Table, dynamic> table,
+      GeneratedColumn<int> column,
+    ) async {
+      if (from >= createdAtVersion) {
+        await m.renameColumn(table, 'anilist_id', column);
+      }
+    }
+
+    await renameIfPreExisting(1, seriesCache, seriesCache.seriesId);
+    // file_cache exists from v1 but is REBUILT by the v9 step, so from a
+    // pre-v9 cache it is already in current shape.
+    await renameIfPreExisting(9, fileCache, fileCache.seriesId);
+    await renameIfPreExisting(3, matchOverrides, matchOverrides.seriesId);
+    await renameIfPreExisting(5, watchStates, watchStates.seriesId);
+    await renameIfPreExisting(7, sourceOverrides, sourceOverrides.seriesId);
+    await renameIfPreExisting(8, skipSegments, skipSegments.seriesId);
+    await renameIfPreExisting(11, hiddenEpisodes, hiddenEpisodes.seriesId);
+    await renameIfPreExisting(13, showPrefs, showPrefs.seriesId);
+
+    await m.createTable(seriesExternalIds);
+
+    // Seed the side table from what we already know. Every existing series_id
+    // IS an AniList id (that is what it was until this migration), and id_mal
+    // is the MAL id AniList gave us.
+    //
+    // The `> 0` guard is belt-and-braces: placeholder ids are negative and are
+    // never persisted to series_cache, but if one ever were, it must not be
+    // published as though it were a real AniList id.
+    await customStatement(
+      "INSERT OR IGNORE INTO series_external_ids (series_id, provider, "
+      "external_id) SELECT series_id, 'anilist', CAST(series_id AS TEXT) "
+      'FROM series_cache WHERE series_id > 0',
+    );
+    await customStatement(
+      "INSERT OR IGNORE INTO series_external_ids (series_id, provider, "
+      "external_id) SELECT series_id, 'mal', CAST(id_mal AS TEXT) "
+      'FROM series_cache WHERE id_mal IS NOT NULL',
+    );
+
+    // OBLIGATION carried forward: series_cache.id_mal is now duplicated by the
+    // 'mal' row above. It stays for now because removing it means repointing
+    // the AniSkip lookup, which is a behaviour change and belongs in the
+    // provider-abstraction slice, not this identity-only one. Drop it there.
+  }
+
   Future<void> _migrateFileCacheToRelativeV9(Migrator m) async {
     final folderRows = await customSelect(
       'SELECT path FROM library_folders',
@@ -407,13 +523,17 @@ class CacheDatabase extends _$CacheDatabase {
       final loc = rebaseToFolderRelative(r.read<String>('path'), folderPaths);
       await customStatement(
         'INSERT INTO file_cache (folder_path, relative_path, file_size, '
-        'modified_at_ms, anilist_id, episode_number, parsed_title, '
+        'modified_at_ms, series_id, episode_number, parsed_title, '
         'match_score, release_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           loc.folderPath,
           loc.relativePath,
           r.read<int>('file_size'),
           r.read<int>('modified_at_ms'),
+          // READ side: this row comes from the PRE-v9 table, whose column is
+          // still literally `anilist_id`. The INSERT above writes `series_id`
+          // because m.createTable(fileCache) built the table in its CURRENT
+          // shape. That asymmetry is deliberate — do not "fix" it to match.
           r.readNullable<int>('anilist_id'),
           r.readNullable<int>('episode_number'),
           r.read<String>('parsed_title'),
@@ -429,11 +549,11 @@ class CacheDatabase extends _$CacheDatabase {
 
   Future<List<CachedSeriesRow>> allSeriesRows() => select(seriesCache).get();
 
-  Future<List<CachedFileRow>> filesForSeries(int anilistId) =>
-      (select(fileCache)..where((f) => f.anilistId.equals(anilistId))).get();
+  Future<List<CachedFileRow>> filesForSeries(int seriesId) =>
+      (select(fileCache)..where((f) => f.seriesId.equals(seriesId))).get();
 
   Future<List<CachedFileRow>> unmatchedFileRows() =>
-      (select(fileCache)..where((f) => f.anilistId.isNull())).get();
+      (select(fileCache)..where((f) => f.seriesId.isNull())).get();
 
   // --- Library folders (Stage 5) ---
 
@@ -483,9 +603,9 @@ class CacheDatabase extends _$CacheDatabase {
       await (delete(libraryFolders)..where((f) => f.path.equals(path))).go();
       await (delete(fileCache)..where((f) => f.folderPath.equals(path))).go();
       await customStatement(
-        'DELETE FROM series_cache WHERE anilist_id NOT IN ('
-        'SELECT anilist_id FROM file_cache WHERE anilist_id IS NOT NULL '
-        'UNION SELECT anilist_id FROM match_overrides)',
+        'DELETE FROM series_cache WHERE series_id NOT IN ('
+        'SELECT series_id FROM file_cache WHERE series_id IS NOT NULL '
+        'UNION SELECT series_id FROM match_overrides)',
       );
     });
   }
@@ -527,8 +647,54 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// Cache a series without pruning (used by fix-match before its override
   /// row exists — applySync's prune would otherwise drop the new series).
-  Future<void> upsertSeries(CachedSeriesRow row) =>
-      into(seriesCache).insertOnConflictUpdate(row);
+  Future<void> upsertSeries(CachedSeriesRow row) async {
+    await into(seriesCache).insertOnConflictUpdate(row);
+    await _recordProviderIds(row);
+  }
+
+  /// Record which provider ids a cached series is known by.
+  ///
+  /// Today every series is identified through AniList, so its `series_id` IS
+  /// its AniList id — that is the v14 invariant. The provider-abstraction slice
+  /// replaces this assumption with the ids the answering provider actually
+  /// reported, at which point a minted `series_id` will carry no 'anilist' row
+  /// at all. Writing it here (not only in the migration) is what keeps the side
+  /// table true for series cached AFTER the upgrade.
+  Future<void> _recordProviderIds(CachedSeriesRow row) async {
+    // Placeholders are negative and never reach series_cache; guard anyway so a
+    // synthetic id can never be published as though it were a provider's.
+    if (row.seriesId <= 0) return;
+    await into(seriesExternalIds).insertOnConflictUpdate(
+      SeriesExternalId(
+        seriesId: row.seriesId,
+        provider: 'anilist',
+        externalId: '${row.seriesId}',
+      ),
+    );
+    final mal = row.idMal;
+    if (mal != null) {
+      await into(seriesExternalIds).insertOnConflictUpdate(
+        SeriesExternalId(
+          seriesId: row.seriesId,
+          provider: 'mal',
+          externalId: '$mal',
+        ),
+      );
+    }
+  }
+
+  /// series_id -> its AniList id, for the read path. Absent when a series has
+  /// no AniList id (a minted one, once other providers exist).
+  Future<Map<int, int>> anilistIdsBySeriesId() async {
+    final rows = await (select(
+      seriesExternalIds,
+    )..where((e) => e.provider.equals('anilist'))).get();
+    return {
+      for (final r in rows)
+        if (int.tryParse(r.externalId) != null)
+          r.seriesId: int.parse(r.externalId),
+    };
+  }
 
   Future<void> upsertOverride(MatchOverrideRow row) =>
       into(matchOverrides).insertOnConflictUpdate(row);
@@ -541,7 +707,7 @@ class CacheDatabase extends _$CacheDatabase {
           ))
           .go();
 
-  // --- Watch state (Stage 6). Keyed by episode identity (anilistId, episode). ---
+  // --- Watch state (Stage 6). Keyed by episode identity (seriesId, episode). ---
 
   Future<List<WatchStateRow>> allWatchStateRows() => select(watchStates).get();
 
@@ -562,9 +728,9 @@ class CacheDatabase extends _$CacheDatabase {
             ]))
           .get();
 
-  Future<WatchStateRow?> watchStateFor(int anilistId, int episode) =>
+  Future<WatchStateRow?> watchStateFor(int seriesId, int episode) =>
       (select(watchStates)..where(
-            (w) => w.anilistId.equals(anilistId) & w.episode.equals(episode),
+            (w) => w.seriesId.equals(seriesId) & w.episode.equals(episode),
           ))
           .getSingleOrNull();
 
@@ -573,9 +739,9 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// Remove an episode's watch state entirely (dismiss from "Continue
   /// watching" without marking it watched).
-  Future<void> deleteWatchState(int anilistId, int episode) =>
+  Future<void> deleteWatchState(int seriesId, int episode) =>
       (delete(watchStates)..where(
-            (w) => w.anilistId.equals(anilistId) & w.episode.equals(episode),
+            (w) => w.seriesId.equals(seriesId) & w.episode.equals(episode),
           ))
           .go();
 
@@ -589,9 +755,9 @@ class CacheDatabase extends _$CacheDatabase {
   Future<void> upsertSourceOverride(SourceOverrideRow row) =>
       into(sourceOverrides).insertOnConflictUpdate(row);
 
-  Future<void> deleteSourceOverride(int anilistId, int episode) =>
+  Future<void> deleteSourceOverride(int seriesId, int episode) =>
       (delete(sourceOverrides)..where(
-            (s) => s.anilistId.equals(anilistId) & s.episode.equals(episode),
+            (s) => s.seriesId.equals(seriesId) & s.episode.equals(episode),
           ))
           .go();
 
@@ -600,9 +766,9 @@ class CacheDatabase extends _$CacheDatabase {
 
   Future<List<SkipSegmentRow>> allSkipRows() => select(skipSegments).get();
 
-  Future<SkipSegmentRow?> skipSegmentFor(int anilistId, int episode) =>
+  Future<SkipSegmentRow?> skipSegmentFor(int seriesId, int episode) =>
       (select(skipSegments)..where(
-            (s) => s.anilistId.equals(anilistId) & s.episode.equals(episode),
+            (s) => s.seriesId.equals(seriesId) & s.episode.equals(episode),
           ))
           .getSingleOrNull();
 
@@ -618,29 +784,27 @@ class CacheDatabase extends _$CacheDatabase {
   Future<List<HiddenEpisodeRow>> allHiddenRows() =>
       select(hiddenEpisodes).get();
 
-  Future<List<HiddenEpisodeRow>> hiddenRowsFor(int anilistId) => (select(
-    hiddenEpisodes,
-  )..where((h) => h.anilistId.equals(anilistId))).get();
+  Future<List<HiddenEpisodeRow>> hiddenRowsFor(int seriesId) =>
+      (select(hiddenEpisodes)..where((h) => h.seriesId.equals(seriesId))).get();
 
   /// Hide a set of episode positions for one series (per-episode, even when the
   /// hide action targeted a bundle). Idempotent upserts in one transaction.
-  Future<void> hideEpisodes(int anilistId, List<int> episodes) => transaction(
-    () async {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      for (final ep in episodes) {
-        await into(hiddenEpisodes).insertOnConflictUpdate(
-          HiddenEpisodeRow(anilistId: anilistId, episode: ep, hiddenAtMs: now),
-        );
-      }
-    },
-  );
+  Future<void> hideEpisodes(int seriesId, List<int> episodes) =>
+      transaction(() async {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        for (final ep in episodes) {
+          await into(hiddenEpisodes).insertOnConflictUpdate(
+            HiddenEpisodeRow(seriesId: seriesId, episode: ep, hiddenAtMs: now),
+          );
+        }
+      });
 
   /// Unhide a set of episode positions for one series.
-  Future<void> unhideEpisodes(int anilistId, List<int> episodes) =>
+  Future<void> unhideEpisodes(int seriesId, List<int> episodes) =>
       transaction(() async {
         for (final ep in episodes) {
           await (delete(hiddenEpisodes)..where(
-                (h) => h.anilistId.equals(anilistId) & h.episode.equals(ep),
+                (h) => h.seriesId.equals(seriesId) & h.episode.equals(ep),
               ))
               .go();
         }
@@ -662,9 +826,9 @@ class CacheDatabase extends _$CacheDatabase {
 
   Future<List<ShowPreferenceRow>> allShowPrefRows() => select(showPrefs).get();
 
-  Future<ShowPreferenceRow?> showPrefFor(int anilistId) => (select(
+  Future<ShowPreferenceRow?> showPrefFor(int seriesId) => (select(
     showPrefs,
-  )..where((p) => p.anilistId.equals(anilistId))).getSingleOrNull();
+  )..where((p) => p.seriesId.equals(seriesId))).getSingleOrNull();
 
   Future<void> upsertShowPref(ShowPreferenceRow row) =>
       into(showPrefs).insertOnConflictUpdate(row);
@@ -707,6 +871,7 @@ class CacheDatabase extends _$CacheDatabase {
     return transaction(() async {
       for (final s in seriesUpserts) {
         await into(seriesCache).insertOnConflictUpdate(s);
+        await _recordProviderIds(s);
       }
       for (final f in fileUpserts) {
         await into(fileCache).insertOnConflictUpdate(f);
@@ -716,11 +881,11 @@ class CacheDatabase extends _$CacheDatabase {
       }
       for (final (placeholderId, realId) in promotions) {
         await customStatement(
-          'UPDATE OR IGNORE watch_state SET anilist_id = ? '
-          'WHERE anilist_id = ? AND episode >= 0',
+          'UPDATE OR IGNORE watch_state SET series_id = ? '
+          'WHERE series_id = ? AND episode >= 0',
           [realId, placeholderId],
         );
-        await customStatement('DELETE FROM watch_state WHERE anilist_id = ?', [
+        await customStatement('DELETE FROM watch_state WHERE series_id = ?', [
           placeholderId,
         ]);
       }
@@ -731,14 +896,14 @@ class CacheDatabase extends _$CacheDatabase {
             .go();
       }
       await customStatement(
-        'DELETE FROM series_cache WHERE anilist_id NOT IN ('
-        'SELECT anilist_id FROM file_cache WHERE anilist_id IS NOT NULL '
-        'UNION SELECT anilist_id FROM match_overrides)',
+        'DELETE FROM series_cache WHERE series_id NOT IN ('
+        'SELECT series_id FROM file_cache WHERE series_id IS NOT NULL '
+        'UNION SELECT series_id FROM match_overrides)',
       );
       // Drop skip rows whose series is no longer cached.
       await customStatement(
-        'DELETE FROM skip_segments WHERE anilist_id NOT IN ('
-        'SELECT anilist_id FROM series_cache)',
+        'DELETE FROM skip_segments WHERE series_id NOT IN ('
+        'SELECT series_id FROM series_cache)',
       );
     });
   }

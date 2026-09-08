@@ -9,7 +9,7 @@ Series _series({
   String? native,
   bool pending = false,
 }) => Series(
-  anilistId: pending ? -42 : 1,
+  seriesId: pending ? -42 : 1,
   titles: Titles(english: english, romaji: romaji, native: native),
   pending: pending,
 );

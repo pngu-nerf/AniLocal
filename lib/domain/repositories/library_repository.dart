@@ -21,7 +21,7 @@ abstract interface class LibraryRepository {
   Future<List<Series>> allSeries();
 
   /// Episodes (matched files) for a series, ordered by episode number.
-  Future<List<Episode>> episodesFor(int anilistId);
+  Future<List<Episode>> episodesFor(int seriesId);
 
   /// Files that scanned but matched no AniList entry — kept on record so they
   /// don't vanish on rescan (Stage 5 fix-match will resolve them).

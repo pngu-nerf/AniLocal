@@ -36,25 +36,25 @@ class _FakeRepository
         ShowPreferencesRepository {
   static const _series = [
     Series(
-      anilistId: 1,
+      seriesId: 1,
       titles: Titles(romaji: 'Sousou no Frieren', english: 'Frieren'),
       format: 'TV',
       episodeCount: 28,
     ),
     Series(
-      anilistId: 2,
+      seriesId: 2,
       titles: Titles(romaji: 'Bocchi the Rock!', english: 'Bocchi the Rock!'),
       format: 'TV',
       episodeCount: 12,
     ),
     Series(
-      anilistId: 3,
+      seriesId: 3,
       titles: Titles(romaji: 'Cowboy Bebop', english: 'Cowboy Bebop'),
       format: 'TV',
       episodeCount: 26,
     ),
     Series(
-      anilistId: -7,
+      seriesId: -7,
       titles: Titles(romaji: '[SubsPlease] Dandadan - 03'),
       pending: true,
     ),
@@ -63,7 +63,7 @@ class _FakeRepository
   static const _episode = Episode(
     number: 5,
     fileRef: '/x/ep5.mkv',
-    seriesAnilistId: 1,
+    seriesId: 1,
     anchoredNumber: 5,
     resumePosition: Duration(minutes: 8),
     duration: Duration(minutes: 24),
@@ -73,7 +73,7 @@ class _FakeRepository
   Future<List<Series>> allSeries() async => _series;
 
   @override
-  Future<List<Episode>> episodesFor(int anilistId) async => const [];
+  Future<List<Episode>> episodesFor(int seriesId) async => const [];
 
   @override
   Future<List<IdentifiedEpisode>> unmatchedFiles() async => const [];
@@ -104,15 +104,15 @@ class _FakeRepository
   Future<void> setWatchedManual(Episode e, {required bool watched}) async {}
 
   @override
-  Future<ShowPreferences> preferencesFor(int anilistId) async =>
+  Future<ShowPreferences> preferencesFor(int seriesId) async =>
       const ShowPreferences();
   @override
   Future<Map<int, ShowPreferences>> allPreferences() async => const {};
   @override
-  Future<void> setPictureMode(int anilistId, PictureMode mode) async {}
+  Future<void> setPictureMode(int seriesId, PictureMode mode) async {}
   @override
   Future<void> setNextEpisodeHidden(
-    int anilistId, {
+    int seriesId, {
     required bool hidden,
   }) async {}
 
@@ -143,13 +143,13 @@ class _FakeRepository
   @override
   Future<Map<int, Episode>> upNextBySeries() async => const {};
   @override
-  Future<Set<int>> hiddenEpisodes(int anilistId) async => const {};
+  Future<Set<int>> hiddenEpisodes(int seriesId) async => const {};
   @override
   Future<Map<int, Set<int>>> allHiddenEpisodes() async => const {};
   @override
-  Future<void> hideEpisodes(int anilistId, List<int> episodes) async {}
+  Future<void> hideEpisodes(int seriesId, List<int> episodes) async {}
   @override
-  Future<void> unhideEpisodes(int anilistId, List<int> episodes) async {}
+  Future<void> unhideEpisodes(int seriesId, List<int> episodes) async {}
 }
 
 class _FakeFixMatch implements FixMatchRepository {

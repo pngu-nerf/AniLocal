@@ -10,7 +10,7 @@ void main() {
 
       final series = seriesFromMediaJson(media);
 
-      expect(series.anilistId, 154587);
+      expect(series.seriesId, 154587);
       expect(series.titles.romaji, 'Sousou no Frieren');
       expect(series.titles.english, 'Frieren: Beyond Journey\'s End');
       expect(series.titles.native, '葬送のフリーレン');
@@ -34,7 +34,7 @@ void main() {
 
       final series = seriesFromMediaJson(media);
 
-      expect(series.anilistId, 1);
+      expect(series.seriesId, 1);
       expect(series.titles.romaji, 'Only Romaji');
       expect(series.format, isNull);
       expect(series.episodeCount, isNull);

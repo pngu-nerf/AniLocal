@@ -9,12 +9,12 @@ class $SeriesCacheTable extends SeriesCache
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $SeriesCacheTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
-    'anilistId',
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
   );
   @override
-  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
-    'anilist_id',
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -104,7 +104,7 @@ class $SeriesCacheTable extends SeriesCache
   );
   @override
   List<GeneratedColumn> get $columns => [
-    anilistId,
+    seriesId,
     idMal,
     romaji,
     english,
@@ -126,10 +126,10 @@ class $SeriesCacheTable extends SeriesCache
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('anilist_id')) {
+    if (data.containsKey('series_id')) {
       context.handle(
-        _anilistIdMeta,
-        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
       );
     }
     if (data.containsKey('id_mal')) {
@@ -196,14 +196,14 @@ class $SeriesCacheTable extends SeriesCache
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {anilistId};
+  Set<GeneratedColumn> get $primaryKey => {seriesId};
   @override
   CachedSeriesRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return CachedSeriesRow(
-      anilistId: attachedDatabase.typeMapping.read(
+      seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}anilist_id'],
+        data['${effectivePrefix}series_id'],
       )!,
       idMal: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -247,7 +247,7 @@ class $SeriesCacheTable extends SeriesCache
 }
 
 class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
-  final int anilistId;
+  final int seriesId;
 
   /// MyAnimeList id (AniList `idMal`) — the key AniSkip needs. Nullable: not
   /// every entry has a MAL mapping, and pre-v8 rows backfill on re-fetch.
@@ -260,7 +260,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   final String? coverImageUrl;
   final String? coverImagePath;
   const CachedSeriesRow({
-    required this.anilistId,
+    required this.seriesId,
     this.idMal,
     this.romaji,
     this.english,
@@ -273,7 +273,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['anilist_id'] = Variable<int>(anilistId);
+    map['series_id'] = Variable<int>(seriesId);
     if (!nullToAbsent || idMal != null) {
       map['id_mal'] = Variable<int>(idMal);
     }
@@ -303,7 +303,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
 
   SeriesCacheCompanion toCompanion(bool nullToAbsent) {
     return SeriesCacheCompanion(
-      anilistId: Value(anilistId),
+      seriesId: Value(seriesId),
       idMal: idMal == null && nullToAbsent
           ? const Value.absent()
           : Value(idMal),
@@ -337,7 +337,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return CachedSeriesRow(
-      anilistId: serializer.fromJson<int>(json['anilistId']),
+      seriesId: serializer.fromJson<int>(json['seriesId']),
       idMal: serializer.fromJson<int?>(json['idMal']),
       romaji: serializer.fromJson<String?>(json['romaji']),
       english: serializer.fromJson<String?>(json['english']),
@@ -352,7 +352,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'anilistId': serializer.toJson<int>(anilistId),
+      'seriesId': serializer.toJson<int>(seriesId),
       'idMal': serializer.toJson<int?>(idMal),
       'romaji': serializer.toJson<String?>(romaji),
       'english': serializer.toJson<String?>(english),
@@ -365,7 +365,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   }
 
   CachedSeriesRow copyWith({
-    int? anilistId,
+    int? seriesId,
     Value<int?> idMal = const Value.absent(),
     Value<String?> romaji = const Value.absent(),
     Value<String?> english = const Value.absent(),
@@ -375,7 +375,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     Value<String?> coverImageUrl = const Value.absent(),
     Value<String?> coverImagePath = const Value.absent(),
   }) => CachedSeriesRow(
-    anilistId: anilistId ?? this.anilistId,
+    seriesId: seriesId ?? this.seriesId,
     idMal: idMal.present ? idMal.value : this.idMal,
     romaji: romaji.present ? romaji.value : this.romaji,
     english: english.present ? english.value : this.english,
@@ -391,7 +391,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   );
   CachedSeriesRow copyWithCompanion(SeriesCacheCompanion data) {
     return CachedSeriesRow(
-      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       idMal: data.idMal.present ? data.idMal.value : this.idMal,
       romaji: data.romaji.present ? data.romaji.value : this.romaji,
       english: data.english.present ? data.english.value : this.english,
@@ -414,7 +414,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   @override
   String toString() {
     return (StringBuffer('CachedSeriesRow(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('idMal: $idMal, ')
           ..write('romaji: $romaji, ')
           ..write('english: $english, ')
@@ -429,7 +429,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
 
   @override
   int get hashCode => Object.hash(
-    anilistId,
+    seriesId,
     idMal,
     romaji,
     english,
@@ -443,7 +443,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is CachedSeriesRow &&
-          other.anilistId == this.anilistId &&
+          other.seriesId == this.seriesId &&
           other.idMal == this.idMal &&
           other.romaji == this.romaji &&
           other.english == this.english &&
@@ -455,7 +455,7 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
 }
 
 class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
-  final Value<int> anilistId;
+  final Value<int> seriesId;
   final Value<int?> idMal;
   final Value<String?> romaji;
   final Value<String?> english;
@@ -465,7 +465,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   final Value<String?> coverImageUrl;
   final Value<String?> coverImagePath;
   const SeriesCacheCompanion({
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.idMal = const Value.absent(),
     this.romaji = const Value.absent(),
     this.english = const Value.absent(),
@@ -476,7 +476,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     this.coverImagePath = const Value.absent(),
   });
   SeriesCacheCompanion.insert({
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.idMal = const Value.absent(),
     this.romaji = const Value.absent(),
     this.english = const Value.absent(),
@@ -487,7 +487,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     this.coverImagePath = const Value.absent(),
   });
   static Insertable<CachedSeriesRow> custom({
-    Expression<int>? anilistId,
+    Expression<int>? seriesId,
     Expression<int>? idMal,
     Expression<String>? romaji,
     Expression<String>? english,
@@ -498,7 +498,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     Expression<String>? coverImagePath,
   }) {
     return RawValuesInsertable({
-      if (anilistId != null) 'anilist_id': anilistId,
+      if (seriesId != null) 'series_id': seriesId,
       if (idMal != null) 'id_mal': idMal,
       if (romaji != null) 'romaji': romaji,
       if (english != null) 'english': english,
@@ -511,7 +511,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   }
 
   SeriesCacheCompanion copyWith({
-    Value<int>? anilistId,
+    Value<int>? seriesId,
     Value<int?>? idMal,
     Value<String?>? romaji,
     Value<String?>? english,
@@ -522,7 +522,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     Value<String?>? coverImagePath,
   }) {
     return SeriesCacheCompanion(
-      anilistId: anilistId ?? this.anilistId,
+      seriesId: seriesId ?? this.seriesId,
       idMal: idMal ?? this.idMal,
       romaji: romaji ?? this.romaji,
       english: english ?? this.english,
@@ -537,8 +537,8 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (anilistId.present) {
-      map['anilist_id'] = Variable<int>(anilistId.value);
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
     }
     if (idMal.present) {
       map['id_mal'] = Variable<int>(idMal.value);
@@ -570,7 +570,7 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   @override
   String toString() {
     return (StringBuffer('SeriesCacheCompanion(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('idMal: $idMal, ')
           ..write('romaji: $romaji, ')
           ..write('english: $english, ')
@@ -634,12 +634,12 @@ class $FileCacheTable extends FileCache
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
-    'anilistId',
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
   );
   @override
-  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
-    'anilist_id',
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
     aliasedName,
     true,
     type: DriftSqlType.int,
@@ -711,7 +711,7 @@ class $FileCacheTable extends FileCache
     relativePath,
     fileSize,
     modifiedAtMs,
-    anilistId,
+    seriesId,
     episodeNumber,
     parsedTitle,
     matchScore,
@@ -768,10 +768,10 @@ class $FileCacheTable extends FileCache
     } else if (isInserting) {
       context.missing(_modifiedAtMsMeta);
     }
-    if (data.containsKey('anilist_id')) {
+    if (data.containsKey('series_id')) {
       context.handle(
-        _anilistIdMeta,
-        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
       );
     }
     if (data.containsKey('episode_number')) {
@@ -843,9 +843,9 @@ class $FileCacheTable extends FileCache
         DriftSqlType.int,
         data['${effectivePrefix}modified_at_ms'],
       )!,
-      anilistId: attachedDatabase.typeMapping.read(
+      seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}anilist_id'],
+        data['${effectivePrefix}series_id'],
       ),
       episodeNumber: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -881,13 +881,13 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   final String relativePath;
   final int fileSize;
   final int modifiedAtMs;
-  final int? anilistId;
+  final int? seriesId;
   final int? episodeNumber;
   final String parsedTitle;
   final double matchScore;
   final String? releaseGroup;
 
-  /// Identification lifecycle, meaningful ONLY while [anilistId] is null. This
+  /// Identification lifecycle, meaningful ONLY while [seriesId] is null. This
   /// is the THIRD state (besides matched / confirmed-unmatched): true = PENDING
   /// — the file was discovered on disk and parsed, but AniList hasn't yet
   /// resolved it (offline, not-yet-tried, or a transient lookup failure). A
@@ -899,14 +899,14 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
   ///
   /// Defaulting to false makes the v9->v10 migration exact: every pre-v10
   /// unmatched row keeps its old meaning (confirmed-unmatched), and matched
-  /// rows are unaffected (the flag is ignored when [anilistId] is set).
+  /// rows are unaffected (the flag is ignored when [seriesId] is set).
   final bool pendingIdentification;
   const CachedFileRow({
     required this.folderPath,
     required this.relativePath,
     required this.fileSize,
     required this.modifiedAtMs,
-    this.anilistId,
+    this.seriesId,
     this.episodeNumber,
     required this.parsedTitle,
     required this.matchScore,
@@ -920,8 +920,8 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     map['relative_path'] = Variable<String>(relativePath);
     map['file_size'] = Variable<int>(fileSize);
     map['modified_at_ms'] = Variable<int>(modifiedAtMs);
-    if (!nullToAbsent || anilistId != null) {
-      map['anilist_id'] = Variable<int>(anilistId);
+    if (!nullToAbsent || seriesId != null) {
+      map['series_id'] = Variable<int>(seriesId);
     }
     if (!nullToAbsent || episodeNumber != null) {
       map['episode_number'] = Variable<int>(episodeNumber);
@@ -941,9 +941,9 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
       relativePath: Value(relativePath),
       fileSize: Value(fileSize),
       modifiedAtMs: Value(modifiedAtMs),
-      anilistId: anilistId == null && nullToAbsent
+      seriesId: seriesId == null && nullToAbsent
           ? const Value.absent()
-          : Value(anilistId),
+          : Value(seriesId),
       episodeNumber: episodeNumber == null && nullToAbsent
           ? const Value.absent()
           : Value(episodeNumber),
@@ -966,7 +966,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
       relativePath: serializer.fromJson<String>(json['relativePath']),
       fileSize: serializer.fromJson<int>(json['fileSize']),
       modifiedAtMs: serializer.fromJson<int>(json['modifiedAtMs']),
-      anilistId: serializer.fromJson<int?>(json['anilistId']),
+      seriesId: serializer.fromJson<int?>(json['seriesId']),
       episodeNumber: serializer.fromJson<int?>(json['episodeNumber']),
       parsedTitle: serializer.fromJson<String>(json['parsedTitle']),
       matchScore: serializer.fromJson<double>(json['matchScore']),
@@ -984,7 +984,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
       'relativePath': serializer.toJson<String>(relativePath),
       'fileSize': serializer.toJson<int>(fileSize),
       'modifiedAtMs': serializer.toJson<int>(modifiedAtMs),
-      'anilistId': serializer.toJson<int?>(anilistId),
+      'seriesId': serializer.toJson<int?>(seriesId),
       'episodeNumber': serializer.toJson<int?>(episodeNumber),
       'parsedTitle': serializer.toJson<String>(parsedTitle),
       'matchScore': serializer.toJson<double>(matchScore),
@@ -998,7 +998,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     String? relativePath,
     int? fileSize,
     int? modifiedAtMs,
-    Value<int?> anilistId = const Value.absent(),
+    Value<int?> seriesId = const Value.absent(),
     Value<int?> episodeNumber = const Value.absent(),
     String? parsedTitle,
     double? matchScore,
@@ -1009,7 +1009,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     relativePath: relativePath ?? this.relativePath,
     fileSize: fileSize ?? this.fileSize,
     modifiedAtMs: modifiedAtMs ?? this.modifiedAtMs,
-    anilistId: anilistId.present ? anilistId.value : this.anilistId,
+    seriesId: seriesId.present ? seriesId.value : this.seriesId,
     episodeNumber: episodeNumber.present
         ? episodeNumber.value
         : this.episodeNumber,
@@ -1030,7 +1030,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
       modifiedAtMs: data.modifiedAtMs.present
           ? data.modifiedAtMs.value
           : this.modifiedAtMs,
-      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       episodeNumber: data.episodeNumber.present
           ? data.episodeNumber.value
           : this.episodeNumber,
@@ -1056,7 +1056,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
           ..write('relativePath: $relativePath, ')
           ..write('fileSize: $fileSize, ')
           ..write('modifiedAtMs: $modifiedAtMs, ')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episodeNumber: $episodeNumber, ')
           ..write('parsedTitle: $parsedTitle, ')
           ..write('matchScore: $matchScore, ')
@@ -1072,7 +1072,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
     relativePath,
     fileSize,
     modifiedAtMs,
-    anilistId,
+    seriesId,
     episodeNumber,
     parsedTitle,
     matchScore,
@@ -1087,7 +1087,7 @@ class CachedFileRow extends DataClass implements Insertable<CachedFileRow> {
           other.relativePath == this.relativePath &&
           other.fileSize == this.fileSize &&
           other.modifiedAtMs == this.modifiedAtMs &&
-          other.anilistId == this.anilistId &&
+          other.seriesId == this.seriesId &&
           other.episodeNumber == this.episodeNumber &&
           other.parsedTitle == this.parsedTitle &&
           other.matchScore == this.matchScore &&
@@ -1100,7 +1100,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
   final Value<String> relativePath;
   final Value<int> fileSize;
   final Value<int> modifiedAtMs;
-  final Value<int?> anilistId;
+  final Value<int?> seriesId;
   final Value<int?> episodeNumber;
   final Value<String> parsedTitle;
   final Value<double> matchScore;
@@ -1112,7 +1112,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     this.relativePath = const Value.absent(),
     this.fileSize = const Value.absent(),
     this.modifiedAtMs = const Value.absent(),
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.episodeNumber = const Value.absent(),
     this.parsedTitle = const Value.absent(),
     this.matchScore = const Value.absent(),
@@ -1125,7 +1125,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     required String relativePath,
     required int fileSize,
     required int modifiedAtMs,
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.episodeNumber = const Value.absent(),
     required String parsedTitle,
     this.matchScore = const Value.absent(),
@@ -1142,7 +1142,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     Expression<String>? relativePath,
     Expression<int>? fileSize,
     Expression<int>? modifiedAtMs,
-    Expression<int>? anilistId,
+    Expression<int>? seriesId,
     Expression<int>? episodeNumber,
     Expression<String>? parsedTitle,
     Expression<double>? matchScore,
@@ -1155,7 +1155,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
       if (relativePath != null) 'relative_path': relativePath,
       if (fileSize != null) 'file_size': fileSize,
       if (modifiedAtMs != null) 'modified_at_ms': modifiedAtMs,
-      if (anilistId != null) 'anilist_id': anilistId,
+      if (seriesId != null) 'series_id': seriesId,
       if (episodeNumber != null) 'episode_number': episodeNumber,
       if (parsedTitle != null) 'parsed_title': parsedTitle,
       if (matchScore != null) 'match_score': matchScore,
@@ -1171,7 +1171,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     Value<String>? relativePath,
     Value<int>? fileSize,
     Value<int>? modifiedAtMs,
-    Value<int?>? anilistId,
+    Value<int?>? seriesId,
     Value<int?>? episodeNumber,
     Value<String>? parsedTitle,
     Value<double>? matchScore,
@@ -1184,7 +1184,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
       relativePath: relativePath ?? this.relativePath,
       fileSize: fileSize ?? this.fileSize,
       modifiedAtMs: modifiedAtMs ?? this.modifiedAtMs,
-      anilistId: anilistId ?? this.anilistId,
+      seriesId: seriesId ?? this.seriesId,
       episodeNumber: episodeNumber ?? this.episodeNumber,
       parsedTitle: parsedTitle ?? this.parsedTitle,
       matchScore: matchScore ?? this.matchScore,
@@ -1210,8 +1210,8 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
     if (modifiedAtMs.present) {
       map['modified_at_ms'] = Variable<int>(modifiedAtMs.value);
     }
-    if (anilistId.present) {
-      map['anilist_id'] = Variable<int>(anilistId.value);
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
     }
     if (episodeNumber.present) {
       map['episode_number'] = Variable<int>(episodeNumber.value);
@@ -1243,7 +1243,7 @@ class FileCacheCompanion extends UpdateCompanion<CachedFileRow> {
           ..write('relativePath: $relativePath, ')
           ..write('fileSize: $fileSize, ')
           ..write('modifiedAtMs: $modifiedAtMs, ')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episodeNumber: $episodeNumber, ')
           ..write('parsedTitle: $parsedTitle, ')
           ..write('matchScore: $matchScore, ')
@@ -1671,12 +1671,12 @@ class $MatchOverridesTable extends MatchOverrides
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
-    'anilistId',
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
   );
   @override
-  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
-    'anilist_id',
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -1724,7 +1724,7 @@ class $MatchOverridesTable extends MatchOverrides
   List<GeneratedColumn> get $columns => [
     fileSize,
     modifiedAtMs,
-    anilistId,
+    seriesId,
     anchoredEpisode,
     continuousOffset,
     displayContinuous,
@@ -1760,13 +1760,13 @@ class $MatchOverridesTable extends MatchOverrides
     } else if (isInserting) {
       context.missing(_modifiedAtMsMeta);
     }
-    if (data.containsKey('anilist_id')) {
+    if (data.containsKey('series_id')) {
       context.handle(
-        _anilistIdMeta,
-        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_anilistIdMeta);
+      context.missing(_seriesIdMeta);
     }
     if (data.containsKey('anchored_episode')) {
       context.handle(
@@ -1812,9 +1812,9 @@ class $MatchOverridesTable extends MatchOverrides
         DriftSqlType.int,
         data['${effectivePrefix}modified_at_ms'],
       )!,
-      anilistId: attachedDatabase.typeMapping.read(
+      seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}anilist_id'],
+        data['${effectivePrefix}series_id'],
       )!,
       anchoredEpisode: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -1841,14 +1841,14 @@ class MatchOverrideRow extends DataClass
     implements Insertable<MatchOverrideRow> {
   final int fileSize;
   final int modifiedAtMs;
-  final int anilistId;
+  final int seriesId;
   final int? anchoredEpisode;
   final int continuousOffset;
   final bool displayContinuous;
   const MatchOverrideRow({
     required this.fileSize,
     required this.modifiedAtMs,
-    required this.anilistId,
+    required this.seriesId,
     this.anchoredEpisode,
     required this.continuousOffset,
     required this.displayContinuous,
@@ -1858,7 +1858,7 @@ class MatchOverrideRow extends DataClass
     final map = <String, Expression>{};
     map['file_size'] = Variable<int>(fileSize);
     map['modified_at_ms'] = Variable<int>(modifiedAtMs);
-    map['anilist_id'] = Variable<int>(anilistId);
+    map['series_id'] = Variable<int>(seriesId);
     if (!nullToAbsent || anchoredEpisode != null) {
       map['anchored_episode'] = Variable<int>(anchoredEpisode);
     }
@@ -1871,7 +1871,7 @@ class MatchOverrideRow extends DataClass
     return MatchOverridesCompanion(
       fileSize: Value(fileSize),
       modifiedAtMs: Value(modifiedAtMs),
-      anilistId: Value(anilistId),
+      seriesId: Value(seriesId),
       anchoredEpisode: anchoredEpisode == null && nullToAbsent
           ? const Value.absent()
           : Value(anchoredEpisode),
@@ -1888,7 +1888,7 @@ class MatchOverrideRow extends DataClass
     return MatchOverrideRow(
       fileSize: serializer.fromJson<int>(json['fileSize']),
       modifiedAtMs: serializer.fromJson<int>(json['modifiedAtMs']),
-      anilistId: serializer.fromJson<int>(json['anilistId']),
+      seriesId: serializer.fromJson<int>(json['seriesId']),
       anchoredEpisode: serializer.fromJson<int?>(json['anchoredEpisode']),
       continuousOffset: serializer.fromJson<int>(json['continuousOffset']),
       displayContinuous: serializer.fromJson<bool>(json['displayContinuous']),
@@ -1900,7 +1900,7 @@ class MatchOverrideRow extends DataClass
     return <String, dynamic>{
       'fileSize': serializer.toJson<int>(fileSize),
       'modifiedAtMs': serializer.toJson<int>(modifiedAtMs),
-      'anilistId': serializer.toJson<int>(anilistId),
+      'seriesId': serializer.toJson<int>(seriesId),
       'anchoredEpisode': serializer.toJson<int?>(anchoredEpisode),
       'continuousOffset': serializer.toJson<int>(continuousOffset),
       'displayContinuous': serializer.toJson<bool>(displayContinuous),
@@ -1910,14 +1910,14 @@ class MatchOverrideRow extends DataClass
   MatchOverrideRow copyWith({
     int? fileSize,
     int? modifiedAtMs,
-    int? anilistId,
+    int? seriesId,
     Value<int?> anchoredEpisode = const Value.absent(),
     int? continuousOffset,
     bool? displayContinuous,
   }) => MatchOverrideRow(
     fileSize: fileSize ?? this.fileSize,
     modifiedAtMs: modifiedAtMs ?? this.modifiedAtMs,
-    anilistId: anilistId ?? this.anilistId,
+    seriesId: seriesId ?? this.seriesId,
     anchoredEpisode: anchoredEpisode.present
         ? anchoredEpisode.value
         : this.anchoredEpisode,
@@ -1930,7 +1930,7 @@ class MatchOverrideRow extends DataClass
       modifiedAtMs: data.modifiedAtMs.present
           ? data.modifiedAtMs.value
           : this.modifiedAtMs,
-      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       anchoredEpisode: data.anchoredEpisode.present
           ? data.anchoredEpisode.value
           : this.anchoredEpisode,
@@ -1948,7 +1948,7 @@ class MatchOverrideRow extends DataClass
     return (StringBuffer('MatchOverrideRow(')
           ..write('fileSize: $fileSize, ')
           ..write('modifiedAtMs: $modifiedAtMs, ')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('anchoredEpisode: $anchoredEpisode, ')
           ..write('continuousOffset: $continuousOffset, ')
           ..write('displayContinuous: $displayContinuous')
@@ -1960,7 +1960,7 @@ class MatchOverrideRow extends DataClass
   int get hashCode => Object.hash(
     fileSize,
     modifiedAtMs,
-    anilistId,
+    seriesId,
     anchoredEpisode,
     continuousOffset,
     displayContinuous,
@@ -1971,7 +1971,7 @@ class MatchOverrideRow extends DataClass
       (other is MatchOverrideRow &&
           other.fileSize == this.fileSize &&
           other.modifiedAtMs == this.modifiedAtMs &&
-          other.anilistId == this.anilistId &&
+          other.seriesId == this.seriesId &&
           other.anchoredEpisode == this.anchoredEpisode &&
           other.continuousOffset == this.continuousOffset &&
           other.displayContinuous == this.displayContinuous);
@@ -1980,7 +1980,7 @@ class MatchOverrideRow extends DataClass
 class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
   final Value<int> fileSize;
   final Value<int> modifiedAtMs;
-  final Value<int> anilistId;
+  final Value<int> seriesId;
   final Value<int?> anchoredEpisode;
   final Value<int> continuousOffset;
   final Value<bool> displayContinuous;
@@ -1988,7 +1988,7 @@ class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
   const MatchOverridesCompanion({
     this.fileSize = const Value.absent(),
     this.modifiedAtMs = const Value.absent(),
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.anchoredEpisode = const Value.absent(),
     this.continuousOffset = const Value.absent(),
     this.displayContinuous = const Value.absent(),
@@ -1997,18 +1997,18 @@ class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
   MatchOverridesCompanion.insert({
     required int fileSize,
     required int modifiedAtMs,
-    required int anilistId,
+    required int seriesId,
     this.anchoredEpisode = const Value.absent(),
     this.continuousOffset = const Value.absent(),
     this.displayContinuous = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : fileSize = Value(fileSize),
        modifiedAtMs = Value(modifiedAtMs),
-       anilistId = Value(anilistId);
+       seriesId = Value(seriesId);
   static Insertable<MatchOverrideRow> custom({
     Expression<int>? fileSize,
     Expression<int>? modifiedAtMs,
-    Expression<int>? anilistId,
+    Expression<int>? seriesId,
     Expression<int>? anchoredEpisode,
     Expression<int>? continuousOffset,
     Expression<bool>? displayContinuous,
@@ -2017,7 +2017,7 @@ class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
     return RawValuesInsertable({
       if (fileSize != null) 'file_size': fileSize,
       if (modifiedAtMs != null) 'modified_at_ms': modifiedAtMs,
-      if (anilistId != null) 'anilist_id': anilistId,
+      if (seriesId != null) 'series_id': seriesId,
       if (anchoredEpisode != null) 'anchored_episode': anchoredEpisode,
       if (continuousOffset != null) 'continuous_offset': continuousOffset,
       if (displayContinuous != null) 'display_continuous': displayContinuous,
@@ -2028,7 +2028,7 @@ class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
   MatchOverridesCompanion copyWith({
     Value<int>? fileSize,
     Value<int>? modifiedAtMs,
-    Value<int>? anilistId,
+    Value<int>? seriesId,
     Value<int?>? anchoredEpisode,
     Value<int>? continuousOffset,
     Value<bool>? displayContinuous,
@@ -2037,7 +2037,7 @@ class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
     return MatchOverridesCompanion(
       fileSize: fileSize ?? this.fileSize,
       modifiedAtMs: modifiedAtMs ?? this.modifiedAtMs,
-      anilistId: anilistId ?? this.anilistId,
+      seriesId: seriesId ?? this.seriesId,
       anchoredEpisode: anchoredEpisode ?? this.anchoredEpisode,
       continuousOffset: continuousOffset ?? this.continuousOffset,
       displayContinuous: displayContinuous ?? this.displayContinuous,
@@ -2054,8 +2054,8 @@ class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
     if (modifiedAtMs.present) {
       map['modified_at_ms'] = Variable<int>(modifiedAtMs.value);
     }
-    if (anilistId.present) {
-      map['anilist_id'] = Variable<int>(anilistId.value);
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
     }
     if (anchoredEpisode.present) {
       map['anchored_episode'] = Variable<int>(anchoredEpisode.value);
@@ -2077,7 +2077,7 @@ class MatchOverridesCompanion extends UpdateCompanion<MatchOverrideRow> {
     return (StringBuffer('MatchOverridesCompanion(')
           ..write('fileSize: $fileSize, ')
           ..write('modifiedAtMs: $modifiedAtMs, ')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('anchoredEpisode: $anchoredEpisode, ')
           ..write('continuousOffset: $continuousOffset, ')
           ..write('displayContinuous: $displayContinuous, ')
@@ -2093,12 +2093,12 @@ class $WatchStatesTable extends WatchStates
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $WatchStatesTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
-    'anilistId',
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
   );
   @override
-  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
-    'anilist_id',
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -2183,7 +2183,7 @@ class $WatchStatesTable extends WatchStates
   );
   @override
   List<GeneratedColumn> get $columns => [
-    anilistId,
+    seriesId,
     episode,
     resumePositionMs,
     durationMs,
@@ -2203,13 +2203,13 @@ class $WatchStatesTable extends WatchStates
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('anilist_id')) {
+    if (data.containsKey('series_id')) {
       context.handle(
-        _anilistIdMeta,
-        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_anilistIdMeta);
+      context.missing(_seriesIdMeta);
     }
     if (data.containsKey('episode')) {
       context.handle(
@@ -2262,14 +2262,14 @@ class $WatchStatesTable extends WatchStates
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {anilistId, episode};
+  Set<GeneratedColumn> get $primaryKey => {seriesId, episode};
   @override
   WatchStateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return WatchStateRow(
-      anilistId: attachedDatabase.typeMapping.read(
+      seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}anilist_id'],
+        data['${effectivePrefix}series_id'],
       )!,
       episode: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -2305,7 +2305,7 @@ class $WatchStatesTable extends WatchStates
 }
 
 class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
-  final int anilistId;
+  final int seriesId;
   final int episode;
   final int resumePositionMs;
   final int durationMs;
@@ -2319,7 +2319,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   final bool watchedManual;
   final int updatedAtMs;
   const WatchStateRow({
-    required this.anilistId,
+    required this.seriesId,
     required this.episode,
     required this.resumePositionMs,
     required this.durationMs,
@@ -2330,7 +2330,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['anilist_id'] = Variable<int>(anilistId);
+    map['series_id'] = Variable<int>(seriesId);
     map['episode'] = Variable<int>(episode);
     map['resume_position_ms'] = Variable<int>(resumePositionMs);
     map['duration_ms'] = Variable<int>(durationMs);
@@ -2342,7 +2342,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
 
   WatchStatesCompanion toCompanion(bool nullToAbsent) {
     return WatchStatesCompanion(
-      anilistId: Value(anilistId),
+      seriesId: Value(seriesId),
       episode: Value(episode),
       resumePositionMs: Value(resumePositionMs),
       durationMs: Value(durationMs),
@@ -2358,7 +2358,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return WatchStateRow(
-      anilistId: serializer.fromJson<int>(json['anilistId']),
+      seriesId: serializer.fromJson<int>(json['seriesId']),
       episode: serializer.fromJson<int>(json['episode']),
       resumePositionMs: serializer.fromJson<int>(json['resumePositionMs']),
       durationMs: serializer.fromJson<int>(json['durationMs']),
@@ -2371,7 +2371,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'anilistId': serializer.toJson<int>(anilistId),
+      'seriesId': serializer.toJson<int>(seriesId),
       'episode': serializer.toJson<int>(episode),
       'resumePositionMs': serializer.toJson<int>(resumePositionMs),
       'durationMs': serializer.toJson<int>(durationMs),
@@ -2382,7 +2382,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   }
 
   WatchStateRow copyWith({
-    int? anilistId,
+    int? seriesId,
     int? episode,
     int? resumePositionMs,
     int? durationMs,
@@ -2390,7 +2390,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
     bool? watchedManual,
     int? updatedAtMs,
   }) => WatchStateRow(
-    anilistId: anilistId ?? this.anilistId,
+    seriesId: seriesId ?? this.seriesId,
     episode: episode ?? this.episode,
     resumePositionMs: resumePositionMs ?? this.resumePositionMs,
     durationMs: durationMs ?? this.durationMs,
@@ -2400,7 +2400,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   );
   WatchStateRow copyWithCompanion(WatchStatesCompanion data) {
     return WatchStateRow(
-      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       episode: data.episode.present ? data.episode.value : this.episode,
       resumePositionMs: data.resumePositionMs.present
           ? data.resumePositionMs.value
@@ -2421,7 +2421,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   @override
   String toString() {
     return (StringBuffer('WatchStateRow(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('resumePositionMs: $resumePositionMs, ')
           ..write('durationMs: $durationMs, ')
@@ -2434,7 +2434,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
 
   @override
   int get hashCode => Object.hash(
-    anilistId,
+    seriesId,
     episode,
     resumePositionMs,
     durationMs,
@@ -2446,7 +2446,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is WatchStateRow &&
-          other.anilistId == this.anilistId &&
+          other.seriesId == this.seriesId &&
           other.episode == this.episode &&
           other.resumePositionMs == this.resumePositionMs &&
           other.durationMs == this.durationMs &&
@@ -2456,7 +2456,7 @@ class WatchStateRow extends DataClass implements Insertable<WatchStateRow> {
 }
 
 class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
-  final Value<int> anilistId;
+  final Value<int> seriesId;
   final Value<int> episode;
   final Value<int> resumePositionMs;
   final Value<int> durationMs;
@@ -2465,7 +2465,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
   final Value<int> updatedAtMs;
   final Value<int> rowid;
   const WatchStatesCompanion({
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.episode = const Value.absent(),
     this.resumePositionMs = const Value.absent(),
     this.durationMs = const Value.absent(),
@@ -2475,7 +2475,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     this.rowid = const Value.absent(),
   });
   WatchStatesCompanion.insert({
-    required int anilistId,
+    required int seriesId,
     required int episode,
     this.resumePositionMs = const Value.absent(),
     this.durationMs = const Value.absent(),
@@ -2483,10 +2483,10 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     this.watchedManual = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : anilistId = Value(anilistId),
+  }) : seriesId = Value(seriesId),
        episode = Value(episode);
   static Insertable<WatchStateRow> custom({
-    Expression<int>? anilistId,
+    Expression<int>? seriesId,
     Expression<int>? episode,
     Expression<int>? resumePositionMs,
     Expression<int>? durationMs,
@@ -2496,7 +2496,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (anilistId != null) 'anilist_id': anilistId,
+      if (seriesId != null) 'series_id': seriesId,
       if (episode != null) 'episode': episode,
       if (resumePositionMs != null) 'resume_position_ms': resumePositionMs,
       if (durationMs != null) 'duration_ms': durationMs,
@@ -2508,7 +2508,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
   }
 
   WatchStatesCompanion copyWith({
-    Value<int>? anilistId,
+    Value<int>? seriesId,
     Value<int>? episode,
     Value<int>? resumePositionMs,
     Value<int>? durationMs,
@@ -2518,7 +2518,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
     Value<int>? rowid,
   }) {
     return WatchStatesCompanion(
-      anilistId: anilistId ?? this.anilistId,
+      seriesId: seriesId ?? this.seriesId,
       episode: episode ?? this.episode,
       resumePositionMs: resumePositionMs ?? this.resumePositionMs,
       durationMs: durationMs ?? this.durationMs,
@@ -2532,8 +2532,8 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (anilistId.present) {
-      map['anilist_id'] = Variable<int>(anilistId.value);
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
     }
     if (episode.present) {
       map['episode'] = Variable<int>(episode.value);
@@ -2562,7 +2562,7 @@ class WatchStatesCompanion extends UpdateCompanion<WatchStateRow> {
   @override
   String toString() {
     return (StringBuffer('WatchStatesCompanion(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('resumePositionMs: $resumePositionMs, ')
           ..write('durationMs: $durationMs, ')
@@ -2581,12 +2581,12 @@ class $SourceOverridesTable extends SourceOverrides
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $SourceOverridesTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
-    'anilistId',
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
   );
   @override
-  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
-    'anilist_id',
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -2628,7 +2628,7 @@ class $SourceOverridesTable extends SourceOverrides
   );
   @override
   List<GeneratedColumn> get $columns => [
-    anilistId,
+    seriesId,
     episode,
     folderPath,
     updatedAtMs,
@@ -2645,13 +2645,13 @@ class $SourceOverridesTable extends SourceOverrides
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('anilist_id')) {
+    if (data.containsKey('series_id')) {
       context.handle(
-        _anilistIdMeta,
-        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_anilistIdMeta);
+      context.missing(_seriesIdMeta);
     }
     if (data.containsKey('episode')) {
       context.handle(
@@ -2682,14 +2682,14 @@ class $SourceOverridesTable extends SourceOverrides
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {anilistId, episode};
+  Set<GeneratedColumn> get $primaryKey => {seriesId, episode};
   @override
   SourceOverrideRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SourceOverrideRow(
-      anilistId: attachedDatabase.typeMapping.read(
+      seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}anilist_id'],
+        data['${effectivePrefix}series_id'],
       )!,
       episode: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -2714,12 +2714,12 @@ class $SourceOverridesTable extends SourceOverrides
 
 class SourceOverrideRow extends DataClass
     implements Insertable<SourceOverrideRow> {
-  final int anilistId;
+  final int seriesId;
   final int episode;
   final String folderPath;
   final int updatedAtMs;
   const SourceOverrideRow({
-    required this.anilistId,
+    required this.seriesId,
     required this.episode,
     required this.folderPath,
     required this.updatedAtMs,
@@ -2727,7 +2727,7 @@ class SourceOverrideRow extends DataClass
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['anilist_id'] = Variable<int>(anilistId);
+    map['series_id'] = Variable<int>(seriesId);
     map['episode'] = Variable<int>(episode);
     map['folder_path'] = Variable<String>(folderPath);
     map['updated_at_ms'] = Variable<int>(updatedAtMs);
@@ -2736,7 +2736,7 @@ class SourceOverrideRow extends DataClass
 
   SourceOverridesCompanion toCompanion(bool nullToAbsent) {
     return SourceOverridesCompanion(
-      anilistId: Value(anilistId),
+      seriesId: Value(seriesId),
       episode: Value(episode),
       folderPath: Value(folderPath),
       updatedAtMs: Value(updatedAtMs),
@@ -2749,7 +2749,7 @@ class SourceOverrideRow extends DataClass
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SourceOverrideRow(
-      anilistId: serializer.fromJson<int>(json['anilistId']),
+      seriesId: serializer.fromJson<int>(json['seriesId']),
       episode: serializer.fromJson<int>(json['episode']),
       folderPath: serializer.fromJson<String>(json['folderPath']),
       updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
@@ -2759,7 +2759,7 @@ class SourceOverrideRow extends DataClass
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'anilistId': serializer.toJson<int>(anilistId),
+      'seriesId': serializer.toJson<int>(seriesId),
       'episode': serializer.toJson<int>(episode),
       'folderPath': serializer.toJson<String>(folderPath),
       'updatedAtMs': serializer.toJson<int>(updatedAtMs),
@@ -2767,19 +2767,19 @@ class SourceOverrideRow extends DataClass
   }
 
   SourceOverrideRow copyWith({
-    int? anilistId,
+    int? seriesId,
     int? episode,
     String? folderPath,
     int? updatedAtMs,
   }) => SourceOverrideRow(
-    anilistId: anilistId ?? this.anilistId,
+    seriesId: seriesId ?? this.seriesId,
     episode: episode ?? this.episode,
     folderPath: folderPath ?? this.folderPath,
     updatedAtMs: updatedAtMs ?? this.updatedAtMs,
   );
   SourceOverrideRow copyWithCompanion(SourceOverridesCompanion data) {
     return SourceOverrideRow(
-      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       episode: data.episode.present ? data.episode.value : this.episode,
       folderPath: data.folderPath.present
           ? data.folderPath.value
@@ -2793,7 +2793,7 @@ class SourceOverrideRow extends DataClass
   @override
   String toString() {
     return (StringBuffer('SourceOverrideRow(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('folderPath: $folderPath, ')
           ..write('updatedAtMs: $updatedAtMs')
@@ -2802,48 +2802,48 @@ class SourceOverrideRow extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(anilistId, episode, folderPath, updatedAtMs);
+  int get hashCode => Object.hash(seriesId, episode, folderPath, updatedAtMs);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SourceOverrideRow &&
-          other.anilistId == this.anilistId &&
+          other.seriesId == this.seriesId &&
           other.episode == this.episode &&
           other.folderPath == this.folderPath &&
           other.updatedAtMs == this.updatedAtMs);
 }
 
 class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
-  final Value<int> anilistId;
+  final Value<int> seriesId;
   final Value<int> episode;
   final Value<String> folderPath;
   final Value<int> updatedAtMs;
   final Value<int> rowid;
   const SourceOverridesCompanion({
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.episode = const Value.absent(),
     this.folderPath = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SourceOverridesCompanion.insert({
-    required int anilistId,
+    required int seriesId,
     required int episode,
     required String folderPath,
     this.updatedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : anilistId = Value(anilistId),
+  }) : seriesId = Value(seriesId),
        episode = Value(episode),
        folderPath = Value(folderPath);
   static Insertable<SourceOverrideRow> custom({
-    Expression<int>? anilistId,
+    Expression<int>? seriesId,
     Expression<int>? episode,
     Expression<String>? folderPath,
     Expression<int>? updatedAtMs,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (anilistId != null) 'anilist_id': anilistId,
+      if (seriesId != null) 'series_id': seriesId,
       if (episode != null) 'episode': episode,
       if (folderPath != null) 'folder_path': folderPath,
       if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
@@ -2852,14 +2852,14 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
   }
 
   SourceOverridesCompanion copyWith({
-    Value<int>? anilistId,
+    Value<int>? seriesId,
     Value<int>? episode,
     Value<String>? folderPath,
     Value<int>? updatedAtMs,
     Value<int>? rowid,
   }) {
     return SourceOverridesCompanion(
-      anilistId: anilistId ?? this.anilistId,
+      seriesId: seriesId ?? this.seriesId,
       episode: episode ?? this.episode,
       folderPath: folderPath ?? this.folderPath,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
@@ -2870,8 +2870,8 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (anilistId.present) {
-      map['anilist_id'] = Variable<int>(anilistId.value);
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
     }
     if (episode.present) {
       map['episode'] = Variable<int>(episode.value);
@@ -2891,7 +2891,7 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
   @override
   String toString() {
     return (StringBuffer('SourceOverridesCompanion(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('folderPath: $folderPath, ')
           ..write('updatedAtMs: $updatedAtMs, ')
@@ -2907,12 +2907,12 @@ class $SkipSegmentsTable extends SkipSegments
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $SkipSegmentsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
-    'anilistId',
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
   );
   @override
-  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
-    'anilist_id',
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -2975,7 +2975,7 @@ class $SkipSegmentsTable extends SkipSegments
   );
   @override
   List<GeneratedColumn> get $columns => [
-    anilistId,
+    seriesId,
     episode,
     introStartMs,
     introEndMs,
@@ -2994,13 +2994,13 @@ class $SkipSegmentsTable extends SkipSegments
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('anilist_id')) {
+    if (data.containsKey('series_id')) {
       context.handle(
-        _anilistIdMeta,
-        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_anilistIdMeta);
+      context.missing(_seriesIdMeta);
     }
     if (data.containsKey('episode')) {
       context.handle(
@@ -3050,14 +3050,14 @@ class $SkipSegmentsTable extends SkipSegments
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {anilistId, episode};
+  Set<GeneratedColumn> get $primaryKey => {seriesId, episode};
   @override
   SkipSegmentRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SkipSegmentRow(
-      anilistId: attachedDatabase.typeMapping.read(
+      seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}anilist_id'],
+        data['${effectivePrefix}series_id'],
       )!,
       episode: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -3089,14 +3089,14 @@ class $SkipSegmentsTable extends SkipSegments
 }
 
 class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
-  final int anilistId;
+  final int seriesId;
   final int episode;
   final int? introStartMs;
   final int? introEndMs;
   final int? outroStartMs;
   final int? outroEndMs;
   const SkipSegmentRow({
-    required this.anilistId,
+    required this.seriesId,
     required this.episode,
     this.introStartMs,
     this.introEndMs,
@@ -3106,7 +3106,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['anilist_id'] = Variable<int>(anilistId);
+    map['series_id'] = Variable<int>(seriesId);
     map['episode'] = Variable<int>(episode);
     if (!nullToAbsent || introStartMs != null) {
       map['intro_start_ms'] = Variable<int>(introStartMs);
@@ -3125,7 +3125,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
 
   SkipSegmentsCompanion toCompanion(bool nullToAbsent) {
     return SkipSegmentsCompanion(
-      anilistId: Value(anilistId),
+      seriesId: Value(seriesId),
       episode: Value(episode),
       introStartMs: introStartMs == null && nullToAbsent
           ? const Value.absent()
@@ -3148,7 +3148,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SkipSegmentRow(
-      anilistId: serializer.fromJson<int>(json['anilistId']),
+      seriesId: serializer.fromJson<int>(json['seriesId']),
       episode: serializer.fromJson<int>(json['episode']),
       introStartMs: serializer.fromJson<int?>(json['introStartMs']),
       introEndMs: serializer.fromJson<int?>(json['introEndMs']),
@@ -3160,7 +3160,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'anilistId': serializer.toJson<int>(anilistId),
+      'seriesId': serializer.toJson<int>(seriesId),
       'episode': serializer.toJson<int>(episode),
       'introStartMs': serializer.toJson<int?>(introStartMs),
       'introEndMs': serializer.toJson<int?>(introEndMs),
@@ -3170,14 +3170,14 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   }
 
   SkipSegmentRow copyWith({
-    int? anilistId,
+    int? seriesId,
     int? episode,
     Value<int?> introStartMs = const Value.absent(),
     Value<int?> introEndMs = const Value.absent(),
     Value<int?> outroStartMs = const Value.absent(),
     Value<int?> outroEndMs = const Value.absent(),
   }) => SkipSegmentRow(
-    anilistId: anilistId ?? this.anilistId,
+    seriesId: seriesId ?? this.seriesId,
     episode: episode ?? this.episode,
     introStartMs: introStartMs.present ? introStartMs.value : this.introStartMs,
     introEndMs: introEndMs.present ? introEndMs.value : this.introEndMs,
@@ -3186,7 +3186,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   );
   SkipSegmentRow copyWithCompanion(SkipSegmentsCompanion data) {
     return SkipSegmentRow(
-      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       episode: data.episode.present ? data.episode.value : this.episode,
       introStartMs: data.introStartMs.present
           ? data.introStartMs.value
@@ -3206,7 +3206,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   @override
   String toString() {
     return (StringBuffer('SkipSegmentRow(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('introStartMs: $introStartMs, ')
           ..write('introEndMs: $introEndMs, ')
@@ -3218,7 +3218,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
 
   @override
   int get hashCode => Object.hash(
-    anilistId,
+    seriesId,
     episode,
     introStartMs,
     introEndMs,
@@ -3229,7 +3229,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SkipSegmentRow &&
-          other.anilistId == this.anilistId &&
+          other.seriesId == this.seriesId &&
           other.episode == this.episode &&
           other.introStartMs == this.introStartMs &&
           other.introEndMs == this.introEndMs &&
@@ -3238,7 +3238,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
 }
 
 class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
-  final Value<int> anilistId;
+  final Value<int> seriesId;
   final Value<int> episode;
   final Value<int?> introStartMs;
   final Value<int?> introEndMs;
@@ -3246,7 +3246,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
   final Value<int?> outroEndMs;
   final Value<int> rowid;
   const SkipSegmentsCompanion({
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.episode = const Value.absent(),
     this.introStartMs = const Value.absent(),
     this.introEndMs = const Value.absent(),
@@ -3255,17 +3255,17 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     this.rowid = const Value.absent(),
   });
   SkipSegmentsCompanion.insert({
-    required int anilistId,
+    required int seriesId,
     required int episode,
     this.introStartMs = const Value.absent(),
     this.introEndMs = const Value.absent(),
     this.outroStartMs = const Value.absent(),
     this.outroEndMs = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : anilistId = Value(anilistId),
+  }) : seriesId = Value(seriesId),
        episode = Value(episode);
   static Insertable<SkipSegmentRow> custom({
-    Expression<int>? anilistId,
+    Expression<int>? seriesId,
     Expression<int>? episode,
     Expression<int>? introStartMs,
     Expression<int>? introEndMs,
@@ -3274,7 +3274,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (anilistId != null) 'anilist_id': anilistId,
+      if (seriesId != null) 'series_id': seriesId,
       if (episode != null) 'episode': episode,
       if (introStartMs != null) 'intro_start_ms': introStartMs,
       if (introEndMs != null) 'intro_end_ms': introEndMs,
@@ -3285,7 +3285,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
   }
 
   SkipSegmentsCompanion copyWith({
-    Value<int>? anilistId,
+    Value<int>? seriesId,
     Value<int>? episode,
     Value<int?>? introStartMs,
     Value<int?>? introEndMs,
@@ -3294,7 +3294,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     Value<int>? rowid,
   }) {
     return SkipSegmentsCompanion(
-      anilistId: anilistId ?? this.anilistId,
+      seriesId: seriesId ?? this.seriesId,
       episode: episode ?? this.episode,
       introStartMs: introStartMs ?? this.introStartMs,
       introEndMs: introEndMs ?? this.introEndMs,
@@ -3307,8 +3307,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (anilistId.present) {
-      map['anilist_id'] = Variable<int>(anilistId.value);
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
     }
     if (episode.present) {
       map['episode'] = Variable<int>(episode.value);
@@ -3334,7 +3334,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
   @override
   String toString() {
     return (StringBuffer('SkipSegmentsCompanion(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('introStartMs: $introStartMs, ')
           ..write('introEndMs: $introEndMs, ')
@@ -3352,12 +3352,12 @@ class $HiddenEpisodesTable extends HiddenEpisodes
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $HiddenEpisodesTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
-    'anilistId',
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
   );
   @override
-  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
-    'anilist_id',
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -3387,7 +3387,7 @@ class $HiddenEpisodesTable extends HiddenEpisodes
     defaultValue: const Constant(0),
   );
   @override
-  List<GeneratedColumn> get $columns => [anilistId, episode, hiddenAtMs];
+  List<GeneratedColumn> get $columns => [seriesId, episode, hiddenAtMs];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -3400,13 +3400,13 @@ class $HiddenEpisodesTable extends HiddenEpisodes
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('anilist_id')) {
+    if (data.containsKey('series_id')) {
       context.handle(
-        _anilistIdMeta,
-        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_anilistIdMeta);
+      context.missing(_seriesIdMeta);
     }
     if (data.containsKey('episode')) {
       context.handle(
@@ -3429,14 +3429,14 @@ class $HiddenEpisodesTable extends HiddenEpisodes
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {anilistId, episode};
+  Set<GeneratedColumn> get $primaryKey => {seriesId, episode};
   @override
   HiddenEpisodeRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return HiddenEpisodeRow(
-      anilistId: attachedDatabase.typeMapping.read(
+      seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}anilist_id'],
+        data['${effectivePrefix}series_id'],
       )!,
       episode: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -3457,18 +3457,18 @@ class $HiddenEpisodesTable extends HiddenEpisodes
 
 class HiddenEpisodeRow extends DataClass
     implements Insertable<HiddenEpisodeRow> {
-  final int anilistId;
+  final int seriesId;
   final int episode;
   final int hiddenAtMs;
   const HiddenEpisodeRow({
-    required this.anilistId,
+    required this.seriesId,
     required this.episode,
     required this.hiddenAtMs,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['anilist_id'] = Variable<int>(anilistId);
+    map['series_id'] = Variable<int>(seriesId);
     map['episode'] = Variable<int>(episode);
     map['hidden_at_ms'] = Variable<int>(hiddenAtMs);
     return map;
@@ -3476,7 +3476,7 @@ class HiddenEpisodeRow extends DataClass
 
   HiddenEpisodesCompanion toCompanion(bool nullToAbsent) {
     return HiddenEpisodesCompanion(
-      anilistId: Value(anilistId),
+      seriesId: Value(seriesId),
       episode: Value(episode),
       hiddenAtMs: Value(hiddenAtMs),
     );
@@ -3488,7 +3488,7 @@ class HiddenEpisodeRow extends DataClass
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return HiddenEpisodeRow(
-      anilistId: serializer.fromJson<int>(json['anilistId']),
+      seriesId: serializer.fromJson<int>(json['seriesId']),
       episode: serializer.fromJson<int>(json['episode']),
       hiddenAtMs: serializer.fromJson<int>(json['hiddenAtMs']),
     );
@@ -3497,21 +3497,21 @@ class HiddenEpisodeRow extends DataClass
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'anilistId': serializer.toJson<int>(anilistId),
+      'seriesId': serializer.toJson<int>(seriesId),
       'episode': serializer.toJson<int>(episode),
       'hiddenAtMs': serializer.toJson<int>(hiddenAtMs),
     };
   }
 
-  HiddenEpisodeRow copyWith({int? anilistId, int? episode, int? hiddenAtMs}) =>
+  HiddenEpisodeRow copyWith({int? seriesId, int? episode, int? hiddenAtMs}) =>
       HiddenEpisodeRow(
-        anilistId: anilistId ?? this.anilistId,
+        seriesId: seriesId ?? this.seriesId,
         episode: episode ?? this.episode,
         hiddenAtMs: hiddenAtMs ?? this.hiddenAtMs,
       );
   HiddenEpisodeRow copyWithCompanion(HiddenEpisodesCompanion data) {
     return HiddenEpisodeRow(
-      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       episode: data.episode.present ? data.episode.value : this.episode,
       hiddenAtMs: data.hiddenAtMs.present
           ? data.hiddenAtMs.value
@@ -3522,7 +3522,7 @@ class HiddenEpisodeRow extends DataClass
   @override
   String toString() {
     return (StringBuffer('HiddenEpisodeRow(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('hiddenAtMs: $hiddenAtMs')
           ..write(')'))
@@ -3530,42 +3530,42 @@ class HiddenEpisodeRow extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(anilistId, episode, hiddenAtMs);
+  int get hashCode => Object.hash(seriesId, episode, hiddenAtMs);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is HiddenEpisodeRow &&
-          other.anilistId == this.anilistId &&
+          other.seriesId == this.seriesId &&
           other.episode == this.episode &&
           other.hiddenAtMs == this.hiddenAtMs);
 }
 
 class HiddenEpisodesCompanion extends UpdateCompanion<HiddenEpisodeRow> {
-  final Value<int> anilistId;
+  final Value<int> seriesId;
   final Value<int> episode;
   final Value<int> hiddenAtMs;
   final Value<int> rowid;
   const HiddenEpisodesCompanion({
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.episode = const Value.absent(),
     this.hiddenAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HiddenEpisodesCompanion.insert({
-    required int anilistId,
+    required int seriesId,
     required int episode,
     this.hiddenAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : anilistId = Value(anilistId),
+  }) : seriesId = Value(seriesId),
        episode = Value(episode);
   static Insertable<HiddenEpisodeRow> custom({
-    Expression<int>? anilistId,
+    Expression<int>? seriesId,
     Expression<int>? episode,
     Expression<int>? hiddenAtMs,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (anilistId != null) 'anilist_id': anilistId,
+      if (seriesId != null) 'series_id': seriesId,
       if (episode != null) 'episode': episode,
       if (hiddenAtMs != null) 'hidden_at_ms': hiddenAtMs,
       if (rowid != null) 'rowid': rowid,
@@ -3573,13 +3573,13 @@ class HiddenEpisodesCompanion extends UpdateCompanion<HiddenEpisodeRow> {
   }
 
   HiddenEpisodesCompanion copyWith({
-    Value<int>? anilistId,
+    Value<int>? seriesId,
     Value<int>? episode,
     Value<int>? hiddenAtMs,
     Value<int>? rowid,
   }) {
     return HiddenEpisodesCompanion(
-      anilistId: anilistId ?? this.anilistId,
+      seriesId: seriesId ?? this.seriesId,
       episode: episode ?? this.episode,
       hiddenAtMs: hiddenAtMs ?? this.hiddenAtMs,
       rowid: rowid ?? this.rowid,
@@ -3589,8 +3589,8 @@ class HiddenEpisodesCompanion extends UpdateCompanion<HiddenEpisodeRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (anilistId.present) {
-      map['anilist_id'] = Variable<int>(anilistId.value);
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
     }
     if (episode.present) {
       map['episode'] = Variable<int>(episode.value);
@@ -3607,7 +3607,7 @@ class HiddenEpisodesCompanion extends UpdateCompanion<HiddenEpisodeRow> {
   @override
   String toString() {
     return (StringBuffer('HiddenEpisodesCompanion(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('hiddenAtMs: $hiddenAtMs, ')
           ..write('rowid: $rowid')
@@ -3830,12 +3830,12 @@ class $ShowPrefsTable extends ShowPrefs
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $ShowPrefsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _anilistIdMeta = const VerificationMeta(
-    'anilistId',
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
   );
   @override
-  late final GeneratedColumn<int> anilistId = GeneratedColumn<int>(
-    'anilist_id',
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -3870,7 +3870,7 @@ class $ShowPrefsTable extends ShowPrefs
   );
   @override
   List<GeneratedColumn> get $columns => [
-    anilistId,
+    seriesId,
     pictureMode,
     nextEpisodeHidden,
   ];
@@ -3886,10 +3886,10 @@ class $ShowPrefsTable extends ShowPrefs
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('anilist_id')) {
+    if (data.containsKey('series_id')) {
       context.handle(
-        _anilistIdMeta,
-        anilistId.isAcceptableOrUnknown(data['anilist_id']!, _anilistIdMeta),
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
       );
     }
     if (data.containsKey('picture_mode')) {
@@ -3914,14 +3914,14 @@ class $ShowPrefsTable extends ShowPrefs
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {anilistId};
+  Set<GeneratedColumn> get $primaryKey => {seriesId};
   @override
   ShowPreferenceRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ShowPreferenceRow(
-      anilistId: attachedDatabase.typeMapping.read(
+      seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}anilist_id'],
+        data['${effectivePrefix}series_id'],
       )!,
       pictureMode: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -3942,7 +3942,7 @@ class $ShowPrefsTable extends ShowPrefs
 
 class ShowPreferenceRow extends DataClass
     implements Insertable<ShowPreferenceRow> {
-  final int anilistId;
+  final int seriesId;
 
   /// Cover display mode token (see PictureMode): 'normal' / 'blur' / 'removed'.
   final String pictureMode;
@@ -3950,14 +3950,14 @@ class ShowPreferenceRow extends DataClass
   /// Whether the card's "Next episode" button is hidden for this show.
   final bool nextEpisodeHidden;
   const ShowPreferenceRow({
-    required this.anilistId,
+    required this.seriesId,
     required this.pictureMode,
     required this.nextEpisodeHidden,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['anilist_id'] = Variable<int>(anilistId);
+    map['series_id'] = Variable<int>(seriesId);
     map['picture_mode'] = Variable<String>(pictureMode);
     map['next_episode_hidden'] = Variable<bool>(nextEpisodeHidden);
     return map;
@@ -3965,7 +3965,7 @@ class ShowPreferenceRow extends DataClass
 
   ShowPrefsCompanion toCompanion(bool nullToAbsent) {
     return ShowPrefsCompanion(
-      anilistId: Value(anilistId),
+      seriesId: Value(seriesId),
       pictureMode: Value(pictureMode),
       nextEpisodeHidden: Value(nextEpisodeHidden),
     );
@@ -3977,7 +3977,7 @@ class ShowPreferenceRow extends DataClass
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return ShowPreferenceRow(
-      anilistId: serializer.fromJson<int>(json['anilistId']),
+      seriesId: serializer.fromJson<int>(json['seriesId']),
       pictureMode: serializer.fromJson<String>(json['pictureMode']),
       nextEpisodeHidden: serializer.fromJson<bool>(json['nextEpisodeHidden']),
     );
@@ -3986,24 +3986,24 @@ class ShowPreferenceRow extends DataClass
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'anilistId': serializer.toJson<int>(anilistId),
+      'seriesId': serializer.toJson<int>(seriesId),
       'pictureMode': serializer.toJson<String>(pictureMode),
       'nextEpisodeHidden': serializer.toJson<bool>(nextEpisodeHidden),
     };
   }
 
   ShowPreferenceRow copyWith({
-    int? anilistId,
+    int? seriesId,
     String? pictureMode,
     bool? nextEpisodeHidden,
   }) => ShowPreferenceRow(
-    anilistId: anilistId ?? this.anilistId,
+    seriesId: seriesId ?? this.seriesId,
     pictureMode: pictureMode ?? this.pictureMode,
     nextEpisodeHidden: nextEpisodeHidden ?? this.nextEpisodeHidden,
   );
   ShowPreferenceRow copyWithCompanion(ShowPrefsCompanion data) {
     return ShowPreferenceRow(
-      anilistId: data.anilistId.present ? data.anilistId.value : this.anilistId,
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       pictureMode: data.pictureMode.present
           ? data.pictureMode.value
           : this.pictureMode,
@@ -4016,7 +4016,7 @@ class ShowPreferenceRow extends DataClass
   @override
   String toString() {
     return (StringBuffer('ShowPreferenceRow(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('pictureMode: $pictureMode, ')
           ..write('nextEpisodeHidden: $nextEpisodeHidden')
           ..write(')'))
@@ -4024,49 +4024,49 @@ class ShowPreferenceRow extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(anilistId, pictureMode, nextEpisodeHidden);
+  int get hashCode => Object.hash(seriesId, pictureMode, nextEpisodeHidden);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ShowPreferenceRow &&
-          other.anilistId == this.anilistId &&
+          other.seriesId == this.seriesId &&
           other.pictureMode == this.pictureMode &&
           other.nextEpisodeHidden == this.nextEpisodeHidden);
 }
 
 class ShowPrefsCompanion extends UpdateCompanion<ShowPreferenceRow> {
-  final Value<int> anilistId;
+  final Value<int> seriesId;
   final Value<String> pictureMode;
   final Value<bool> nextEpisodeHidden;
   const ShowPrefsCompanion({
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.pictureMode = const Value.absent(),
     this.nextEpisodeHidden = const Value.absent(),
   });
   ShowPrefsCompanion.insert({
-    this.anilistId = const Value.absent(),
+    this.seriesId = const Value.absent(),
     this.pictureMode = const Value.absent(),
     this.nextEpisodeHidden = const Value.absent(),
   });
   static Insertable<ShowPreferenceRow> custom({
-    Expression<int>? anilistId,
+    Expression<int>? seriesId,
     Expression<String>? pictureMode,
     Expression<bool>? nextEpisodeHidden,
   }) {
     return RawValuesInsertable({
-      if (anilistId != null) 'anilist_id': anilistId,
+      if (seriesId != null) 'series_id': seriesId,
       if (pictureMode != null) 'picture_mode': pictureMode,
       if (nextEpisodeHidden != null) 'next_episode_hidden': nextEpisodeHidden,
     });
   }
 
   ShowPrefsCompanion copyWith({
-    Value<int>? anilistId,
+    Value<int>? seriesId,
     Value<String>? pictureMode,
     Value<bool>? nextEpisodeHidden,
   }) {
     return ShowPrefsCompanion(
-      anilistId: anilistId ?? this.anilistId,
+      seriesId: seriesId ?? this.seriesId,
       pictureMode: pictureMode ?? this.pictureMode,
       nextEpisodeHidden: nextEpisodeHidden ?? this.nextEpisodeHidden,
     );
@@ -4075,8 +4075,8 @@ class ShowPrefsCompanion extends UpdateCompanion<ShowPreferenceRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (anilistId.present) {
-      map['anilist_id'] = Variable<int>(anilistId.value);
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
     }
     if (pictureMode.present) {
       map['picture_mode'] = Variable<String>(pictureMode.value);
@@ -4090,9 +4090,287 @@ class ShowPrefsCompanion extends UpdateCompanion<ShowPreferenceRow> {
   @override
   String toString() {
     return (StringBuffer('ShowPrefsCompanion(')
-          ..write('anilistId: $anilistId, ')
+          ..write('seriesId: $seriesId, ')
           ..write('pictureMode: $pictureMode, ')
           ..write('nextEpisodeHidden: $nextEpisodeHidden')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SeriesExternalIdsTable extends SeriesExternalIds
+    with TableInfo<$SeriesExternalIdsTable, SeriesExternalId> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SeriesExternalIdsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _seriesIdMeta = const VerificationMeta(
+    'seriesId',
+  );
+  @override
+  late final GeneratedColumn<int> seriesId = GeneratedColumn<int>(
+    'series_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _providerMeta = const VerificationMeta(
+    'provider',
+  );
+  @override
+  late final GeneratedColumn<String> provider = GeneratedColumn<String>(
+    'provider',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _externalIdMeta = const VerificationMeta(
+    'externalId',
+  );
+  @override
+  late final GeneratedColumn<String> externalId = GeneratedColumn<String>(
+    'external_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [seriesId, provider, externalId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'series_external_ids';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SeriesExternalId> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('series_id')) {
+      context.handle(
+        _seriesIdMeta,
+        seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_seriesIdMeta);
+    }
+    if (data.containsKey('provider')) {
+      context.handle(
+        _providerMeta,
+        provider.isAcceptableOrUnknown(data['provider']!, _providerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_providerMeta);
+    }
+    if (data.containsKey('external_id')) {
+      context.handle(
+        _externalIdMeta,
+        externalId.isAcceptableOrUnknown(data['external_id']!, _externalIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_externalIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {seriesId, provider};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {provider, externalId},
+  ];
+  @override
+  SeriesExternalId map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SeriesExternalId(
+      seriesId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}series_id'],
+      )!,
+      provider: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}provider'],
+      )!,
+      externalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_id'],
+      )!,
+    );
+  }
+
+  @override
+  $SeriesExternalIdsTable createAlias(String alias) {
+    return $SeriesExternalIdsTable(attachedDatabase, alias);
+  }
+}
+
+class SeriesExternalId extends DataClass
+    implements Insertable<SeriesExternalId> {
+  final int seriesId;
+
+  /// Which database the id belongs to: 'anilist', 'mal', 'kitsu', 'anidb'.
+  final String provider;
+  final String externalId;
+  const SeriesExternalId({
+    required this.seriesId,
+    required this.provider,
+    required this.externalId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['series_id'] = Variable<int>(seriesId);
+    map['provider'] = Variable<String>(provider);
+    map['external_id'] = Variable<String>(externalId);
+    return map;
+  }
+
+  SeriesExternalIdsCompanion toCompanion(bool nullToAbsent) {
+    return SeriesExternalIdsCompanion(
+      seriesId: Value(seriesId),
+      provider: Value(provider),
+      externalId: Value(externalId),
+    );
+  }
+
+  factory SeriesExternalId.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SeriesExternalId(
+      seriesId: serializer.fromJson<int>(json['seriesId']),
+      provider: serializer.fromJson<String>(json['provider']),
+      externalId: serializer.fromJson<String>(json['externalId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'seriesId': serializer.toJson<int>(seriesId),
+      'provider': serializer.toJson<String>(provider),
+      'externalId': serializer.toJson<String>(externalId),
+    };
+  }
+
+  SeriesExternalId copyWith({
+    int? seriesId,
+    String? provider,
+    String? externalId,
+  }) => SeriesExternalId(
+    seriesId: seriesId ?? this.seriesId,
+    provider: provider ?? this.provider,
+    externalId: externalId ?? this.externalId,
+  );
+  SeriesExternalId copyWithCompanion(SeriesExternalIdsCompanion data) {
+    return SeriesExternalId(
+      seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
+      provider: data.provider.present ? data.provider.value : this.provider,
+      externalId: data.externalId.present
+          ? data.externalId.value
+          : this.externalId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SeriesExternalId(')
+          ..write('seriesId: $seriesId, ')
+          ..write('provider: $provider, ')
+          ..write('externalId: $externalId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(seriesId, provider, externalId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SeriesExternalId &&
+          other.seriesId == this.seriesId &&
+          other.provider == this.provider &&
+          other.externalId == this.externalId);
+}
+
+class SeriesExternalIdsCompanion extends UpdateCompanion<SeriesExternalId> {
+  final Value<int> seriesId;
+  final Value<String> provider;
+  final Value<String> externalId;
+  final Value<int> rowid;
+  const SeriesExternalIdsCompanion({
+    this.seriesId = const Value.absent(),
+    this.provider = const Value.absent(),
+    this.externalId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SeriesExternalIdsCompanion.insert({
+    required int seriesId,
+    required String provider,
+    required String externalId,
+    this.rowid = const Value.absent(),
+  }) : seriesId = Value(seriesId),
+       provider = Value(provider),
+       externalId = Value(externalId);
+  static Insertable<SeriesExternalId> custom({
+    Expression<int>? seriesId,
+    Expression<String>? provider,
+    Expression<String>? externalId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (seriesId != null) 'series_id': seriesId,
+      if (provider != null) 'provider': provider,
+      if (externalId != null) 'external_id': externalId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SeriesExternalIdsCompanion copyWith({
+    Value<int>? seriesId,
+    Value<String>? provider,
+    Value<String>? externalId,
+    Value<int>? rowid,
+  }) {
+    return SeriesExternalIdsCompanion(
+      seriesId: seriesId ?? this.seriesId,
+      provider: provider ?? this.provider,
+      externalId: externalId ?? this.externalId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (seriesId.present) {
+      map['series_id'] = Variable<int>(seriesId.value);
+    }
+    if (provider.present) {
+      map['provider'] = Variable<String>(provider.value);
+    }
+    if (externalId.present) {
+      map['external_id'] = Variable<String>(externalId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SeriesExternalIdsCompanion(')
+          ..write('seriesId: $seriesId, ')
+          ..write('provider: $provider, ')
+          ..write('externalId: $externalId, ')
+          ..write('rowid: $rowid')
           ..write(')'))
         .toString();
   }
@@ -4113,6 +4391,8 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
   late final $HiddenEpisodesTable hiddenEpisodes = $HiddenEpisodesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $ShowPrefsTable showPrefs = $ShowPrefsTable(this);
+  late final $SeriesExternalIdsTable seriesExternalIds =
+      $SeriesExternalIdsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4128,12 +4408,13 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     hiddenEpisodes,
     appSettings,
     showPrefs,
+    seriesExternalIds,
   ];
 }
 
 typedef $$SeriesCacheTableCreateCompanionBuilder =
     SeriesCacheCompanion Function({
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<int?> idMal,
       Value<String?> romaji,
       Value<String?> english,
@@ -4145,7 +4426,7 @@ typedef $$SeriesCacheTableCreateCompanionBuilder =
     });
 typedef $$SeriesCacheTableUpdateCompanionBuilder =
     SeriesCacheCompanion Function({
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<int?> idMal,
       Value<String?> romaji,
       Value<String?> english,
@@ -4165,8 +4446,8 @@ class $$SeriesCacheTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4220,8 +4501,8 @@ class $$SeriesCacheTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -4275,8 +4556,8 @@ class $$SeriesCacheTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<int> get anilistId =>
-      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
 
   GeneratedColumn<int> get idMal =>
       $composableBuilder(column: $table.idMal, builder: (column) => column);
@@ -4342,7 +4623,7 @@ class $$SeriesCacheTableTableManager
               $$SeriesCacheTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<int?> idMal = const Value.absent(),
                 Value<String?> romaji = const Value.absent(),
                 Value<String?> english = const Value.absent(),
@@ -4352,7 +4633,7 @@ class $$SeriesCacheTableTableManager
                 Value<String?> coverImageUrl = const Value.absent(),
                 Value<String?> coverImagePath = const Value.absent(),
               }) => SeriesCacheCompanion(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 idMal: idMal,
                 romaji: romaji,
                 english: english,
@@ -4364,7 +4645,7 @@ class $$SeriesCacheTableTableManager
               ),
           createCompanionCallback:
               ({
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<int?> idMal = const Value.absent(),
                 Value<String?> romaji = const Value.absent(),
                 Value<String?> english = const Value.absent(),
@@ -4374,7 +4655,7 @@ class $$SeriesCacheTableTableManager
                 Value<String?> coverImageUrl = const Value.absent(),
                 Value<String?> coverImagePath = const Value.absent(),
               }) => SeriesCacheCompanion.insert(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 idMal: idMal,
                 romaji: romaji,
                 english: english,
@@ -4415,7 +4696,7 @@ typedef $$FileCacheTableCreateCompanionBuilder =
       required String relativePath,
       required int fileSize,
       required int modifiedAtMs,
-      Value<int?> anilistId,
+      Value<int?> seriesId,
       Value<int?> episodeNumber,
       required String parsedTitle,
       Value<double> matchScore,
@@ -4429,7 +4710,7 @@ typedef $$FileCacheTableUpdateCompanionBuilder =
       Value<String> relativePath,
       Value<int> fileSize,
       Value<int> modifiedAtMs,
-      Value<int?> anilistId,
+      Value<int?> seriesId,
       Value<int?> episodeNumber,
       Value<String> parsedTitle,
       Value<double> matchScore,
@@ -4467,8 +4748,8 @@ class $$FileCacheTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4527,8 +4808,8 @@ class $$FileCacheTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -4585,8 +4866,8 @@ class $$FileCacheTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get anilistId =>
-      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
 
   GeneratedColumn<int> get episodeNumber => $composableBuilder(
     column: $table.episodeNumber,
@@ -4649,7 +4930,7 @@ class $$FileCacheTableTableManager
                 Value<String> relativePath = const Value.absent(),
                 Value<int> fileSize = const Value.absent(),
                 Value<int> modifiedAtMs = const Value.absent(),
-                Value<int?> anilistId = const Value.absent(),
+                Value<int?> seriesId = const Value.absent(),
                 Value<int?> episodeNumber = const Value.absent(),
                 Value<String> parsedTitle = const Value.absent(),
                 Value<double> matchScore = const Value.absent(),
@@ -4661,7 +4942,7 @@ class $$FileCacheTableTableManager
                 relativePath: relativePath,
                 fileSize: fileSize,
                 modifiedAtMs: modifiedAtMs,
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episodeNumber: episodeNumber,
                 parsedTitle: parsedTitle,
                 matchScore: matchScore,
@@ -4675,7 +4956,7 @@ class $$FileCacheTableTableManager
                 required String relativePath,
                 required int fileSize,
                 required int modifiedAtMs,
-                Value<int?> anilistId = const Value.absent(),
+                Value<int?> seriesId = const Value.absent(),
                 Value<int?> episodeNumber = const Value.absent(),
                 required String parsedTitle,
                 Value<double> matchScore = const Value.absent(),
@@ -4687,7 +4968,7 @@ class $$FileCacheTableTableManager
                 relativePath: relativePath,
                 fileSize: fileSize,
                 modifiedAtMs: modifiedAtMs,
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episodeNumber: episodeNumber,
                 parsedTitle: parsedTitle,
                 matchScore: matchScore,
@@ -4932,7 +5213,7 @@ typedef $$MatchOverridesTableCreateCompanionBuilder =
     MatchOverridesCompanion Function({
       required int fileSize,
       required int modifiedAtMs,
-      required int anilistId,
+      required int seriesId,
       Value<int?> anchoredEpisode,
       Value<int> continuousOffset,
       Value<bool> displayContinuous,
@@ -4942,7 +5223,7 @@ typedef $$MatchOverridesTableUpdateCompanionBuilder =
     MatchOverridesCompanion Function({
       Value<int> fileSize,
       Value<int> modifiedAtMs,
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<int?> anchoredEpisode,
       Value<int> continuousOffset,
       Value<bool> displayContinuous,
@@ -4968,8 +5249,8 @@ class $$MatchOverridesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5008,8 +5289,8 @@ class $$MatchOverridesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5046,8 +5327,8 @@ class $$MatchOverridesTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get anilistId =>
-      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
 
   GeneratedColumn<int> get anchoredEpisode => $composableBuilder(
     column: $table.anchoredEpisode,
@@ -5104,7 +5385,7 @@ class $$MatchOverridesTableTableManager
               ({
                 Value<int> fileSize = const Value.absent(),
                 Value<int> modifiedAtMs = const Value.absent(),
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<int?> anchoredEpisode = const Value.absent(),
                 Value<int> continuousOffset = const Value.absent(),
                 Value<bool> displayContinuous = const Value.absent(),
@@ -5112,7 +5393,7 @@ class $$MatchOverridesTableTableManager
               }) => MatchOverridesCompanion(
                 fileSize: fileSize,
                 modifiedAtMs: modifiedAtMs,
-                anilistId: anilistId,
+                seriesId: seriesId,
                 anchoredEpisode: anchoredEpisode,
                 continuousOffset: continuousOffset,
                 displayContinuous: displayContinuous,
@@ -5122,7 +5403,7 @@ class $$MatchOverridesTableTableManager
               ({
                 required int fileSize,
                 required int modifiedAtMs,
-                required int anilistId,
+                required int seriesId,
                 Value<int?> anchoredEpisode = const Value.absent(),
                 Value<int> continuousOffset = const Value.absent(),
                 Value<bool> displayContinuous = const Value.absent(),
@@ -5130,7 +5411,7 @@ class $$MatchOverridesTableTableManager
               }) => MatchOverridesCompanion.insert(
                 fileSize: fileSize,
                 modifiedAtMs: modifiedAtMs,
-                anilistId: anilistId,
+                seriesId: seriesId,
                 anchoredEpisode: anchoredEpisode,
                 continuousOffset: continuousOffset,
                 displayContinuous: displayContinuous,
@@ -5163,7 +5444,7 @@ typedef $$MatchOverridesTableProcessedTableManager =
     >;
 typedef $$WatchStatesTableCreateCompanionBuilder =
     WatchStatesCompanion Function({
-      required int anilistId,
+      required int seriesId,
       required int episode,
       Value<int> resumePositionMs,
       Value<int> durationMs,
@@ -5174,7 +5455,7 @@ typedef $$WatchStatesTableCreateCompanionBuilder =
     });
 typedef $$WatchStatesTableUpdateCompanionBuilder =
     WatchStatesCompanion Function({
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<int> episode,
       Value<int> resumePositionMs,
       Value<int> durationMs,
@@ -5193,8 +5474,8 @@ class $$WatchStatesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5238,8 +5519,8 @@ class $$WatchStatesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5283,8 +5564,8 @@ class $$WatchStatesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<int> get anilistId =>
-      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
 
   GeneratedColumn<int> get episode =>
       $composableBuilder(column: $table.episode, builder: (column) => column);
@@ -5344,7 +5625,7 @@ class $$WatchStatesTableTableManager
               $$WatchStatesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<int> episode = const Value.absent(),
                 Value<int> resumePositionMs = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
@@ -5353,7 +5634,7 @@ class $$WatchStatesTableTableManager
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WatchStatesCompanion(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episode: episode,
                 resumePositionMs: resumePositionMs,
                 durationMs: durationMs,
@@ -5364,7 +5645,7 @@ class $$WatchStatesTableTableManager
               ),
           createCompanionCallback:
               ({
-                required int anilistId,
+                required int seriesId,
                 required int episode,
                 Value<int> resumePositionMs = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
@@ -5373,7 +5654,7 @@ class $$WatchStatesTableTableManager
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WatchStatesCompanion.insert(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episode: episode,
                 resumePositionMs: resumePositionMs,
                 durationMs: durationMs,
@@ -5409,7 +5690,7 @@ typedef $$WatchStatesTableProcessedTableManager =
     >;
 typedef $$SourceOverridesTableCreateCompanionBuilder =
     SourceOverridesCompanion Function({
-      required int anilistId,
+      required int seriesId,
       required int episode,
       required String folderPath,
       Value<int> updatedAtMs,
@@ -5417,7 +5698,7 @@ typedef $$SourceOverridesTableCreateCompanionBuilder =
     });
 typedef $$SourceOverridesTableUpdateCompanionBuilder =
     SourceOverridesCompanion Function({
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<int> episode,
       Value<String> folderPath,
       Value<int> updatedAtMs,
@@ -5433,8 +5714,8 @@ class $$SourceOverridesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5463,8 +5744,8 @@ class $$SourceOverridesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5493,8 +5774,8 @@ class $$SourceOverridesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<int> get anilistId =>
-      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
 
   GeneratedColumn<int> get episode =>
       $composableBuilder(column: $table.episode, builder: (column) => column);
@@ -5547,13 +5828,13 @@ class $$SourceOverridesTableTableManager
               $$SourceOverridesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<int> episode = const Value.absent(),
                 Value<String> folderPath = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SourceOverridesCompanion(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episode: episode,
                 folderPath: folderPath,
                 updatedAtMs: updatedAtMs,
@@ -5561,13 +5842,13 @@ class $$SourceOverridesTableTableManager
               ),
           createCompanionCallback:
               ({
-                required int anilistId,
+                required int seriesId,
                 required int episode,
                 required String folderPath,
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SourceOverridesCompanion.insert(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episode: episode,
                 folderPath: folderPath,
                 updatedAtMs: updatedAtMs,
@@ -5604,7 +5885,7 @@ typedef $$SourceOverridesTableProcessedTableManager =
     >;
 typedef $$SkipSegmentsTableCreateCompanionBuilder =
     SkipSegmentsCompanion Function({
-      required int anilistId,
+      required int seriesId,
       required int episode,
       Value<int?> introStartMs,
       Value<int?> introEndMs,
@@ -5614,7 +5895,7 @@ typedef $$SkipSegmentsTableCreateCompanionBuilder =
     });
 typedef $$SkipSegmentsTableUpdateCompanionBuilder =
     SkipSegmentsCompanion Function({
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<int> episode,
       Value<int?> introStartMs,
       Value<int?> introEndMs,
@@ -5632,8 +5913,8 @@ class $$SkipSegmentsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5672,8 +5953,8 @@ class $$SkipSegmentsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5712,8 +5993,8 @@ class $$SkipSegmentsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<int> get anilistId =>
-      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
 
   GeneratedColumn<int> get episode =>
       $composableBuilder(column: $table.episode, builder: (column) => column);
@@ -5770,7 +6051,7 @@ class $$SkipSegmentsTableTableManager
               $$SkipSegmentsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<int> episode = const Value.absent(),
                 Value<int?> introStartMs = const Value.absent(),
                 Value<int?> introEndMs = const Value.absent(),
@@ -5778,7 +6059,7 @@ class $$SkipSegmentsTableTableManager
                 Value<int?> outroEndMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SkipSegmentsCompanion(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episode: episode,
                 introStartMs: introStartMs,
                 introEndMs: introEndMs,
@@ -5788,7 +6069,7 @@ class $$SkipSegmentsTableTableManager
               ),
           createCompanionCallback:
               ({
-                required int anilistId,
+                required int seriesId,
                 required int episode,
                 Value<int?> introStartMs = const Value.absent(),
                 Value<int?> introEndMs = const Value.absent(),
@@ -5796,7 +6077,7 @@ class $$SkipSegmentsTableTableManager
                 Value<int?> outroEndMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SkipSegmentsCompanion.insert(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episode: episode,
                 introStartMs: introStartMs,
                 introEndMs: introEndMs,
@@ -5831,14 +6112,14 @@ typedef $$SkipSegmentsTableProcessedTableManager =
     >;
 typedef $$HiddenEpisodesTableCreateCompanionBuilder =
     HiddenEpisodesCompanion Function({
-      required int anilistId,
+      required int seriesId,
       required int episode,
       Value<int> hiddenAtMs,
       Value<int> rowid,
     });
 typedef $$HiddenEpisodesTableUpdateCompanionBuilder =
     HiddenEpisodesCompanion Function({
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<int> episode,
       Value<int> hiddenAtMs,
       Value<int> rowid,
@@ -5853,8 +6134,8 @@ class $$HiddenEpisodesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5878,8 +6159,8 @@ class $$HiddenEpisodesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5903,8 +6184,8 @@ class $$HiddenEpisodesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<int> get anilistId =>
-      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
 
   GeneratedColumn<int> get episode =>
       $composableBuilder(column: $table.episode, builder: (column) => column);
@@ -5952,24 +6233,24 @@ class $$HiddenEpisodesTableTableManager
               $$HiddenEpisodesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<int> episode = const Value.absent(),
                 Value<int> hiddenAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HiddenEpisodesCompanion(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episode: episode,
                 hiddenAtMs: hiddenAtMs,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
-                required int anilistId,
+                required int seriesId,
                 required int episode,
                 Value<int> hiddenAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HiddenEpisodesCompanion.insert(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 episode: episode,
                 hiddenAtMs: hiddenAtMs,
                 rowid: rowid,
@@ -6140,13 +6421,13 @@ typedef $$AppSettingsTableProcessedTableManager =
     >;
 typedef $$ShowPrefsTableCreateCompanionBuilder =
     ShowPrefsCompanion Function({
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<String> pictureMode,
       Value<bool> nextEpisodeHidden,
     });
 typedef $$ShowPrefsTableUpdateCompanionBuilder =
     ShowPrefsCompanion Function({
-      Value<int> anilistId,
+      Value<int> seriesId,
       Value<String> pictureMode,
       Value<bool> nextEpisodeHidden,
     });
@@ -6160,8 +6441,8 @@ class $$ShowPrefsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6185,8 +6466,8 @@ class $$ShowPrefsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<int> get anilistId => $composableBuilder(
-    column: $table.anilistId,
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -6210,8 +6491,8 @@ class $$ShowPrefsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<int> get anilistId =>
-      $composableBuilder(column: $table.anilistId, builder: (column) => column);
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
 
   GeneratedColumn<String> get pictureMode => $composableBuilder(
     column: $table.pictureMode,
@@ -6255,21 +6536,21 @@ class $$ShowPrefsTableTableManager
               $$ShowPrefsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<String> pictureMode = const Value.absent(),
                 Value<bool> nextEpisodeHidden = const Value.absent(),
               }) => ShowPrefsCompanion(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 pictureMode: pictureMode,
                 nextEpisodeHidden: nextEpisodeHidden,
               ),
           createCompanionCallback:
               ({
-                Value<int> anilistId = const Value.absent(),
+                Value<int> seriesId = const Value.absent(),
                 Value<String> pictureMode = const Value.absent(),
                 Value<bool> nextEpisodeHidden = const Value.absent(),
               }) => ShowPrefsCompanion.insert(
-                anilistId: anilistId,
+                seriesId: seriesId,
                 pictureMode: pictureMode,
                 nextEpisodeHidden: nextEpisodeHidden,
               ),
@@ -6298,6 +6579,183 @@ typedef $$ShowPrefsTableProcessedTableManager =
       ShowPreferenceRow,
       PrefetchHooks Function()
     >;
+typedef $$SeriesExternalIdsTableCreateCompanionBuilder =
+    SeriesExternalIdsCompanion Function({
+      required int seriesId,
+      required String provider,
+      required String externalId,
+      Value<int> rowid,
+    });
+typedef $$SeriesExternalIdsTableUpdateCompanionBuilder =
+    SeriesExternalIdsCompanion Function({
+      Value<int> seriesId,
+      Value<String> provider,
+      Value<String> externalId,
+      Value<int> rowid,
+    });
+
+class $$SeriesExternalIdsTableFilterComposer
+    extends Composer<_$CacheDatabase, $SeriesExternalIdsTable> {
+  $$SeriesExternalIdsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get provider => $composableBuilder(
+    column: $table.provider,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalId => $composableBuilder(
+    column: $table.externalId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SeriesExternalIdsTableOrderingComposer
+    extends Composer<_$CacheDatabase, $SeriesExternalIdsTable> {
+  $$SeriesExternalIdsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get seriesId => $composableBuilder(
+    column: $table.seriesId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get provider => $composableBuilder(
+    column: $table.provider,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalId => $composableBuilder(
+    column: $table.externalId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SeriesExternalIdsTableAnnotationComposer
+    extends Composer<_$CacheDatabase, $SeriesExternalIdsTable> {
+  $$SeriesExternalIdsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get seriesId =>
+      $composableBuilder(column: $table.seriesId, builder: (column) => column);
+
+  GeneratedColumn<String> get provider =>
+      $composableBuilder(column: $table.provider, builder: (column) => column);
+
+  GeneratedColumn<String> get externalId => $composableBuilder(
+    column: $table.externalId,
+    builder: (column) => column,
+  );
+}
+
+class $$SeriesExternalIdsTableTableManager
+    extends
+        RootTableManager<
+          _$CacheDatabase,
+          $SeriesExternalIdsTable,
+          SeriesExternalId,
+          $$SeriesExternalIdsTableFilterComposer,
+          $$SeriesExternalIdsTableOrderingComposer,
+          $$SeriesExternalIdsTableAnnotationComposer,
+          $$SeriesExternalIdsTableCreateCompanionBuilder,
+          $$SeriesExternalIdsTableUpdateCompanionBuilder,
+          (
+            SeriesExternalId,
+            BaseReferences<
+              _$CacheDatabase,
+              $SeriesExternalIdsTable,
+              SeriesExternalId
+            >,
+          ),
+          SeriesExternalId,
+          PrefetchHooks Function()
+        > {
+  $$SeriesExternalIdsTableTableManager(
+    _$CacheDatabase db,
+    $SeriesExternalIdsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SeriesExternalIdsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SeriesExternalIdsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SeriesExternalIdsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> seriesId = const Value.absent(),
+                Value<String> provider = const Value.absent(),
+                Value<String> externalId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SeriesExternalIdsCompanion(
+                seriesId: seriesId,
+                provider: provider,
+                externalId: externalId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int seriesId,
+                required String provider,
+                required String externalId,
+                Value<int> rowid = const Value.absent(),
+              }) => SeriesExternalIdsCompanion.insert(
+                seriesId: seriesId,
+                provider: provider,
+                externalId: externalId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SeriesExternalIdsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$CacheDatabase,
+      $SeriesExternalIdsTable,
+      SeriesExternalId,
+      $$SeriesExternalIdsTableFilterComposer,
+      $$SeriesExternalIdsTableOrderingComposer,
+      $$SeriesExternalIdsTableAnnotationComposer,
+      $$SeriesExternalIdsTableCreateCompanionBuilder,
+      $$SeriesExternalIdsTableUpdateCompanionBuilder,
+      (
+        SeriesExternalId,
+        BaseReferences<
+          _$CacheDatabase,
+          $SeriesExternalIdsTable,
+          SeriesExternalId
+        >,
+      ),
+      SeriesExternalId,
+      PrefetchHooks Function()
+    >;
 
 class $CacheDatabaseManager {
   final _$CacheDatabase _db;
@@ -6322,4 +6780,6 @@ class $CacheDatabaseManager {
       $$AppSettingsTableTableManager(_db, _db.appSettings);
   $$ShowPrefsTableTableManager get showPrefs =>
       $$ShowPrefsTableTableManager(_db, _db.showPrefs);
+  $$SeriesExternalIdsTableTableManager get seriesExternalIds =>
+      $$SeriesExternalIdsTableTableManager(_db, _db.seriesExternalIds);
 }

@@ -53,7 +53,7 @@ class _MutableRepo
   @override
   Future<List<Series>> allSeries() async => const [];
   @override
-  Future<List<Episode>> episodesFor(int anilistId) async => const [];
+  Future<List<Episode>> episodesFor(int seriesId) async => const [];
   @override
   Future<List<IdentifiedEpisode>> unmatchedFiles() async => const [];
   @override
@@ -79,15 +79,15 @@ class _MutableRepo
   Future<void> setWatchedManual(Episode e, {required bool watched}) async {}
 
   @override
-  Future<ShowPreferences> preferencesFor(int anilistId) async =>
+  Future<ShowPreferences> preferencesFor(int seriesId) async =>
       const ShowPreferences();
   @override
   Future<Map<int, ShowPreferences>> allPreferences() async => const {};
   @override
-  Future<void> setPictureMode(int anilistId, PictureMode mode) async {}
+  Future<void> setPictureMode(int seriesId, PictureMode mode) async {}
   @override
   Future<void> setNextEpisodeHidden(
-    int anilistId, {
+    int seriesId, {
     required bool hidden,
   }) async {}
 
@@ -112,13 +112,13 @@ class _MutableRepo
   @override
   Future<Map<int, Episode>> upNextBySeries() async => const {};
   @override
-  Future<Set<int>> hiddenEpisodes(int anilistId) async => const {};
+  Future<Set<int>> hiddenEpisodes(int seriesId) async => const {};
   @override
   Future<Map<int, Set<int>>> allHiddenEpisodes() async => const {};
   @override
-  Future<void> hideEpisodes(int anilistId, List<int> episodes) async {}
+  Future<void> hideEpisodes(int seriesId, List<int> episodes) async {}
   @override
-  Future<void> unhideEpisodes(int anilistId, List<int> episodes) async {}
+  Future<void> unhideEpisodes(int seriesId, List<int> episodes) async {}
 }
 
 class _FakeFixMatch implements FixMatchRepository {

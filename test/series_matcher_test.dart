@@ -38,7 +38,7 @@ void main() {
 
     final result = await matcher.match('ZzzRip Cowboy Bebop');
 
-    expect(result.series?.anilistId, 1);
+    expect(result.series?.seriesId, 1);
     expect(searches, ['ZzzRip Cowboy Bebop', 'Cowboy Bebop']);
   });
 

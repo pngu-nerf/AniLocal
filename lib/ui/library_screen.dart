@@ -155,14 +155,14 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   String _query = '';
   // Drives the chunky XP scrollbar over the grid.
   final ScrollController _gridScroll = ScrollController();
-  // anilistId -> the next episode to watch (relations-aware). Loaded async;
+  // seriesId -> the next episode to watch (relations-aware). Loaded async;
   // cards show their "Next" affordance once it arrives.
   Map<int, Episode> _upNext = {};
-  // anilistId -> the set of library folders its sources live under. Greying is
+  // seriesId -> the set of library folders its sources live under. Greying is
   // a pure function of this + the live missing-folder set (recomputed in the
   // grid's ValueListenableBuilder, so toggling missing state needs no re-fetch).
   Map<int, Set<String>> _sourceFoldersBySeries = {};
-  // anilistId -> downloaded-episode tally for the card's "⬇N of M +X" line:
+  // seriesId -> downloaded-episode tally for the card's "⬇N of M +X" line:
   // inRange = downloaded eps whose anchored position is within 1..episodeCount;
   // outOfRange = the rest (position > count, or unanchored); total = the
   // completeness denominator (episodeCount minus any hidden in-range positions
@@ -255,8 +255,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     final folders = <int, Set<String>>{};
     final counts = <int, ({int inRange, int outOfRange, int? total})>{};
     for (final s in series) {
-      final eps = await widget.repository.episodesFor(s.anilistId);
-      folders[s.anilistId] = {
+      final eps = await widget.repository.episodesFor(s.seriesId);
+      folders[s.seriesId] = {
         for (final e in eps)
           for (final src in e.sources) src.folderPath,
       };
@@ -268,7 +268,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       // Hidden positions drop out of the count AND reduce the denominator, so
       // hiding the only missing episode reads "11 of 11" (same rule the show
       // page uses via computeDownloadTally).
-      final hidden = allHidden[s.anilistId] ?? const <int>{};
+      final hidden = allHidden[s.seriesId] ?? const <int>{};
       final m = s.episodeCount;
       var inRange = 0;
       var outOfRange = 0;
@@ -286,7 +286,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
           if (h >= 1 && h <= m) hiddenInRange++;
         }
       }
-      counts[s.anilistId] = (
+      counts[s.seriesId] = (
         inRange: inRange,
         outOfRange: outOfRange,
         total: m == null ? null : m - hiddenInRange,
@@ -603,7 +603,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                     itemCount: series.length,
                     itemBuilder: (_, i) {
                       final folders =
-                          _sourceFoldersBySeries[series[i].anilistId] ??
+                          _sourceFoldersBySeries[series[i].seriesId] ??
                           const <String>{};
                       final unavailable = seriesUnavailable(folders, missing);
                       return _SeriesCard(
@@ -620,8 +620,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                         showPreferences: widget.showPreferences,
                         settings: widget.settings,
                         onRefreshMetadata: widget.onRefreshMetadata,
-                        nextEpisode: _upNext[series[i].anilistId],
-                        downloaded: _downloadCounts[series[i].anilistId],
+                        nextEpisode: _upNext[series[i].seriesId],
+                        downloaded: _downloadCounts[series[i].seriesId],
                         unavailable: unavailable,
                         onPlay: _play,
                         onReturn: _reload,
@@ -923,13 +923,13 @@ class _SeriesCardState extends State<_SeriesCard> {
   }
 
   Future<void> _setPicture(PictureMode mode) async {
-    await widget.showPreferences.setPictureMode(widget.series.anilistId, mode);
+    await widget.showPreferences.setPictureMode(widget.series.seriesId, mode);
     widget.onReturn(); // reload so the projection (and every cover) refreshes
   }
 
   Future<void> _setNextHidden(bool hidden) async {
     await widget.showPreferences.setNextEpisodeHidden(
-      widget.series.anilistId,
+      widget.series.seriesId,
       hidden: hidden,
     );
     widget.onReturn();

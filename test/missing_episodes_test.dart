@@ -5,12 +5,8 @@ import 'package:anilocal/domain/models/episode_slot.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A present episode anchored at [n].
-Episode _ep(int n) => Episode(
-  number: n,
-  fileRef: 'f$n.mkv',
-  seriesAnilistId: 1,
-  anchoredNumber: n,
-);
+Episode _ep(int n) =>
+    Episode(number: n, fileRef: 'f$n.mkv', seriesId: 1, anchoredNumber: n);
 
 /// Convenience: the (number, status) shape of computed slots.
 List<(int, EpisodeStatus)> _shape(List<EpisodeSlot> slots) => [

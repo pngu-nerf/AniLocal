@@ -200,7 +200,7 @@ void main() {
       expect(s2.matched, 1, reason: 'pending file re-identified once online');
       final matched = (await repo.allSeries()).single;
       expect(matched.pending, isFalse);
-      expect(matched.anilistId, 1);
+      expect(matched.seriesId, 1);
       expect(matched.titles.romaji, 'Cowboy Bebop');
       expect(await repo.unmatchedFiles(), isEmpty);
     },

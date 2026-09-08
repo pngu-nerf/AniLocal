@@ -37,8 +37,7 @@ class _EpisodeListZoneState extends State<EpisodeListZone> {
   static const double _rowExtent = 64;
 
   static bool _isCurrent(Episode a, Episode b) =>
-      a.seriesAnilistId == b.seriesAnilistId &&
-      a.anchoredNumber == b.anchoredNumber;
+      a.seriesId == b.seriesId && a.anchoredNumber == b.anchoredNumber;
 
   @override
   void initState() {

@@ -133,8 +133,7 @@ class _VideoZoneState extends State<VideoZone> {
   bool _outroSkipped = false;
 
   static bool _sameEpisode(Episode a, Episode b) =>
-      a.seriesAnilistId == b.seriesAnilistId &&
-      a.anchoredNumber == b.anchoredNumber;
+      a.seriesId == b.seriesId && a.anchoredNumber == b.anchoredNumber;
 
   /// Publish current domain state to the shared notifier (engine state goes via
   /// player streams, not here). Replaces the old per-widget setState — so the

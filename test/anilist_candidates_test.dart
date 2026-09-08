@@ -35,7 +35,7 @@ void main() {
 
       expect(body['query'], isNot(contains('format_in')));
       expect((body['variables'] as Map).containsKey('format'), isFalse);
-      expect(result.map((s) => s.anilistId), [1, 2]);
+      expect(result.map((s) => s.seriesId), [1, 2]);
     });
 
     test('with filter: includes format_in + perPage variables', () async {

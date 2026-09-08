@@ -197,7 +197,7 @@ void main() {
       await db.applySync(
         seriesUpserts: [
           CachedSeriesRow(
-            anilistId: 1,
+            seriesId: 1,
             idMal: null,
             romaji: 'Cowboy Bebop',
             english: null,
@@ -214,7 +214,7 @@ void main() {
             relativePath: 'cb-03.mkv',
             fileSize: 1,
             modifiedAtMs: 1,
-            anilistId: 1,
+            seriesId: 1,
             episodeNumber: 3,
             parsedTitle: 'Cowboy Bebop',
             matchScore: 1,
@@ -226,7 +226,7 @@ void main() {
       );
       await db.upsertWatchState(
         WatchStateRow(
-          anilistId: 1,
+          seriesId: 1,
           episode: 3,
           resumePositionMs: 5000,
           durationMs: 0,
@@ -239,7 +239,7 @@ void main() {
         MatchOverrideRow(
           fileSize: 99,
           modifiedAtMs: 99,
-          anilistId: 2,
+          seriesId: 2,
           anchoredEpisode: 1,
           continuousOffset: 0,
           displayContinuous: false,

@@ -117,7 +117,7 @@ void main() {
   });
 
   Future<CachedSeriesRow> seriesRow() async =>
-      (await db.allSeriesRows()).firstWhere((r) => r.anilistId == 1);
+      (await db.allSeriesRows()).firstWhere((r) => r.seriesId == 1);
 
   test(
     'an unreachable AniList is reported, not a "refreshed 0" success',

@@ -74,7 +74,7 @@ void main() {
     test('SACRED: a rescan (applySync) never wipes hidden state', () async {
       // A matched series with one file, and the user hides two missing eps.
       await db.upsertSeries(
-        const CachedSeriesRow(anilistId: 10, romaji: 'Show', episodeCount: 5),
+        const CachedSeriesRow(seriesId: 10, romaji: 'Show', episodeCount: 5),
       );
       await db.upsertFiles(const [
         CachedFileRow(
@@ -82,7 +82,7 @@ void main() {
           relativePath: 'e1.mkv',
           fileSize: 1,
           modifiedAtMs: 1,
-          anilistId: 10,
+          seriesId: 10,
           episodeNumber: 1,
           parsedTitle: 'Show',
           matchScore: 1,
@@ -136,7 +136,7 @@ void main() {
       expect(await db.allHiddenRows(), isEmpty);
       // Existing content untouched.
       final series = await repo.allSeries();
-      expect(series.single.anilistId, 1);
+      expect(series.single.seriesId, 1);
       expect(series.single.episodeCount, 26);
 
       // And hiding works post-migration.

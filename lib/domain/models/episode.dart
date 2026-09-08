@@ -5,7 +5,7 @@ import 'skip_range.dart';
 
 /// One playable episode mapped to a [Series].
 ///
-/// Watch state is keyed by EPISODE IDENTITY — [seriesAnilistId] + the
+/// Watch state is keyed by EPISODE IDENTITY — [seriesId] + the
 /// AniList-faithful [anchoredNumber] (from Stage 5 fix-match) — NOT by
 /// [fileRef]. That identity survives a file move and is what makes one logical
 /// episode out of several files: "resume episode 5" means episode 5 regardless
@@ -20,7 +20,7 @@ class Episode extends Equatable {
     required this.number,
     required this.fileRef,
     this.title,
-    this.seriesAnilistId = 0,
+    this.seriesId = 0,
     this.anchoredNumber = 0,
     this.watched = false,
     this.resumePosition = Duration.zero,
@@ -40,7 +40,7 @@ class Episode extends Equatable {
 
   /// Watch-state identity: the AniList entry this episode belongs to, and its
   /// anchored (AniList-faithful) position within that entry.
-  final int seriesAnilistId;
+  final int seriesId;
   final int anchoredNumber;
 
   final bool watched;
@@ -71,7 +71,7 @@ class Episode extends Equatable {
     number,
     fileRef,
     title,
-    seriesAnilistId,
+    seriesId,
     anchoredNumber,
     watched,
     resumePosition,

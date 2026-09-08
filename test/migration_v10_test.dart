@@ -93,7 +93,7 @@ void main() {
 
       // The matched series still shows in the grid (not as a placeholder).
       final series = await repo.allSeries();
-      expect(series.single.anilistId, 1);
+      expect(series.single.seriesId, 1);
       expect(series.single.pending, isFalse);
 
       // The pre-existing unmatched file is still in the fix-match screen, and is

@@ -98,7 +98,7 @@ void main() {
 
   Future<Series> candidate(String query, int id) async {
     final c = await fixMatch.searchCandidates(query);
-    return c.firstWhere((s) => s.anilistId == id);
+    return c.firstWhere((s) => s.seriesId == id);
   }
 
   test('override survives a rescan (seam #5)', () async {
@@ -131,13 +131,13 @@ void main() {
     );
 
     expect(await repo.unmatchedFiles(), isEmpty);
-    expect((await repo.allSeries()).single.anilistId, 400);
+    expect((await repo.allSeries()).single.seriesId, 400);
   });
 
   test('wrongly-matched file -> reassign', () async {
     final f = await touch('Sakamoto Days - 03.mkv', 700);
     await sync.sync([dir.path]); // auto -> S1 (#100)
-    expect((await repo.allSeries()).single.anilistId, 100);
+    expect((await repo.allSeries()).single.seriesId, 100);
 
     await fixMatch.assignFile(
       filePath: f.path,
@@ -145,7 +145,7 @@ void main() {
       anchoredEpisode: 3,
     );
 
-    expect((await repo.allSeries()).single.anilistId, 200);
+    expect((await repo.allSeries()).single.seriesId, 200);
   });
 
   test(

@@ -27,7 +27,7 @@ void main() {
   late Directory dir;
   late CacheDatabase db;
   late List<String> skipRequests;
-  var anilistIdMal = <String, int?>{};
+  var seriesIdMal = <String, int?>{};
 
   Future<void> touch(String name) async {
     final f = File('${dir.path}/$name');
@@ -91,7 +91,7 @@ void main() {
         final q = (jsonDecode(req.body)['variables']['search'] as String)
             .toLowerCase();
         if (q.contains('sakamoto')) {
-          return page(500, 'Sakamoto Days', anilistIdMal['sakamoto']);
+          return page(500, 'Sakamoto Days', seriesIdMal['sakamoto']);
         }
         return http.Response(
           jsonEncode({
@@ -127,7 +127,7 @@ void main() {
     dir = await Directory.systemTemp.createTemp('anilocal_idmal_');
     db = CacheDatabase(NativeDatabase.memory());
     skipRequests = [];
-    anilistIdMal = {'sakamoto': null}; // AniList knows the show, not its MAL id
+    seriesIdMal = {'sakamoto': null}; // AniList knows the show, not its MAL id
     await touch('Sakamoto Days - 01.mkv');
   });
 
@@ -155,12 +155,12 @@ void main() {
       reason: 'AniSkip must be asked using the id the cross-map supplied',
     );
     final rows = await db.allSkipRows();
-    expect(rows.single.anilistId, 500);
+    expect(rows.single.seriesId, 500);
     expect(rows.single.introEndMs, 90000);
   });
 
   test('AniList\'s own idMal still wins when it has one', () async {
-    anilistIdMal = {'sakamoto': 12345};
+    seriesIdMal = {'sakamoto': 12345};
 
     await buildSync(withCrossMap: true).sync([dir.path]);
 
@@ -176,7 +176,7 @@ void main() {
     // was healthy already stores idMal; before this change refreshMetadata
     // seeded its lookup ONLY from the live fetch, so an offline refresh found
     // nothing and backfilled no skips even for shows whose MAL id was known.
-    anilistIdMal = {'sakamoto': 12345};
+    seriesIdMal = {'sakamoto': 12345};
     await buildSync(withCrossMap: false).sync([dir.path]);
     await db.customStatement('DELETE FROM skip_segments');
     skipRequests.clear();

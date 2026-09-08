@@ -131,7 +131,7 @@ void main() {
 
       // The already-matched series is preserved through the outage, not pruned.
       final series = await repo.allSeries();
-      final cowboy = series.firstWhere((s) => s.anilistId == 1);
+      final cowboy = series.firstWhere((s) => s.seriesId == 1);
       expect(cowboy.pending, isFalse);
       expect(
         (await repo.episodesFor(1)).length,

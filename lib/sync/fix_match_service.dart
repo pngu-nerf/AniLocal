@@ -58,7 +58,7 @@ class FixMatchService implements FixMatchRepository {
       MatchOverrideRow(
         fileSize: stat.size,
         modifiedAtMs: modifiedAtMs,
-        anilistId: chosen.anilistId,
+        seriesId: chosen.seriesId,
         anchoredEpisode: anchoredEpisode ?? file.episodeNumber,
         continuousOffset: continuousOffset,
         displayContinuous: displayContinuous,
@@ -89,7 +89,7 @@ class FixMatchService implements FixMatchRepository {
         MatchOverrideRow(
           fileSize: stat.size,
           modifiedAtMs: stat.modified.millisecondsSinceEpoch,
-          anilistId: chosen.anilistId,
+          seriesId: chosen.seriesId,
           anchoredEpisode: anchorStart + i,
           continuousOffset: continuousOffset,
           displayContinuous: displayContinuous,
@@ -113,10 +113,10 @@ class FixMatchService implements FixMatchRepository {
   }
 
   Future<void> _cacheSeries(Series s) async {
-    final artPath = await art.ensureCover(s.anilistId, s.coverImageRef);
+    final artPath = await art.ensureCover(s.seriesId, s.coverImageRef);
     await cache.upsertSeries(
       CachedSeriesRow(
-        anilistId: s.anilistId,
+        seriesId: s.seriesId,
         romaji: s.titles.romaji,
         english: s.titles.english,
         nativeTitle: s.titles.native,

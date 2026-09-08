@@ -17,13 +17,13 @@ class ArtCache {
   /// location, tests/tools pass a temp dir; no path_provider coupling here).
   final Future<Directory> Function() directory;
 
-  /// Ensure cover art for [anilistId] is on disk; return its local path (or
+  /// Ensure cover art for [seriesId] is on disk; return its local path (or
   /// null on failure / no URL).
-  Future<String?> ensureCover(int anilistId, String? url) async {
+  Future<String?> ensureCover(int seriesId, String? url) async {
     if (url == null || url.isEmpty) return null;
     final dir = await directory();
     final ext = _extensionOf(url);
-    final file = File('${dir.path}/$anilistId$ext');
+    final file = File('${dir.path}/$seriesId$ext');
 
     if (await file.exists() && await file.length() > 0) {
       return file.path; // already cached

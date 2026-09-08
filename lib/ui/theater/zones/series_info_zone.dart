@@ -40,7 +40,8 @@ class SeriesInfoZone extends StatelessWidget {
     final meta = <String>[
       if (series.format != null) series.format!,
       '${series.episodeCount ?? episodeCount} episodes',
-      if (!series.pending) 'AniList #${series.anilistId}',
+      if (!series.pending && series.anilistId != null)
+        'AniList #${series.anilistId}',
     ];
 
     // Sizes to its CONTENT (mainAxisSize.min) — no greedy scroll view, so the

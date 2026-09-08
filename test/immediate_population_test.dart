@@ -107,7 +107,7 @@ void main() {
     expect(placeholder.coverImageRef, isNull); // blank art
 
     // Its files are present (and playable) under the placeholder.
-    final eps = await repo.episodesFor(placeholder.anilistId);
+    final eps = await repo.episodesFor(placeholder.seriesId);
     expect(eps.map((e) => e.number), [1, 2]);
 
     // A placeholder is NOT a confirmed-unmatched file — it stays out of the
@@ -170,14 +170,14 @@ void main() {
       // The pending placeholder row already existed when discovery fired.
       final atDiscovery = await rowsAtDiscovery!;
       expect(
-        atDiscovery.any((r) => r.pendingIdentification && r.anilistId == null),
+        atDiscovery.any((r) => r.pendingIdentification && r.seriesId == null),
         isTrue,
       );
 
       // After the lookup the placeholder upgraded in place to the real match.
       final series = await repo.allSeries();
       expect(series.single.pending, isFalse);
-      expect(series.single.anilistId, 1);
+      expect(series.single.seriesId, 1);
     },
   );
 
@@ -197,7 +197,7 @@ void main() {
     expect(s.matched, 1, reason: 'pending file re-attempted and resolved');
     final series = await repo.allSeries();
     expect(series.single.pending, isFalse);
-    expect(series.single.anilistId, 1);
+    expect(series.single.seriesId, 1);
     expect(series.single.titles.romaji, 'Cowboy Bebop');
     expect(series.single.coverImageRef, isNotNull); // art now present
     expect(File(series.single.coverImageRef!).existsSync(), isTrue);
@@ -235,7 +235,7 @@ void main() {
       await sync.sync([dir.path]);
       final placeholder = (await repo.allSeries()).single;
       expect(placeholder.pending, isTrue);
-      final synthId = placeholder.anilistId;
+      final synthId = placeholder.seriesId;
       expect(synthId, isNegative, reason: 'synthetic placeholder id');
 
       final pendingEp = (await repo.episodesFor(synthId)).single;
@@ -258,21 +258,21 @@ void main() {
       await sync.sync([dir.path]);
       final matched = (await repo.allSeries()).single;
       expect(matched.pending, isFalse);
-      expect(matched.anilistId, 1);
+      expect(matched.seriesId, 1);
 
       // Resume carried over to the REAL series — not stranded.
       final realEp = (await repo.episodesFor(1)).single;
       expect(realEp.resumePosition, const Duration(seconds: 5));
       // ...and it surfaces in Continue Watching under the real series.
       final cont = await repo.continueWatching();
-      expect(cont.single.series.anilistId, 1);
+      expect(cont.single.series.seriesId, 1);
       expect(cont.single.episode.resumePosition, const Duration(seconds: 5));
 
       // The synthetic id is GONE from durable storage — nothing keyed to it.
       expect(await db.watchStateFor(synthId, pendingEp.anchoredNumber), isNull);
       final rows = await db.allWatchStateRows();
-      expect(rows.every((r) => r.anilistId >= 0), isTrue);
-      expect(rows.single.anilistId, 1);
+      expect(rows.every((r) => r.seriesId >= 0), isTrue);
+      expect(rows.single.seriesId, 1);
     },
   );
 }

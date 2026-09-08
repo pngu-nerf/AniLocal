@@ -5,7 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 CachedSeriesRow _series(int id) => CachedSeriesRow(
-  anilistId: id,
+  seriesId: id,
   romaji: 'Series $id',
   english: null,
   nativeTitle: null,
@@ -20,7 +20,7 @@ CachedFileRow _file(int id, int ep) => CachedFileRow(
   relativePath: 'ep$ep.mkv',
   fileSize: 1,
   modifiedAtMs: ep,
-  anilistId: id,
+  seriesId: id,
   episodeNumber: ep,
   parsedTitle: 'Series $id',
   matchScore: 1,
@@ -61,7 +61,7 @@ void main() {
     expect(p.pictureMode, PictureMode.blur);
     expect(p.nextEpisodeHidden, isTrue);
 
-    final s = (await repo.allSeries()).firstWhere((s) => s.anilistId == 1);
+    final s = (await repo.allSeries()).firstWhere((s) => s.seriesId == 1);
     expect(s.pictureMode, PictureMode.blur);
     expect(s.nextEpisodeHidden, isTrue);
   });
@@ -112,7 +112,7 @@ void main() {
 
       await fill(); // rescan re-runs the fill path
 
-      final s = (await repo.allSeries()).firstWhere((s) => s.anilistId == 1);
+      final s = (await repo.allSeries()).firstWhere((s) => s.seriesId == 1);
       expect(s.pictureMode, PictureMode.blur, reason: 'survives rescan');
       expect(s.nextEpisodeHidden, isTrue, reason: 'survives rescan');
     },

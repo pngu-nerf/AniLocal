@@ -143,7 +143,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   }
 
   Future<void> _loadEpisodes() async {
-    final eps = await widget.repository.episodesFor(widget.series.anilistId);
+    final eps = await widget.repository.episodesFor(widget.series.seriesId);
     if (mounted) setState(() => _episodes = eps);
   }
 
@@ -226,7 +226,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
       TheaterZone.video: VideoZone(
         // Keyed by series so a different show gets a fresh playback frame;
         // within a series, the same frame swaps episodes in place.
-        key: ValueKey(widget.series.anilistId),
+        key: ValueKey(widget.series.seriesId),
         episode: _current,
         watchState: widget.watchState,
         watchOrder: widget.watchOrder,

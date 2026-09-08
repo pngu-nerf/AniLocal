@@ -85,7 +85,7 @@ class _StubPlayer implements Player {
 Episode _ep(int n) => Episode(
   number: n,
   fileRef: '/lib/ep$n.mkv',
-  seriesAnilistId: 1,
+  seriesId: 1,
   anchoredNumber: n,
   title: 'Episode $n',
 );

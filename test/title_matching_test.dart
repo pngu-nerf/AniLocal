@@ -4,7 +4,7 @@ import 'package:anilocal/domain/models/titles.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Series _series(int id, {String? romaji, String? english}) => Series(
-  anilistId: id,
+  seriesId: id,
   titles: Titles(romaji: romaji, english: english),
 );
 
@@ -43,7 +43,7 @@ void main() {
         _series(3, romaji: 'Sousou no Frieren', english: "Frieren"),
       ];
       final result = rankCandidates('Sousou no Frieren', candidates);
-      expect(result.series?.anilistId, 3);
+      expect(result.series?.seriesId, 3);
       expect(result.score, greaterThan(0.9));
     });
 
@@ -55,7 +55,7 @@ void main() {
         _series(11, romaji: 'Fate/Zero'),
       ];
       final result = rankCandidates('Fate Zero', candidates);
-      expect(result.series?.anilistId, 11);
+      expect(result.series?.seriesId, 11);
     });
 
     test('below the floor returns no match', () {

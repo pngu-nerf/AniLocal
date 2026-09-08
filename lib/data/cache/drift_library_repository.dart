@@ -18,7 +18,7 @@ import '../../domain/repositories/watch_state_repository.dart';
 import '../folders/volume_resolver.dart';
 import '../scanner/title_matching.dart' show normalizeTitle;
 import 'cache_database.dart';
-import 'placeholder_identity.dart';
+import 'series_identity.dart';
 
 /// Sort rank for a file not under any known library folder (orphan from a
 /// removed folder) — below every real folder, so it's the last-resort source.
@@ -28,29 +28,29 @@ const int _unfiledSortOrder = 1 << 30;
 class _Effective {
   _Effective({
     required this.file,
-    required this.anilistId,
+    required this.seriesId,
     required this.displayNumber,
     required this.anchoredNumber,
     required this.pending,
   });
 
   final CachedFileRow file;
-  final int? anilistId; // null = unmatched (pending or confirmed)
+  final int? seriesId; // null = unmatched (pending or confirmed)
   final int? displayNumber; // presentation number (continuous or faithful)
   final int anchoredNumber; // AniList-faithful position = watch-state identity
 
-  /// Meaningful only when [anilistId] is null: true = pending (not yet
+  /// Meaningful only when [seriesId] is null: true = pending (not yet
   /// identified → shown as a placeholder), false = confirmed-unmatched (→
   /// fix-match screen). A file resolved via an override is never pending.
   final bool pending;
 }
 
-/// One LOGICAL episode = the files sharing an identity (anilistId, anchored),
+/// One LOGICAL episode = the files sharing an identity (seriesId, anchored),
 /// collapsed to a single playable unit with its priority-ordered [sources] and
 /// the resolved [activeFileRef] (manual source override if set, else priority).
 class _Logical {
   _Logical({
-    required this.anilistId,
+    required this.seriesId,
     required this.anchored,
     required this.displayNumber,
     required this.sources,
@@ -58,7 +58,7 @@ class _Logical {
     required this.pinnedFolder,
   });
 
-  final int anilistId;
+  final int seriesId;
   final int anchored;
   final int? displayNumber;
   final List<EpisodeSource> sources; // priority-ordered (default = first)
@@ -137,7 +137,7 @@ class DriftLibraryRepository
             // pending — even if its auto row was still a pending placeholder.
             return _Effective(
               file: f,
-              anilistId: o.anilistId,
+              seriesId: o.seriesId,
               displayNumber: display,
               anchoredNumber: anchored,
               pending: false,
@@ -145,17 +145,17 @@ class DriftLibraryRepository
           }
           return _Effective(
             file: f,
-            anilistId: f.anilistId,
+            seriesId: f.seriesId,
             displayNumber: f.episodeNumber,
             anchoredNumber: f.episodeNumber ?? 0,
-            pending: f.anilistId == null && f.pendingIdentification,
+            pending: f.seriesId == null && f.pendingIdentification,
           );
         }(),
     ];
   }
 
   /// Collapse matched files into logical episodes keyed by identity
-  /// (anilistId, anchored). Each gets its sources priority-ordered by the
+  /// (seriesId, anchored). Each gets its sources priority-ordered by the
   /// containing folder's sortOrder, and an active source resolved as:
   /// manual override (if its folder still holds the episode) else the
   /// highest-priority source. This is where multi-source de-duplication and
@@ -168,13 +168,13 @@ class DriftLibraryRepository
     final currentByFolder = await _currentFolderPaths(folders);
     final overrides = {
       for (final o in await _db.allSourceOverrideRows())
-        (o.anilistId, o.episode): o,
+        (o.seriesId, o.episode): o,
     };
 
     final groups = <(int, int), List<_Effective>>{};
     for (final e in effective) {
-      if (e.anilistId == null) continue;
-      groups.putIfAbsent((e.anilistId!, e.anchoredNumber), () => []).add(e);
+      if (e.seriesId == null) continue;
+      groups.putIfAbsent((e.seriesId!, e.anchoredNumber), () => []).add(e);
     }
 
     final result = <(int, int), _Logical>{};
@@ -222,7 +222,7 @@ class DriftLibraryRepository
       // Display number comes from the active source's effective match (all
       // sources are the same episode; normally identical).
       result[key] = _Logical(
-        anilistId: key.$1,
+        seriesId: key.$1,
         anchored: key.$2,
         displayNumber: entries[activeIdx].eff.displayNumber,
         sources: sources,
@@ -238,22 +238,27 @@ class DriftLibraryRepository
     final effective = await _effectiveMatches();
     final wanted = {
       for (final e in effective)
-        if (e.anilistId != null) e.anilistId!,
+        if (e.seriesId != null) e.seriesId!,
     };
-    final byId = {for (final r in await _db.allSeriesRows()) r.anilistId: r};
+    final byId = {for (final r in await _db.allSeriesRows()) r.seriesId: r};
     final prefs = await allPreferences();
+    final anilistIds = await _db.anilistIdsBySeriesId();
     final list = [
       for (final id in wanted)
         if (byId[id] != null)
-          _toSeries(byId[id]!, prefs[id] ?? const ShowPreferences()),
+          _toSeries(
+            byId[id]!,
+            prefs[id] ?? const ShowPreferences(),
+            anilistIds[id],
+          ),
     ];
     // Pending (not-yet-identified) files surface as NAMED PLACEHOLDERS — one
     // per distinct parsed-title group — so the library reflects what's on disk
     // even before/without AniList. They upgrade in place once a scan matches
-    // them (their rows gain an anilistId and re-group under the real series).
+    // them (their rows gain an seriesId and re-group under the real series).
     final placeholderTitle = <int, String>{}; // synthetic id -> sample title
     for (final e in effective) {
-      if (e.anilistId != null || !e.pending) continue;
+      if (e.seriesId != null || !e.pending) continue;
       final raw = e.file.parsedTitle;
       if (raw.isEmpty) continue;
       placeholderTitle.putIfAbsent(
@@ -269,28 +274,29 @@ class DriftLibraryRepository
   }
 
   @override
-  Future<List<Episode>> episodesFor(int anilistId) async {
+  Future<List<Episode>> episodesFor(int seriesId) async {
     // A negative id is a pending placeholder (see [placeholderSeriesId]); its
     // "episodes" are the pending files of that parsed-title group.
-    if (anilistId < 0) return _placeholderEpisodesFor(anilistId);
+    if (isPlaceholderSeriesId(seriesId)) {
+      return _placeholderEpisodesFor(seriesId);
+    }
     final logical = await _logicalEpisodes();
     final watch = {
-      for (final w in await _db.allWatchStateRows())
-        (w.anilistId, w.episode): w,
+      for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
     };
     final skips = {
-      for (final s in await _db.allSkipRows()) (s.anilistId, s.episode): s,
+      for (final s in await _db.allSkipRows()) (s.seriesId, s.episode): s,
     };
     final mine = [
       for (final l in logical.values)
-        if (l.anilistId == anilistId) l,
+        if (l.seriesId == seriesId) l,
     ]..sort((a, b) => (a.displayNumber ?? 0).compareTo(b.displayNumber ?? 0));
     return [
       for (final l in mine)
         _toEpisode(
           l,
-          watch[(anilistId, l.anchored)],
-          skips[(anilistId, l.anchored)],
+          watch[(seriesId, l.anchored)],
+          skips[(seriesId, l.anchored)],
         ),
     ];
   }
@@ -306,7 +312,7 @@ class DriftLibraryRepository
         // Only CONFIRMED-unmatched (AniList said no) — a pending file is shown
         // as a library placeholder instead, and must not appear here (it's
         // "not yet tried", not "couldn't identify").
-        if (e.anilistId == null && !e.pending)
+        if (e.seriesId == null && !e.pending)
           IdentifiedEpisode(
             filePath: _fileRef(e.file, currentByFolder),
             parsedTitle: e.file.parsedTitle,
@@ -320,7 +326,7 @@ class DriftLibraryRepository
   /// A placeholder [Series] for a not-yet-identified parsed-title group: the
   /// parsed title stands in for the name, no art, [Series.pending] set.
   Series _placeholderSeries(int id, String parsedTitle) => Series(
-    anilistId: id,
+    seriesId: id,
     titles: Titles(romaji: parsedTitle),
     pending: true,
   );
@@ -336,8 +342,7 @@ class DriftLibraryRepository
     final folderByPath = {for (final f in folders) f.path: f};
     final currentByFolder = await _currentFolderPaths(folders);
     final watch = {
-      for (final w in await _db.allWatchStateRows())
-        (w.anilistId, w.episode): w,
+      for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
     };
 
     // Group this title group's pending files by episode position. A numbered
@@ -346,7 +351,7 @@ class DriftLibraryRepository
     // stay separate rather than merging into one "Episode 0".
     final groups = <int, List<CachedFileRow>>{};
     for (final e in effective) {
-      if (e.anilistId != null || !e.pending) continue;
+      if (e.seriesId != null || !e.pending) continue;
       final raw = e.file.parsedTitle;
       if (raw.isEmpty) continue;
       if (placeholderSeriesId(normalizeTitle(raw)) != placeholderId) continue;
@@ -382,7 +387,7 @@ class DriftLibraryRepository
             title: number > 0
                 ? 'Episode $number'
                 : _name(sources.first.fileRef),
-            seriesAnilistId: placeholderId,
+            seriesId: placeholderId,
             anchoredNumber: anchored,
             watched: w?.watched ?? false,
             resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
@@ -410,12 +415,12 @@ class DriftLibraryRepository
     // Progress-only write: PRESERVE the existing watched + manual-override flags
     // (never clobber a manual watched/unwatched while resume keeps ticking).
     final existing = await _db.watchStateFor(
-      episode.seriesAnilistId,
+      episode.seriesId,
       episode.anchoredNumber,
     );
     await _db.upsertWatchState(
       WatchStateRow(
-        anilistId: episode.seriesAnilistId,
+        seriesId: episode.seriesId,
         episode: episode.anchoredNumber,
         resumePositionMs: position.inMilliseconds,
         durationMs: duration.inMilliseconds,
@@ -429,7 +434,7 @@ class DriftLibraryRepository
   @override
   Future<void> setWatched(Episode episode, {required bool watched}) async {
     final existing = await _db.watchStateFor(
-      episode.seriesAnilistId,
+      episode.seriesId,
       episode.anchoredNumber,
     );
     // The AUTO / threshold path. A MANUAL override wins: never touch a row the
@@ -437,7 +442,7 @@ class DriftLibraryRepository
     if (existing?.watchedManual ?? false) return;
     await _db.upsertWatchState(
       WatchStateRow(
-        anilistId: episode.seriesAnilistId,
+        seriesId: episode.seriesId,
         episode: episode.anchoredNumber,
         // Marking watched clears resume so it leaves "Continue watching".
         resumePositionMs: watched ? 0 : (existing?.resumePositionMs ?? 0),
@@ -455,7 +460,7 @@ class DriftLibraryRepository
     required bool watched,
   }) async {
     final existing = await _db.watchStateFor(
-      episode.seriesAnilistId,
+      episode.seriesId,
       episode.anchoredNumber,
     );
     // Sticky manual override: set watched + mark it manual so the auto/threshold
@@ -464,7 +469,7 @@ class DriftLibraryRepository
     // resume position + duration carry over exactly.
     await _db.upsertWatchState(
       WatchStateRow(
-        anilistId: episode.seriesAnilistId,
+        seriesId: episode.seriesId,
         episode: episode.anchoredNumber,
         resumePositionMs: existing?.resumePositionMs ?? 0,
         durationMs: existing?.durationMs ?? episode.duration.inMilliseconds,
@@ -477,7 +482,7 @@ class DriftLibraryRepository
 
   @override
   Future<void> clearProgress(Episode episode) =>
-      _db.deleteWatchState(episode.seriesAnilistId, episode.anchoredNumber);
+      _db.deleteWatchState(episode.seriesId, episode.anchoredNumber);
 
   @override
   Future<List<ContinueWatching>> continueWatching() async {
@@ -485,25 +490,27 @@ class DriftLibraryRepository
         .inProgressWatchStates(); // ordered, recent first
     final logical = await _logicalEpisodes(); // one per episode identity
     final seriesById = {
-      for (final r in await _db.allSeriesRows()) r.anilistId: r,
+      for (final r in await _db.allSeriesRows()) r.seriesId: r,
     };
     final skips = {
-      for (final s in await _db.allSkipRows()) (s.anilistId, s.episode): s,
+      for (final s in await _db.allSkipRows()) (s.seriesId, s.episode): s,
     };
     final prefs = await allPreferences();
+    final anilistIds = await _db.anilistIdsBySeriesId();
 
     final result = <ContinueWatching>[];
     for (final w in inProgress) {
-      final match = logical[(w.anilistId, w.episode)];
-      final series = seriesById[w.anilistId];
+      final match = logical[(w.seriesId, w.episode)];
+      final series = seriesById[w.seriesId];
       if (match == null || series == null) continue; // file/series gone
       result.add(
         ContinueWatching(
           series: _toSeries(
             series,
-            prefs[w.anilistId] ?? const ShowPreferences(),
+            prefs[w.seriesId] ?? const ShowPreferences(),
+            anilistIds[w.seriesId],
           ),
-          episode: _toEpisode(match, w, skips[(w.anilistId, w.episode)]),
+          episode: _toEpisode(match, w, skips[(w.seriesId, w.episode)]),
         ),
       );
     }
@@ -536,10 +543,10 @@ class DriftLibraryRepository
     // source for an unidentified show would persist the synthetic id into
     // source_overrides and strand it on identification. Pending episodes always
     // play the automatic (highest-priority) source; this is a no-op for them.
-    if (episode.seriesAnilistId < 0) return Future<void>.value();
+    if (isPlaceholderSeriesId(episode.seriesId)) return Future<void>.value();
     return _db.upsertSourceOverride(
       SourceOverrideRow(
-        anilistId: episode.seriesAnilistId,
+        seriesId: episode.seriesId,
         episode: episode.anchoredNumber,
         folderPath: folderPath,
         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
@@ -549,11 +556,8 @@ class DriftLibraryRepository
 
   @override
   Future<void> clearSource(Episode episode) {
-    if (episode.seriesAnilistId < 0) return Future<void>.value();
-    return _db.deleteSourceOverride(
-      episode.seriesAnilistId,
-      episode.anchoredNumber,
-    );
+    if (isPlaceholderSeriesId(episode.seriesId)) return Future<void>.value();
+    return _db.deleteSourceOverride(episode.seriesId, episode.anchoredNumber);
   }
 
   // --- Missing episodes (hidden state). Sole writer of hidden_episodes;
@@ -561,26 +565,26 @@ class DriftLibraryRepository
   //     so a rescan/refresh never wipes a hide. Keyed by episode identity. ---
 
   @override
-  Future<Set<int>> hiddenEpisodes(int anilistId) async => {
-    for (final h in await _db.hiddenRowsFor(anilistId)) h.episode,
+  Future<Set<int>> hiddenEpisodes(int seriesId) async => {
+    for (final h in await _db.hiddenRowsFor(seriesId)) h.episode,
   };
 
   @override
   Future<Map<int, Set<int>>> allHiddenEpisodes() async {
     final result = <int, Set<int>>{};
     for (final h in await _db.allHiddenRows()) {
-      result.putIfAbsent(h.anilistId, () => {}).add(h.episode);
+      result.putIfAbsent(h.seriesId, () => {}).add(h.episode);
     }
     return result;
   }
 
   @override
-  Future<void> hideEpisodes(int anilistId, List<int> episodes) =>
-      _db.hideEpisodes(anilistId, episodes);
+  Future<void> hideEpisodes(int seriesId, List<int> episodes) =>
+      _db.hideEpisodes(seriesId, episodes);
 
   @override
-  Future<void> unhideEpisodes(int anilistId, List<int> episodes) =>
-      _db.unhideEpisodes(anilistId, episodes);
+  Future<void> unhideEpisodes(int seriesId, List<int> episodes) =>
+      _db.unhideEpisodes(seriesId, episodes);
 
   // --- Watch order ("Up Next"). The SINGLE source of "what's next" — every
   //     caller (player auto-advance, library "Next: Ep N") routes through here.
@@ -595,13 +599,13 @@ class DriftLibraryRepository
   Future<NextResult> nextEpisode(Episode current) async {
     final logical = await _logicalEpisodes();
     final next = _resolveNext(
-      current.seriesAnilistId,
+      current.seriesId,
       current.anchoredNumber,
       logical,
     );
     if (next == null) return const NoNextEpisode();
-    final w = await _db.watchStateFor(next.anilistId, next.anchored);
-    final skip = await _db.skipSegmentFor(next.anilistId, next.anchored);
+    final w = await _db.watchStateFor(next.seriesId, next.anchored);
+    final skip = await _db.skipSegmentFor(next.seriesId, next.anchored);
     return NextEpisode(_toEpisode(next, w, skip));
   }
 
@@ -609,54 +613,53 @@ class DriftLibraryRepository
   Future<Map<int, Episode>> upNextBySeries() async {
     final logical = await _logicalEpisodes();
     final watch = {
-      for (final w in await _db.allWatchStateRows())
-        (w.anilistId, w.episode): w,
+      for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
     };
     final skips = {
-      for (final s in await _db.allSkipRows()) (s.anilistId, s.episode): s,
+      for (final s in await _db.allSkipRows()) (s.seriesId, s.episode): s,
     };
 
     // Furthest WATCHED anchored position per series the user has started.
     final latestWatched = <int, int>{};
     for (final w in watch.values) {
       if (!w.watched) continue;
-      final cur = latestWatched[w.anilistId];
+      final cur = latestWatched[w.seriesId];
       if (cur == null || w.episode > cur) {
-        latestWatched[w.anilistId] = w.episode;
+        latestWatched[w.seriesId] = w.episode;
       }
     }
 
     final result = <int, Episode>{};
-    latestWatched.forEach((anilistId, anchored) {
+    latestWatched.forEach((seriesId, anchored) {
       // Same resolver as nextEpisode — within-season next.
-      final next = _resolveNext(anilistId, anchored, logical);
+      final next = _resolveNext(seriesId, anchored, logical);
       if (next == null) return; // NoNextEpisode -> caught up, show nothing
-      final w = watch[(next.anilistId, next.anchored)];
+      final w = watch[(next.seriesId, next.anchored)];
       if (w?.watched ?? false) return; // already watched -> nothing "next"
-      result[anilistId] = _toEpisode(
+      result[seriesId] = _toEpisode(
         next,
         w,
-        skips[(next.anilistId, next.anchored)],
+        skips[(next.seriesId, next.anchored)],
       );
     });
     return result;
   }
 
-  /// The logical episode after (anilistId, anchored) WITHIN the same series, or
+  /// The logical episode after (seriesId, anchored) WITHIN the same series, or
   /// null at the season boundary (the series' last in-library episode). The
   /// null is the seam where cross-season will later follow the SEQUEL relation.
   _Logical? _resolveNext(
-    int anilistId,
+    int seriesId,
     int anchored,
     Map<(int, int), _Logical> logical,
-  ) => logical[(anilistId, anchored + 1)];
+  ) => logical[(seriesId, anchored + 1)];
 
   Episode _toEpisode(_Logical l, WatchStateRow? w, SkipSegmentRow? skip) =>
       Episode(
         number: l.displayNumber ?? 0,
         fileRef: l.activeFileRef,
         title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
-        seriesAnilistId: l.anilistId,
+        seriesId: l.seriesId,
         anchoredNumber: l.anchored,
         watched: w?.watched ?? false,
         resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
@@ -679,8 +682,10 @@ class DriftLibraryRepository
   Series _toSeries(
     CachedSeriesRow r, [
     ShowPreferences prefs = const ShowPreferences(),
+    int? anilistId,
   ]) => Series(
-    anilistId: r.anilistId,
+    seriesId: r.seriesId,
+    anilistId: anilistId,
     titles: Titles(romaji: r.romaji, english: r.english, native: r.nativeTitle),
     format: r.format,
     episodeCount: r.episodeCount,
@@ -701,20 +706,20 @@ class DriftLibraryRepository
   //     writer, so refresh/rescan can't wipe these. ---
 
   @override
-  Future<ShowPreferences> preferencesFor(int anilistId) async =>
-      _toPrefs(await _db.showPrefFor(anilistId));
+  Future<ShowPreferences> preferencesFor(int seriesId) async =>
+      _toPrefs(await _db.showPrefFor(seriesId));
 
   @override
   Future<Map<int, ShowPreferences>> allPreferences() async => {
-    for (final r in await _db.allShowPrefRows()) r.anilistId: _toPrefs(r),
+    for (final r in await _db.allShowPrefRows()) r.seriesId: _toPrefs(r),
   };
 
   @override
-  Future<void> setPictureMode(int anilistId, PictureMode mode) async {
-    final existing = await _db.showPrefFor(anilistId);
+  Future<void> setPictureMode(int seriesId, PictureMode mode) async {
+    final existing = await _db.showPrefFor(seriesId);
     await _db.upsertShowPref(
       ShowPreferenceRow(
-        anilistId: anilistId,
+        seriesId: seriesId,
         pictureMode: mode.token,
         nextEpisodeHidden: existing?.nextEpisodeHidden ?? false,
       ),
@@ -723,13 +728,13 @@ class DriftLibraryRepository
 
   @override
   Future<void> setNextEpisodeHidden(
-    int anilistId, {
+    int seriesId, {
     required bool hidden,
   }) async {
-    final existing = await _db.showPrefFor(anilistId);
+    final existing = await _db.showPrefFor(seriesId);
     await _db.upsertShowPref(
       ShowPreferenceRow(
-        anilistId: anilistId,
+        seriesId: seriesId,
         pictureMode: existing?.pictureMode ?? PictureMode.normal.token,
         nextEpisodeHidden: hidden,
       ),
@@ -740,14 +745,14 @@ class DriftLibraryRepository
   Future<void> setAllNextEpisodeHidden({required bool hidden}) async {
     // Overwrite every cached show's flag, preserving each show's picture mode.
     final existing = {
-      for (final r in await _db.allShowPrefRows()) r.anilistId: r,
+      for (final r in await _db.allShowPrefRows()) r.seriesId: r,
     };
     for (final s in await _db.allSeriesRows()) {
       await _db.upsertShowPref(
         ShowPreferenceRow(
-          anilistId: s.anilistId,
+          seriesId: s.seriesId,
           pictureMode:
-              existing[s.anilistId]?.pictureMode ?? PictureMode.normal.token,
+              existing[s.seriesId]?.pictureMode ?? PictureMode.normal.token,
           nextEpisodeHidden: hidden,
         ),
       );

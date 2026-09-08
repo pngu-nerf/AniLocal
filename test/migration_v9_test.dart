@@ -122,7 +122,7 @@ void main() {
         'Cowboy Bebop/Cowboy Bebop - 01.mkv',
         reason: 'path rebased relative to its folder',
       );
-      expect(files.single.anilistId, 1, reason: 'match preserved');
+      expect(files.single.seriesId, 1, reason: 'match preserved');
       expect(files.single.fileSize, size1);
       expect(files.single.modifiedAtMs, mtime1);
 

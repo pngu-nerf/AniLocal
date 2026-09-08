@@ -2,7 +2,7 @@ import '../models/episode.dart';
 
 /// The UI's entry point for choosing which source a multi-source episode plays
 /// from. Writes a manual override keyed by the episode's identity
-/// (`seriesAnilistId` + `anchoredNumber`) — the same identity watch state uses,
+/// (`seriesId` + `anchoredNumber`) — the same identity watch state uses,
 /// so the choice is per logical episode, not per file.
 ///
 /// The override is sacred across rescans (seam #5, source dimension): the

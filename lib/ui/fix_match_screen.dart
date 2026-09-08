@@ -184,7 +184,7 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
           itemCount: results.length,
           itemBuilder: (_, i) {
             final s = results[i];
-            final selected = _selected?.anilistId == s.anilistId;
+            final selected = _selected?.seriesId == s.seriesId;
             final title = s.displayTitle;
             return Padding(
               padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
@@ -237,7 +237,8 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
                                   if (s.format != null) s.format,
                                   if (s.episodeCount != null)
                                     '${s.episodeCount} ep',
-                                  'AniList #${s.anilistId}',
+                                  if (s.anilistId != null)
+                                    'AniList #${s.anilistId}',
                                 ].join(' · '),
                                 style: const TextStyle(
                                   color: Xp.textDim,

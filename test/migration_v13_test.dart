@@ -77,7 +77,7 @@ void main() {
     addTearDown(db.close);
 
     final series = await db.allSeriesRows();
-    expect(series.single.anilistId, 1);
+    expect(series.single.seriesId, 1);
     // The manual watched-override from v12 survives intact.
     final w = (await db.allWatchStateRows()).single;
     expect(w.watched, isTrue);

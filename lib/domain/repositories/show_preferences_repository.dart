@@ -7,17 +7,17 @@ import '../models/show_preferences.dart';
 /// (and a column), not a parallel store.
 abstract interface class ShowPreferencesRepository {
   /// Current preferences for a show; all-default when nothing is stored.
-  Future<ShowPreferences> preferencesFor(int anilistId);
+  Future<ShowPreferences> preferencesFor(int seriesId);
 
   /// All stored preferences, keyed by AniList id — for batch reads (the grid).
   /// Shows without an override are simply absent (treat as [ShowPreferences]()).
   Future<Map<int, ShowPreferences>> allPreferences();
 
   /// Set the cover display mode for a show (blur / removed / normal).
-  Future<void> setPictureMode(int anilistId, PictureMode mode);
+  Future<void> setPictureMode(int seriesId, PictureMode mode);
 
   /// Set whether the "Next episode" button is hidden for a show.
-  Future<void> setNextEpisodeHidden(int anilistId, {required bool hidden});
+  Future<void> setNextEpisodeHidden(int seriesId, {required bool hidden});
 
   /// Overwrite EVERY cached show's next-episode-hidden pref to [hidden] — the
   /// global "Hide Next Episode" master switch applying to all shows (a

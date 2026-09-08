@@ -6,7 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 CachedSeriesRow _series(int id, {int? episodeCount}) => CachedSeriesRow(
-  anilistId: id,
+  seriesId: id,
   romaji: 'Series $id',
   english: null,
   nativeTitle: null,
@@ -16,14 +16,14 @@ CachedSeriesRow _series(int id, {int? episodeCount}) => CachedSeriesRow(
   coverImagePath: null,
 );
 
-CachedFileRow _file(int anilistId, int ep) => CachedFileRow(
-  folderPath: '/lib/s$anilistId',
+CachedFileRow _file(int seriesId, int ep) => CachedFileRow(
+  folderPath: '/lib/s$seriesId',
   relativePath: 'ep$ep.mkv',
   fileSize: 1,
   modifiedAtMs: ep,
-  anilistId: anilistId,
+  seriesId: seriesId,
   episodeNumber: ep,
-  parsedTitle: 'Series $anilistId',
+  parsedTitle: 'Series $seriesId',
   matchScore: 1,
   releaseGroup: null,
   pendingIdentification: false,
@@ -40,9 +40,9 @@ void main() {
         removedKeys: const [],
       );
 
-  Future<void> markWatched(int anilistId, int ep) => db.upsertWatchState(
+  Future<void> markWatched(int seriesId, int ep) => db.upsertWatchState(
     WatchStateRow(
-      anilistId: anilistId,
+      seriesId: seriesId,
       episode: ep,
       resumePositionMs: 0,
       durationMs: 0,
@@ -52,8 +52,8 @@ void main() {
     ),
   );
 
-  Future<Episode> ep(int anilistId, int number) async =>
-      (await repo.episodesFor(anilistId)).firstWhere((e) => e.number == number);
+  Future<Episode> ep(int seriesId, int number) async =>
+      (await repo.episodesFor(seriesId)).firstWhere((e) => e.number == number);
 
   setUp(() {
     db = CacheDatabase(NativeDatabase.memory());
@@ -71,7 +71,7 @@ void main() {
       final result = await repo.nextEpisode(await ep(1, 2));
       expect(result, isA<NextEpisode>());
       final next = (result as NextEpisode).episode;
-      expect(next.seriesAnilistId, 1);
+      expect(next.seriesId, 1);
       expect(next.number, 3);
     });
 
