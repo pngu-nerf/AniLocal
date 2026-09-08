@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../domain/models/refresh_summary.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
@@ -88,8 +89,7 @@ class AniLocalApp extends StatelessWidget {
 
   /// Re-fetch metadata (idMal + skip data) for already-cached series, without
   /// scanning files or touching overrides/watch-state. Returns counts.
-  final Future<({int seriesRefreshed, int skipsFetched})> Function()
-  onRefreshMetadata;
+  final Future<RefreshSummary> Function() onRefreshMetadata;
 
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 

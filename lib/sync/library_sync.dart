@@ -10,6 +10,8 @@ import '../data/scanner/filename_parser.dart';
 import '../data/scanner/folder_scanner.dart';
 import '../data/scanner/series_matcher.dart';
 import '../data/scanner/title_matching.dart';
+import '../domain/models/metadata_failure.dart';
+import '../domain/models/refresh_summary.dart';
 import '../domain/models/series.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/models/titles.dart';
@@ -213,6 +215,7 @@ class LibrarySync {
     final resolved = <String, _Resolved>{};
     final erroredTitles = <String>{};
     var anilistLookups = 0;
+    MetadataFailure? apiFailure;
     for (final entry in deltaTitles.entries) {
       final norm = entry.key;
       final sample = entry.value;
@@ -233,8 +236,11 @@ class LibrarySync {
           score: result.score,
           freshSeries: result.series,
         );
-      } on AniListException {
+      } on AniListException catch (e) {
         erroredTitles.add(norm); // transient — skip, retry next scan
+        // First cause wins: an outage fails every lookup the same way, and the
+        // first is the one that isn't a knock-on effect of a degrading API.
+        apiFailure ??= e.failure;
       }
     }
 
@@ -246,6 +252,9 @@ class LibrarySync {
     // healthy scan reconciles real moves/deletions.
     final apiUnreachable =
         anilistLookups > 0 && erroredTitles.length == anilistLookups;
+    // Only report a cause when EVERY lookup failed; a lone failure among
+    // successes isn't an outage and must not accuse the user's connection.
+    final reportedFailure = apiUnreachable ? apiFailure : null;
     final effectiveRemovedKeys = apiUnreachable
         ? const <(String, String)>[]
         : removedKeys;
@@ -371,7 +380,7 @@ class LibrarySync {
       errored: errored,
       anilistLookups: anilistLookups,
       unreadableFolders: unreadableFolders.toList(),
-      apiUnreachable: apiUnreachable,
+      apiFailure: reportedFailure,
     );
   }
 
@@ -384,7 +393,7 @@ class LibrarySync {
   ///
   /// Online action; the cache stays the offline read path. Returns counts for
   /// a confirmation message.
-  Future<({int seriesRefreshed, int skipsFetched})> refreshMetadata() async {
+  Future<RefreshSummary> refreshMetadata() async {
     final files = await cache.allFileRows();
     final overrides = {
       for (final o in await cache.allOverrideRows())
@@ -401,15 +410,25 @@ class LibrarySync {
     // Re-fetch by id and upsert (no prune). idMal becomes available here.
     final idMalById = <int, int?>{};
     var seriesRefreshed = 0;
+    MetadataFailure? failure;
     try {
       for (final s in await matcher.anilist.fetchSeriesByIds(ids.toList())) {
+        // A null field here CANNOT blank a cached value: upsertSeries goes
+        // through drift's insertOnConflictUpdate, whose DO UPDATE SET omits
+        // null columns (toColumns(nullToAbsent: true)). So a degraded payload,
+        // or a cover download that failed, leaves the existing row's fields
+        // intact — the no-wipe guarantee this method promises. Pinned by
+        // test/metadata_refresh_failure_test.dart.
         final artPath = await art.ensureCover(s.anilistId, s.coverImageRef);
         await cache.upsertSeries(_seriesRow(s, artPath));
         idMalById[s.anilistId] = s.idMal;
         seriesRefreshed++;
       }
-    } on AniListException {
-      // Transient — keep existing metadata; a later refresh retries.
+    } on AniListException catch (e) {
+      // Transient — keep existing metadata; a later refresh retries. Reported
+      // rather than swallowed: a silent catch here made an outage look like a
+      // successful "Refreshed 0 series".
+      failure = e.failure;
     }
 
     // Effective (anilistId, anchored) per matched file — overrides win, so
@@ -452,7 +471,11 @@ class LibrarySync {
       }
     }
 
-    return (seriesRefreshed: seriesRefreshed, skipsFetched: skipsFetched);
+    return RefreshSummary(
+      seriesRefreshed: seriesRefreshed,
+      skipsFetched: skipsFetched,
+      failure: failure,
+    );
   }
 
   CachedSeriesRow _seriesRow(Series s, String? artPath) => CachedSeriesRow(

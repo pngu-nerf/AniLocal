@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'metadata_failure.dart';
+
 /// Outcome of a library refresh (fill path), surfaced to the UI. A domain model
 /// so the UI can render it without importing sync/cache types (seam #1).
 class SyncSummary extends Equatable {
@@ -13,7 +15,7 @@ class SyncSummary extends Equatable {
     required this.errored,
     required this.anilistLookups,
     this.unreadableFolders = const [],
-    this.apiUnreachable = false,
+    this.apiFailure,
   });
 
   /// Total video files found on disk.
@@ -47,11 +49,17 @@ class SyncSummary extends Equatable {
   /// silently dropped.
   final List<String> unreadableFolders;
 
-  /// Every AniList lookup this scan failed (403 / transport / timeout) — the
-  /// API is unreachable, not "the content is gone". Like an unreadable folder,
-  /// the cache is PRESERVED (no removals/prune) so a transient outage can't
-  /// empty a populated library. Surfaced so the user knows to retry.
-  final bool apiUnreachable;
+  /// Set when every AniList lookup this scan failed — the API is unreachable,
+  /// not "the content is gone". Like an unreadable folder, the cache is
+  /// PRESERVED (no removals/prune) so a transient outage can't empty a
+  /// populated library. Carries WHOSE end the fault is on so the UI can tell
+  /// the user whether to check their connection or just wait. Null = no
+  /// failure.
+  final MetadataFailure? apiFailure;
+
+  /// Whether AniList was unreachable this scan. Derived from [apiFailure] so
+  /// the flag and the reason can never disagree.
+  bool get apiUnreachable => apiFailure != null;
 
   @override
   List<Object?> get props => [
@@ -64,6 +72,6 @@ class SyncSummary extends Equatable {
     errored,
     anilistLookups,
     unreadableFolders,
-    apiUnreachable,
+    apiFailure,
   ];
 }

@@ -7,6 +7,7 @@ import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/picture_mode.dart';
 import '../domain/models/series.dart';
+import '../domain/models/refresh_summary.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
@@ -17,6 +18,7 @@ import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import 'access_recovery.dart';
+import 'metadata_failure_message.dart';
 import 'library/continue_watching_panel.dart';
 import 'library/library_layout.dart';
 import 'library/library_layout_config.dart';
@@ -111,8 +113,7 @@ class LibraryScreen extends StatefulWidget {
 
   /// Re-fetch metadata (idMal + skip data) for cached series — no file scan, no
   /// pruning, preserves overrides/watch-state. Returns counts for a snackbar.
-  final Future<({int seriesRefreshed, int skipsFetched})> Function()
-  onRefreshMetadata;
+  final Future<RefreshSummary> Function() onRefreshMetadata;
 
   /// Opens the native folder picker; reports whether a folder was added and the
   /// denied TCC category label (if the folder's category access was refused).
@@ -402,14 +403,15 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
           ),
         );
       }
-      if (summary.apiUnreachable) {
+      final apiFailure = summary.apiFailure;
+      if (apiFailure != null) {
         messenger.showSnackBar(
           SnackBar(
             duration: const Duration(seconds: 8),
             backgroundColor: Theme.of(context).colorScheme.errorContainer,
-            content: const Text(
-              "⚠ Couldn't reach AniList — your library was kept as-is "
-              '(nothing removed). Check your connection and rescan.',
+            content: Text(
+              '⚠ ${metadataFailureCause(apiFailure)} '
+              'Your library was kept as-is (nothing removed).',
             ),
           ),
         );
@@ -781,8 +783,7 @@ class _SeriesCard extends StatefulWidget {
   final MissingEpisodesRepository missingRepo;
   final ShowPreferencesRepository showPreferences;
   final SettingsRepository settings;
-  final Future<({int seriesRefreshed, int skipsFetched})> Function()
-  onRefreshMetadata;
+  final Future<RefreshSummary> Function() onRefreshMetadata;
 
   /// The next episode to watch for this series (relations-aware), or null when
   /// the series isn't started / has nothing next. Drives the "Next" button.

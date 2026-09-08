@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/models/refresh_summary.dart';
+import '../metadata_failure_message.dart';
 import 'sources_actions.dart';
 
 /// The few NON-setting, per-screen hooks the Settings window needs (the settings
@@ -21,8 +23,7 @@ class SettingsDialogActions {
   final SourcesActions sources;
 
   /// Re-fetch metadata (idMal + skip data) for cached series. Returns counts.
-  final Future<({int seriesRefreshed, int skipsFetched})> Function()
-  onRefreshMetadata;
+  final Future<RefreshSummary> Function() onRefreshMetadata;
 
   /// Called after a successful refresh so the opening screen can reload.
   final VoidCallback onRefreshed;
@@ -39,23 +40,38 @@ Future<void> refreshMetadata(
   BuildContext dialogContext,
   SettingsDialogActions actions,
 ) async {
-  // Capture the app-level messenger before popping the window.
+  // Capture the app-level messenger AND the error colour before popping the
+  // window — dialogContext is defunct once it's gone.
   final messenger = ScaffoldMessenger.of(dialogContext);
+  final errorBackground = Theme.of(dialogContext).colorScheme.errorContainer;
   Navigator.of(dialogContext).pop();
   messenger
     ..clearSnackBars()
     ..showSnackBar(const SnackBar(content: Text('Refreshing metadata…')));
   try {
     final r = await actions.onRefreshMetadata();
+    final failure = r.failure;
     messenger
       ..clearSnackBars()
       ..showSnackBar(
-        SnackBar(
-          content: Text(
-            'Refreshed ${r.seriesRefreshed} series · '
-            '${r.skipsFetched} skip sets fetched',
-          ),
-        ),
+        failure == null
+            ? SnackBar(
+                content: Text(
+                  'Refreshed ${r.seriesRefreshed} series · '
+                  '${r.skipsFetched} skip sets fetched',
+                ),
+              )
+            : SnackBar(
+                // An unreachable AniList is a FAILED refresh, not a refresh of
+                // zero series: reporting success here sent the user hunting for
+                // a local bug during an AniList outage.
+                duration: const Duration(seconds: 8),
+                backgroundColor: errorBackground,
+                content: Text(
+                  '⚠ ${metadataFailureCause(failure)} '
+                  'Your metadata was left untouched.',
+                ),
+              ),
       );
     actions.onRefreshed();
   } catch (e) {

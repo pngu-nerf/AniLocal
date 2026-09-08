@@ -7,6 +7,7 @@ import '../domain/models/episode.dart';
 import '../domain/models/episode_list_row.dart';
 import '../domain/models/episode_slot.dart';
 import '../domain/models/episode_source.dart';
+import '../domain/models/refresh_summary.dart';
 import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
@@ -105,8 +106,7 @@ class SeriesDetailScreen extends StatefulWidget {
   /// shared settings dialog (opened identically from home + here).
   final SettingsRepository settings;
 
-  final Future<({int seriesRefreshed, int skipsFetched})> Function()
-  onRefreshMetadata;
+  final Future<RefreshSummary> Function() onRefreshMetadata;
 
   /// Sources (folders) dependencies, forwarded so this screen's settings window
   /// carries the same Sources tab the home one does.

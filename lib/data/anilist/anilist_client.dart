@@ -2,14 +2,24 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/series.dart';
 import 'anilist_mapper.dart';
 import 'anilist_queries.dart';
 
 /// Thrown for any AniList request that doesn't yield a usable result.
 class AniListException implements Exception {
-  const AniListException(this.message);
+  const AniListException(
+    this.message, {
+    this.failure = MetadataFailure.service,
+  });
+
   final String message;
+
+  /// Whose end the fault is on, for the UI to render. Defaults to
+  /// [MetadataFailure.service] because blaming the user's connection without
+  /// evidence is the worse error: it sends them to debug a working network.
+  final MetadataFailure failure;
 
   @override
   String toString() => 'AniListException: $message';
@@ -134,25 +144,72 @@ class AniListClient {
         body: jsonEncode(body),
       );
     } on Exception catch (e) {
-      throw AniListException('Network error contacting AniList: $e');
-    }
-
-    if (response.statusCode == 429) {
-      throw const AniListException(
-        'Rate limited by AniList (HTTP 429). Try again shortly.',
-      );
-    }
-    if (response.statusCode != 200) {
+      // No HTTP response at all: the request never reached AniList, so the
+      // fault is on this side of the wire.
       throw AniListException(
-        'AniList request failed: HTTP ${response.statusCode}.',
+        'Network error contacting AniList: $e',
+        failure: MetadataFailure.connection,
       );
     }
 
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode != 200) {
+      final detail = _graphQLErrorText(response.body);
+      throw AniListException(
+        detail == null
+            ? 'AniList request failed: HTTP ${response.statusCode}.'
+            : 'AniList request failed: HTTP ${response.statusCode} — $detail',
+        failure: _classifyStatus(response.statusCode, detail != null),
+      );
+    }
+
+    // Guarded, not a cast: a 200 carrying HTML (an edge interstitial) would
+    // otherwise throw a bare FormatException that escapes every `on
+    // AniListException` handler upstream — aborting the whole scan and skipping
+    // the cache-preserving unreachable guard in LibrarySync.
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException catch (e) {
+      throw AniListException('Malformed AniList response: $e');
+    }
+    if (decoded is! Map<String, dynamic>) {
+      throw const AniListException('Unexpected AniList response shape.');
+    }
     if (decoded['errors'] != null) {
       throw AniListException('AniList GraphQL error: ${decoded['errors']}');
     }
     return decoded;
+  }
+
+  /// Whose end a non-200 points at. [isAniListBody] means the response carried
+  /// AniList's own GraphQL error envelope, which only AniList writes.
+  static MetadataFailure _classifyStatus(int status, bool isAniListBody) {
+    if (status == 429) return MetadataFailure.rateLimited;
+    // 5xx is server-side by definition, whoever rendered the page.
+    if (status >= 500) return MetadataFailure.service;
+    // A 4xx speaking GraphQL is AniList deliberately refusing — today's
+    // "API temporarily disabled" outage lands here. A 4xx with any other body
+    // was written by something between the user and AniList (proxy, VPN,
+    // captive portal, or the Cloudflare UA block this client works around).
+    return isAniListBody ? MetadataFailure.service : MetadataFailure.blocked;
+  }
+
+  /// AniList's own error text from a GraphQL error envelope, or null when the
+  /// body isn't one. Doubles as the "did AniList write this?" test, so the
+  /// classification and the message can never disagree about the body.
+  static String? _graphQLErrorText(String body) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(body);
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map<String, dynamic>) return null;
+    final errors = decoded['errors'];
+    if (errors is! List || errors.isEmpty) return null;
+    final first = errors.first;
+    final message = first is Map<String, dynamic> ? first['message'] : null;
+    return message is String && message.isNotEmpty ? message : null;
   }
 
   void dispose() => _http.close();

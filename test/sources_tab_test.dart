@@ -1,3 +1,4 @@
+import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/ui/settings/panels/sources_panel.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:anilocal/ui/settings/settings_window.dart';
@@ -46,7 +47,7 @@ Future<_Closed> _open(
               actions: SettingsDialogActions(
                 sources: fakeSourcesActions(repo, onAddFolder: onAddFolder),
                 onRefreshMetadata: () async =>
-                    (seriesRefreshed: 0, skipsFetched: 0),
+                    const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
                 onRefreshed: () {},
                 loadUnmatchedCount: () async => 0,
                 onOpenUnmatched: () {},

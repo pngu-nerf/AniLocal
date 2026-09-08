@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
@@ -176,7 +177,8 @@ Widget _app(_Repo repo) {
       playback: PlaybackController(resolver: repo),
       missing: repo,
       settings: const FakeSettings(),
-      onRefreshMetadata: () async => (seriesRefreshed: 0, skipsFetched: 0),
+      onRefreshMetadata: () async =>
+          const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
       sources: SourcesActions(
         repository: repo,
         onAddFolder: () async => (added: false, deniedLabel: null),

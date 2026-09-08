@@ -1,5 +1,6 @@
 import 'dart:ui' show Size;
 
+import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
@@ -173,7 +174,8 @@ void main() {
           scans++;
           return _emptySummary;
         },
-        onRefreshMetadata: () async => (seriesRefreshed: 0, skipsFetched: 0),
+        onRefreshMetadata: () async =>
+            const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
         onAddFolder: () async => (added: false, deniedLabel: null),
         accessIssues: ValueNotifier<List<String>>(const []),
         missingFolders: ValueNotifier<List<String>>(const []),

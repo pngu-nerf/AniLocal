@@ -9,6 +9,7 @@ import 'package:anilocal/data/cache/drift_library_repository.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
+import 'package:anilocal/domain/models/metadata_failure.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +42,26 @@ void main() {
   late DriftLibraryRepository repo;
   late LibrarySync sync;
   var anilistDown = false;
+  var anilistOffline = false;
+
+  /// AniList's verbatim outage response — a 403 that DOES carry a well-formed
+  /// GraphQL envelope. Using the real shape here (not plain text) is what
+  /// proves the client classifies by status before touching the body.
+  http.Response apiDisabled() => http.Response(
+    jsonEncode({
+      'errors': [
+        {
+          'message':
+              'The AniList API has been temporarily disabled due to '
+              'severe stability issues.',
+          'status': 403,
+        },
+      ],
+      'data': null,
+    }),
+    403,
+    headers: {'content-type': 'application/json'},
+  );
 
   Future<void> touch(String name, int size) async {
     final f = File('${dir.path}/$name');
@@ -53,10 +74,14 @@ void main() {
     db = CacheDatabase(NativeDatabase.memory());
     repo = DriftLibraryRepository(db);
     anilistDown = false;
+    anilistOffline = false;
     final artDir = await Directory('${dir.path}/.art').create();
     final mock = MockClient((req) async {
       if (req.method == 'POST') {
-        if (anilistDown) return http.Response('forbidden', 403);
+        if (anilistOffline) {
+          throw const SocketException('Network is unreachable');
+        }
+        if (anilistDown) return apiDisabled();
         final q = (jsonDecode(req.body)['variables']['search'] as String)
             .toLowerCase();
         if (q.contains('cowboy')) return _page([_m(1, 'Cowboy Bebop')]);
@@ -121,6 +146,42 @@ void main() {
       expect(await repo.unmatchedFiles(), isEmpty);
     },
   );
+
+  test(
+    'an outage is attributed to AniList, not the user\'s connection',
+    () async {
+      await touch('Trigun - 01.mkv', 300);
+      anilistDown = true;
+
+      final summary = await sync.sync([dir.path]);
+
+      // AniList answered, so the user's network demonstrably works. Telling them
+      // to check their connection here would send them debugging a working one.
+      expect(summary.apiFailure, MetadataFailure.service);
+      expect(summary.apiUnreachable, isTrue);
+    },
+  );
+
+  test('being offline is attributed to the user\'s connection', () async {
+    await touch('Trigun - 01.mkv', 300);
+    anilistOffline = true;
+
+    final summary = await sync.sync([dir.path]);
+
+    expect(summary.apiFailure, MetadataFailure.connection);
+    // The file still survives as a named placeholder, as in any outage.
+    final trigun = (await repo.allSeries()).firstWhere((s) => s.pending);
+    expect(trigun.titles.romaji, 'Trigun');
+  });
+
+  test('a healthy scan reports no failure at all', () async {
+    await touch('Cowboy Bebop - 01.mkv', 100);
+
+    final summary = await sync.sync([dir.path]);
+
+    expect(summary.apiFailure, isNull);
+    expect(summary.apiUnreachable, isFalse);
+  });
 
   test('a healthy scan still removes a genuinely-gone file', () async {
     // The resilience guard must NOT block normal removals when the API is fine.

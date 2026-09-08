@@ -1,3 +1,4 @@
+import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/skip_mode.dart';
 import 'package:anilocal/ui/settings/setting_row.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
@@ -50,7 +51,8 @@ SettingsDialogActions _actions({
   FakeSourcesRepository? sources,
 }) => SettingsDialogActions(
   sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
-  onRefreshMetadata: () async => (seriesRefreshed: 0, skipsFetched: 0),
+  onRefreshMetadata: () async =>
+      const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
   onRefreshed: () {},
   loadUnmatchedCount: () async => 3,
   onOpenUnmatched: onUnmatched ?? () {},
