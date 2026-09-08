@@ -1,3 +1,4 @@
+import '../../domain/models/external_ids.dart';
 import '../../domain/models/related_series.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/titles.dart';
@@ -10,11 +11,17 @@ import '../../domain/models/titles.dart';
 /// it's unit-testable from a captured response.
 Series seriesFromMediaJson(Map<String, dynamic> media) {
   return Series(
+    // seriesId is provisional here: it is what AniList calls the show, and
+    // `ensureSeriesId` decides the real local identity (which may already
+    // exist under another provider's id, or may need minting).
     seriesId: media['id'] as int,
-    // Same value today — this response came FROM AniList — but recorded
-    // separately because the two diverge as soon as another provider answers.
-    anilistId: media['id'] as int,
-    idMal: media['idMal'] as int?,
+    // Report EVERY id this response carries, not just AniList's own — that is
+    // what lets ensureSeriesId recognise a show some other provider already
+    // identified instead of minting a second identity for it.
+    externalIds: ExternalIds(
+      anilist: media['id'] as int,
+      mal: media['idMal'] as int?,
+    ),
     titles: _titlesFrom(media['title'] as Map<String, dynamic>?),
     format: media['format'] as String?,
     episodeCount: media['episodes'] as int?,

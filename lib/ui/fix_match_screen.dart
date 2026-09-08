@@ -237,8 +237,8 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
                                   if (s.format != null) s.format,
                                   if (s.episodeCount != null)
                                     '${s.episodeCount} ep',
-                                  if (s.anilistId != null)
-                                    'AniList #${s.anilistId}',
+                                  if (s.externalIds.anilist != null)
+                                    'AniList #${s.externalIds.anilist}',
                                 ].join(' · '),
                                 style: const TextStyle(
                                   color: Xp.textDim,

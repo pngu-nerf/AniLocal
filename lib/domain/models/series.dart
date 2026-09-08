@@ -1,47 +1,44 @@
 import 'package:equatable/equatable.dart';
 
+import 'external_ids.dart';
 import 'picture_mode.dart';
 import 'related_series.dart';
 import 'titles.dart';
 
-/// A single anime entry, keyed by its AniList ID.
+/// A single anime entry, keyed by [seriesId] — AniLocal's own surrogate, not
+/// any provider's id.
 ///
-/// Minimal projection of what the UI renders — not a clone of the AniList
-/// schema. Mapping from AniList DTOs lives in `lib/data/anilist`; persistence
-/// lives in `lib/data/cache`. This type carries no JSON or DB annotations.
+/// Minimal projection of what the UI renders — not a clone of any provider's
+/// schema. Mapping from provider DTOs lives in `lib/data/metadata` and the
+/// per-provider modules; persistence lives in `lib/data/cache`. This type
+/// carries no JSON or DB annotations.
 class Series extends Equatable {
   const Series({
     required this.seriesId,
-    this.anilistId,
+    this.externalIds = ExternalIds.empty,
     required this.titles,
     this.format,
     this.coverImageRef,
     this.episodeCount,
-    this.idMal,
     this.relations = const [],
     this.pending = false,
     this.pictureMode = PictureMode.normal,
     this.nextEpisodeHidden = false,
   });
 
-  /// For a real AniList entry this is its positive AniList ID. For a PENDING
-  /// placeholder (a show discovered on disk but not yet identified) it is a
-  /// stable NEGATIVE synthetic id derived from the parsed title — never a real
-  /// AniList id, so it can't collide with one. See [pending].
+  /// AniLocal's own opaque identity for this show. Positive values were seeded
+  /// from AniList; values at or above `kMintedSeriesIdBase` were minted for a
+  /// show no AniList entry covers; NEGATIVE values are PENDING placeholders
+  /// derived from the parsed title. See `series_identity.dart` for the bands.
   final int seriesId;
 
-  /// The id ANILIST knows this show by, when it knows it at all.
+  /// What other databases call this show — AniList, MAL, Kitsu, AniDB. Any of
+  /// them may be absent. Distinct from [seriesId]: these are attributes, not
+  /// identity, so nothing here may be used as a key.
   ///
-  /// Distinct from [seriesId], which is AniLocal's own opaque surrogate. They
-  /// happen to be equal for every show identified through AniList, but a show
-  /// that only another provider knows has a minted [seriesId] and NO AniList
-  /// id — so anything rendering "AniList #…" must read this and omit the label
-  /// when it is null, rather than printing the surrogate and lying.
-  final int? anilistId;
-
-  /// MyAnimeList id (AniList's `idMal` cross-reference). Used only to query
-  /// AniSkip (keyed by MAL id); null when AniList has no MAL mapping.
-  final int? idMal;
+  /// Anything rendering "AniList #…" must read `externalIds.anilist` and omit
+  /// the label when it is null, rather than printing the surrogate and lying.
+  final ExternalIds externalIds;
 
   final Titles titles;
 
@@ -88,12 +85,11 @@ class Series extends Equatable {
   @override
   List<Object?> get props => [
     seriesId,
-    anilistId,
+    externalIds,
     titles,
     format,
     coverImageRef,
     episodeCount,
-    idMal,
     relations,
     pending,
     pictureMode,

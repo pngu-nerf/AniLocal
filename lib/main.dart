@@ -9,6 +9,8 @@ import 'data/cache/cache_database.dart';
 import 'data/cache/drift_library_repository.dart';
 import 'data/cache/drift_settings_repository.dart';
 import 'data/crossmap/cross_map_store.dart';
+import 'data/metadata/anilist_metadata_provider.dart';
+import 'data/metadata/metadata_provider.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
 import 'data/folders/tcc_folder_access.dart';
@@ -52,13 +54,16 @@ void main() {
   // memoization. Internal-disk folders never touch it (their path is stable).
   final VolumeResolver volumeResolver = DiskutilVolumeResolver();
   final repository = DriftLibraryRepository(database, resolver: volumeResolver);
+  // ONE ordered source list, shared by the scan and by fix-match so the two
+  // can never disagree about which source is preferred. Today it holds a single
+  // provider; adding one is appending to this list.
+  final metadataProviders = <MetadataProvider>[
+    AniListMetadataProvider(AniListClient(), formatsIn: kEpisodicAnimeFormats),
+  ];
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
     parser: const HeuristicFilenameParser(),
-    matcher: SeriesMatcher(
-      anilist: AniListClient(),
-      formatsIn: kEpisodicAnimeFormats,
-    ),
+    matcher: SeriesMatcher(providers: metadataProviders),
     cache: database,
     art: ArtCache(directory: coverArtDirectory),
     // AniSkip fetched at scan time only; playback reads skips from the cache.
@@ -70,10 +75,9 @@ void main() {
   );
   // Fix-match: the ONLY writer of overrides (LibrarySync can't reach it).
   final fixMatch = FixMatchService(
-    anilist: AniListClient(),
+    providers: metadataProviders,
     art: ArtCache(directory: coverArtDirectory),
     cache: database,
-    formatsIn: kEpisodicAnimeFormats,
   );
   const FolderPicker picker = FileSelectorFolderPicker();
   final FolderAccess folderAccess = TccFolderAccess();

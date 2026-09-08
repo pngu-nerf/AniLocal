@@ -43,39 +43,6 @@ class AniListClient {
   final http.Client _http;
   final Uri _endpoint;
 
-  /// Search for a single anime by [title] and map the best match to [Series].
-  ///
-  /// [formatsIn] optionally restricts results to an allow-list of AniList
-  /// formats (e.g. `['TV', 'MOVIE', 'OVA']`); null means no filter (everything,
-  /// including MUSIC PVs). Throws [AniListException] on transport errors, rate
-  /// limiting, GraphQL errors, or no match.
-  Future<Series> fetchSeriesByTitle(
-    String title, {
-    List<String>? formatsIn,
-  }) async {
-    // AniList 500s on an explicit `format_in: null`, so only use the filtered
-    // query (and send the variable) when a non-empty filter is supplied.
-    final filtering = formatsIn != null && formatsIn.isNotEmpty;
-    final body = filtering
-        ? {
-            'query': mediaSearchQueryFiltered,
-            'variables': {'search': title, 'format': formatsIn},
-          }
-        : {
-            'query': mediaSearchQuery,
-            'variables': {'search': title},
-          };
-
-    final decoded = await _post(body);
-    final data = decoded['data'] as Map<String, dynamic>?;
-    final media = data?['Media'] as Map<String, dynamic>?;
-    if (media == null) {
-      throw AniListException('No AniList match for "$title".');
-    }
-
-    return seriesFromMediaJson(media);
-  }
-
   /// Search for up to [perPage] anime candidates by [title], for client-side
   /// ranking (Stage 3). [formatsIn] restricts formats; pass episodic formats to
   /// cut MUSIC-type false-positives. Returns `[]` when nothing matches.

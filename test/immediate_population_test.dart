@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
@@ -77,7 +78,9 @@ void main() {
     sync = LibrarySync(
       scanner: const FileSystemFolderScanner(),
       parser: const HeuristicFilenameParser(),
-      matcher: SeriesMatcher(anilist: AniListClient(httpClient: mock)),
+      matcher: SeriesMatcher(
+        providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
+      ),
       cache: db,
       art: ArtCache(httpClient: mock, directory: () async => artDir),
       aniSkip: AniSkipClient(
@@ -128,15 +131,19 @@ void main() {
         scanner: const FileSystemFolderScanner(),
         parser: const HeuristicFilenameParser(),
         matcher: SeriesMatcher(
-          anilist: AniListClient(
-            httpClient: MockClient((req) async {
-              if (req.method == 'POST') {
-                lookupAt ??= step++;
-                return _page([_m(1, 'Cowboy Bebop')]);
-              }
-              return http.Response.bytes([1, 2, 3], 200);
-            }),
-          ),
+          providers: [
+            AniListMetadataProvider(
+              AniListClient(
+                httpClient: MockClient((req) async {
+                  if (req.method == 'POST') {
+                    lookupAt ??= step++;
+                    return _page([_m(1, 'Cowboy Bebop')]);
+                  }
+                  return http.Response.bytes([1, 2, 3], 200);
+                }),
+              ),
+            ),
+          ],
         ),
         cache: db,
         art: ArtCache(

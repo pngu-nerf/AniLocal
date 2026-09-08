@@ -1,19 +1,17 @@
 import 'package:drift/drift.dart';
 
+import '../../domain/models/external_ids.dart';
 import '../folders/volume_resolver.dart' show rebaseToFolderRelative;
+import 'series_identity.dart';
 
 part 'cache_database.g.dart';
 
-/// AniList metadata projection, keyed by AniList ID. ONLY fields the UI renders
+/// Series metadata projection, keyed by [seriesId]. ONLY fields the UI renders
 /// (seam rule: a projection, not a clone). `coverImagePath` is the downloaded
 /// local art file so offline browse shows art, not broken images.
 @DataClassName('CachedSeriesRow')
 class SeriesCache extends Table {
   IntColumn get seriesId => integer()();
-
-  /// MyAnimeList id (AniList `idMal`) — the key AniSkip needs. Nullable: not
-  /// every entry has a MAL mapping, and pre-v8 rows backfill on re-fetch.
-  IntColumn get idMal => integer().nullable()();
 
   TextColumn get romaji => text().nullable()();
   TextColumn get english => text().nullable()();
@@ -328,7 +326,7 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
@@ -377,7 +375,14 @@ class CacheDatabase extends _$CacheDatabase {
         await m.createTable(sourceOverrides);
       }
       if (from < 8) {
-        await m.addColumn(seriesCache, seriesCache.idMal);
+        // Raw SQL, not m.addColumn: id_mal no longer exists in the current
+        // table shape (v15 drops it), so there is no generated column to pass.
+        // The historical step must still run — v14's seeding reads id_mal, and
+        // v15 then drops it — so a pre-v8 cache follows the same path every
+        // other cache did.
+        await customStatement(
+          'ALTER TABLE series_cache ADD COLUMN id_mal INTEGER',
+        );
         await m.createTable(skipSegments);
       }
       if (from < 9) {
@@ -418,6 +423,17 @@ class CacheDatabase extends _$CacheDatabase {
       }
       if (from < 14) {
         await _migrateToSurrogateIdentityV14(m, from);
+      }
+      if (from < 15) {
+        // series_cache.id_mal is now the 'mal' row in series_external_ids, and
+        // v14 already seeded it there. Two homes for one fact is exactly the
+        // duplication CLAUDE.md forbids, so the column goes; the AniSkip lookup
+        // reads the side table instead. Safe to drop: not indexed, not part of
+        // any primary key. (v14 seeded it BEFORE this runs, so no data is lost
+        // even on a single v13 -> v15 hop.)
+        if (from >= 8) {
+          await m.dropColumn(seriesCache, 'id_mal');
+        }
       }
     },
   );
@@ -652,47 +668,134 @@ class CacheDatabase extends _$CacheDatabase {
     await _recordProviderIds(row);
   }
 
-  /// Record which provider ids a cached series is known by.
+  /// Record the one provider id the id band itself implies.
   ///
-  /// Today every series is identified through AniList, so its `series_id` IS
-  /// its AniList id — that is the v14 invariant. The provider-abstraction slice
-  /// replaces this assumption with the ids the answering provider actually
-  /// reported, at which point a minted `series_id` will carry no 'anilist' row
-  /// at all. Writing it here (not only in the migration) is what keeps the side
-  /// table true for series cached AFTER the upgrade.
+  /// An id in the PROVIDER-SEEDED band IS an AniList id by definition (see
+  /// `series_identity.dart`), so caching such a series is enough to know that
+  /// mapping. Every OTHER id a provider reports — MAL, Kitsu — is learned via
+  /// [ensureSeriesId], which is the single place that reasons about identity.
   Future<void> _recordProviderIds(CachedSeriesRow row) async {
-    // Placeholders are negative and never reach series_cache; guard anyway so a
-    // synthetic id can never be published as though it were a provider's.
-    if (row.seriesId <= 0) return;
+    // Placeholders are negative and never reach series_cache; a minted id has
+    // no AniList id at all. Guard both.
+    if (!isProviderSeededSeriesId(row.seriesId)) return;
     await into(seriesExternalIds).insertOnConflictUpdate(
       SeriesExternalId(
         seriesId: row.seriesId,
-        provider: 'anilist',
+        provider: kAnilistProvider,
         externalId: '${row.seriesId}',
       ),
     );
-    final mal = row.idMal;
-    if (mal != null) {
-      await into(seriesExternalIds).insertOnConflictUpdate(
-        SeriesExternalId(
-          seriesId: row.seriesId,
-          provider: 'mal',
-          externalId: '$mal',
-        ),
-      );
-    }
   }
 
-  /// series_id -> its AniList id, for the read path. Absent when a series has
-  /// no AniList id (a minted one, once other providers exist).
-  Future<Map<int, int>> anilistIdsBySeriesId() async {
-    final rows = await (select(
-      seriesExternalIds,
-    )..where((e) => e.provider.equals('anilist'))).get();
+  /// Resolve [ids] to a local series identity, minting one only if no existing
+  /// series already carries ANY of them.
+  ///
+  /// THE SOLE MINTING SITE, and the rule matters more than it looks:
+  ///
+  /// > A show first identified through Kitsu mints id `M`, and six episodes get
+  /// > watched — `watch_state` rows under `M`. Later AniList is healthy and
+  /// > returns the same show. If we looked it up only by the ANSWERING
+  /// > provider's id we would find nothing, mint `M'`, and the show would fork
+  /// > in two — six episodes of progress stranded under an id nothing
+  /// > references any more.
+  ///
+  /// So the lookup matches on EVERY id the caller reports, not just the one the
+  /// provider is authoritative for. Both AniList and Kitsu publish MAL ids, so
+  /// `mal` is the practical bridge between them.
+  ///
+  /// When SEVERAL existing series match — two rows that turn out to be the same
+  /// show — this deliberately does NOT merge them. Merging would move sacred
+  /// rows on the fill path, which seam #5 forbids, and a silently clobbered
+  /// fix-match is unrecoverable. The lowest matching id wins for the new
+  /// mapping; the other row is left exactly as it is.
+  ///
+  /// Runs in ONE transaction so a crash between allocating the counter and
+  /// writing the row cannot leak or reuse an id.
+  Future<int> ensureSeriesId(ExternalIds ids) async {
+    if (ids.isEmpty) {
+      throw ArgumentError('ensureSeriesId needs at least one external id');
+    }
+    return transaction(() async {
+      final matches = <int>{};
+      for (final entry in ids.byProvider.entries) {
+        final rows =
+            await (select(seriesExternalIds)..where(
+                  (e) =>
+                      e.provider.equals(entry.key) &
+                      e.externalId.equals('${entry.value}'),
+                ))
+                .get();
+        matches.addAll(rows.map((r) => r.seriesId));
+      }
+
+      // Lowest wins — an arbitrary but STABLE choice, so repeated calls with
+      // the same inputs keep resolving to the same identity.
+      //
+      // With no match, an AniList id becomes the series_id directly rather than
+      // minting. That IS the provider-seeded band (see series_identity.dart):
+      // every id in it is an AniList id, which is what the v14 migration seeded
+      // and what keeps cover-art filenames stable. Minting is reserved for the
+      // case that band cannot express — a show AniList does not have.
+      final seriesId = matches.isNotEmpty
+          ? matches.reduce((a, b) => a < b ? a : b)
+          : (ids.anilist ?? await _mintSeriesId());
+
+      // Record anything newly learned — but never STEAL an id that already
+      // belongs to a different series. That happens when one answer claims ids
+      // we had recorded against two separate identities: they are really one
+      // show. Re-pointing the mapping here would be a merge in all but name,
+      // and merging on the fill path can clobber a fix-match unrecoverably
+      // (seam #5). So the conflicting mapping is left exactly where it is; the
+      // UNIQUE (provider, external_id) index is what makes that detectable
+      // rather than silent.
+      for (final entry in ids.byProvider.entries) {
+        final existing =
+            await (select(seriesExternalIds)..where(
+                  (e) =>
+                      e.provider.equals(entry.key) &
+                      e.externalId.equals('${entry.value}'),
+                ))
+                .getSingleOrNull();
+        if (existing != null && existing.seriesId != seriesId) continue;
+        await into(seriesExternalIds).insertOnConflictUpdate(
+          SeriesExternalId(
+            seriesId: seriesId,
+            provider: entry.key,
+            externalId: '${entry.value}',
+          ),
+        );
+      }
+      return seriesId;
+    });
+  }
+
+  /// Next surrogate id for a show no provider-seeded id covers. Monotonic and
+  /// stored in app_settings, so it needs no schema of its own.
+  Future<int> _mintSeriesId() async {
+    final row = await (select(
+      appSettings,
+    )..where((s) => s.key.equals(_nextMintedIdKey))).getSingleOrNull();
+    final next = int.tryParse(row?.value ?? '') ?? kMintedSeriesIdBase;
+    await into(appSettings).insertOnConflictUpdate(
+      AppSettingRow(key: _nextMintedIdKey, value: '${next + 1}'),
+    );
+    return next;
+  }
+
+  static const String _nextMintedIdKey = 'next_minted_series_id';
+
+  /// series_id -> everything other databases call it, for the read path.
+  /// A minted series simply has fewer entries (no 'anilist' row at all).
+  Future<Map<int, ExternalIds>> externalIdsBySeriesId() async {
+    final rows = await select(seriesExternalIds).get();
+    final byProvider = <int, Map<String, int>>{};
+    for (final r in rows) {
+      final value = int.tryParse(r.externalId);
+      if (value == null) continue; // a non-numeric provider id we don't model
+      (byProvider[r.seriesId] ??= {})[r.provider] = value;
+    }
     return {
-      for (final r in rows)
-        if (int.tryParse(r.externalId) != null)
-          r.seriesId: int.parse(r.externalId),
+      for (final e in byProvider.entries) e.key: ExternalIds.fromMap(e.value),
     };
   }
 

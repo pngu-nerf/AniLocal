@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -25,15 +26,21 @@ void main() {
   test('retries without leading word when first search is empty', () async {
     final searches = <String>[];
     final matcher = SeriesMatcher(
-      anilist: AniListClient(
-        httpClient: MockClient((req) async {
-          final search =
-              (jsonDecode(req.body)['variables']['search']) as String;
-          searches.add(search);
-          if (search == 'Cowboy Bebop') return _page([_m(1, 'Cowboy Bebop')]);
-          return _page(const []); // polluted query -> empty
-        }),
-      ),
+      providers: [
+        AniListMetadataProvider(
+          AniListClient(
+            httpClient: MockClient((req) async {
+              final search =
+                  (jsonDecode(req.body)['variables']['search']) as String;
+              searches.add(search);
+              if (search == 'Cowboy Bebop') {
+                return _page([_m(1, 'Cowboy Bebop')]);
+              }
+              return _page(const []); // polluted query -> empty
+            }),
+          ),
+        ),
+      ],
     );
 
     final result = await matcher.match('ZzzRip Cowboy Bebop');
@@ -44,11 +51,15 @@ void main() {
 
   test('returns no match when candidates score below the floor', () async {
     final matcher = SeriesMatcher(
-      anilist: AniListClient(
-        httpClient: MockClient(
-          (req) async => _page([_m(1, 'Completely Different Show')]),
+      providers: [
+        AniListMetadataProvider(
+          AniListClient(
+            httpClient: MockClient(
+              (req) async => _page([_m(1, 'Completely Different Show')]),
+            ),
+          ),
         ),
-      ),
+      ],
     );
 
     final result = await matcher.match('zzz nonsense qux');

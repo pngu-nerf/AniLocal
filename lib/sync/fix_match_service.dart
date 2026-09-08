@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../data/anilist/anilist_client.dart';
+import '../data/metadata/metadata_provider.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
 import '../domain/models/series.dart';
@@ -14,22 +14,36 @@ import '../domain/repositories/fix_match_repository.dart';
 /// they follow a moved/renamed file with no extra bookkeeping.
 class FixMatchService implements FixMatchRepository {
   FixMatchService({
-    required this.anilist,
+    required this.providers,
     required this.art,
     required this.cache,
-    this.formatsIn,
   });
 
-  final AniListClient anilist;
+  /// Ordered metadata sources, same list and same priority as the scan uses.
+  final List<MetadataProvider> providers;
   final ArtCache art;
   final CacheDatabase cache;
-  final List<String>? formatsIn;
 
-  /// Ranked AniList candidates for the user to pick from (top result alone is
-  /// unreliable — Stage 2 recon).
+  /// Ranked candidates for the user to pick from (the top result alone is
+  /// unreliable — Stage 2 recon). Asks each configured source in order and
+  /// returns the first that answers, so fix-match keeps working through an
+  /// outage of the preferred one.
   @override
-  Future<List<Series>> searchCandidates(String query) =>
-      anilist.searchSeriesCandidates(query, formatsIn: formatsIn, perPage: 15);
+  Future<List<Series>> searchCandidates(String query) async {
+    MetadataException? lastFailure;
+    for (final provider in providers) {
+      if (!provider.isConfigured) continue;
+      try {
+        return await provider.searchCandidates(query, perPage: 15);
+      } on MetadataException catch (e) {
+        lastFailure = e;
+      }
+    }
+    // Surfaced in the fix-match pane as "Search failed: …" — the user is
+    // actively waiting here, so silence would be worse than an error.
+    throw lastFailure ??
+        const MetadataException('No metadata source is configured.');
+  }
 
   /// Assign (unmatched → match) or reassign a single file to [chosen].
   ///
@@ -113,6 +127,13 @@ class FixMatchService implements FixMatchRepository {
   }
 
   Future<void> _cacheSeries(Series s) async {
+    // Learn every id the chosen entry carries. Without this a fix-matched show
+    // got no MAL id and therefore no AniSkip data until some later refresh
+    // happened to backfill it — the auto-matched path recorded ids, this one
+    // silently did not.
+    if (s.externalIds.isNotEmpty) {
+      await cache.ensureSeriesId(s.externalIds);
+    }
     final artPath = await art.ensureCover(s.seriesId, s.coverImageRef);
     await cache.upsertSeries(
       CachedSeriesRow(

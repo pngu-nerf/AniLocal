@@ -1,0 +1,60 @@
+import '../../domain/models/metadata_failure.dart';
+import '../../domain/models/series.dart';
+
+/// Thrown when a provider cannot answer. Carries [failure] so the UI can say
+/// WHOSE end the fault is on (see `metadata_failure_message.dart`), and so the
+/// fallback chain can tell "this provider is down, try the next" from "asking
+/// again immediately would just burn the next one's quota too".
+///
+/// Provider-agnostic on purpose: `LibrarySync` catches THIS, not any one
+/// provider's exception type, which is what lets a second provider be added
+/// without touching the fill path.
+class MetadataException implements Exception {
+  const MetadataException(
+    this.message, {
+    this.failure = MetadataFailure.service,
+  });
+
+  final String message;
+  final MetadataFailure failure;
+
+  @override
+  String toString() => 'MetadataException: $message';
+}
+
+/// One source of "what is this show" — AniList, Kitsu, MyAnimeList, …
+///
+/// The contract is deliberately tiny: two reads, both returning domain models.
+/// Everything provider-specific — HTTP, JSON shape, query language, format
+/// vocabulary — stays inside the implementation (seam #3 generalised).
+///
+/// Implementations MUST:
+/// - report every id they know via [Series.externalIds], not just their own,
+///   because that is what lets `ensureSeriesId` recognise a show another
+///   provider already identified instead of minting a duplicate identity;
+/// - normalise [Series.format] to the shared vocabulary rather than passing
+///   their own through — it is rendered raw in the UI, so an un-normalised mix
+///   would show `TV` beside `movie`;
+/// - throw [MetadataException] for any failure, so the chain can fall through.
+abstract class MetadataProvider {
+  /// Stable identifier, and the value written to
+  /// `series_external_ids.provider`. Also what the settings list persists, so
+  /// it must not change once shipped.
+  String get token;
+
+  /// Shown in the settings source list.
+  String get displayName;
+
+  /// Whether this provider can be used right now. False for one that needs a
+  /// client ID the user hasn't supplied — such a provider is SKIPPED by the
+  /// chain rather than counted as a failure.
+  bool get isConfigured => true;
+
+  /// Ranked-candidate search for a parsed title. Returns `[]` for a genuine
+  /// no-match; throws [MetadataException] when the lookup could not be made.
+  Future<List<Series>> searchCandidates(String title, {int perPage});
+
+  /// Re-fetch known entries by THIS provider's own ids (the refresh backfill).
+  /// Ids the provider doesn't recognise are simply absent from the result.
+  Future<List<Series>> fetchByProviderIds(List<int> providerIds);
+}

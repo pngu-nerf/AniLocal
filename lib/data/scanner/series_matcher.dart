@@ -1,36 +1,74 @@
-import '../anilist/anilist_client.dart';
+import '../../domain/models/metadata_failure.dart';
+import '../metadata/metadata_provider.dart';
 import 'title_matching.dart';
 
-/// Matches a parsed title to an AniList [Series] via ranked candidates.
+/// Matches a parsed title to a [Series], asking an ORDERED list of providers.
 ///
-/// Searches with the episodic format filter (cuts MUSIC false-positives), and
-/// if the search returns nothing, retries once with the leading word dropped —
-/// a general fix for unrecognized leading junk (site-ripper prefixes) without
-/// enumerating site names. Propagates [AniListException] (transient errors) so
-/// the caller can distinguish "lookup failed" from "no match".
+/// The first configured provider that answers wins. A provider that fails
+/// (down, blocked, offline) is fallen through to the next, which is the whole
+/// point: one source being unreachable must not stop a file being identified.
+/// A provider that answers with NO candidates has genuinely answered — that is
+/// a no-match, not a failure, so the chain stops there rather than shopping the
+/// title around until some provider guesses something.
+///
+/// Within a provider, if the search returns nothing the title is retried once
+/// with the leading word dropped — a general fix for unrecognized leading junk
+/// (site-ripper prefixes) without enumerating site names.
+///
+/// Propagates [MetadataException] when EVERY provider failed, so the caller can
+/// still distinguish "lookup failed" (stay pending, retry next scan) from "no
+/// match" (confirmed-unmatched, never retried automatically).
 class SeriesMatcher {
-  const SeriesMatcher({
-    required this.anilist,
-    this.formatsIn,
-    this.candidatesPerTitle = 10,
-  });
+  const SeriesMatcher({required this.providers, this.candidatesPerTitle = 10});
 
-  final AniListClient anilist;
-  final List<String>? formatsIn;
+  /// Priority order: index 0 is the source of truth.
+  final List<MetadataProvider> providers;
+
   final int candidatesPerTitle;
 
   Future<MatchResult> match(String title) async {
-    var candidates = await anilist.searchSeriesCandidates(
+    MetadataException? lastFailure;
+    var tried = 0;
+
+    for (final provider in providers) {
+      // Not a failure — a provider awaiting a client ID simply isn't available,
+      // and must not count towards "everything is down".
+      if (!provider.isConfigured) continue;
+      tried++;
+      try {
+        return await _matchWith(provider, title);
+      } on MetadataException catch (e) {
+        lastFailure = e;
+      }
+    }
+
+    if (lastFailure != null) throw lastFailure;
+
+    // Nothing was even tried (no providers, or none configured). Treat it as a
+    // FAILURE rather than a no-match: a no-match would flip the file to
+    // confirmed-unmatched and it would never be retried automatically, which is
+    // the wrong outcome for a configuration problem.
+    throw MetadataException(
+      tried == 0
+          ? 'No metadata source is configured.'
+          : 'No metadata source could answer.',
+      failure: MetadataFailure.service,
+    );
+  }
+
+  Future<MatchResult> _matchWith(
+    MetadataProvider provider,
+    String title,
+  ) async {
+    var candidates = await provider.searchCandidates(
       title,
-      formatsIn: formatsIn,
       perPage: candidatesPerTitle,
     );
     if (candidates.isEmpty) {
       final trimmed = _dropLeadingWord(title);
       if (trimmed != null) {
-        candidates = await anilist.searchSeriesCandidates(
+        candidates = await provider.searchCandidates(
           trimmed,
-          formatsIn: formatsIn,
           perPage: candidatesPerTitle,
         );
         if (candidates.isNotEmpty) return rankCandidates(trimmed, candidates);

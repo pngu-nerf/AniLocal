@@ -1,16 +1,17 @@
 import 'dart:io';
 
-import '../data/anilist/anilist_client.dart';
 import '../data/aniskip/aniskip_client.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
 import '../data/cache/series_identity.dart';
 import '../data/crossmap/cross_map_store.dart';
+import '../data/metadata/metadata_provider.dart';
 import '../data/folders/volume_resolver.dart';
 import '../data/scanner/filename_parser.dart';
 import '../data/scanner/folder_scanner.dart';
 import '../data/scanner/series_matcher.dart';
 import '../data/scanner/title_matching.dart';
+import '../domain/models/external_ids.dart';
 import '../domain/models/metadata_failure.dart';
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/series.dart';
@@ -238,12 +239,20 @@ class LibrarySync {
       try {
         anilistLookups++;
         final result = await matcher.match(sample);
+        final found = result.series;
+        // Identity is OURS, not the provider's. ensureSeriesId recognises a
+        // show another provider already identified (matching on ANY id the
+        // answer carries) and mints only when nothing matches — without this
+        // the same show would fork under two ids and strand watch progress.
+        final seriesId = found == null
+            ? null
+            : await cache.ensureSeriesId(found.externalIds);
         resolved[norm] = _Resolved(
-          seriesId: result.series?.seriesId,
+          seriesId: seriesId,
           score: result.score,
-          freshSeries: result.series,
+          freshSeries: found,
         );
-      } on AniListException catch (e) {
+      } on MetadataException catch (e) {
         erroredTitles.add(norm); // transient — skip, retry next scan
         // First cause wins: an outage fails every lookup the same way, and the
         // first is the one that isn't a knock-on effect of a degrading API.
@@ -270,12 +279,12 @@ class LibrarySync {
     final seriesUpserts = <CachedSeriesRow>[];
     for (final r in resolved.values) {
       final fresh = r.freshSeries;
-      if (fresh == null) continue;
-      final artPath = await art.ensureCover(
-        fresh.seriesId,
-        fresh.coverImageRef,
-      );
-      seriesUpserts.add(_seriesRow(fresh, artPath));
+      final seriesId = r.seriesId;
+      if (fresh == null || seriesId == null) continue;
+      // Art is filed under OUR id, not the provider's — they diverge as soon as
+      // a show is identified by a source other than AniList.
+      final artPath = await art.ensureCover(seriesId, fresh.coverImageRef);
+      seriesUpserts.add(_seriesRow(fresh, artPath, seriesId));
     }
 
     // Build the final (identified) file rows. A file whose title errored this
@@ -325,11 +334,15 @@ class LibrarySync {
     // already incremental (fileUpserts are only the deltas). Failures/no-data
     // are skipped silently; partial AniSkip coverage is normal.
     final idMalById = <int, int?>{
-      for (final r in cachedSeries.values) r.seriesId: r.idMal,
+      for (final e in (await cache.externalIdsBySeriesId()).entries)
+        e.key: e.value.mal,
     };
     for (final r in resolved.values) {
       final fresh = r.freshSeries;
-      if (fresh != null) idMalById[fresh.seriesId] = fresh.idMal;
+      final seriesId = r.seriesId;
+      if (fresh != null && seriesId != null) {
+        idMalById[seriesId] = fresh.externalIds.mal;
+      }
     }
     final skipKeys = <(int, int)>{
       for (final f in fileUpserts)
@@ -415,34 +428,71 @@ class LibrarySync {
       for (final o in overrides.values) o.seriesId,
     };
 
-    // Re-fetch by id and upsert (no prune). idMal becomes available here.
-    // Seeded from the CACHE first: a refresh whose AniList fetch fails still
-    // knows the MAL ids it already stored, so skips can still be backfilled
-    // offline (before this, an unreachable AniList left the map empty and no
-    // skip was ever fetched, even for shows whose idMal was already known).
+    // Re-fetch and upsert (no prune).
+    // Seeded from the CACHE first: a refresh whose fetch fails still knows the
+    // MAL ids it already stored, so skips can still be backfilled offline
+    // (before this, an unreachable source left the map empty and no skip was
+    // ever fetched, even for shows whose idMal was already known).
     final idMalById = <int, int?>{
-      for (final r in await cache.allSeriesRows()) r.seriesId: r.idMal,
+      for (final e in (await cache.externalIdsBySeriesId()).entries)
+        e.key: e.value.mal,
     };
+    // Each provider is re-asked BY ITS OWN ids, which is why the side table
+    // exists: our series_id means nothing to Kitsu or MAL.
+    final externalIds = await cache.externalIdsBySeriesId();
     var seriesRefreshed = 0;
     MetadataFailure? failure;
-    try {
-      for (final s in await matcher.anilist.fetchSeriesByIds(ids.toList())) {
-        // A null field here CANNOT blank a cached value: upsertSeries goes
-        // through drift's insertOnConflictUpdate, whose DO UPDATE SET omits
-        // null columns (toColumns(nullToAbsent: true)). So a degraded payload,
-        // or a cover download that failed, leaves the existing row's fields
-        // intact — the no-wipe guarantee this method promises. Pinned by
-        // test/metadata_refresh_failure_test.dart.
-        final artPath = await art.ensureCover(s.seriesId, s.coverImageRef);
-        await cache.upsertSeries(_seriesRow(s, artPath));
-        idMalById[s.seriesId] = s.idMal;
-        seriesRefreshed++;
+
+    for (final provider in matcher.providers) {
+      if (!provider.isConfigured) continue;
+
+      // series_id <-> this provider's id, for the ids we actually hold.
+      final providerIdBySeries = <int, int>{};
+      for (final seriesId in ids) {
+        final providerId = externalIds[seriesId]?.forProvider(provider.token);
+        if (providerId != null) providerIdBySeries[seriesId] = providerId;
       }
-    } on AniListException catch (e) {
-      // Transient — keep existing metadata; a later refresh retries. Reported
-      // rather than swallowed: a silent catch here made an outage look like a
-      // successful "Refreshed 0 series".
-      failure = e.failure;
+      if (providerIdBySeries.isEmpty) continue;
+      final seriesByProviderId = {
+        for (final e in providerIdBySeries.entries) e.value: e.key,
+      };
+
+      try {
+        final fetched = await provider.fetchByProviderIds(
+          providerIdBySeries.values.toList(),
+        );
+        for (final fresh in fetched) {
+          // Map the provider's answer back onto OUR identity — never adopt the
+          // provider's id as the key.
+          final providerId = fresh.externalIds.forProvider(provider.token);
+          final seriesId = seriesByProviderId[providerId];
+          // Answered about something we didn't ask for.
+          if (seriesId == null) continue;
+          // A null field here CANNOT blank a cached value: upsertSeries goes
+          // through drift's insertOnConflictUpdate, whose DO UPDATE SET omits
+          // null columns (toColumns(nullToAbsent: true)). So a degraded payload,
+          // or a cover download that failed, leaves the existing row's fields
+          // intact — the no-wipe guarantee this method promises. Pinned by
+          // test/metadata_refresh_failure_test.dart.
+          final artPath = await art.ensureCover(seriesId, fresh.coverImageRef);
+          await cache.upsertSeries(_seriesRow(fresh, artPath, seriesId));
+          // Learn any ids this answer carried that we didn't have.
+          await cache.ensureSeriesId(
+            fresh.externalIds.fillFrom(
+              externalIds[seriesId] ?? ExternalIds.empty,
+            ),
+          );
+          idMalById[seriesId] = fresh.externalIds.mal ?? idMalById[seriesId];
+          seriesRefreshed++;
+        }
+        failure = null;
+        break; // the preferred source answered; lower ones are the fallback
+      } on MetadataException catch (e) {
+        // Transient — keep existing metadata and try the next source. Reported
+        // rather than swallowed: a silent catch here made an outage look like a
+        // successful "Refreshed 0 series".
+        failure = e.failure;
+      }
     }
 
     // Effective (seriesId, anchored) per matched file — overrides win, so
@@ -523,17 +573,19 @@ class LibrarySync {
     return resolved;
   }
 
-  CachedSeriesRow _seriesRow(Series s, String? artPath) => CachedSeriesRow(
-    seriesId: s.seriesId,
-    idMal: s.idMal,
-    romaji: s.titles.romaji,
-    english: s.titles.english,
-    nativeTitle: s.titles.native,
-    format: s.format,
-    episodeCount: s.episodeCount,
-    coverImageUrl: s.coverImageRef,
-    coverImagePath: artPath,
-  );
+  /// [seriesId] overrides the provider's own id: the provider reports what IT
+  /// calls the show, but the cache is keyed by our surrogate.
+  CachedSeriesRow _seriesRow(Series s, String? artPath, [int? seriesId]) =>
+      CachedSeriesRow(
+        seriesId: seriesId ?? s.seriesId,
+        romaji: s.titles.romaji,
+        english: s.titles.english,
+        nativeTitle: s.titles.native,
+        format: s.format,
+        episodeCount: s.episodeCount,
+        coverImageUrl: s.coverImageRef,
+        coverImagePath: artPath,
+      );
 
   Series _seriesFromRow(CachedSeriesRow r) => Series(
     seriesId: r.seriesId,

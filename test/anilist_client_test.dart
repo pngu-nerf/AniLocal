@@ -11,9 +11,13 @@ import 'package:http/testing.dart';
 http.Response _okMedia() => http.Response(
   jsonEncode({
     'data': {
-      'Media': {
-        'id': 1,
-        'title': {'romaji': 'X', 'english': null, 'native': null},
+      'Page': {
+        'media': [
+          {
+            'id': 1,
+            'title': {'romaji': 'X', 'english': null, 'native': null},
+          },
+        ],
       },
     },
   }),
@@ -34,7 +38,7 @@ void main() {
           }),
         );
 
-        await client.fetchSeriesByTitle('frieren');
+        await client.searchSeriesCandidates('frieren');
 
         expect(body['query'], isNot(contains('format_in')));
         expect((body['variables'] as Map).containsKey('format'), isFalse);
@@ -50,7 +54,10 @@ void main() {
         }),
       );
 
-      await client.fetchSeriesByTitle('fate', formatsIn: const ['TV', 'MOVIE']);
+      await client.searchSeriesCandidates(
+        'fate',
+        formatsIn: const ['TV', 'MOVIE'],
+      );
 
       expect(body['query'], contains('format_in'));
       expect(body['variables']['format'], ['TV', 'MOVIE']);
@@ -62,7 +69,7 @@ void main() {
       );
 
       expect(
-        () => client.fetchSeriesByTitle('frieren'),
+        () => client.searchSeriesCandidates('frieren'),
         throwsA(isA<AniListException>()),
       );
     });

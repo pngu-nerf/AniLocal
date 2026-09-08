@@ -173,7 +173,6 @@ void main() {
       (r) => r.seriesId == 21,
     );
     expect(series.romaji, 'Cowboy Bebop');
-    expect(series.idMal, 4224);
     expect(series.coverImagePath, '/a/21.jpg', reason: 'art path untouched');
     final file = (await db.allFileRows()).single;
     expect(file.seriesId, 21);
@@ -217,7 +216,11 @@ void main() {
 
     // Every pre-existing series_id WAS an AniList id — that is the invariant
     // the rename preserves, so it can be published as one.
-    expect(await db.anilistIdsBySeriesId(), {21: 21, 99: 99});
+    final ids = await db.externalIdsBySeriesId();
+    expect(ids[21]?.anilist, 21);
+    expect(ids[99]?.anilist, 99);
+    expect(ids[21]?.mal, 4224);
+    expect(ids[99]?.mal, isNull, reason: 'that series had no id_mal');
 
     final mal = await db
         .customSelect(

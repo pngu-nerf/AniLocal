@@ -1022,8 +1022,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                                     if (series.format != null) series.format,
                                     if (series.episodeCount != null)
                                       '${series.episodeCount} episodes',
-                                    if (series.anilistId != null)
-                                      'AniList #${series.anilistId}',
+                                    if (series.externalIds.anilist != null)
+                                      'AniList #${series.externalIds.anilist}',
                                   ].join(' · '),
                             style: const TextStyle(
                               color: Xp.textDim,

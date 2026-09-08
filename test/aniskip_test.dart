@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
@@ -118,7 +119,9 @@ void main() {
     LibrarySync syncWith(MockClient mock, Directory artDir) => LibrarySync(
       scanner: const FileSystemFolderScanner(),
       parser: const HeuristicFilenameParser(),
-      matcher: SeriesMatcher(anilist: AniListClient(httpClient: mock)),
+      matcher: SeriesMatcher(
+        providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
+      ),
       cache: db,
       art: ArtCache(httpClient: mock, directory: () async => artDir),
       aniSkip: AniSkipClient(httpClient: mock),
@@ -157,8 +160,9 @@ void main() {
         ),
       );
       expect(ep.outroSkip, isNotNull);
-      // idMal was fetched + cached (needed to query AniSkip).
-      expect((await db.allSeriesRows()).single.idMal, 999);
+      // The MAL id was fetched + recorded (needed to query AniSkip). It now
+      // lives in series_external_ids, not a column on series_cache.
+      expect((await db.externalIdsBySeriesId())[1]?.mal, 999);
     });
 
     test('no AniSkip data -> Episode has null skips (graceful)', () async {
@@ -198,7 +202,6 @@ void main() {
         seriesUpserts: [
           CachedSeriesRow(
             seriesId: 1,
-            idMal: null,
             romaji: 'Cowboy Bebop',
             english: null,
             nativeTitle: null,
@@ -257,7 +260,9 @@ void main() {
       final sync = LibrarySync(
         scanner: const FileSystemFolderScanner(),
         parser: const HeuristicFilenameParser(),
-        matcher: SeriesMatcher(anilist: AniListClient(httpClient: mock)),
+        matcher: SeriesMatcher(
+          providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
+        ),
         cache: db,
         art: ArtCache(httpClient: mock, directory: () async => artDir),
         aniSkip: AniSkipClient(httpClient: mock),
@@ -267,8 +272,8 @@ void main() {
 
       expect(result.seriesRefreshed, 1);
       expect(result.skipsFetched, 1);
-      // idMal backfilled onto the existing series row.
-      expect((await db.allSeriesRows()).single.idMal, 999);
+      // The MAL id was backfilled — into series_external_ids now.
+      expect((await db.externalIdsBySeriesId())[1]?.mal, 999);
       // Skip data now cached for the matched episode.
       expect(await db.skipSegmentFor(1, 3), isNotNull);
       // User data untouched.

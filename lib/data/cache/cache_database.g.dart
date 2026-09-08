@@ -20,15 +20,6 @@ class $SeriesCacheTable extends SeriesCache
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _idMalMeta = const VerificationMeta('idMal');
-  @override
-  late final GeneratedColumn<int> idMal = GeneratedColumn<int>(
-    'id_mal',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _romajiMeta = const VerificationMeta('romaji');
   @override
   late final GeneratedColumn<String> romaji = GeneratedColumn<String>(
@@ -105,7 +96,6 @@ class $SeriesCacheTable extends SeriesCache
   @override
   List<GeneratedColumn> get $columns => [
     seriesId,
-    idMal,
     romaji,
     english,
     nativeTitle,
@@ -130,12 +120,6 @@ class $SeriesCacheTable extends SeriesCache
       context.handle(
         _seriesIdMeta,
         seriesId.isAcceptableOrUnknown(data['series_id']!, _seriesIdMeta),
-      );
-    }
-    if (data.containsKey('id_mal')) {
-      context.handle(
-        _idMalMeta,
-        idMal.isAcceptableOrUnknown(data['id_mal']!, _idMalMeta),
       );
     }
     if (data.containsKey('romaji')) {
@@ -205,10 +189,6 @@ class $SeriesCacheTable extends SeriesCache
         DriftSqlType.int,
         data['${effectivePrefix}series_id'],
       )!,
-      idMal: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id_mal'],
-      ),
       romaji: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}romaji'],
@@ -248,10 +228,6 @@ class $SeriesCacheTable extends SeriesCache
 
 class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   final int seriesId;
-
-  /// MyAnimeList id (AniList `idMal`) — the key AniSkip needs. Nullable: not
-  /// every entry has a MAL mapping, and pre-v8 rows backfill on re-fetch.
-  final int? idMal;
   final String? romaji;
   final String? english;
   final String? nativeTitle;
@@ -261,7 +237,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   final String? coverImagePath;
   const CachedSeriesRow({
     required this.seriesId,
-    this.idMal,
     this.romaji,
     this.english,
     this.nativeTitle,
@@ -274,9 +249,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['series_id'] = Variable<int>(seriesId);
-    if (!nullToAbsent || idMal != null) {
-      map['id_mal'] = Variable<int>(idMal);
-    }
     if (!nullToAbsent || romaji != null) {
       map['romaji'] = Variable<String>(romaji);
     }
@@ -304,9 +276,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   SeriesCacheCompanion toCompanion(bool nullToAbsent) {
     return SeriesCacheCompanion(
       seriesId: Value(seriesId),
-      idMal: idMal == null && nullToAbsent
-          ? const Value.absent()
-          : Value(idMal),
       romaji: romaji == null && nullToAbsent
           ? const Value.absent()
           : Value(romaji),
@@ -338,7 +307,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return CachedSeriesRow(
       seriesId: serializer.fromJson<int>(json['seriesId']),
-      idMal: serializer.fromJson<int?>(json['idMal']),
       romaji: serializer.fromJson<String?>(json['romaji']),
       english: serializer.fromJson<String?>(json['english']),
       nativeTitle: serializer.fromJson<String?>(json['nativeTitle']),
@@ -353,7 +321,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'seriesId': serializer.toJson<int>(seriesId),
-      'idMal': serializer.toJson<int?>(idMal),
       'romaji': serializer.toJson<String?>(romaji),
       'english': serializer.toJson<String?>(english),
       'nativeTitle': serializer.toJson<String?>(nativeTitle),
@@ -366,7 +333,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
 
   CachedSeriesRow copyWith({
     int? seriesId,
-    Value<int?> idMal = const Value.absent(),
     Value<String?> romaji = const Value.absent(),
     Value<String?> english = const Value.absent(),
     Value<String?> nativeTitle = const Value.absent(),
@@ -376,7 +342,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     Value<String?> coverImagePath = const Value.absent(),
   }) => CachedSeriesRow(
     seriesId: seriesId ?? this.seriesId,
-    idMal: idMal.present ? idMal.value : this.idMal,
     romaji: romaji.present ? romaji.value : this.romaji,
     english: english.present ? english.value : this.english,
     nativeTitle: nativeTitle.present ? nativeTitle.value : this.nativeTitle,
@@ -392,7 +357,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   CachedSeriesRow copyWithCompanion(SeriesCacheCompanion data) {
     return CachedSeriesRow(
       seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
-      idMal: data.idMal.present ? data.idMal.value : this.idMal,
       romaji: data.romaji.present ? data.romaji.value : this.romaji,
       english: data.english.present ? data.english.value : this.english,
       nativeTitle: data.nativeTitle.present
@@ -415,7 +379,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   String toString() {
     return (StringBuffer('CachedSeriesRow(')
           ..write('seriesId: $seriesId, ')
-          ..write('idMal: $idMal, ')
           ..write('romaji: $romaji, ')
           ..write('english: $english, ')
           ..write('nativeTitle: $nativeTitle, ')
@@ -430,7 +393,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   @override
   int get hashCode => Object.hash(
     seriesId,
-    idMal,
     romaji,
     english,
     nativeTitle,
@@ -444,7 +406,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
       identical(this, other) ||
       (other is CachedSeriesRow &&
           other.seriesId == this.seriesId &&
-          other.idMal == this.idMal &&
           other.romaji == this.romaji &&
           other.english == this.english &&
           other.nativeTitle == this.nativeTitle &&
@@ -456,7 +417,6 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
 
 class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   final Value<int> seriesId;
-  final Value<int?> idMal;
   final Value<String?> romaji;
   final Value<String?> english;
   final Value<String?> nativeTitle;
@@ -466,7 +426,6 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   final Value<String?> coverImagePath;
   const SeriesCacheCompanion({
     this.seriesId = const Value.absent(),
-    this.idMal = const Value.absent(),
     this.romaji = const Value.absent(),
     this.english = const Value.absent(),
     this.nativeTitle = const Value.absent(),
@@ -477,7 +436,6 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   });
   SeriesCacheCompanion.insert({
     this.seriesId = const Value.absent(),
-    this.idMal = const Value.absent(),
     this.romaji = const Value.absent(),
     this.english = const Value.absent(),
     this.nativeTitle = const Value.absent(),
@@ -488,7 +446,6 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   });
   static Insertable<CachedSeriesRow> custom({
     Expression<int>? seriesId,
-    Expression<int>? idMal,
     Expression<String>? romaji,
     Expression<String>? english,
     Expression<String>? nativeTitle,
@@ -499,7 +456,6 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   }) {
     return RawValuesInsertable({
       if (seriesId != null) 'series_id': seriesId,
-      if (idMal != null) 'id_mal': idMal,
       if (romaji != null) 'romaji': romaji,
       if (english != null) 'english': english,
       if (nativeTitle != null) 'native_title': nativeTitle,
@@ -512,7 +468,6 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
 
   SeriesCacheCompanion copyWith({
     Value<int>? seriesId,
-    Value<int?>? idMal,
     Value<String?>? romaji,
     Value<String?>? english,
     Value<String?>? nativeTitle,
@@ -523,7 +478,6 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   }) {
     return SeriesCacheCompanion(
       seriesId: seriesId ?? this.seriesId,
-      idMal: idMal ?? this.idMal,
       romaji: romaji ?? this.romaji,
       english: english ?? this.english,
       nativeTitle: nativeTitle ?? this.nativeTitle,
@@ -539,9 +493,6 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     final map = <String, Expression>{};
     if (seriesId.present) {
       map['series_id'] = Variable<int>(seriesId.value);
-    }
-    if (idMal.present) {
-      map['id_mal'] = Variable<int>(idMal.value);
     }
     if (romaji.present) {
       map['romaji'] = Variable<String>(romaji.value);
@@ -571,7 +522,6 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   String toString() {
     return (StringBuffer('SeriesCacheCompanion(')
           ..write('seriesId: $seriesId, ')
-          ..write('idMal: $idMal, ')
           ..write('romaji: $romaji, ')
           ..write('english: $english, ')
           ..write('nativeTitle: $nativeTitle, ')
@@ -4415,7 +4365,6 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
 typedef $$SeriesCacheTableCreateCompanionBuilder =
     SeriesCacheCompanion Function({
       Value<int> seriesId,
-      Value<int?> idMal,
       Value<String?> romaji,
       Value<String?> english,
       Value<String?> nativeTitle,
@@ -4427,7 +4376,6 @@ typedef $$SeriesCacheTableCreateCompanionBuilder =
 typedef $$SeriesCacheTableUpdateCompanionBuilder =
     SeriesCacheCompanion Function({
       Value<int> seriesId,
-      Value<int?> idMal,
       Value<String?> romaji,
       Value<String?> english,
       Value<String?> nativeTitle,
@@ -4448,11 +4396,6 @@ class $$SeriesCacheTableFilterComposer
   });
   ColumnFilters<int> get seriesId => $composableBuilder(
     column: $table.seriesId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get idMal => $composableBuilder(
-    column: $table.idMal,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4506,11 +4449,6 @@ class $$SeriesCacheTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get idMal => $composableBuilder(
-    column: $table.idMal,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get romaji => $composableBuilder(
     column: $table.romaji,
     builder: (column) => ColumnOrderings(column),
@@ -4558,9 +4496,6 @@ class $$SeriesCacheTableAnnotationComposer
   });
   GeneratedColumn<int> get seriesId =>
       $composableBuilder(column: $table.seriesId, builder: (column) => column);
-
-  GeneratedColumn<int> get idMal =>
-      $composableBuilder(column: $table.idMal, builder: (column) => column);
 
   GeneratedColumn<String> get romaji =>
       $composableBuilder(column: $table.romaji, builder: (column) => column);
@@ -4624,7 +4559,6 @@ class $$SeriesCacheTableTableManager
           updateCompanionCallback:
               ({
                 Value<int> seriesId = const Value.absent(),
-                Value<int?> idMal = const Value.absent(),
                 Value<String?> romaji = const Value.absent(),
                 Value<String?> english = const Value.absent(),
                 Value<String?> nativeTitle = const Value.absent(),
@@ -4634,7 +4568,6 @@ class $$SeriesCacheTableTableManager
                 Value<String?> coverImagePath = const Value.absent(),
               }) => SeriesCacheCompanion(
                 seriesId: seriesId,
-                idMal: idMal,
                 romaji: romaji,
                 english: english,
                 nativeTitle: nativeTitle,
@@ -4646,7 +4579,6 @@ class $$SeriesCacheTableTableManager
           createCompanionCallback:
               ({
                 Value<int> seriesId = const Value.absent(),
-                Value<int?> idMal = const Value.absent(),
                 Value<String?> romaji = const Value.absent(),
                 Value<String?> english = const Value.absent(),
                 Value<String?> nativeTitle = const Value.absent(),
@@ -4656,7 +4588,6 @@ class $$SeriesCacheTableTableManager
                 Value<String?> coverImagePath = const Value.absent(),
               }) => SeriesCacheCompanion.insert(
                 seriesId: seriesId,
-                idMal: idMal,
                 romaji: romaji,
                 english: english,
                 nativeTitle: nativeTitle,

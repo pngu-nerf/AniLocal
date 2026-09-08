@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
@@ -76,7 +77,7 @@ void main() {
     sync = LibrarySync(
       scanner: const FileSystemFolderScanner(),
       parser: const HeuristicFilenameParser(),
-      matcher: SeriesMatcher(anilist: anilist),
+      matcher: SeriesMatcher(providers: [AniListMetadataProvider(anilist)]),
       cache: db,
       art: ArtCache(httpClient: mock, directory: () async => artDir),
       aniSkip: AniSkipClient(
@@ -84,7 +85,7 @@ void main() {
       ),
     );
     fixMatch = FixMatchService(
-      anilist: anilist,
+      providers: [AniListMetadataProvider(anilist)],
       art: ArtCache(httpClient: mock, directory: () async => artDir),
       cache: db,
     );

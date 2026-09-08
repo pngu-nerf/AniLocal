@@ -1,5 +1,6 @@
 import '../../domain/models/continue_watching.dart';
 import '../../domain/models/episode.dart';
+import '../../domain/models/external_ids.dart';
 import '../../domain/models/episode_source.dart';
 import '../../domain/models/identified_episode.dart';
 import '../../domain/models/next_result.dart';
@@ -242,14 +243,14 @@ class DriftLibraryRepository
     };
     final byId = {for (final r in await _db.allSeriesRows()) r.seriesId: r};
     final prefs = await allPreferences();
-    final anilistIds = await _db.anilistIdsBySeriesId();
+    final externalIds = await _db.externalIdsBySeriesId();
     final list = [
       for (final id in wanted)
         if (byId[id] != null)
           _toSeries(
             byId[id]!,
             prefs[id] ?? const ShowPreferences(),
-            anilistIds[id],
+            externalIds[id] ?? ExternalIds.empty,
           ),
     ];
     // Pending (not-yet-identified) files surface as NAMED PLACEHOLDERS — one
@@ -496,7 +497,7 @@ class DriftLibraryRepository
       for (final s in await _db.allSkipRows()) (s.seriesId, s.episode): s,
     };
     final prefs = await allPreferences();
-    final anilistIds = await _db.anilistIdsBySeriesId();
+    final externalIds = await _db.externalIdsBySeriesId();
 
     final result = <ContinueWatching>[];
     for (final w in inProgress) {
@@ -508,7 +509,7 @@ class DriftLibraryRepository
           series: _toSeries(
             series,
             prefs[w.seriesId] ?? const ShowPreferences(),
-            anilistIds[w.seriesId],
+            externalIds[w.seriesId] ?? ExternalIds.empty,
           ),
           episode: _toEpisode(match, w, skips[(w.seriesId, w.episode)]),
         ),
@@ -682,10 +683,10 @@ class DriftLibraryRepository
   Series _toSeries(
     CachedSeriesRow r, [
     ShowPreferences prefs = const ShowPreferences(),
-    int? anilistId,
+    ExternalIds externalIds = ExternalIds.empty,
   ]) => Series(
     seriesId: r.seriesId,
-    anilistId: anilistId,
+    externalIds: externalIds,
     titles: Titles(romaji: r.romaji, english: r.english, native: r.nativeTitle),
     format: r.format,
     episodeCount: r.episodeCount,

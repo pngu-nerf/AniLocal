@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
@@ -96,7 +97,9 @@ void main() {
     sync = LibrarySync(
       scanner: const FileSystemFolderScanner(),
       parser: const HeuristicFilenameParser(),
-      matcher: SeriesMatcher(anilist: AniListClient(httpClient: mock)),
+      matcher: SeriesMatcher(
+        providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
+      ),
       cache: db,
       art: ArtCache(httpClient: mock, directory: () async => artDir),
       aniSkip: AniSkipClient(
@@ -145,11 +148,15 @@ void main() {
       scanner: const FileSystemFolderScanner(),
       parser: const HeuristicFilenameParser(),
       matcher: SeriesMatcher(
-        anilist: AniListClient(
-          httpClient: MockClient(
-            (_) async => throw const SocketException('offline'),
+        providers: [
+          AniListMetadataProvider(
+            AniListClient(
+              httpClient: MockClient(
+                (_) async => throw const SocketException('offline'),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
       cache: db,
       art: ArtCache(
@@ -200,7 +207,11 @@ void main() {
     final after = await seriesRow();
     expect(after.romaji, 'Cowboy Bebop', reason: 'title preserved');
     expect(after.episodeCount, 26, reason: 'episode count preserved');
-    expect(after.idMal, before.idMal, reason: 'idMal preserved');
+    expect(
+      (await db.externalIdsBySeriesId())[1]?.mal,
+      101,
+      reason: 'the MAL id survives a degraded payload',
+    );
   });
 
   test('a failed art download keeps the cover we already had', () async {
