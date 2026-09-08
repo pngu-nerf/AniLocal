@@ -8,6 +8,7 @@ import 'data/cache/cache_connection.dart';
 import 'data/cache/cache_database.dart';
 import 'data/cache/drift_library_repository.dart';
 import 'data/cache/drift_settings_repository.dart';
+import 'data/crossmap/cross_map_store.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
 import 'data/folders/tcc_folder_access.dart';
@@ -62,6 +63,9 @@ void main() {
     art: ArtCache(directory: coverArtDirectory),
     // AniSkip fetched at scan time only; playback reads skips from the cache.
     aniSkip: AniSkipClient(),
+    // Fills a MAL id AniList didn't supply, so auto-skip survives an AniList
+    // outage. Fetched lazily and only when something is actually missing.
+    crossMap: CrossMapStore(directory: derivedDataDirectory),
     resolver: volumeResolver,
   );
   // Fix-match: the ONLY writer of overrides (LibrarySync can't reach it).

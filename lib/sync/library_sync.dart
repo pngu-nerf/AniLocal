@@ -5,6 +5,7 @@ import '../data/aniskip/aniskip_client.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
 import '../data/cache/placeholder_identity.dart';
+import '../data/crossmap/cross_map_store.dart';
 import '../data/folders/volume_resolver.dart';
 import '../data/scanner/filename_parser.dart';
 import '../data/scanner/folder_scanner.dart';
@@ -39,6 +40,7 @@ class LibrarySync {
     required this.cache,
     required this.art,
     required this.aniSkip,
+    this.crossMap,
     VolumeResolver? resolver,
   }) : resolver = resolver ?? DiskutilVolumeResolver();
 
@@ -48,6 +50,11 @@ class LibrarySync {
   final CacheDatabase cache;
   final ArtCache art;
   final AniSkipClient aniSkip;
+
+  /// Cross-database id map, used ONLY to fill a MAL id AniList didn't give us
+  /// (so AniSkip keeps working when AniList is unreachable). Optional: null —
+  /// or a map that has never been fetched — leaves behaviour exactly as it was.
+  final CrossMapStore? crossMap;
 
   /// Resolves a folder's CURRENT mount when its volume remounted under a new
   /// name (defaults to the macOS diskutil-backed resolver; injectable for tests).
@@ -329,9 +336,10 @@ class LibrarySync {
         if (f.anilistId != null && f.episodeNumber != null)
           (f.anilistId!, f.episodeNumber!),
     };
+    final malIds = await _resolveMalIds(idMalById, skipKeys.map((k) => k.$1));
     final skipUpserts = <SkipSegmentRow>[];
     for (final (anilistId, episode) in skipKeys) {
-      final mal = idMalById[anilistId];
+      final mal = malIds[anilistId];
       if (mal == null) continue;
       try {
         final skips = await aniSkip.fetchSkips(mal, episode);
@@ -408,7 +416,13 @@ class LibrarySync {
     };
 
     // Re-fetch by id and upsert (no prune). idMal becomes available here.
-    final idMalById = <int, int?>{};
+    // Seeded from the CACHE first: a refresh whose AniList fetch fails still
+    // knows the MAL ids it already stored, so skips can still be backfilled
+    // offline (before this, an unreachable AniList left the map empty and no
+    // skip was ever fetched, even for shows whose idMal was already known).
+    final idMalById = <int, int?>{
+      for (final r in await cache.allSeriesRows()) r.anilistId: r.idMal,
+    };
     var seriesRefreshed = 0;
     MetadataFailure? failure;
     try {
@@ -447,10 +461,11 @@ class LibrarySync {
     final haveSkips = {
       for (final s in await cache.allSkipRows()) (s.anilistId, s.episode),
     };
+    final malIds = await _resolveMalIds(idMalById, identities.map((i) => i.$1));
     var skipsFetched = 0;
     for (final (anilistId, episode) in identities) {
       if (haveSkips.contains((anilistId, episode))) continue;
-      final mal = idMalById[anilistId];
+      final mal = malIds[anilistId];
       if (mal == null) continue;
       try {
         final skips = await aniSkip.fetchSkips(mal, episode);
@@ -476,6 +491,36 @@ class LibrarySync {
       skipsFetched: skipsFetched,
       failure: failure,
     );
+  }
+
+  /// MAL ids for [seriesIds]: whatever a provider already gave us, with the
+  /// gaps filled from the cross-map.
+  ///
+  /// This is what makes AniSkip independent of AniList. `idMal` used to come
+  /// ONLY from AniList's response, so a show identified while AniList was
+  /// unreachable had no MAL id and silently lost auto-skip forever. The map
+  /// supplies it offline. A null [crossMap], an unfetched map, or an id the map
+  /// doesn't know all leave the entry exactly as it was — never worse than
+  /// before. Placeholder ids are negative and simply miss.
+  Future<Map<int, int?>> _resolveMalIds(
+    Map<int, int?> known,
+    Iterable<int> seriesIds,
+  ) async {
+    final store = crossMap;
+    if (store == null) return known;
+    final missing = {
+      for (final id in seriesIds)
+        if (known[id] == null) id,
+    };
+    if (missing.isEmpty) return known; // nothing to look up -> no map load
+    final map = await store.load();
+    if (map.isEmpty) return known;
+    final resolved = Map<int, int?>.of(known);
+    for (final id in missing) {
+      final mal = map.malFor(id);
+      if (mal != null) resolved[id] = mal;
+    }
+    return resolved;
   }
 
   CachedSeriesRow _seriesRow(Series s, String? artPath) => CachedSeriesRow(

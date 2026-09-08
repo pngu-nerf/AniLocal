@@ -18,6 +18,18 @@ LazyDatabase openCacheDatabase() {
   });
 }
 
+/// Directory holding derived data caches that aren't the DB — currently the
+/// cross-database id map. Separate from art so clearing one can't affect the
+/// other.
+Future<Directory> derivedDataDirectory() async {
+  final support = await getApplicationSupportDirectory();
+  final dir = Directory('${support.path}/anilocal');
+  if (!await dir.exists()) {
+    await dir.create(recursive: true);
+  }
+  return dir;
+}
+
 /// Directory where downloaded cover art is stored.
 Future<Directory> coverArtDirectory() async {
   final support = await getApplicationSupportDirectory();
