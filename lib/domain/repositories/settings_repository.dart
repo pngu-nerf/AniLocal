@@ -1,4 +1,5 @@
 import '../models/skip_mode.dart';
+import '../models/source_preference.dart';
 
 /// Default watched-threshold on first run — ~a typical ED/credits length, so the
 /// old proportional-90% behavior is roughly preserved. Lives here (domain) so
@@ -24,6 +25,12 @@ abstract interface class SettingsRepository {
   /// Auto-play the next episode at end. Default true.
   Future<bool> loadAutoPlayNext();
   Future<void> setAutoPlayNext(bool enabled);
+
+  /// User's metadata-source order and on/off flags, top first. Empty on a
+  /// first run, which [applySourceOrder] reads as "use the built-in order with
+  /// everything enabled" — so a fresh install needs no seeding.
+  Future<List<SourcePreference>> loadMetadataSourceOrder();
+  Future<void> setMetadataSourceOrder(List<SourcePreference> order);
 
   /// OP/ED skip mode. Default [SkipMode.button].
   Future<SkipMode> loadSkipMode();

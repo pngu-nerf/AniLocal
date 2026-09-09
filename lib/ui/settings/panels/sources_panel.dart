@@ -4,6 +4,7 @@ import '../../../domain/models/library_folder.dart';
 import '../../access_recovery.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
+import '../../widgets/xp_reorderable_list.dart';
 import '../sources_actions.dart';
 
 /// Sources: the watched library folders, in priority order.
@@ -109,62 +110,18 @@ class _SourcesPanelState extends State<SourcesPanel> {
         ),
         const SizedBox(height: 10),
         Expanded(
-          child: ReorderableListView(
-            buildDefaultDragHandles: false,
-            onReorderItem: _onReorder,
-            padding: const EdgeInsets.only(bottom: 4),
-            children: [
-              for (var i = 0; i < folders.length; i++)
-                Padding(
-                  key: ValueKey(folders[i].path),
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: XpPanel(
-                    padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
-                    child: Row(
-                      children: [
-                        ReorderableDragStartListener(
-                          index: i,
-                          child: const MouseRegion(
-                            cursor: SystemMouseCursors.grab,
-                            child: Icon(Icons.drag_handle, color: Xp.textDim),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ChromeLabel(
-                                folders[i].path,
-                                upper: false,
-                                fontSize: 13,
-                                letterSpacing: 1,
-                              ),
-                              if (i == 0) ...[
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Preferred source',
-                                  style: TextStyle(
-                                    color: Xp.textDim,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        XpButton(
-                          dense: true,
-                          icon: Icons.delete_outline,
-                          tooltip: 'Remove (drops its cached files)',
-                          onPressed: () => _remove(folders[i]),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
+          child: XpReorderableList<LibraryFolder>(
+            items: folders,
+            keyOf: (f) => f.path,
+            titleOf: (f) => f.path,
+            firstCaption: 'Preferred source',
+            onReorder: _onReorder,
+            trailingBuilder: (f) => XpButton(
+              dense: true,
+              icon: Icons.delete_outline,
+              tooltip: 'Remove (drops its cached files)',
+              onPressed: () => _remove(f),
+            ),
           ),
         ),
       ],

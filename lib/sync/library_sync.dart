@@ -443,7 +443,7 @@ class LibrarySync {
     var seriesRefreshed = 0;
     MetadataFailure? failure;
 
-    for (final provider in matcher.providers) {
+    for (final provider in await matcher.activeProviders()) {
       if (!provider.isConfigured) continue;
 
       // series_id <-> this provider's id, for the ids we actually hold.

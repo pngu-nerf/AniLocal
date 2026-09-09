@@ -1,4 +1,5 @@
 import 'package:anilocal/domain/models/skip_mode.dart';
+import 'package:anilocal/domain/models/source_preference.dart';
 import 'package:anilocal/domain/repositories/settings_repository.dart';
 
 /// Shared test double for [SettingsRepository] — returns the production defaults
@@ -16,6 +17,14 @@ class FakeSettings implements SettingsRepository {
   Future<bool> loadAutoPlayNext() async => true;
   @override
   Future<void> setAutoPlayNext(bool enabled) async {}
+
+  // Empty = "built-in order, everything enabled" (see applySourceOrder). A test
+  // that needs to observe writes subclasses and overrides, as _Recorder does in
+  // settings_window_test — this class stays const and side-effect-free.
+  @override
+  Future<List<SourcePreference>> loadMetadataSourceOrder() async => const [];
+  @override
+  Future<void> setMetadataSourceOrder(List<SourcePreference> order) async {}
 
   @override
   Future<SkipMode> loadSkipMode() async => SkipMode.button;

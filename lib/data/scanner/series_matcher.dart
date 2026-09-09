@@ -1,4 +1,5 @@
 import '../../domain/models/metadata_failure.dart';
+import '../../domain/models/source_preference.dart';
 import '../metadata/metadata_provider.dart';
 import 'title_matching.dart';
 
@@ -19,18 +20,35 @@ import 'title_matching.dart';
 /// still distinguish "lookup failed" (stay pending, retry next scan) from "no
 /// match" (confirmed-unmatched, never retried automatically).
 class SeriesMatcher {
-  const SeriesMatcher({required this.providers, this.candidatesPerTitle = 10});
+  const SeriesMatcher({
+    required this.providers,
+    this.loadOrder,
+    this.candidatesPerTitle = 10,
+  });
 
-  /// Priority order: index 0 is the source of truth.
+  /// Every source this build ships, in BUILT-IN order.
   final List<MetadataProvider> providers;
 
+  /// The user's saved order/enablement, read fresh on every match rather than
+  /// snapshotted — the settings window can reorder sources while the app is
+  /// open, and the next scan must honour that without a restart. Null means
+  /// "use [providers] as given" (tests, and any caller with no settings store).
+  final Future<List<SourcePreference>> Function()? loadOrder;
+
   final int candidatesPerTitle;
+
+  /// The enabled sources, in the user's order.
+  Future<List<MetadataProvider>> activeProviders() async {
+    final load = loadOrder;
+    if (load == null) return providers;
+    return applySourceOrder(providers, (p) => p.token, await load());
+  }
 
   Future<MatchResult> match(String title) async {
     MetadataException? lastFailure;
     var tried = 0;
 
-    for (final provider in providers) {
+    for (final provider in await activeProviders()) {
       // Not a failure — a provider awaiting a client ID simply isn't available,
       // and must not count towards "everything is down".
       if (!provider.isConfigured) continue;

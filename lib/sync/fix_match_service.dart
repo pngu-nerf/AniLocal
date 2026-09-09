@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../data/metadata/metadata_provider.dart';
+import '../domain/models/source_preference.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
 import '../domain/models/series.dart';
@@ -17,10 +18,15 @@ class FixMatchService implements FixMatchRepository {
     required this.providers,
     required this.art,
     required this.cache,
+    this.loadOrder,
   });
 
-  /// Ordered metadata sources, same list and same priority as the scan uses.
+  /// Every source this build ships, in built-in order.
   final List<MetadataProvider> providers;
+
+  /// The user's saved order — read fresh, exactly as the scan does, so the two
+  /// can never disagree about which source is preferred.
+  final Future<List<SourcePreference>> Function()? loadOrder;
   final ArtCache art;
   final CacheDatabase cache;
 
@@ -31,7 +37,11 @@ class FixMatchService implements FixMatchRepository {
   @override
   Future<List<Series>> searchCandidates(String query) async {
     MetadataException? lastFailure;
-    for (final provider in providers) {
+    final load = loadOrder;
+    final ordered = load == null
+        ? providers
+        : applySourceOrder(providers, (p) => p.token, await load());
+    for (final provider in ordered) {
       if (!provider.isConfigured) continue;
       try {
         return await provider.searchCandidates(query, perPage: 15);

@@ -1,4 +1,5 @@
 import '../../domain/models/skip_mode.dart';
+import '../../domain/models/source_preference.dart';
 import '../../domain/repositories/settings_repository.dart';
 import '../../domain/repositories/show_preferences_repository.dart';
 import 'cache_database.dart';
@@ -18,6 +19,7 @@ class DriftSettingsRepository implements SettingsRepository {
   static const _continueCollapsedKey = 'continue_watching_collapsed';
   static const _autoPlayNextKey = 'autoplay_next';
   static const _skipModeKey = 'skip_mode';
+  static const _metadataSourceOrderKey = 'metadata_source_order';
   // Watched-threshold (time-from-end), stored as whole milliseconds.
   static const _watchedThresholdKey = 'watched_threshold_ms';
   static const _missingEpisodesKey = 'missing_episodes_enabled';
@@ -56,6 +58,35 @@ class DriftSettingsRepository implements SettingsRepository {
       _db.setSetting(_autoPlayNextKey, '$enabled');
 
   // Defaults to "button" (SkipMode.fromToken maps null -> button).
+  // Encoded as `token:1,token:0` — a token list like skip_mode, so no schema
+  // change. Unknown/malformed entries are skipped rather than throwing: this is
+  // user data in a hand-editable store, and a bad row must not brick settings.
+  @override
+  Future<List<SourcePreference>> loadMetadataSourceOrder() async {
+    final raw = await _db.getSetting(_metadataSourceOrderKey);
+    if (raw == null || raw.isEmpty) return const [];
+    final out = <SourcePreference>[];
+    for (final part in raw.split(',')) {
+      final bits = part.split(':');
+      final token = bits.first.trim();
+      if (token.isEmpty) continue;
+      out.add(
+        SourcePreference(
+          token: token,
+          enabled: bits.length < 2 || bits[1] != '0',
+        ),
+      );
+    }
+    return out;
+  }
+
+  @override
+  Future<void> setMetadataSourceOrder(List<SourcePreference> order) =>
+      _db.setSetting(
+        _metadataSourceOrderKey,
+        order.map((p) => '${p.token}:${p.enabled ? 1 : 0}').join(','),
+      );
+
   @override
   Future<SkipMode> loadSkipMode() async =>
       SkipMode.fromToken(await _db.getSetting(_skipModeKey));

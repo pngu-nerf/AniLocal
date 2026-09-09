@@ -77,7 +77,7 @@ glance" + the five seams). Working rules for making changes: **`CLAUDE.md`**.
 | **Screens** (home/library, detail, folders, unmatched, fix-match, settings) | `lib/ui/` (+ `lib/ui/library/`) |
 | **The instrument look** (VFD "fine-instrument" theme, Technics SC-CH900) | `lib/ui/theme/` — tokens (`xp_tokens`), widgets (`xp_widgets`), theme (`xp_theme`), readouts (`vfd_readout`, `header_readout`), brand mark (`brand_wordmark`) |
 | **The app shell / persistent header** | `lib/ui/shell/` — `app_shell` (the ONE window chrome, mounted above the Navigator in `MaterialApp.builder`), `header_controller` (route-keyed spec stack + spinner grace), `header_scope` (`HeaderPublisher` mixin), `header_spec` |
-| **Shared UI shells/components** | `lib/ui/widgets/` — `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list` |
+| **Shared UI shells/components** | `lib/ui/widgets/` — `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list`, `xp_reorderable_list` (the ONE priority-list widget: library folders + metadata sources) |
 
 ---
 

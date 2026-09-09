@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/models/metadata_source.dart';
 import '../../domain/models/refresh_summary.dart';
 import '../metadata_failure_message.dart';
 import 'sources_actions.dart';
@@ -12,6 +13,7 @@ import 'sources_actions.dart';
 class SettingsDialogActions {
   const SettingsDialogActions({
     required this.sources,
+    this.metadataSources = const [],
     required this.onRefreshMetadata,
     required this.onRefreshed,
     required this.loadUnmatchedCount,
@@ -21,6 +23,10 @@ class SettingsDialogActions {
   /// Everything the Sources tab needs. One object rather than three more
   /// threaded callbacks — see [SourcesActions].
   final SourcesActions sources;
+
+  /// Every metadata source this build ships, in built-in order. Descriptors,
+  /// not providers — the UI never sees a `MetadataProvider` (seam #1).
+  final List<MetadataSource> metadataSources;
 
   /// Re-fetch metadata (idMal + skip data) for cached series. Returns counts.
   final Future<RefreshSummary> Function() onRefreshMetadata;

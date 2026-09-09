@@ -9,6 +9,7 @@ import '../widgets/xp_dialog.dart';
 import 'panels/homepage_panel.dart';
 import 'panels/library_panel.dart';
 import 'panels/playback_panel.dart';
+import 'panels/metadata_panel.dart';
 import 'panels/sources_panel.dart';
 import 'settings_actions.dart';
 import 'settings_model.dart';
@@ -118,6 +119,19 @@ class _SettingsWindow extends StatelessWidget {
       // Fills the pane and scrolls itself: it hosts a reorderable list.
       scrollable: false,
       builder: (_) => SourcesPanel(sources: actions.sources),
+    ),
+    // Distinct from Sources on purpose: that is library folders ("what do I
+    // own"), this is metadata sources ("what is this show"). Same interaction,
+    // different question, independent failure modes.
+    SettingsCategory(
+      id: metadataCategoryId,
+      label: 'Metadata',
+      icon: Icons.travel_explore_outlined,
+      scrollable: false, // hosts a reorderable list, like Sources
+      builder: (_) => MetadataPanel(
+        sources: actions.metadataSources,
+        settings: model.repository,
+      ),
     ),
     SettingsCategory(
       id: 'playback',

@@ -18,6 +18,7 @@ import 'data/folders/volume_resolver.dart';
 import 'data/scanner/folder_scanner.dart';
 import 'data/scanner/heuristic_filename_parser.dart';
 import 'data/scanner/series_matcher.dart';
+import 'domain/models/metadata_source.dart';
 import 'domain/models/sync_summary.dart';
 import 'playback/playback_controller.dart';
 import 'sync/fix_match_service.dart';
@@ -54,6 +55,14 @@ void main() {
   // memoization. Internal-disk folders never touch it (their path is stable).
   final VolumeResolver volumeResolver = DiskutilVolumeResolver();
   final repository = DriftLibraryRepository(database, resolver: volumeResolver);
+  // ALL settings live behind one injected object (was ~20 threaded functions).
+  // Adding a setting now touches SettingsRepository + its impl + the reader.
+  // Built BEFORE the fill path because the matcher reads the user's metadata
+  // source order from it.
+  final settings = DriftSettingsRepository(
+    database,
+    showPreferences: repository,
+  );
   // ONE ordered source list, shared by the scan and by fix-match so the two
   // can never disagree about which source is preferred. Today it holds a single
   // provider; adding one is appending to this list.
@@ -63,7 +72,12 @@ void main() {
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
     parser: const HeuristicFilenameParser(),
-    matcher: SeriesMatcher(providers: metadataProviders),
+    matcher: SeriesMatcher(
+      providers: metadataProviders,
+      // Read fresh per scan, so reordering sources in Settings takes effect
+      // without a restart.
+      loadOrder: settings.loadMetadataSourceOrder,
+    ),
     cache: database,
     art: ArtCache(directory: coverArtDirectory),
     // AniSkip fetched at scan time only; playback reads skips from the cache.
@@ -78,6 +92,7 @@ void main() {
     providers: metadataProviders,
     art: ArtCache(directory: coverArtDirectory),
     cache: database,
+    loadOrder: settings.loadMetadataSourceOrder,
   );
   const FolderPicker picker = FileSelectorFolderPicker();
   final FolderAccess folderAccess = TccFolderAccess();
@@ -150,13 +165,6 @@ void main() {
     ], onDiscovered: onDiscovered);
   }
 
-  // ALL settings live behind one injected object (was ~20 threaded functions).
-  // Adding a setting now touches SettingsRepository + its impl + the reader.
-  final settings = DriftSettingsRepository(
-    database,
-    showPreferences: repository,
-  );
-
   // The playback engine is APP-LIFETIME: built once here, injected, and kept
   // alive across navigation. Leaving the theater now stops it instead of
   // destroying it, so libmpv is constructed once per app run rather than once
@@ -181,6 +189,16 @@ void main() {
       // …and ShowPreferencesRepository (per-show cover/next-episode prefs).
       showPreferences: repository,
       settings: settings,
+      // Descriptors for the Settings > Metadata list, derived from the ONE
+      // provider list so the two can't list different sources.
+      metadataSources: [
+        for (final p in metadataProviders)
+          MetadataSource(
+            token: p.token,
+            displayName: p.displayName,
+            configured: p.isConfigured,
+          ),
+      ],
       playback: playback,
       onScan: scan,
       onRefreshMetadata: sync.refreshMetadata,
