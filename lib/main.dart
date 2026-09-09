@@ -43,6 +43,21 @@ const List<String> kEpisodicAnimeFormats = [
   'ONA',
 ];
 
+/// Whether the MyAnimeList source appears in the app at all.
+///
+/// OFF on purpose, not unfinished. MAL is the only source that needs a
+/// credential, and getting one means each user registering their own
+/// application with MyAnimeList and accepting its developer agreement — a real
+/// onboarding wall for a "point at a folder and go" product, in exchange for
+/// almost nothing: AniList and Kitsu already identify shows, and the MAL id
+/// AniSkip needs already arrives via AniList and the cross-map.
+///
+/// Everything behind this flag is complete and covered by tests; flip it to
+/// true and MAL appears in Settings > Metadata, inert until a key is pasted.
+/// `docs/myanimelist-registration.md` records the registration flow so the
+/// decision can be revisited without re-deriving it.
+const bool kShipMyAnimeListSource = false;
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Initialize libmpv before any Player is constructed (library playback).
@@ -94,14 +109,16 @@ void main() {
     // doesn't publish, so its answers land on the same identities as everyone
     // else's.
     JikanMetadataProvider(JikanClient(), crossMap: crossMap),
-    // MAL's data over its OFFICIAL API — reliable, unlike Jikan, but only once
-    // the user supplies their own client ID. AniLocal ships none: MAL's
-    // agreement forbids sharing a key, and one embedded in a downloadable
-    // binary could be revoked out from under every install at once.
-    MalMetadataProvider(
-      MalClient(loadClientId: () => malClientId()),
-      loadClientId: malClientId,
-    ),
+    // MyAnimeList is BUILT AND TESTED but deliberately NOT SHIPPED — see
+    // `docs/myanimelist-registration.md` for why, and for the registration flow
+    // if it comes back. Flipping [kShipMyAnimeListSource] is the whole
+    // re-enable: the client, the adapter, the key storage, the key dialog and
+    // their tests all stay in the tree and keep running, so none of it rots.
+    if (kShipMyAnimeListSource)
+      MalMetadataProvider(
+        MalClient(loadClientId: () => malClientId()),
+        loadClientId: malClientId,
+      ),
   ];
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
