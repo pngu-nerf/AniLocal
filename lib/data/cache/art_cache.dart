@@ -19,13 +19,26 @@ class ArtCache {
 
   /// Ensure cover art for [seriesId] is on disk; return its local path (or
   /// null on failure / no URL).
-  Future<String?> ensureCover(int seriesId, String? url) async {
+  ///
+  /// [cachedUrl] and [cachedPath] are what we last stored for this series. Pass
+  /// them and a cover whose SOURCE URL has changed is re-downloaded — otherwise
+  /// the "file already exists" short-circuit would pin the first source's art
+  /// forever, so switching metadata sources would update every field except the
+  /// picture. Omit them for the plain reuse behaviour.
+  Future<String?> ensureCover(
+    int seriesId,
+    String? url, {
+    String? cachedUrl,
+    String? cachedPath,
+  }) async {
     if (url == null || url.isEmpty) return null;
     final dir = await directory();
     final ext = _extensionOf(url);
     final file = File('${dir.path}/$seriesId$ext');
 
-    if (await file.exists() && await file.length() > 0) {
+    // An unknown previous URL means "no opinion" — reuse, as before.
+    final sameSource = cachedUrl == null || cachedUrl == url;
+    if (sameSource && await file.exists() && await file.length() > 0) {
       return file.path; // already cached
     }
 
@@ -33,6 +46,17 @@ class ArtCache {
       final response = await _http.get(Uri.parse(url));
       if (response.statusCode != 200 || response.bodyBytes.isEmpty) return null;
       await file.writeAsBytes(response.bodyBytes, flush: true);
+      // A different source can use a different extension, so the replacement
+      // may live at a new path. Drop the superseded file rather than orphaning
+      // it — only ever the one we ourselves recorded.
+      if (cachedPath != null && cachedPath != file.path) {
+        try {
+          final stale = File(cachedPath);
+          if (await stale.exists()) await stale.delete();
+        } on Exception {
+          // A leftover file is harmless; failing the refresh over it is not.
+        }
+      }
       return file.path;
     } on Exception {
       return null; // metadata still cached; art retried next scan

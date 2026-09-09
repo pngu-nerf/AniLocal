@@ -9,7 +9,9 @@ import 'data/cache/cache_database.dart';
 import 'data/cache/drift_library_repository.dart';
 import 'data/cache/drift_settings_repository.dart';
 import 'data/crossmap/cross_map_store.dart';
+import 'data/kitsu/kitsu_client.dart';
 import 'data/metadata/anilist_metadata_provider.dart';
+import 'data/metadata/kitsu_metadata_provider.dart';
 import 'data/metadata/metadata_provider.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
@@ -66,8 +68,14 @@ void main() {
   // ONE ordered source list, shared by the scan and by fix-match so the two
   // can never disagree about which source is preferred. Today it holds a single
   // provider; adding one is appending to this list.
+  // Built-in order; the user can reorder or disable any of them in
+  // Settings > Metadata, and that order is read fresh on every lookup.
   final metadataProviders = <MetadataProvider>[
     AniListMetadataProvider(AniListClient(), formatsIn: kEpisodicAnimeFormats),
+    // Keyless, and the only rich source still answering while AniList's API is
+    // disabled. Slower, which the two-phase scan hides: placeholders paint from
+    // phase 1 before any lookup runs.
+    KitsuMetadataProvider(KitsuClient()),
   ];
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),

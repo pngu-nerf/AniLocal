@@ -440,6 +440,11 @@ class LibrarySync {
     // Each provider is re-asked BY ITS OWN ids, which is why the side table
     // exists: our series_id means nothing to Kitsu or MAL.
     final externalIds = await cache.externalIdsBySeriesId();
+    // Previous cover per series, so a source switch actually replaces the art
+    // instead of keeping the first source's picture forever.
+    final cachedSeriesRows = {
+      for (final r in await cache.allSeriesRows()) r.seriesId: r,
+    };
     var seriesRefreshed = 0;
     MetadataFailure? failure;
 
@@ -474,7 +479,13 @@ class LibrarySync {
           // or a cover download that failed, leaves the existing row's fields
           // intact — the no-wipe guarantee this method promises. Pinned by
           // test/metadata_refresh_failure_test.dart.
-          final artPath = await art.ensureCover(seriesId, fresh.coverImageRef);
+          final prior = cachedSeriesRows[seriesId];
+          final artPath = await art.ensureCover(
+            seriesId,
+            fresh.coverImageRef,
+            cachedUrl: prior?.coverImageUrl,
+            cachedPath: prior?.coverImagePath,
+          );
           await cache.upsertSeries(_seriesRow(fresh, artPath, seriesId));
           // Learn any ids this answer carried that we didn't have.
           await cache.ensureSeriesId(

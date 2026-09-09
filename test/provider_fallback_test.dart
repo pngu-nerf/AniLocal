@@ -1,5 +1,11 @@
+import 'dart:convert';
+
+import 'package:anilocal/data/anilist/anilist_client.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/series_identity.dart';
+import 'package:anilocal/data/kitsu/kitsu_client.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
+import 'package:anilocal/data/metadata/kitsu_metadata_provider.dart';
 import 'package:anilocal/data/metadata/metadata_provider.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/domain/models/external_ids.dart';
@@ -8,6 +14,8 @@ import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 /// A provider whose behaviour each test dictates outright — the point here is
 /// the CHAIN and the IDENTITY rules, not any real API's wire format.
@@ -147,6 +155,85 @@ void main() {
         ).match('x'),
         throwsA(isA<MetadataException>()),
       );
+    });
+  });
+
+  group('the real thing: Kitsu answers when AniList is down', () {
+    test('a file is identified, and lands on the AniList identity', () async {
+      // AniList is 403ing exactly as it is in production today.
+      final anilist = AniListMetadataProvider(
+        AniListClient(
+          httpClient: MockClient(
+            (_) async => http.Response(
+              jsonEncode({
+                'errors': [
+                  {'message': 'The AniList API has been temporarily disabled'},
+                ],
+                'data': null,
+              }),
+              403,
+            ),
+          ),
+        ),
+      );
+      final kitsu = KitsuMetadataProvider(
+        KitsuClient(
+          httpClient: MockClient(
+            (_) async => http.Response.bytes(
+              utf8.encode(
+                jsonEncode({
+                  'data': [
+                    {
+                      'id': '1',
+                      'type': 'anime',
+                      'attributes': {
+                        'canonicalTitle': 'Cowboy Bebop',
+                        'titles': {'en_jp': 'Cowboy Bebop'},
+                        'subtype': 'TV',
+                        'episodeCount': 26,
+                      },
+                      'relationships': {
+                        'mappings': {
+                          'data': [
+                            {'type': 'mappings', 'id': 'm1'},
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                  'included': [
+                    {
+                      'id': 'm1',
+                      'type': 'mappings',
+                      'attributes': {
+                        'externalSite': 'anilist/anime',
+                        'externalId': '21',
+                      },
+                    },
+                  ],
+                }),
+              ),
+              200,
+              headers: {'content-type': 'application/vnd.api+json'},
+            ),
+          ),
+        ),
+      );
+
+      final result = await SeriesMatcher(
+        providers: [anilist, kitsu],
+      ).match('Cowboy Bebop');
+
+      expect(result.series, isNotNull, reason: 'Kitsu carried the lookup');
+
+      // Because Kitsu reported the AniList id alongside its own, the show
+      // resolves to the SEEDED identity — the same id AniList would have given
+      // it. A library identified during the outage therefore needs no repair
+      // when AniList returns.
+      final id = await db.ensureSeriesId(result.series!.externalIds);
+      expect(id, 21);
+      expect(isProviderSeededSeriesId(id), isTrue);
+      expect((await db.externalIdsBySeriesId())[21]?.kitsu, 1);
     });
   });
 

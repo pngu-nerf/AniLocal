@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/metadata_failure.dart';
+import '../http_failure.dart';
 import '../user_agent.dart';
 import '../../domain/models/series.dart';
 import 'anilist_mapper.dart';
@@ -115,13 +116,27 @@ class AniListClient {
       );
     }
 
+    // Decode the BYTES as UTF-8, never `response.body`. AniList sends
+    // `application/json` with no `charset`, and Dart's http package falls back
+    // to latin1 in that case. It happens to be harmless today because AniList
+    // \u-escapes non-ASCII, but relying on a server's escaping choice is a trap
+    // — Kitsu sends raw UTF-8 under the same header. JSON is UTF-8 by
+    // specification (RFC 8259).
+    final responseBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+
     if (response.statusCode != 200) {
-      final detail = _graphQLErrorText(response.body);
+      final detail = _graphQLErrorText(responseBody);
       throw AniListException(
         detail == null
             ? 'AniList request failed: HTTP ${response.statusCode}.'
             : 'AniList request failed: HTTP ${response.statusCode} — $detail',
-        failure: _classifyStatus(response.statusCode, detail != null),
+        // Today's "API temporarily disabled" 403 carries a GraphQL envelope,
+        // so it reads as AniList's end; the old Cloudflare UA block did not,
+        // and reads as the network path.
+        failure: classifyHttpFailure(
+          response.statusCode,
+          carriesProviderError: detail != null,
+        ),
       );
     }
 
@@ -131,7 +146,7 @@ class AniListClient {
     // the cache-preserving unreachable guard in LibrarySync.
     final Object? decoded;
     try {
-      decoded = jsonDecode(response.body);
+      decoded = jsonDecode(responseBody);
     } on FormatException catch (e) {
       throw AniListException('Malformed AniList response: $e');
     }
@@ -142,19 +157,6 @@ class AniListClient {
       throw AniListException('AniList GraphQL error: ${decoded['errors']}');
     }
     return decoded;
-  }
-
-  /// Whose end a non-200 points at. [isAniListBody] means the response carried
-  /// AniList's own GraphQL error envelope, which only AniList writes.
-  static MetadataFailure _classifyStatus(int status, bool isAniListBody) {
-    if (status == 429) return MetadataFailure.rateLimited;
-    // 5xx is server-side by definition, whoever rendered the page.
-    if (status >= 500) return MetadataFailure.service;
-    // A 4xx speaking GraphQL is AniList deliberately refusing — today's
-    // "API temporarily disabled" outage lands here. A 4xx with any other body
-    // was written by something between the user and AniList (proxy, VPN,
-    // captive portal, or the Cloudflare UA block this client works around).
-    return isAniListBody ? MetadataFailure.service : MetadataFailure.blocked;
   }
 
   /// AniList's own error text from a GraphQL error envelope, or null when the
