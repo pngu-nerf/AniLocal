@@ -38,9 +38,12 @@ class FixMatchService implements FixMatchRepository {
   Future<List<Series>> searchCandidates(String query) async {
     MetadataException? lastFailure;
     final load = loadOrder;
-    final ordered = load == null
-        ? providers
-        : applySourceOrder(providers, (p) => p.token, await load());
+    final ordered = applySourceOrder(
+      providers,
+      (p) => p.token,
+      load == null ? const [] : await load(),
+      isFallbackOnly: (p) => p.isFallbackOnly,
+    );
     for (final provider in ordered) {
       if (!provider.isConfigured) continue;
       try {

@@ -10,6 +10,7 @@ class MetadataSource extends Equatable {
     required this.token,
     required this.displayName,
     this.configured = true,
+    this.fallbackOnly = false,
     this.setupHint,
   });
 
@@ -24,10 +25,21 @@ class MetadataSource extends Equatable {
   /// no way to discover it — but it is skipped by the lookup chain.
   final bool configured;
 
+  /// True for a source too unreliable to be the source of truth. It sorts below
+  /// every other source no matter where the user drags it, and the list says so
+  /// rather than silently snapping the row back.
+  final bool fallbackOnly;
+
   /// What the user must do to enable it, e.g. 'Add your MyAnimeList client ID'.
   /// Null when [configured].
   final String? setupHint;
 
   @override
-  List<Object?> get props => [token, displayName, configured, setupHint];
+  List<Object?> get props => [
+    token,
+    displayName,
+    configured,
+    fallbackOnly,
+    setupHint,
+  ];
 }

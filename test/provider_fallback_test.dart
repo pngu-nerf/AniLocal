@@ -11,6 +11,7 @@ import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/domain/models/external_ids.dart';
 import 'package:anilocal/domain/models/metadata_failure.dart';
 import 'package:anilocal/domain/models/series.dart';
+import 'package:anilocal/domain/models/source_preference.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,7 @@ class _FakeProvider implements MetadataProvider {
     this.results = const [],
     this.failure,
     this.configured = true,
+    this.fallbackOnly = false,
   });
 
   @override
@@ -32,6 +34,7 @@ class _FakeProvider implements MetadataProvider {
   final List<Series> results;
   final MetadataFailure? failure;
   final bool configured;
+  final bool fallbackOnly;
 
   int searchCalls = 0;
 
@@ -40,6 +43,9 @@ class _FakeProvider implements MetadataProvider {
 
   @override
   bool get isConfigured => configured;
+
+  @override
+  bool get isFallbackOnly => fallbackOnly;
 
   @override
   Future<List<Series>> searchCandidates(
@@ -145,6 +151,76 @@ void main() {
         ),
       );
     });
+
+    test(
+      'a FALLBACK-ONLY source never leads, whatever the user saved',
+      () async {
+        // Jikan is MAL's data through a volunteer proxy measured at ~30%
+        // availability. Worth having when everything else is down; not worth
+        // building a library's metadata on — so it cannot be dragged to the top.
+        final jikan = _FakeProvider(
+          'mal',
+          fallbackOnly: true,
+          results: [_series('Cowboy Bebop', const ExternalIds(mal: 1))],
+        );
+        final anilist = _FakeProvider(
+          'anilist',
+          results: [_series('Cowboy Bebop', const ExternalIds(anilist: 21))],
+        );
+
+        final result = await SeriesMatcher(
+          providers: [jikan, anilist],
+          // The user explicitly put the fallback first.
+          loadOrder: () async => const [
+            SourcePreference(token: 'mal'),
+            SourcePreference(token: 'anilist'),
+          ],
+        ).match('Cowboy Bebop');
+
+        expect(result.series?.externalIds.anilist, 21, reason: 'AniList led');
+        expect(
+          jikan.searchCalls,
+          0,
+          reason: 'not even asked while AniList works',
+        );
+      },
+    );
+
+    test('but a fallback-only source IS used when the others fail', () async {
+      final anilist = _FakeProvider(
+        'anilist',
+        failure: MetadataFailure.service,
+      );
+      final jikan = _FakeProvider(
+        'mal',
+        fallbackOnly: true,
+        results: [_series('Cowboy Bebop', const ExternalIds(mal: 1))],
+      );
+
+      final result = await SeriesMatcher(
+        providers: [anilist, jikan],
+      ).match('Cowboy Bebop');
+
+      expect(result.series?.externalIds.mal, 1);
+    });
+
+    test(
+      'when EVERY source is fallback-only, one of them still answers',
+      () async {
+        // The rule must not deadlock a build that ships only such sources.
+        final a = _FakeProvider(
+          'mal',
+          fallbackOnly: true,
+          results: [_series('Cowboy Bebop', const ExternalIds(mal: 9))],
+        );
+
+        final result = await SeriesMatcher(
+          providers: [a],
+        ).match('Cowboy Bebop');
+
+        expect(result.series?.externalIds.mal, 9);
+      },
+    );
 
     test('no configured source is a FAILURE, never a no-match', () async {
       // A no-match would flip files to confirmed-unmatched and they would never

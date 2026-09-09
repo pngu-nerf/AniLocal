@@ -23,6 +23,9 @@ class KitsuMetadataProvider implements MetadataProvider {
   bool get isConfigured => true; // public reads, no key
 
   @override
+  bool get isFallbackOnly => false;
+
+  @override
   Future<List<Series>> searchCandidates(String title, {int perPage = 10}) =>
       _translate(() => client.searchCandidates(title, perPage: perPage));
 

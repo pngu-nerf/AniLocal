@@ -34,11 +34,18 @@ class SourcePreference extends Equatable {
 /// * Disabled sources are dropped entirely when [enabledOnly], which is what
 ///   the lookup chain wants; the settings UI passes false so it can still show
 ///   them.
+/// * A source marked FALLBACK-ONLY by [isFallbackOnly] can never outrank one
+///   that isn't, whatever the saved order says. Some sources are too unreliable
+///   to be the thing a library's metadata is built from — they are worth having
+///   when everything else is down, and not otherwise. The relative order among
+///   them, and among the rest, is preserved. If EVERY source is fallback-only
+///   the rule does nothing: something has to answer.
 List<T> applySourceOrder<T>(
   List<T> available,
   String Function(T) tokenOf,
   List<SourcePreference> preferences, {
   bool enabledOnly = true,
+  bool Function(T item)? isFallbackOnly,
 }) {
   final byToken = {for (final item in available) tokenOf(item): item};
   final seen = <String>{};
@@ -57,7 +64,14 @@ List<T> applySourceOrder<T>(
     if (seen.contains(tokenOf(item))) continue;
     ordered.add(item);
   }
-  return ordered;
+
+  if (isFallbackOnly == null) return ordered;
+  // Stable partition: leaders keep their order, fallbacks keep theirs, and no
+  // fallback ends up above a leader.
+  return [
+    ...ordered.where((i) => !isFallbackOnly(i)),
+    ...ordered.where(isFallbackOnly),
+  ];
 }
 
 /// Whether [token] is switched on, defaulting to true for a source the saved

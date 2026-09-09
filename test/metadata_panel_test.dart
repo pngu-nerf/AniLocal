@@ -30,6 +30,8 @@ class _StubProvider implements MetadataProvider {
   String get displayName => token;
   @override
   bool get isConfigured => true;
+  @override
+  bool get isFallbackOnly => false;
   int calls = 0;
   @override
   Future<List<Series>> searchCandidates(String t, {int perPage = 10}) async {

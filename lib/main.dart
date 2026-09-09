@@ -9,8 +9,10 @@ import 'data/cache/cache_database.dart';
 import 'data/cache/drift_library_repository.dart';
 import 'data/cache/drift_settings_repository.dart';
 import 'data/crossmap/cross_map_store.dart';
+import 'data/jikan/jikan_client.dart';
 import 'data/kitsu/kitsu_client.dart';
 import 'data/metadata/anilist_metadata_provider.dart';
+import 'data/metadata/jikan_metadata_provider.dart';
 import 'data/metadata/kitsu_metadata_provider.dart';
 import 'data/metadata/metadata_provider.dart';
 import 'data/folders/file_selector_folder_picker.dart';
@@ -57,6 +59,9 @@ void main() {
   // memoization. Internal-disk folders never touch it (their path is stable).
   final VolumeResolver volumeResolver = DiskutilVolumeResolver();
   final repository = DriftLibraryRepository(database, resolver: volumeResolver);
+  // ONE cross-map instance: shared by the AniSkip id backfill and by Jikan's
+  // MAL -> AniList enrichment, so the 5.8MB source is fetched and parsed once.
+  final crossMap = CrossMapStore(directory: derivedDataDirectory);
   // ALL settings live behind one injected object (was ~20 threaded functions).
   // Adding a setting now touches SettingsRepository + its impl + the reader.
   // Built BEFORE the fill path because the matcher reads the user's metadata
@@ -76,6 +81,12 @@ void main() {
     // disabled. Slower, which the two-phase scan hides: placeholders paint from
     // phase 1 before any lookup runs.
     KitsuMetadataProvider(KitsuClient()),
+    // MAL's data with no key — but through a volunteer-run proxy measured at
+    // roughly 30% availability, so it is FALLBACK-ONLY and sorts last however
+    // the user orders the list. The cross-map supplies the AniList id Jikan
+    // doesn't publish, so its answers land on the same identities as everyone
+    // else's.
+    JikanMetadataProvider(JikanClient(), crossMap: crossMap),
   ];
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
@@ -92,7 +103,7 @@ void main() {
     aniSkip: AniSkipClient(),
     // Fills a MAL id AniList didn't supply, so auto-skip survives an AniList
     // outage. Fetched lazily and only when something is actually missing.
-    crossMap: CrossMapStore(directory: derivedDataDirectory),
+    crossMap: crossMap,
     resolver: volumeResolver,
   );
   // Fix-match: the ONLY writer of overrides (LibrarySync can't reach it).
@@ -205,6 +216,7 @@ void main() {
             token: p.token,
             displayName: p.displayName,
             configured: p.isConfigured,
+            fallbackOnly: p.isFallbackOnly,
           ),
       ],
       playback: playback,

@@ -45,6 +45,12 @@ abstract class MetadataProvider {
   /// Shown in the settings source list.
   String get displayName;
 
+  /// True for a source too unreliable to build a library's metadata on. Such a
+  /// source is never allowed to outrank one that isn't, whatever order the user
+  /// saves — it is worth having when everything else is down, and not
+  /// otherwise. Default false.
+  bool get isFallbackOnly => false;
+
   /// Whether this provider can be used right now. False for one that needs a
   /// client ID the user hasn't supplied — such a provider is SKIPPED by the
   /// chain rather than counted as a failure.

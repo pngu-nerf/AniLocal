@@ -56,6 +56,7 @@ class _MetadataPanelState extends State<MetadataPanel> {
         (s) => s.token,
         prefs,
         enabledOnly: false,
+        isFallbackOnly: (s) => s.fallbackOnly,
       );
     });
   }
@@ -71,7 +72,15 @@ class _MetadataPanelState extends State<MetadataPanel> {
         ),
     ];
     setState(() {
-      _ordered = ordered;
+      // Re-apply the rule so a fallback-only source dragged above a real one
+      // visibly settles back rather than appearing to have been accepted.
+      _ordered = applySourceOrder(
+        ordered,
+        (s) => s.token,
+        prefs,
+        enabledOnly: false,
+        isFallbackOnly: (s) => s.fallbackOnly,
+      );
       _prefs = prefs;
     });
     await widget.settings.setMetadataSourceOrder(prefs);
@@ -120,7 +129,12 @@ class _MetadataPanelState extends State<MetadataPanel> {
             keyOf: (s) => s.token,
             titleOf: (s) => s.displayName,
             firstCaption: 'Source of truth',
-            subtitleOf: (s) => s.configured ? null : s.setupHint,
+            subtitleOf: (s) => switch (s) {
+              _ when !s.configured => s.setupHint,
+              _ when s.fallbackOnly =>
+                'Fallback only — never the source of truth',
+              _ => null,
+            },
             dimmed: (s) => !s.configured || !isSourceEnabled(s.token, _prefs),
             onReorder: _reorder,
             leadingBuilder: (s) => Checkbox(

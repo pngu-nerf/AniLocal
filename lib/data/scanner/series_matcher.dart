@@ -40,8 +40,13 @@ class SeriesMatcher {
   /// The enabled sources, in the user's order.
   Future<List<MetadataProvider>> activeProviders() async {
     final load = loadOrder;
-    if (load == null) return providers;
-    return applySourceOrder(providers, (p) => p.token, await load());
+    return applySourceOrder(
+      providers,
+      (p) => p.token,
+      load == null ? const [] : await load(),
+      // A fallback-only source can never lead, whatever the user saved.
+      isFallbackOnly: (p) => p.isFallbackOnly,
+    );
   }
 
   Future<MatchResult> match(String title) async {
