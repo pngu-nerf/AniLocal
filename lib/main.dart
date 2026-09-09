@@ -16,6 +16,8 @@ import 'data/metadata/anilist_metadata_provider.dart';
 import 'data/metadata/jikan_metadata_provider.dart';
 import 'data/metadata/kitsu_metadata_provider.dart';
 import 'data/metadata/mal_metadata_provider.dart';
+import 'data/skip/aniskip_skip_provider.dart';
+import 'data/skip/skip_provider.dart';
 import 'data/metadata/metadata_provider.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
@@ -25,7 +27,7 @@ import 'data/scanner/folder_scanner.dart';
 import 'data/scanner/heuristic_filename_parser.dart';
 import 'data/scanner/series_matcher.dart';
 import 'domain/models/external_ids.dart';
-import 'domain/models/metadata_source.dart';
+import 'domain/models/source_descriptor.dart';
 import 'domain/models/sync_summary.dart';
 import 'playback/playback_controller.dart';
 import 'sync/fix_match_service.dart';
@@ -120,6 +122,7 @@ void main() {
         loadClientId: malClientId,
       ),
   ];
+  final skipProviders = <SkipProvider>[AniSkipSkipProvider(AniSkipClient())];
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
     parser: const HeuristicFilenameParser(),
@@ -131,8 +134,11 @@ void main() {
     ),
     cache: database,
     art: ArtCache(directory: coverArtDirectory),
-    // AniSkip fetched at scan time only; playback reads skips from the cache.
-    aniSkip: AniSkipClient(),
+    // ONE ordered skip-source list, mirroring the metadata one. Fetched at
+    // scan time only; playback still reads skips from the cache and makes no
+    // network call. Chapters, Anime Skip and fingerprinting append here.
+    skipProviders: skipProviders,
+    loadSkipOrder: settings.loadSkipSourceOrder,
     // Fills a MAL id AniList didn't supply, so auto-skip survives an AniList
     // outage. Fetched lazily and only when something is actually missing.
     crossMap: crossMap,
@@ -151,7 +157,7 @@ void main() {
   // pasting one takes effect without a restart.
   final metadataSourceDescriptors = [
     for (final p in metadataProviders)
-      MetadataSource(
+      SourceDescriptor(
         token: p.token,
         displayName: p.displayName,
         requiresClientId: p.requiresClientId,
@@ -262,6 +268,20 @@ void main() {
       // Descriptors for the Settings > Metadata list, derived from the ONE
       // provider list so the two can't list different sources.
       metadataSources: metadataSourceDescriptors,
+      skipSources: [
+        for (final p in skipProviders)
+          SourceDescriptor(
+            token: p.token,
+            displayName: p.displayName,
+            requiresClientId: p.requiresClientId,
+            setupUrl: p.setupUrl,
+            setupInstructions: p.setupInstructions,
+            setupHint: p.requiresClientId
+                ? 'Needs a free client ID from your own ${p.displayName} '
+                      'account'
+                : null,
+          ),
+      ],
       playback: playback,
       onScan: scan,
       onRefreshMetadata: sync.refreshMetadata,

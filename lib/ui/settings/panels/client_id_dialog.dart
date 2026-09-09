@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../domain/models/metadata_source.dart';
+import '../../../domain/models/source_descriptor.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
 import '../../widgets/xp_dialog.dart';
@@ -16,7 +16,7 @@ import '../../widgets/xp_dialog.dart';
 /// hiding it would imply a secrecy it doesn't have and make typos unfindable.
 Future<String?> showClientIdDialog(
   BuildContext context, {
-  required MetadataSource source,
+  required SourceDescriptor source,
   String? current,
 }) {
   final controller = TextEditingController(text: current ?? '');

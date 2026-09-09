@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../domain/models/metadata_source.dart';
+import '../domain/models/source_descriptor.dart';
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
@@ -59,6 +59,7 @@ class AniLocalApp extends StatelessWidget {
     required this.missingFolderPaths,
     required this.onOpenAccessSettings,
     this.metadataSources = const [],
+    this.skipSources = const [],
   });
 
   final LibraryRepository repository;
@@ -95,7 +96,10 @@ class AniLocalApp extends StatelessWidget {
 
   /// Metadata sources this build ships, for the Settings > Metadata list.
   /// Descriptors only — the UI never sees a provider (seam #1).
-  final List<MetadataSource> metadataSources;
+  final List<SourceDescriptor> metadataSources;
+
+  /// Skip sources this build ships, for the Settings > Skip list.
+  final List<SourceDescriptor> skipSources;
 
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 
@@ -187,6 +191,7 @@ class AniLocalApp extends StatelessWidget {
           onOpenAccessSettings: onOpenAccessSettings,
         ),
         metadataSources: metadataSources,
+        skipSources: skipSources,
         accessIssues: accessIssues,
         missingFolders: missingFolders,
         missingFolderPaths: missingFolderPaths,

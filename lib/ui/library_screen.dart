@@ -7,7 +7,7 @@ import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/picture_mode.dart';
 import '../domain/models/series.dart';
-import '../domain/models/metadata_source.dart';
+import '../domain/models/source_descriptor.dart';
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
@@ -81,6 +81,7 @@ class LibraryScreen extends StatefulWidget {
     required this.onRefreshMetadata,
     required this.sources,
     this.metadataSources = const [],
+    this.skipSources = const [],
     required this.accessIssues,
     required this.missingFolders,
     required this.missingFolderPaths,
@@ -124,7 +125,10 @@ class LibraryScreen extends StatefulWidget {
   final SourcesActions sources;
 
   /// Metadata sources this build ships (descriptors), for Settings > Metadata.
-  final List<MetadataSource> metadataSources;
+  final List<SourceDescriptor> metadataSources;
+
+  /// Skip sources this build ships (descriptors), for Settings > Skip.
+  final List<SourceDescriptor> skipSources;
 
   /// Shared denied-state (category labels) — drives the banner; the add-dialog
   /// reads the same source via [onAddFolder]'s result.
@@ -379,6 +383,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   SettingsDialogActions _settingsActions() => SettingsDialogActions(
     sources: widget.sources,
     metadataSources: widget.metadataSources,
+    skipSources: widget.skipSources,
     onRefreshMetadata: widget.onRefreshMetadata,
     onRefreshed: _reload,
     loadUnmatchedCount: () async => _unmatchedCount,

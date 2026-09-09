@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../domain/models/metadata_source.dart';
+import '../../../domain/models/source_descriptor.dart';
 import '../../../domain/models/source_preference.dart';
 import '../../../domain/repositories/settings_repository.dart';
 import '../../theme/xp_tokens.dart';
@@ -8,36 +8,47 @@ import '../../theme/xp_widgets.dart';
 import 'client_id_dialog.dart';
 import '../../widgets/xp_reorderable_list.dart';
 
-/// Where metadata comes from, and in what order.
+/// An ordered, individually-switchable list of sources.
 ///
-/// Deliberately a SEPARATE category from Sources: that one is library folders
-/// ("what do I own"), this one is metadata sources ("what is this show"). They
-/// fail independently and mean different things, so blurring them into one
-/// list would be worse than the duplication of having two.
+/// ONE panel for BOTH families — metadata ("what is this show") and skip
+/// ("where is the OP/ED"). They are separate categories with separate orders
+/// because they answer different questions and fail independently, but the row
+/// itself is identical in both, so a second copy of this would only drift.
 ///
-/// The list is the setting — top is the source of truth, the rest are
-/// fallbacks used only when the one above fails. Turning a source off skips it
-/// entirely.
-class MetadataPanel extends StatefulWidget {
-  const MetadataPanel({
+/// The list IS the setting: top is the source of truth, the rest are fallbacks
+/// used only when the one above fails or has no data. Turning a source off
+/// skips it entirely.
+class SourceListPanel extends StatefulWidget {
+  const SourceListPanel({
     super.key,
     required this.sources,
     required this.settings,
+    required this.loadOrder,
+    required this.saveOrder,
+    required this.caption,
   });
 
-  /// Every source this build ships, in built-in order.
-  final List<MetadataSource> sources;
+  /// Every source of this family that the build ships, in built-in order.
+  final List<SourceDescriptor> sources;
   final SettingsRepository settings;
 
+  /// Which family's order to read and write — the only thing that differs
+  /// between the two uses, besides the caption.
+  final Future<List<SourcePreference>> Function() loadOrder;
+  final Future<void> Function(List<SourcePreference>) saveOrder;
+
+  /// One line explaining what being first means for THIS family.
+  final String caption;
+
   @override
-  State<MetadataPanel> createState() => _MetadataPanelState();
+  State<SourceListPanel> createState() => _SourceListPanelState();
 }
 
-class _MetadataPanelState extends State<MetadataPanel> {
+class _SourceListPanelState extends State<SourceListPanel> {
   /// Null only until the first load — never cleared afterwards, so reordering
   /// doesn't flash the list through a spinner (CLAUDE.md: never clear known
   /// content to show a loading state).
-  List<MetadataSource>? _ordered;
+  List<SourceDescriptor>? _ordered;
   List<SourcePreference> _prefs = const [];
 
   /// token -> the client ID the user has stored, for sources that need one.
@@ -47,7 +58,7 @@ class _MetadataPanelState extends State<MetadataPanel> {
   Map<String, String?> _clientIds = const {};
 
   /// A source is usable if it needs no key, or has one.
-  bool _configured(MetadataSource s) =>
+  bool _configured(SourceDescriptor s) =>
       !s.requiresClientId || (_clientIds[s.token]?.isNotEmpty ?? false);
 
   @override
@@ -57,7 +68,7 @@ class _MetadataPanelState extends State<MetadataPanel> {
   }
 
   Future<void> _load() async {
-    final prefs = await widget.settings.loadMetadataSourceOrder();
+    final prefs = await widget.loadOrder();
     final keys = <String, String?>{};
     for (final source in widget.sources) {
       if (source.requiresClientId) {
@@ -84,7 +95,7 @@ class _MetadataPanelState extends State<MetadataPanel> {
 
   /// Persist the list exactly as displayed, so what the user sees IS the saved
   /// order — no separate notion of order living anywhere else.
-  Future<void> _persist(List<MetadataSource> ordered) async {
+  Future<void> _persist(List<SourceDescriptor> ordered) async {
     final prefs = [
       for (final s in ordered)
         SourcePreference(
@@ -104,7 +115,7 @@ class _MetadataPanelState extends State<MetadataPanel> {
       );
       _prefs = prefs;
     });
-    await widget.settings.setMetadataSourceOrder(prefs);
+    await widget.saveOrder(prefs);
   }
 
   Future<void> _reorder(int oldIndex, int newIndex) async {
@@ -113,7 +124,7 @@ class _MetadataPanelState extends State<MetadataPanel> {
     await _persist(list);
   }
 
-  Future<void> _toggle(MetadataSource source, bool enabled) async {
+  Future<void> _toggle(SourceDescriptor source, bool enabled) async {
     final list = [...?_ordered];
     final prefs = [
       for (final s in list)
@@ -125,10 +136,10 @@ class _MetadataPanelState extends State<MetadataPanel> {
         ),
     ];
     setState(() => _prefs = prefs);
-    await widget.settings.setMetadataSourceOrder(prefs);
+    await widget.saveOrder(prefs);
   }
 
-  Future<void> _editClientId(MetadataSource source) async {
+  Future<void> _editClientId(SourceDescriptor source) async {
     final entered = await showClientIdDialog(
       context,
       source: source,
@@ -154,15 +165,15 @@ class _MetadataPanelState extends State<MetadataPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 10),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
           child: Text(
-            'Top source is used first. The rest are tried only if it fails.',
-            style: TextStyle(color: Xp.textDim, fontSize: 11),
+            widget.caption,
+            style: const TextStyle(color: Xp.textDim, fontSize: 11),
           ),
         ),
         Expanded(
-          child: XpReorderableList<MetadataSource>(
+          child: XpReorderableList<SourceDescriptor>(
             items: ordered,
             keyOf: (s) => s.token,
             titleOf: (s) => s.displayName,
@@ -199,5 +210,6 @@ class _MetadataPanelState extends State<MetadataPanel> {
   }
 }
 
-/// Named once so the category id and any deep-link to it can't drift apart.
+/// Named once so each category id and any deep-link to it can't drift apart.
 const String metadataCategoryId = 'metadata';
+const String skipCategoryId = 'skip';

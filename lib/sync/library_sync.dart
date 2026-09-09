@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import '../data/aniskip/aniskip_client.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
 import '../data/cache/series_identity.dart';
 import '../data/crossmap/cross_map_store.dart';
 import '../data/metadata/metadata_provider.dart';
+import '../data/skip/skip_provider.dart';
 import '../data/folders/volume_resolver.dart';
 import '../data/scanner/filename_parser.dart';
 import '../data/scanner/folder_scanner.dart';
@@ -15,6 +15,8 @@ import '../domain/models/external_ids.dart';
 import '../domain/models/metadata_failure.dart';
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/series.dart';
+import '../domain/models/source_preference.dart';
+import '../domain/models/skip_range.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/models/titles.dart';
 
@@ -40,7 +42,8 @@ class LibrarySync {
     required this.matcher,
     required this.cache,
     required this.art,
-    required this.aniSkip,
+    required this.skipProviders,
+    this.loadSkipOrder,
     this.crossMap,
     VolumeResolver? resolver,
   }) : resolver = resolver ?? DiskutilVolumeResolver();
@@ -50,7 +53,15 @@ class LibrarySync {
   final SeriesMatcher matcher;
   final CacheDatabase cache;
   final ArtCache art;
-  final AniSkipClient aniSkip;
+
+  /// Ordered skip sources, same shape as the metadata chain: the first
+  /// configured, enabled one that HAS data for an episode wins. A source with
+  /// no data is not a failure — partial coverage is normal here.
+  final List<SkipProvider> skipProviders;
+
+  /// The user's saved skip-source order, read fresh so reordering takes effect
+  /// without a restart. Null = use [skipProviders] as given.
+  final Future<List<SourcePreference>> Function()? loadSkipOrder;
 
   /// Cross-database id map, used ONLY to fill a MAL id AniList didn't give us
   /// (so AniSkip keeps working when AniList is unreachable). Optional: null —
@@ -350,26 +361,30 @@ class LibrarySync {
           (f.seriesId!, f.episodeNumber!),
     };
     final malIds = await _resolveMalIds(idMalById, skipKeys.map((k) => k.$1));
+    final activeSkipSources = await _activeSkipProviders();
     final skipUpserts = <SkipSegmentRow>[];
     for (final (seriesId, episode) in skipKeys) {
-      final mal = malIds[seriesId];
-      if (mal == null) continue;
-      try {
-        final skips = await aniSkip.fetchSkips(mal, episode);
-        if (skips == null) continue; // no data -> no row (graceful)
-        skipUpserts.add(
-          SkipSegmentRow(
-            seriesId: seriesId,
-            episode: episode,
-            introStartMs: skips.intro?.start.inMilliseconds,
-            introEndMs: skips.intro?.end.inMilliseconds,
-            outroStartMs: skips.outro?.start.inMilliseconds,
-            outroEndMs: skips.outro?.end.inMilliseconds,
-          ),
-        );
-      } on AniSkipException {
-        // Transient — leave this episode without skip data (no scan failure).
-      }
+      final found = await _resolveSkips(
+        SkipLookup(
+          seriesId: seriesId,
+          episode: episode,
+          malId: malIds[seriesId],
+        ),
+        activeSkipSources,
+      );
+      if (found == null) continue; // no source had data -> no row (graceful)
+      skipUpserts.add(
+        SkipSegmentRow(
+          seriesId: seriesId,
+          episode: episode,
+          introStartMs: found.skips.intro?.start.inMilliseconds,
+          introEndMs: found.skips.intro?.end.inMilliseconds,
+          outroStartMs: found.skips.outro?.start.inMilliseconds,
+          outroEndMs: found.skips.outro?.end.inMilliseconds,
+          source: found.source,
+          confidence: 0,
+        ),
+      );
     }
 
     // For every title that resolved to a real AniList id this scan, carry any
@@ -518,33 +533,37 @@ class LibrarySync {
       }
     }
 
-    // Fetch AniSkip only for identities missing a cached skip row.
+    // Fetch skips only for identities missing a cached row.
     final haveSkips = {
       for (final s in await cache.allSkipRows()) (s.seriesId, s.episode),
     };
     final malIds = await _resolveMalIds(idMalById, identities.map((i) => i.$1));
+    final activeSkipSources = await _activeSkipProviders();
     var skipsFetched = 0;
     for (final (seriesId, episode) in identities) {
       if (haveSkips.contains((seriesId, episode))) continue;
-      final mal = malIds[seriesId];
-      if (mal == null) continue;
-      try {
-        final skips = await aniSkip.fetchSkips(mal, episode);
-        if (skips == null) continue;
-        await cache.upsertSkipSegment(
-          SkipSegmentRow(
-            seriesId: seriesId,
-            episode: episode,
-            introStartMs: skips.intro?.start.inMilliseconds,
-            introEndMs: skips.intro?.end.inMilliseconds,
-            outroStartMs: skips.outro?.start.inMilliseconds,
-            outroEndMs: skips.outro?.end.inMilliseconds,
-          ),
-        );
-        skipsFetched++;
-      } on AniSkipException {
-        // Transient — leave this episode for a later refresh.
-      }
+      final found = await _resolveSkips(
+        SkipLookup(
+          seriesId: seriesId,
+          episode: episode,
+          malId: malIds[seriesId],
+        ),
+        activeSkipSources,
+      );
+      if (found == null) continue;
+      await cache.upsertSkipSegment(
+        SkipSegmentRow(
+          seriesId: seriesId,
+          episode: episode,
+          introStartMs: found.skips.intro?.start.inMilliseconds,
+          introEndMs: found.skips.intro?.end.inMilliseconds,
+          outroStartMs: found.skips.outro?.start.inMilliseconds,
+          outroEndMs: found.skips.outro?.end.inMilliseconds,
+          source: found.source,
+          confidence: 0,
+        ),
+      );
+      skipsFetched++;
     }
 
     return RefreshSummary(
@@ -552,6 +571,42 @@ class LibrarySync {
       skipsFetched: skipsFetched,
       failure: failure,
     );
+  }
+
+  /// The enabled skip sources, in the user's order.
+  Future<List<SkipProvider>> _activeSkipProviders() async {
+    final load = loadSkipOrder;
+    return applySourceOrder(
+      skipProviders,
+      (p) => p.token,
+      load == null ? const [] : await load(),
+    );
+  }
+
+  /// Ask each enabled skip source in turn and take the FIRST that has windows
+  /// for this episode.
+  ///
+  /// "No data" and "failed" are different: a source with nothing for this
+  /// episode is skipped silently and the next is asked, because partial
+  /// coverage is the norm for skip data. Returns the windows plus WHICH source
+  /// produced them, so the row records its provenance.
+  Future<({EpisodeSkips skips, String source})?> _resolveSkips(
+    SkipLookup lookup,
+    List<SkipProvider> providers,
+  ) async {
+    for (final provider in providers) {
+      if (!await provider.isConfigured()) continue;
+      try {
+        final found = await provider.fetchSkips(lookup);
+        if (found == null) continue; // no data here — ask the next source
+        if (found.intro == null && found.outro == null) continue;
+        return (skips: found, source: provider.token);
+      } on SkipException {
+        // Transient — try the next source; a later scan retries this one.
+        continue;
+      }
+    }
+    return null;
   }
 
   /// MAL ids for [seriesIds]: whatever a provider already gave us, with the

@@ -2923,6 +2923,28 @@ class $SkipSegmentsTable extends SkipSegments
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _confidenceMeta = const VerificationMeta(
+    'confidence',
+  );
+  @override
+  late final GeneratedColumn<int> confidence = GeneratedColumn<int>(
+    'confidence',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     seriesId,
@@ -2931,6 +2953,8 @@ class $SkipSegmentsTable extends SkipSegments
     introEndMs,
     outroStartMs,
     outroEndMs,
+    source,
+    confidence,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2996,6 +3020,18 @@ class $SkipSegmentsTable extends SkipSegments
         ),
       );
     }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('confidence')) {
+      context.handle(
+        _confidenceMeta,
+        confidence.isAcceptableOrUnknown(data['confidence']!, _confidenceMeta),
+      );
+    }
     return context;
   }
 
@@ -3029,6 +3065,14 @@ class $SkipSegmentsTable extends SkipSegments
         DriftSqlType.int,
         data['${effectivePrefix}outro_end_ms'],
       ),
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      )!,
+      confidence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}confidence'],
+      )!,
     );
   }
 
@@ -3045,6 +3089,21 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   final int? introEndMs;
   final int? outroStartMs;
   final int? outroEndMs;
+
+  /// WHICH skip source produced this row (`aniskip`, `chapters`, …).
+  ///
+  /// Needed for three things: telling the user where a window came from,
+  /// letting a higher-priority source replace a lower one rather than the
+  /// first writer winning forever, and distinguishing an INFERRED window
+  /// (chapters, fingerprinting) from a curated one. Empty on rows written
+  /// before v16, which all came from AniSkip.
+  final String source;
+
+  /// How much this window is trusted: 0 normal, 1 corroborated by a second
+  /// independent source, -1 conflicting. Auto-skip is gated on it in D5 —
+  /// skipping into real content is the bad outcome, an unoffered skip is
+  /// merely inconvenient.
+  final int confidence;
   const SkipSegmentRow({
     required this.seriesId,
     required this.episode,
@@ -3052,6 +3111,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     this.introEndMs,
     this.outroStartMs,
     this.outroEndMs,
+    required this.source,
+    required this.confidence,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3070,6 +3131,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     if (!nullToAbsent || outroEndMs != null) {
       map['outro_end_ms'] = Variable<int>(outroEndMs);
     }
+    map['source'] = Variable<String>(source);
+    map['confidence'] = Variable<int>(confidence);
     return map;
   }
 
@@ -3089,6 +3152,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       outroEndMs: outroEndMs == null && nullToAbsent
           ? const Value.absent()
           : Value(outroEndMs),
+      source: Value(source),
+      confidence: Value(confidence),
     );
   }
 
@@ -3104,6 +3169,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       introEndMs: serializer.fromJson<int?>(json['introEndMs']),
       outroStartMs: serializer.fromJson<int?>(json['outroStartMs']),
       outroEndMs: serializer.fromJson<int?>(json['outroEndMs']),
+      source: serializer.fromJson<String>(json['source']),
+      confidence: serializer.fromJson<int>(json['confidence']),
     );
   }
   @override
@@ -3116,6 +3183,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       'introEndMs': serializer.toJson<int?>(introEndMs),
       'outroStartMs': serializer.toJson<int?>(outroStartMs),
       'outroEndMs': serializer.toJson<int?>(outroEndMs),
+      'source': serializer.toJson<String>(source),
+      'confidence': serializer.toJson<int>(confidence),
     };
   }
 
@@ -3126,6 +3195,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     Value<int?> introEndMs = const Value.absent(),
     Value<int?> outroStartMs = const Value.absent(),
     Value<int?> outroEndMs = const Value.absent(),
+    String? source,
+    int? confidence,
   }) => SkipSegmentRow(
     seriesId: seriesId ?? this.seriesId,
     episode: episode ?? this.episode,
@@ -3133,6 +3204,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     introEndMs: introEndMs.present ? introEndMs.value : this.introEndMs,
     outroStartMs: outroStartMs.present ? outroStartMs.value : this.outroStartMs,
     outroEndMs: outroEndMs.present ? outroEndMs.value : this.outroEndMs,
+    source: source ?? this.source,
+    confidence: confidence ?? this.confidence,
   );
   SkipSegmentRow copyWithCompanion(SkipSegmentsCompanion data) {
     return SkipSegmentRow(
@@ -3150,6 +3223,10 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       outroEndMs: data.outroEndMs.present
           ? data.outroEndMs.value
           : this.outroEndMs,
+      source: data.source.present ? data.source.value : this.source,
+      confidence: data.confidence.present
+          ? data.confidence.value
+          : this.confidence,
     );
   }
 
@@ -3161,7 +3238,9 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
           ..write('introStartMs: $introStartMs, ')
           ..write('introEndMs: $introEndMs, ')
           ..write('outroStartMs: $outroStartMs, ')
-          ..write('outroEndMs: $outroEndMs')
+          ..write('outroEndMs: $outroEndMs, ')
+          ..write('source: $source, ')
+          ..write('confidence: $confidence')
           ..write(')'))
         .toString();
   }
@@ -3174,6 +3253,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     introEndMs,
     outroStartMs,
     outroEndMs,
+    source,
+    confidence,
   );
   @override
   bool operator ==(Object other) =>
@@ -3184,7 +3265,9 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
           other.introStartMs == this.introStartMs &&
           other.introEndMs == this.introEndMs &&
           other.outroStartMs == this.outroStartMs &&
-          other.outroEndMs == this.outroEndMs);
+          other.outroEndMs == this.outroEndMs &&
+          other.source == this.source &&
+          other.confidence == this.confidence);
 }
 
 class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
@@ -3194,6 +3277,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
   final Value<int?> introEndMs;
   final Value<int?> outroStartMs;
   final Value<int?> outroEndMs;
+  final Value<String> source;
+  final Value<int> confidence;
   final Value<int> rowid;
   const SkipSegmentsCompanion({
     this.seriesId = const Value.absent(),
@@ -3202,6 +3287,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     this.introEndMs = const Value.absent(),
     this.outroStartMs = const Value.absent(),
     this.outroEndMs = const Value.absent(),
+    this.source = const Value.absent(),
+    this.confidence = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SkipSegmentsCompanion.insert({
@@ -3211,6 +3298,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     this.introEndMs = const Value.absent(),
     this.outroStartMs = const Value.absent(),
     this.outroEndMs = const Value.absent(),
+    this.source = const Value.absent(),
+    this.confidence = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : seriesId = Value(seriesId),
        episode = Value(episode);
@@ -3221,6 +3310,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     Expression<int>? introEndMs,
     Expression<int>? outroStartMs,
     Expression<int>? outroEndMs,
+    Expression<String>? source,
+    Expression<int>? confidence,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3230,6 +3321,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
       if (introEndMs != null) 'intro_end_ms': introEndMs,
       if (outroStartMs != null) 'outro_start_ms': outroStartMs,
       if (outroEndMs != null) 'outro_end_ms': outroEndMs,
+      if (source != null) 'source': source,
+      if (confidence != null) 'confidence': confidence,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3241,6 +3334,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     Value<int?>? introEndMs,
     Value<int?>? outroStartMs,
     Value<int?>? outroEndMs,
+    Value<String>? source,
+    Value<int>? confidence,
     Value<int>? rowid,
   }) {
     return SkipSegmentsCompanion(
@@ -3250,6 +3345,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
       introEndMs: introEndMs ?? this.introEndMs,
       outroStartMs: outroStartMs ?? this.outroStartMs,
       outroEndMs: outroEndMs ?? this.outroEndMs,
+      source: source ?? this.source,
+      confidence: confidence ?? this.confidence,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3275,6 +3372,12 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     if (outroEndMs.present) {
       map['outro_end_ms'] = Variable<int>(outroEndMs.value);
     }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (confidence.present) {
+      map['confidence'] = Variable<int>(confidence.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3290,6 +3393,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
           ..write('introEndMs: $introEndMs, ')
           ..write('outroStartMs: $outroStartMs, ')
           ..write('outroEndMs: $outroEndMs, ')
+          ..write('source: $source, ')
+          ..write('confidence: $confidence, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5822,6 +5927,8 @@ typedef $$SkipSegmentsTableCreateCompanionBuilder =
       Value<int?> introEndMs,
       Value<int?> outroStartMs,
       Value<int?> outroEndMs,
+      Value<String> source,
+      Value<int> confidence,
       Value<int> rowid,
     });
 typedef $$SkipSegmentsTableUpdateCompanionBuilder =
@@ -5832,6 +5939,8 @@ typedef $$SkipSegmentsTableUpdateCompanionBuilder =
       Value<int?> introEndMs,
       Value<int?> outroStartMs,
       Value<int?> outroEndMs,
+      Value<String> source,
+      Value<int> confidence,
       Value<int> rowid,
     });
 
@@ -5871,6 +5980,16 @@ class $$SkipSegmentsTableFilterComposer
 
   ColumnFilters<int> get outroEndMs => $composableBuilder(
     column: $table.outroEndMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get confidence => $composableBuilder(
+    column: $table.confidence,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5913,6 +6032,16 @@ class $$SkipSegmentsTableOrderingComposer
     column: $table.outroEndMs,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get confidence => $composableBuilder(
+    column: $table.confidence,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SkipSegmentsTableAnnotationComposer
@@ -5947,6 +6076,14 @@ class $$SkipSegmentsTableAnnotationComposer
 
   GeneratedColumn<int> get outroEndMs => $composableBuilder(
     column: $table.outroEndMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<int> get confidence => $composableBuilder(
+    column: $table.confidence,
     builder: (column) => column,
   );
 }
@@ -5988,6 +6125,8 @@ class $$SkipSegmentsTableTableManager
                 Value<int?> introEndMs = const Value.absent(),
                 Value<int?> outroStartMs = const Value.absent(),
                 Value<int?> outroEndMs = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<int> confidence = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SkipSegmentsCompanion(
                 seriesId: seriesId,
@@ -5996,6 +6135,8 @@ class $$SkipSegmentsTableTableManager
                 introEndMs: introEndMs,
                 outroStartMs: outroStartMs,
                 outroEndMs: outroEndMs,
+                source: source,
+                confidence: confidence,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6006,6 +6147,8 @@ class $$SkipSegmentsTableTableManager
                 Value<int?> introEndMs = const Value.absent(),
                 Value<int?> outroStartMs = const Value.absent(),
                 Value<int?> outroEndMs = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<int> confidence = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SkipSegmentsCompanion.insert(
                 seriesId: seriesId,
@@ -6014,6 +6157,8 @@ class $$SkipSegmentsTableTableManager
                 introEndMs: introEndMs,
                 outroStartMs: outroStartMs,
                 outroEndMs: outroEndMs,
+                source: source,
+                confidence: confidence,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

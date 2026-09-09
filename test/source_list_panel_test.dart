@@ -1,9 +1,9 @@
 import 'package:anilocal/data/metadata/metadata_provider.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
-import 'package:anilocal/domain/models/metadata_source.dart';
+import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/source_preference.dart';
-import 'package:anilocal/ui/settings/panels/metadata_panel.dart';
+import 'package:anilocal/ui/settings/panels/source_list_panel.dart';
 import 'package:anilocal/ui/theme/xp_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,12 +67,15 @@ Future<void> _pump(WidgetTester tester, _Recorder settings) async {
     MaterialApp(
       theme: XpTheme.data(),
       home: Scaffold(
-        body: MetadataPanel(
+        body: SourceListPanel(
           settings: settings,
+          loadOrder: settings.loadMetadataSourceOrder,
+          saveOrder: settings.setMetadataSourceOrder,
+          caption: 'Top source is used first.',
           sources: const [
-            MetadataSource(token: 'anilist', displayName: 'AniList'),
-            MetadataSource(token: 'kitsu', displayName: 'Kitsu'),
-            MetadataSource(
+            SourceDescriptor(token: 'anilist', displayName: 'AniList'),
+            SourceDescriptor(token: 'kitsu', displayName: 'Kitsu'),
+            SourceDescriptor(
               token: 'myanimelist',
               displayName: 'MyAnimeList',
               requiresClientId: true,

@@ -28,6 +28,11 @@ class FakeSettings implements SettingsRepository {
 
   // No key by default. A test needing one subclasses and overrides.
   @override
+  Future<List<SourcePreference>> loadSkipSourceOrder() async => const [];
+  @override
+  Future<void> setSkipSourceOrder(List<SourcePreference> order) async {}
+
+  @override
   Future<String?> loadSourceClientId(String token) async => null;
   @override
   Future<void> setSourceClientId(String token, String? clientId) async {}

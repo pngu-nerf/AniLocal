@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:anilocal/data/anilist/anilist_client.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
+import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
@@ -157,9 +158,13 @@ void main() {
         ),
         cache: db,
         art: ArtCache(httpClient: mock, directory: () async => artDir),
-        aniSkip: AniSkipClient(
-          httpClient: MockClient((_) async => http.Response('', 404)),
-        ),
+        skipProviders: [
+          AniSkipSkipProvider(
+            AniSkipClient(
+              httpClient: MockClient((_) async => http.Response('', 404)),
+            ),
+          ),
+        ],
       );
 
       final summary = await sync.sync([mount]);

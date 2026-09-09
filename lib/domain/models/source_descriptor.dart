@@ -1,12 +1,17 @@
 import 'package:equatable/equatable.dart';
 
-/// What the UI needs to know about one metadata source.
+/// What the UI needs to know about one source — of EITHER family.
 ///
-/// A DESCRIPTOR, not the source itself: `MetadataProvider` lives in
-/// `lib/data/metadata` and the UI must never import it (seam #1). The
+/// A DESCRIPTOR, not the source itself: `MetadataProvider` and `SkipProvider`
+/// live in `lib/data` and the UI must never import them (seam #1). The
 /// composition root maps each provider to one of these.
-class MetadataSource extends Equatable {
-  const MetadataSource({
+///
+/// Deliberately shared by both families. They answer different questions and
+/// are ordered separately, but a source ROW is the same thing in both lists —
+/// a name, whether it needs a key, whether it may lead — so one descriptor and
+/// one panel serve both rather than a near-identical copy of each.
+class SourceDescriptor extends Equatable {
+  const SourceDescriptor({
     required this.token,
     required this.displayName,
     this.requiresClientId = false,

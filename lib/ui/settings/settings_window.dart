@@ -9,7 +9,7 @@ import '../widgets/xp_dialog.dart';
 import 'panels/homepage_panel.dart';
 import 'panels/library_panel.dart';
 import 'panels/playback_panel.dart';
-import 'panels/metadata_panel.dart';
+import 'panels/source_list_panel.dart';
 import 'panels/sources_panel.dart';
 import 'settings_actions.dart';
 import 'settings_model.dart';
@@ -128,9 +128,30 @@ class _SettingsWindow extends StatelessWidget {
       label: 'Metadata',
       icon: Icons.travel_explore_outlined,
       scrollable: false, // hosts a reorderable list, like Sources
-      builder: (_) => MetadataPanel(
+      builder: (_) => SourceListPanel(
         sources: actions.metadataSources,
         settings: model.repository,
+        loadOrder: model.repository.loadMetadataSourceOrder,
+        saveOrder: model.repository.setMetadataSourceOrder,
+        caption:
+            'Top source is used first. The rest are tried only if it fails.',
+      ),
+    ),
+    // Same interaction, different question: this one decides where OP/ED
+    // timings come from, and fails independently of metadata.
+    SettingsCategory(
+      id: skipCategoryId,
+      label: 'Skip',
+      icon: Icons.fast_forward_outlined,
+      scrollable: false,
+      builder: (_) => SourceListPanel(
+        sources: actions.skipSources,
+        settings: model.repository,
+        loadOrder: model.repository.loadSkipSourceOrder,
+        saveOrder: model.repository.setSkipSourceOrder,
+        caption:
+            'Top source is used first. The rest are tried only if it has no '
+            'data for an episode.',
       ),
     ),
     SettingsCategory(

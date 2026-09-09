@@ -20,6 +20,7 @@ class DriftSettingsRepository implements SettingsRepository {
   static const _autoPlayNextKey = 'autoplay_next';
   static const _skipModeKey = 'skip_mode';
   static const _metadataSourceOrderKey = 'metadata_source_order';
+  static const _skipSourceOrderKey = 'skip_source_order';
   // Watched-threshold (time-from-end), stored as whole milliseconds.
   static const _watchedThresholdKey = 'watched_threshold_ms';
   static const _missingEpisodesKey = 'missing_episodes_enabled';
@@ -62,8 +63,17 @@ class DriftSettingsRepository implements SettingsRepository {
   // change. Unknown/malformed entries are skipped rather than throwing: this is
   // user data in a hand-editable store, and a bad row must not brick settings.
   @override
-  Future<List<SourcePreference>> loadMetadataSourceOrder() async {
-    final raw = await _db.getSetting(_metadataSourceOrderKey);
+  Future<List<SourcePreference>> loadMetadataSourceOrder() =>
+      _loadOrder(_metadataSourceOrderKey);
+
+  @override
+  Future<void> setMetadataSourceOrder(List<SourcePreference> order) =>
+      _saveOrder(_metadataSourceOrderKey, order);
+
+  /// ONE encoder for both source lists, so the two families can never drift
+  /// into different persisted formats.
+  Future<List<SourcePreference>> _loadOrder(String key) async {
+    final raw = await _db.getSetting(key);
     if (raw == null || raw.isEmpty) return const [];
     final out = <SourcePreference>[];
     for (final part in raw.split(',')) {
@@ -80,12 +90,19 @@ class DriftSettingsRepository implements SettingsRepository {
     return out;
   }
 
-  @override
-  Future<void> setMetadataSourceOrder(List<SourcePreference> order) =>
+  Future<void> _saveOrder(String key, List<SourcePreference> order) =>
       _db.setSetting(
-        _metadataSourceOrderKey,
+        key,
         order.map((p) => '${p.token}:${p.enabled ? 1 : 0}').join(','),
       );
+
+  @override
+  Future<List<SourcePreference>> loadSkipSourceOrder() =>
+      _loadOrder(_skipSourceOrderKey);
+
+  @override
+  Future<void> setSkipSourceOrder(List<SourcePreference> order) =>
+      _saveOrder(_skipSourceOrderKey, order);
 
   @override
   Future<String?> loadSourceClientId(String token) async {

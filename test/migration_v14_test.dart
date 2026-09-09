@@ -251,6 +251,18 @@ void main() {
     },
   );
 
+  test('v16 adds skip provenance without disturbing existing rows', () async {
+    final db = openMigratedV13();
+    addTearDown(db.close);
+
+    final skip = (await db.allSkipRows()).single;
+    expect(skip.introEndMs, 91000, reason: 'the window itself is untouched');
+    // Left EMPTY rather than backfilled to 'aniskip': "we don't know where this
+    // came from" must stay distinguishable from "we recorded that it did".
+    expect(skip.source, '');
+    expect(skip.confidence, 0, reason: 'never corroborated');
+  });
+
   test('LEAPFROG v8 -> v14 works (no such column: anilist_id)', () async {
     // The hazard: earlier migration steps call m.createTable(), which emits the
     // table in its CURRENT shape — already `series_id`. Renaming it again fails.

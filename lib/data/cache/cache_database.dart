@@ -204,6 +204,21 @@ class SkipSegments extends Table {
   IntColumn get outroStartMs => integer().nullable()();
   IntColumn get outroEndMs => integer().nullable()();
 
+  /// WHICH skip source produced this row (`aniskip`, `chapters`, …).
+  ///
+  /// Needed for three things: telling the user where a window came from,
+  /// letting a higher-priority source replace a lower one rather than the
+  /// first writer winning forever, and distinguishing an INFERRED window
+  /// (chapters, fingerprinting) from a curated one. Empty on rows written
+  /// before v16, which all came from AniSkip.
+  TextColumn get source => text().withDefault(const Constant(''))();
+
+  /// How much this window is trusted: 0 normal, 1 corroborated by a second
+  /// independent source, -1 conflicting. Auto-skip is gated on it in D5 —
+  /// skipping into real content is the bad outcome, an unoffered skip is
+  /// merely inconvenient.
+  IntColumn get confidence => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {seriesId, episode};
 
@@ -326,7 +341,7 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
@@ -433,6 +448,16 @@ class CacheDatabase extends _$CacheDatabase {
         // even on a single v13 -> v15 hop.)
         if (from >= 8) {
           await m.dropColumn(seriesCache, 'id_mal');
+        }
+      }
+      if (from < 16) {
+        // Additive and defaulted, so every existing row keeps its meaning: a
+        // pre-v16 skip row came from AniSkip and was never corroborated. Left
+        // as '' rather than backfilled to 'aniskip' so "we don't know where
+        // this came from" stays distinguishable from "we recorded that it did".
+        if (from >= 8) {
+          await m.addColumn(skipSegments, skipSegments.source);
+          await m.addColumn(skipSegments, skipSegments.confidence);
         }
       }
     },

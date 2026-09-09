@@ -42,6 +42,12 @@ abstract interface class SettingsRepository {
   Future<String?> loadSourceClientId(String token);
   Future<void> setSourceClientId(String token, String? clientId);
 
+  /// User's SKIP-source order and on/off flags, top first. Separate from the
+  /// metadata order: the two families answer different questions, fail
+  /// independently, and are ordered independently.
+  Future<List<SourcePreference>> loadSkipSourceOrder();
+  Future<void> setSkipSourceOrder(List<SourcePreference> order);
+
   /// OP/ED skip mode. Default [SkipMode.button].
   Future<SkipMode> loadSkipMode();
   Future<void> setSkipMode(SkipMode mode);

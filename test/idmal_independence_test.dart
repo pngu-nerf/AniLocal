@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:anilocal/data/anilist/anilist_client.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
+import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/crossmap/cross_map_store.dart';
@@ -118,7 +119,9 @@ void main() {
         httpClient: anilist,
         directory: () async => Directory('${dir.path}/.art')..createSync(),
       ),
-      aniSkip: AniSkipClient(httpClient: aniSkipMock()),
+      skipProviders: [
+        AniSkipSkipProvider(AniSkipClient(httpClient: aniSkipMock())),
+      ],
       crossMap: withCrossMap
           ? CrossMapStore(
               httpClient: crossMapMock(),
@@ -205,7 +208,9 @@ void main() {
         httpClient: MockClient((_) async => http.Response('', 500)),
         directory: () async => Directory('${dir.path}/.art')..createSync(),
       ),
-      aniSkip: AniSkipClient(httpClient: aniSkipMock()),
+      skipProviders: [
+        AniSkipSkipProvider(AniSkipClient(httpClient: aniSkipMock())),
+      ],
       // No cross-map at all — the cached idMal must carry this on its own.
     );
 
@@ -243,7 +248,9 @@ void main() {
         httpClient: MockClient((_) async => http.Response('', 500)),
         directory: () async => Directory('${dir.path}/.art')..createSync(),
       ),
-      aniSkip: AniSkipClient(httpClient: aniSkipMock()),
+      skipProviders: [
+        AniSkipSkipProvider(AniSkipClient(httpClient: aniSkipMock())),
+      ],
       crossMap: CrossMapStore(
         httpClient: crossMapMock(),
         directory: () async => dir,

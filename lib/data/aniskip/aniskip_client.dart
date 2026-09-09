@@ -3,13 +3,24 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/skip_range.dart';
+import '../../domain/models/metadata_failure.dart';
+import '../http_failure.dart';
 import '../user_agent.dart';
 
 /// Thrown for an AniSkip request that failed transport-side (network / non-404
 /// HTTP). "No data" is NOT an exception — it returns null.
 class AniSkipException implements Exception {
-  const AniSkipException(this.message);
+  const AniSkipException(
+    this.message, {
+    this.failure = MetadataFailure.service,
+  });
+
   final String message;
+
+  /// Whose end the fault is on, so a skip failure is attributed the same way a
+  /// metadata one is. Defaults to [MetadataFailure.service] — never blame the
+  /// user's connection without evidence.
+  final MetadataFailure failure;
   @override
   String toString() => 'AniSkipException: $message';
 }
@@ -55,16 +66,23 @@ class AniSkipClient {
         },
       );
     } on Exception catch (e) {
-      throw AniSkipException('Network error contacting AniSkip: $e');
+      throw AniSkipException(
+        'Network error contacting AniSkip: $e',
+        failure: MetadataFailure.connection,
+      );
     }
 
     if (response.statusCode == 404) return null; // no data for this episode
-    if (response.statusCode == 429) {
-      throw const AniSkipException('Rate limited by AniSkip (HTTP 429).');
-    }
     if (response.statusCode != 200) {
       throw AniSkipException(
         'AniSkip request failed: HTTP ${response.statusCode}.',
+        // Shared with every other client so they all attribute alike. AniSkip
+        // has no error envelope of its own, so a 4xx that isn't 404 reads as
+        // something in the network path.
+        failure: classifyHttpFailure(
+          response.statusCode,
+          carriesProviderError: false,
+        ),
       );
     }
 
