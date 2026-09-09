@@ -40,6 +40,10 @@ class _StubProvider implements MetadataProvider {
   @override
   bool get requiresClientId => false;
   @override
+  String? get setupUrl => null;
+  @override
+  String? get setupInstructions => null;
+  @override
   Future<bool> isConfigured() async => true;
   @override
   bool get isFallbackOnly => false;
@@ -72,7 +76,13 @@ Future<void> _pump(WidgetTester tester, _Recorder settings) async {
               token: 'myanimelist',
               displayName: 'MyAnimeList',
               requiresClientId: true,
-              setupHint: 'Add your MyAnimeList client ID',
+              setupHint:
+                  'Needs a free client ID from your own MyAnimeList '
+                  'account',
+              setupUrl: 'https://myanimelist.net/apiconfig',
+              setupInstructions:
+                  'Any MyAnimeList account can create one: Profile settings '
+                  '→ API → Create ID.',
             ),
           ],
         ),
@@ -92,7 +102,11 @@ void main() {
     expect(find.text('Kitsu'), findsOneWidget);
     // Hiding an unconfigured source would leave no way to discover it.
     expect(find.text('MyAnimeList'), findsOneWidget);
-    expect(find.text('Add your MyAnimeList client ID'), findsOneWidget);
+    expect(
+      find.textContaining('free client ID from your own'),
+      findsOneWidget,
+      reason: 'the row must say it is a personal key, not a developer artifact',
+    );
   });
 
   testWidgets('the first row is captioned as the source of truth', (
@@ -134,7 +148,7 @@ void main() {
   testWidgets('a source needing a key offers one, and says so', (tester) async {
     await _pump(tester, _Recorder());
 
-    expect(find.text('Add your MyAnimeList client ID'), findsOneWidget);
+    expect(find.textContaining('free client ID from your own'), findsOneWidget);
     expect(find.text('ADD KEY'), findsOneWidget);
     // Sources that need nothing must not grow a button.
     expect(find.text('CHANGE'), findsNothing);
@@ -146,7 +160,7 @@ void main() {
     // The affordance flips to Change, the setup hint is gone, and the row can
     // now be switched on — all derived from the STORED KEY, not a snapshot.
     expect(find.text('CHANGE'), findsOneWidget);
-    expect(find.text('Add your MyAnimeList client ID'), findsNothing);
+    expect(find.textContaining('free client ID from your own'), findsNothing);
     final boxes = tester.widgetList<Checkbox>(find.byType(Checkbox)).toList();
     expect(boxes.last.onChanged, isNotNull);
   });

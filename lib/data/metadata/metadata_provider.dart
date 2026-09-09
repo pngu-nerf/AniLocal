@@ -65,6 +65,12 @@ abstract class MetadataProvider {
   /// is state, and lives in settings — see [isConfigured].
   bool get requiresClientId => false;
 
+  /// Where the user goes to create their own key, and what to do there. Null
+  /// unless [requiresClientId]. Lives on the provider because only it knows
+  /// its own sign-up path — the key dialog is shared by every such source.
+  String? get setupUrl => null;
+  String? get setupInstructions => null;
+
   /// Whether this provider can be used right now. False for one awaiting a
   /// client ID the user hasn't supplied — such a provider is SKIPPED by the
   /// chain rather than counted as a failure.

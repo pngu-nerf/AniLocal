@@ -140,8 +140,10 @@ void main() {
         requiresClientId: p.requiresClientId,
         fallbackOnly: p.isFallbackOnly,
         setupHint: p.requiresClientId
-            ? 'Add your ${p.displayName} client ID to enable'
+            ? 'Needs a free client ID from your own ${p.displayName} account'
             : null,
+        setupUrl: p.setupUrl,
+        setupInstructions: p.setupInstructions,
       ),
   ];
 

@@ -29,10 +29,22 @@ Future<String?> showClientIdDialog(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'AniLocal ships no key of its own for this source. Register an '
-            'application on ${source.displayName} and paste its client ID '
-            'here — it stays on this machine.',
+            source.setupInstructions ??
+                'Paste the client ID for ${source.displayName}.',
             style: const TextStyle(color: Xp.textDim, fontSize: 12),
+          ),
+          if (source.setupUrl != null) ...[
+            const SizedBox(height: 6),
+            SelectableText(
+              source.setupUrl!,
+              style: const TextStyle(color: Xp.accent, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 6),
+          const Text(
+            'It stays on this machine and is never sent anywhere but that '
+            'service.',
+            style: TextStyle(color: Xp.textDim, fontSize: 11),
           ),
           const SizedBox(height: 12),
           TextField(

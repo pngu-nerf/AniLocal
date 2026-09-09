@@ -46,6 +46,10 @@ class _FakeProvider implements MetadataProvider {
 
   @override
   bool get requiresClientId => false;
+  @override
+  String? get setupUrl => null;
+  @override
+  String? get setupInstructions => null;
 
   @override
   Future<bool> isConfigured() async => configured;

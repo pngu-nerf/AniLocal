@@ -31,6 +31,12 @@ class JikanMetadataProvider implements MetadataProvider {
   bool get requiresClientId => false;
 
   @override
+  String? get setupUrl => null;
+
+  @override
+  String? get setupInstructions => null;
+
+  @override
   String get displayName => 'MyAnimeList (via Jikan)';
 
   @override

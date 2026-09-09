@@ -12,6 +12,8 @@ class MetadataSource extends Equatable {
     this.requiresClientId = false,
     this.fallbackOnly = false,
     this.setupHint,
+    this.setupUrl,
+    this.setupInstructions,
   });
 
   /// Stable identity — matches the provider's token and the value persisted in
@@ -36,9 +38,13 @@ class MetadataSource extends Equatable {
   /// rather than silently snapping the row back.
   final bool fallbackOnly;
 
-  /// What the user must do to enable it, e.g. 'Add your MyAnimeList client ID'.
-  /// Null when [configured].
+  /// One-line prompt shown under the row when no key is stored.
   final String? setupHint;
+
+  /// Where to create a key, and what to do there — shown in the key dialog so
+  /// the user isn't sent hunting. Null unless [requiresClientId].
+  final String? setupUrl;
+  final String? setupInstructions;
 
   @override
   List<Object?> get props => [
@@ -47,5 +53,7 @@ class MetadataSource extends Equatable {
     requiresClientId,
     fallbackOnly,
     setupHint,
+    setupUrl,
+    setupInstructions,
   ];
 }
