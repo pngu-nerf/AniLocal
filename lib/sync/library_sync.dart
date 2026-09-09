@@ -532,14 +532,27 @@ class LibrarySync {
 
     // Effective (seriesId, anchored) per matched file — overrides win, so
     // fix-matched episodes get skips keyed to their corrected identity.
+    //
+    // The FILE is carried alongside, because a LOCAL skip source reads it. This
+    // path matters more than it looks: a scan only fetches skips for files it
+    // is already reprocessing (new or changed), so for a library that is
+    // already scanned, refresh is the ONLY way a newly-added skip source ever
+    // reaches the existing episodes.
     final identities = <(int, int)>{};
+    final pathByIdentity = <(int, int), String>{};
     for (final f in files) {
       final o = overrides[(f.fileSize, f.modifiedAtMs)];
-      if (o != null) {
-        identities.add((o.seriesId, o.anchoredEpisode ?? 0));
-      } else if (f.seriesId != null) {
-        identities.add((f.seriesId!, f.episodeNumber ?? 0));
-      }
+      final (int, int)? identity = o != null
+          ? (o.seriesId, o.anchoredEpisode ?? 0)
+          : f.seriesId != null
+          ? (f.seriesId!, f.episodeNumber ?? 0)
+          : null;
+      if (identity == null) continue;
+      identities.add(identity);
+      pathByIdentity.putIfAbsent(
+        identity,
+        () => '${f.folderPath}/${f.relativePath}',
+      );
     }
 
     // Fetch skips only for identities missing a cached row.
@@ -556,6 +569,7 @@ class LibrarySync {
           seriesId: seriesId,
           episode: episode,
           malId: malIds[seriesId],
+          filePath: pathByIdentity[(seriesId, episode)],
         ),
         activeSkipSources,
       );

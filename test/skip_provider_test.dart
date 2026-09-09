@@ -245,6 +245,46 @@ void main() {
       expect(await db.allSkipRows(), isEmpty);
     });
 
+    test('REFRESH carries the file path too — the backfill path', () async {
+      // The one that actually matters for an existing library: a scan only
+      // fetches skips for files it is already reprocessing, so refresh is the
+      // ONLY way a newly-added local source reaches episodes already scanned.
+      // Without the file path a chapters-style source is silently inert here.
+      await scanWith([_FakeSkip('aniskip')]); // scan first, no skip data
+      expect(await db.allSkipRows(), isEmpty);
+
+      late SkipLookup seen;
+      final spy = _FakeSkip(
+        'chapters',
+        windows: _op(),
+        onLookup: (l) => seen = l,
+      );
+      final mock = MockClient((req) async {
+        if (req.method == 'POST') return _anilistPage();
+        return http.Response.bytes([1, 2, 3], 200);
+      });
+      await LibrarySync(
+        scanner: const FileSystemFolderScanner(),
+        parser: const HeuristicFilenameParser(),
+        matcher: SeriesMatcher(
+          providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
+        ),
+        cache: db,
+        art: ArtCache(
+          httpClient: mock,
+          directory: () async => Directory('${dir.path}/.art')..createSync(),
+        ),
+        skipProviders: [spy],
+      ).refreshMetadata();
+
+      expect(
+        seen.filePath,
+        endsWith('Cowboy Bebop - 01.mkv'),
+        reason: 'a local source cannot read a file it is never given',
+      );
+      expect((await db.allSkipRows()).single.source, 'chapters');
+    });
+
     test('the lookup carries the MAL id resolved for the series', () async {
       late SkipLookup seen;
       final spy = _FakeSkip('aniskip', onLookup: (l) => seen = l);
