@@ -183,6 +183,39 @@ void main() {
       }
     });
 
+    test("Jikan's REAL outage body is parsed and blamed correctly", () async {
+      // Captured verbatim from api.jikan.moe during this work. Note what it
+      // says: MAL is refusing JIKAN, while MAL itself answers browsers fine —
+      // so the failure is between Jikan and MAL, outside anyone's control here,
+      // and `service` is the honest attribution.
+      try {
+        await _client(
+          MockClient(
+            (_) async => http.Response(
+              jsonEncode({
+                'status': 504,
+                'type': 'HttpException',
+                'message':
+                    'Jikan failed to connect to MyAnimeList. MyAnimeList may '
+                    'be down/unavailable or refuses to connect',
+                'error': null,
+              }),
+              504,
+            ),
+          ),
+        ).searchCandidates('x');
+        fail('expected a JikanException');
+      } on JikanException catch (e) {
+        expect(e.failure, MetadataFailure.service);
+        expect(
+          e.message,
+          contains('refuses to connect'),
+          reason:
+              "Jikan's own words survive into the message, so a log says why",
+        );
+      }
+    });
+
     test('offline is the connection', () async {
       await expectLater(
         _client(
