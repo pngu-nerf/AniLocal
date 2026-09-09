@@ -193,8 +193,9 @@ class JikanClient {
     final last = _lastRequest;
     if (last != null) {
       final since = DateTime.now().difference(last);
-      if (since < _minInterval)
+      if (since < _minInterval) {
         await Future<void>.delayed(_minInterval - since);
+      }
     }
     _lastRequest = DateTime.now();
   }
