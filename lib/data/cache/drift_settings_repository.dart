@@ -88,6 +88,18 @@ class DriftSettingsRepository implements SettingsRepository {
       );
 
   @override
+  Future<String?> loadSourceClientId(String token) async {
+    final raw = await _db.getSetting(_sourceClientIdKey(token));
+    return (raw == null || raw.trim().isEmpty) ? null : raw.trim();
+  }
+
+  @override
+  Future<void> setSourceClientId(String token, String? clientId) =>
+      _db.setSetting(_sourceClientIdKey(token), clientId?.trim() ?? '');
+
+  static String _sourceClientIdKey(String token) => 'source_client_id_$token';
+
+  @override
   Future<SkipMode> loadSkipMode() async =>
       SkipMode.fromToken(await _db.getSetting(_skipModeKey));
   @override

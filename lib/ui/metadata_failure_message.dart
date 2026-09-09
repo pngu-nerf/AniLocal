@@ -19,4 +19,7 @@ String metadataFailureCause(MetadataFailure failure) => switch (failure) {
         'Try again later.',
   MetadataFailure.rateLimited =>
     'AniList is rate-limiting us — wait a minute, then try again.',
+  MetadataFailure.unauthorized =>
+    'That source rejected its client ID — check it in Settings → Metadata. '
+        'Waiting will not help.',
 };

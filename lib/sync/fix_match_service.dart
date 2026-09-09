@@ -45,7 +45,7 @@ class FixMatchService implements FixMatchRepository {
       isFallbackOnly: (p) => p.isFallbackOnly,
     );
     for (final provider in ordered) {
-      if (!provider.isConfigured) continue;
+      if (!await provider.isConfigured()) continue;
       try {
         return await provider.searchCandidates(query, perPage: 15);
       } on MetadataException catch (e) {

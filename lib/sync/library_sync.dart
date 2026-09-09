@@ -449,7 +449,7 @@ class LibrarySync {
     MetadataFailure? failure;
 
     for (final provider in await matcher.activeProviders()) {
-      if (!provider.isConfigured) continue;
+      if (!await provider.isConfigured()) continue;
 
       // series_id <-> this provider's id, for the ids we actually hold.
       final providerIdBySeries = <int, int>{};

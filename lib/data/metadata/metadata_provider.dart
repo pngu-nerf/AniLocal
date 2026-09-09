@@ -45,16 +45,34 @@ abstract class MetadataProvider {
   /// Shown in the settings source list.
   String get displayName;
 
+  /// Which external-id space this source's OWN ids belong to — the value used
+  /// in `series_external_ids.provider`.
+  ///
+  /// Usually the same as [token], but not always: Jikan and the official
+  /// MyAnimeList API are two DIFFERENT sources (separate rows in the settings
+  /// list, separate reliability, one needs a key) that both speak MAL ids. They
+  /// therefore have distinct tokens and a shared namespace.
+  String get idNamespace => token;
+
   /// True for a source too unreliable to build a library's metadata on. Such a
   /// source is never allowed to outrank one that isn't, whatever order the user
   /// saves — it is worth having when everything else is down, and not
   /// otherwise. Default false.
   bool get isFallbackOnly => false;
 
-  /// Whether this provider can be used right now. False for one that needs a
+  /// True for a source the user must supply a client ID before it can be used.
+  /// A static property of the source; whether a key has actually been entered
+  /// is state, and lives in settings — see [isConfigured].
+  bool get requiresClientId => false;
+
+  /// Whether this provider can be used right now. False for one awaiting a
   /// client ID the user hasn't supplied — such a provider is SKIPPED by the
   /// chain rather than counted as a failure.
-  bool get isConfigured => true;
+  ///
+  /// Async because the answer lives in settings and can change while the app is
+  /// running: paste a key and the very next lookup should use it, with no
+  /// restart and no stale cached copy.
+  Future<bool> isConfigured();
 
   /// Ranked-candidate search for a parsed title. Returns `[]` for a genuine
   /// no-match; throws [MetadataException] when the lookup could not be made.

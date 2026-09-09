@@ -8,6 +8,11 @@ const String kMalProvider = 'mal';
 const String kKitsuProvider = 'kitsu';
 const String kAnidbProvider = 'anidb';
 
+/// SOURCE tokens that aren't also id namespaces. Jikan and the official MAL API
+/// are separate sources in the settings list; both report ids in [kMalProvider].
+const String kJikanProvider = 'jikan';
+const String kMyAnimeListProvider = 'myanimelist';
+
 /// The ids other databases know a show by.
 ///
 /// Deliberately NOT the show's identity — that is `series_id`, AniLocal's own

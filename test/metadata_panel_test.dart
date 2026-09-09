@@ -10,16 +10,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_settings.dart';
 
-/// Records the order it is given so a test can assert what was persisted.
+/// Records what the panel persisted, so a test can assert on it.
 class _Recorder extends FakeSettings {
-  _Recorder([this.stored = const []]);
+  _Recorder([this.stored = const [], this.clientIds = const {}]);
   List<SourcePreference> stored;
+  Map<String, String?> clientIds;
 
   @override
   Future<List<SourcePreference>> loadMetadataSourceOrder() async => stored;
   @override
   Future<void> setMetadataSourceOrder(List<SourcePreference> order) async =>
       stored = order;
+
+  @override
+  Future<String?> loadSourceClientId(String token) async => clientIds[token];
+  @override
+  Future<void> setSourceClientId(String token, String? clientId) async =>
+      clientIds = {...clientIds, token: clientId};
 }
 
 class _StubProvider implements MetadataProvider {
@@ -29,7 +36,11 @@ class _StubProvider implements MetadataProvider {
   @override
   String get displayName => token;
   @override
-  bool get isConfigured => true;
+  String get idNamespace => token;
+  @override
+  bool get requiresClientId => false;
+  @override
+  Future<bool> isConfigured() async => true;
   @override
   bool get isFallbackOnly => false;
   int calls = 0;
@@ -58,9 +69,9 @@ Future<void> _pump(WidgetTester tester, _Recorder settings) async {
             MetadataSource(token: 'anilist', displayName: 'AniList'),
             MetadataSource(token: 'kitsu', displayName: 'Kitsu'),
             MetadataSource(
-              token: 'mal',
+              token: 'myanimelist',
               displayName: 'MyAnimeList',
-              configured: false,
+              requiresClientId: true,
               setupHint: 'Add your MyAnimeList client ID',
             ),
           ],
@@ -118,6 +129,26 @@ void main() {
       isTrue,
       reason: 'toggling one source must not disturb the others',
     );
+  });
+
+  testWidgets('a source needing a key offers one, and says so', (tester) async {
+    await _pump(tester, _Recorder());
+
+    expect(find.text('Add your MyAnimeList client ID'), findsOneWidget);
+    expect(find.text('ADD KEY'), findsOneWidget);
+    // Sources that need nothing must not grow a button.
+    expect(find.text('CHANGE'), findsNothing);
+  });
+
+  testWidgets('once a key is stored the source becomes usable', (tester) async {
+    await _pump(tester, _Recorder(const [], const {'myanimelist': 'abc123'}));
+
+    // The affordance flips to Change, the setup hint is gone, and the row can
+    // now be switched on — all derived from the STORED KEY, not a snapshot.
+    expect(find.text('CHANGE'), findsOneWidget);
+    expect(find.text('Add your MyAnimeList client ID'), findsNothing);
+    final boxes = tester.widgetList<Checkbox>(find.byType(Checkbox)).toList();
+    expect(boxes.last.onChanged, isNotNull);
   });
 
   testWidgets('a saved order is reflected in the list', (tester) async {

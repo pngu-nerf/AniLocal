@@ -29,4 +29,10 @@ enum MetadataFailure {
 
   /// AniList answered 429: we asked too fast. Resolves on its own.
   rateLimited,
+
+  /// The service rejected our credential — a client ID that is missing, wrong,
+  /// or revoked. Distinct from every other kind because it is neither end
+  /// FAILING: both are working, and the fix is a setting the user controls.
+  /// Nothing will improve by waiting.
+  unauthorized,
 }

@@ -56,7 +56,7 @@ class SeriesMatcher {
     for (final provider in await activeProviders()) {
       // Not a failure — a provider awaiting a client ID simply isn't available,
       // and must not count towards "everything is down".
-      if (!provider.isConfigured) continue;
+      if (!await provider.isConfigured()) continue;
       tried++;
       try {
         return await _matchWith(provider, title);

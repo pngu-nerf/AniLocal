@@ -21,13 +21,20 @@ class JikanMetadataProvider implements MetadataProvider {
   final CrossMapStore? crossMap;
 
   @override
-  String get token => kMalProvider;
+  String get token => kJikanProvider;
+
+  @override
+  // Jikan proxies MyAnimeList, so the ids it reports are MAL ids.
+  String get idNamespace => kMalProvider;
+
+  @override
+  bool get requiresClientId => false;
 
   @override
   String get displayName => 'MyAnimeList (via Jikan)';
 
   @override
-  bool get isConfigured => true; // no key, no account
+  Future<bool> isConfigured() async => true; // no key, no account
 
   @override
   bool get isFallbackOnly => true;

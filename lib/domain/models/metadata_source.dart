@@ -9,7 +9,7 @@ class MetadataSource extends Equatable {
   const MetadataSource({
     required this.token,
     required this.displayName,
-    this.configured = true,
+    this.requiresClientId = false,
     this.fallbackOnly = false,
     this.setupHint,
   });
@@ -20,10 +20,16 @@ class MetadataSource extends Equatable {
 
   final String displayName;
 
-  /// False for a source that needs something from the user before it can be
-  /// used (a client ID). Such a source is still LISTED — hiding it would leave
-  /// no way to discover it — but it is skipped by the lookup chain.
-  final bool configured;
+  /// True for a source the user must give a client ID before it can be used.
+  ///
+  /// Deliberately NOT "is it configured": that is state, and a snapshot taken
+  /// at startup would go stale the moment a key is pasted. The panel reads the
+  /// stored key itself, so the key is the single source of truth and both the
+  /// list and the lookup chain read the same one.
+  ///
+  /// Such a source is still LISTED — hiding it would leave no way to discover
+  /// it — but the chain skips it until a key exists.
+  final bool requiresClientId;
 
   /// True for a source too unreliable to be the source of truth. It sorts below
   /// every other source no matter where the user drags it, and the list says so
@@ -38,7 +44,7 @@ class MetadataSource extends Equatable {
   List<Object?> get props => [
     token,
     displayName,
-    configured,
+    requiresClientId,
     fallbackOnly,
     setupHint,
   ];

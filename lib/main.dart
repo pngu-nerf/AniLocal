@@ -10,10 +10,12 @@ import 'data/cache/drift_library_repository.dart';
 import 'data/cache/drift_settings_repository.dart';
 import 'data/crossmap/cross_map_store.dart';
 import 'data/jikan/jikan_client.dart';
+import 'data/mal/mal_client.dart';
 import 'data/kitsu/kitsu_client.dart';
 import 'data/metadata/anilist_metadata_provider.dart';
 import 'data/metadata/jikan_metadata_provider.dart';
 import 'data/metadata/kitsu_metadata_provider.dart';
+import 'data/metadata/mal_metadata_provider.dart';
 import 'data/metadata/metadata_provider.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
@@ -22,6 +24,7 @@ import 'data/folders/volume_resolver.dart';
 import 'data/scanner/folder_scanner.dart';
 import 'data/scanner/heuristic_filename_parser.dart';
 import 'data/scanner/series_matcher.dart';
+import 'domain/models/external_ids.dart';
 import 'domain/models/metadata_source.dart';
 import 'domain/models/sync_summary.dart';
 import 'playback/playback_controller.dart';
@@ -70,6 +73,10 @@ void main() {
     database,
     showPreferences: repository,
   );
+  // Read fresh on every use, so pasting a key in Settings works immediately and
+  // clearing one disables the source immediately.
+  Future<String?> malClientId() =>
+      settings.loadSourceClientId(kMyAnimeListProvider);
   // ONE ordered source list, shared by the scan and by fix-match so the two
   // can never disagree about which source is preferred. Today it holds a single
   // provider; adding one is appending to this list.
@@ -87,6 +94,14 @@ void main() {
     // doesn't publish, so its answers land on the same identities as everyone
     // else's.
     JikanMetadataProvider(JikanClient(), crossMap: crossMap),
+    // MAL's data over its OFFICIAL API — reliable, unlike Jikan, but only once
+    // the user supplies their own client ID. AniLocal ships none: MAL's
+    // agreement forbids sharing a key, and one embedded in a downloadable
+    // binary could be revoked out from under every install at once.
+    MalMetadataProvider(
+      MalClient(loadClientId: () => malClientId()),
+      loadClientId: malClientId,
+    ),
   ];
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
@@ -113,6 +128,23 @@ void main() {
     cache: database,
     loadOrder: settings.loadMetadataSourceOrder,
   );
+  // Descriptors for the Settings > Metadata list, derived from the ONE provider
+  // list so the two can't list different sources. `configured` is a snapshot
+  // for first paint; the panel re-derives it live from the stored key, so
+  // pasting one takes effect without a restart.
+  final metadataSourceDescriptors = [
+    for (final p in metadataProviders)
+      MetadataSource(
+        token: p.token,
+        displayName: p.displayName,
+        requiresClientId: p.requiresClientId,
+        fallbackOnly: p.isFallbackOnly,
+        setupHint: p.requiresClientId
+            ? 'Add your ${p.displayName} client ID to enable'
+            : null,
+      ),
+  ];
+
   const FolderPicker picker = FileSelectorFolderPicker();
   final FolderAccess folderAccess = TccFolderAccess();
 
@@ -210,15 +242,7 @@ void main() {
       settings: settings,
       // Descriptors for the Settings > Metadata list, derived from the ONE
       // provider list so the two can't list different sources.
-      metadataSources: [
-        for (final p in metadataProviders)
-          MetadataSource(
-            token: p.token,
-            displayName: p.displayName,
-            configured: p.isConfigured,
-            fallbackOnly: p.isFallbackOnly,
-          ),
-      ],
+      metadataSources: metadataSourceDescriptors,
       playback: playback,
       onScan: scan,
       onRefreshMetadata: sync.refreshMetadata,

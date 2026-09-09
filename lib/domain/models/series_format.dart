@@ -21,6 +21,9 @@ const String kFormatMusic = 'MUSIC';
 /// An unrecognised value is UPPER-CASED and passed through rather than dropped:
 /// a source inventing a format we've never seen should still show the user
 /// something, and silently blanking the field would look like missing data.
+/// This matters concretely — MAL's published enum omits values it actually
+/// returns (`pv`, `cm`, `tv_special` are all live), so an exhaustive parser
+/// here would throw on real data.
 String? normalizeSeriesFormat(String? raw) {
   if (raw == null) return null;
   final trimmed = raw.trim();
@@ -33,6 +36,8 @@ String? normalizeSeriesFormat(String? raw) {
     'OVA' => kFormatOva,
     'ONA' => kFormatOna,
     'MUSIC' => kFormatMusic,
+    // MAL says 'unknown' where the others say nothing at all.
+    'UNKNOWN' => null,
     final other => other,
   };
 }

@@ -4,6 +4,8 @@ import '../../../domain/models/metadata_source.dart';
 import '../../../domain/models/source_preference.dart';
 import '../../../domain/repositories/settings_repository.dart';
 import '../../theme/xp_tokens.dart';
+import '../../theme/xp_widgets.dart';
+import 'client_id_dialog.dart';
 import '../../widgets/xp_reorderable_list.dart';
 
 /// Where metadata comes from, and in what order.
@@ -38,6 +40,16 @@ class _MetadataPanelState extends State<MetadataPanel> {
   List<MetadataSource>? _ordered;
   List<SourcePreference> _prefs = const [];
 
+  /// token -> the client ID the user has stored, for sources that need one.
+  /// Read from settings rather than snapshotted at startup, so pasting a key
+  /// takes effect immediately and the panel and the lookup chain can never
+  /// disagree about whether a source is usable.
+  Map<String, String?> _clientIds = const {};
+
+  /// A source is usable if it needs no key, or has one.
+  bool _configured(MetadataSource s) =>
+      !s.requiresClientId || (_clientIds[s.token]?.isNotEmpty ?? false);
+
   @override
   void initState() {
     super.initState();
@@ -46,7 +58,16 @@ class _MetadataPanelState extends State<MetadataPanel> {
 
   Future<void> _load() async {
     final prefs = await widget.settings.loadMetadataSourceOrder();
+    final keys = <String, String?>{};
+    for (final source in widget.sources) {
+      if (source.requiresClientId) {
+        keys[source.token] = await widget.settings.loadSourceClientId(
+          source.token,
+        );
+      }
+    }
     if (!mounted) return;
+    _clientIds = keys;
     setState(() {
       _prefs = prefs;
       // enabledOnly: false — the panel must show a disabled source, otherwise
@@ -107,6 +128,23 @@ class _MetadataPanelState extends State<MetadataPanel> {
     await widget.settings.setMetadataSourceOrder(prefs);
   }
 
+  Future<void> _editClientId(MetadataSource source) async {
+    final entered = await showClientIdDialog(
+      context,
+      source: source,
+      current: _clientIds[source.token],
+    );
+    if (entered == null) return; // cancelled — leave the stored key alone
+    await widget.settings.setSourceClientId(source.token, entered);
+    if (!mounted) return;
+    setState(() {
+      _clientIds = {
+        ..._clientIds,
+        source.token: entered.isEmpty ? null : entered,
+      };
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final ordered = _ordered;
@@ -130,18 +168,27 @@ class _MetadataPanelState extends State<MetadataPanel> {
             titleOf: (s) => s.displayName,
             firstCaption: 'Source of truth',
             subtitleOf: (s) => switch (s) {
-              _ when !s.configured => s.setupHint,
+              _ when !_configured(s) => s.setupHint,
               _ when s.fallbackOnly =>
                 'Fallback only — never the source of truth',
               _ => null,
             },
-            dimmed: (s) => !s.configured || !isSourceEnabled(s.token, _prefs),
+            dimmed: (s) => !_configured(s) || !isSourceEnabled(s.token, _prefs),
             onReorder: _reorder,
+            trailingBuilder: (s) => !s.requiresClientId
+                ? const SizedBox.shrink()
+                : XpButton(
+                    dense: true,
+                    icon: Icons.key_outlined,
+                    label: _configured(s) ? 'Change' : 'Add key',
+                    tooltip: 'Client ID for ${s.displayName}',
+                    onPressed: () => _editClientId(s),
+                  ),
             leadingBuilder: (s) => Checkbox(
               value: isSourceEnabled(s.token, _prefs),
               // An unconfigured source can't be switched on — there is nothing
               // behind it yet. The row stays visible and says what is missing.
-              onChanged: s.configured ? (v) => _toggle(s, v ?? false) : null,
+              onChanged: _configured(s) ? (v) => _toggle(s, v ?? false) : null,
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),

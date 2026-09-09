@@ -32,6 +32,16 @@ abstract interface class SettingsRepository {
   Future<List<SourcePreference>> loadMetadataSourceOrder();
   Future<void> setMetadataSourceOrder(List<SourcePreference> order);
 
+  /// The client ID the user supplied for [token], or null when they haven't.
+  ///
+  /// Per-source and keyed by token so a second source needing one (Anime Skip,
+  /// in the skip family) reuses this instead of adding another pair of methods.
+  /// Stored in the local settings table in plain text: a MAL/Anime Skip client
+  /// ID identifies an APPLICATION, not a person, and grants no access to any
+  /// account — it is not a password. It is never logged.
+  Future<String?> loadSourceClientId(String token);
+  Future<void> setSourceClientId(String token, String? clientId);
+
   /// OP/ED skip mode. Default [SkipMode.button].
   Future<SkipMode> loadSkipMode();
   Future<void> setSkipMode(SkipMode mode);

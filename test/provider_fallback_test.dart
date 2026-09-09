@@ -42,7 +42,13 @@ class _FakeProvider implements MetadataProvider {
   String get displayName => token;
 
   @override
-  bool get isConfigured => configured;
+  String get idNamespace => token;
+
+  @override
+  bool get requiresClientId => false;
+
+  @override
+  Future<bool> isConfigured() async => configured;
 
   @override
   bool get isFallbackOnly => fallbackOnly;

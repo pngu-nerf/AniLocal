@@ -26,7 +26,13 @@ class AniListMetadataProvider implements MetadataProvider {
   String get displayName => 'AniList';
 
   @override
-  bool get isConfigured => true; // public reads, no key
+  String get idNamespace => token;
+
+  @override
+  bool get requiresClientId => false;
+
+  @override
+  Future<bool> isConfigured() async => true; // public reads, no key
 
   @override
   bool get isFallbackOnly => false;
