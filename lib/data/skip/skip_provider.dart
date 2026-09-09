@@ -1,6 +1,15 @@
 import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/skip_range.dart';
 
+/// Skip-source tokens. A SEPARATE namespace from the metadata sources: the two
+/// lists are ordered independently, so a token only has to be unique within its
+/// own family. Lives here rather than beside any one provider, because the
+/// family owns the vocabulary.
+const String kAniSkipSource = 'aniskip';
+const String kChaptersSource = 'chapters';
+const String kAnimeSkipSource = 'animeskip';
+const String kFingerprintSource = 'fingerprint';
+
 /// Thrown when a skip source cannot answer. Mirrors `MetadataException` so the
 /// two families report failures the same way and the UI copy is shared.
 class SkipException implements Exception {

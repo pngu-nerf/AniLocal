@@ -362,6 +362,14 @@ class LibrarySync {
     };
     final malIds = await _resolveMalIds(idMalById, skipKeys.map((k) => k.$1));
     final activeSkipSources = await _activeSkipProviders();
+    // A LOCAL skip source reads the episode's own file, so the lookup has to
+    // carry it. Absolute path, rebuilt from the folder identity + relative
+    // path the cache is keyed by.
+    final pathByIdentity = <(int, int), String>{
+      for (final f in fileUpserts)
+        if (f.seriesId != null && f.episodeNumber != null)
+          (f.seriesId!, f.episodeNumber!): '${f.folderPath}/${f.relativePath}',
+    };
     final skipUpserts = <SkipSegmentRow>[];
     for (final (seriesId, episode) in skipKeys) {
       final found = await _resolveSkips(
@@ -369,6 +377,7 @@ class LibrarySync {
           seriesId: seriesId,
           episode: episode,
           malId: malIds[seriesId],
+          filePath: pathByIdentity[(seriesId, episode)],
         ),
         activeSkipSources,
       );

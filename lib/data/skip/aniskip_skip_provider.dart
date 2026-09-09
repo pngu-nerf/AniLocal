@@ -46,11 +46,3 @@ class AniSkipSkipProvider implements SkipProvider {
     }
   }
 }
-
-/// Skip-source tokens. Separate namespace from the metadata sources: the two
-/// lists are ordered independently and a token only has to be unique within
-/// its own family.
-const String kAniSkipSource = 'aniskip';
-const String kChaptersSource = 'chapters';
-const String kAnimeSkipSource = 'animeskip';
-const String kFingerprintSource = 'fingerprint';

@@ -17,6 +17,7 @@ import 'data/metadata/jikan_metadata_provider.dart';
 import 'data/metadata/kitsu_metadata_provider.dart';
 import 'data/metadata/mal_metadata_provider.dart';
 import 'data/skip/aniskip_skip_provider.dart';
+import 'data/skip/chapters_skip_provider.dart';
 import 'data/skip/skip_provider.dart';
 import 'data/metadata/metadata_provider.dart';
 import 'data/folders/file_selector_folder_picker.dart';
@@ -122,7 +123,12 @@ void main() {
         loadClientId: malClientId,
       ),
   ];
-  final skipProviders = <SkipProvider>[AniSkipSkipProvider(AniSkipClient())];
+  final skipProviders = <SkipProvider>[
+    AniSkipSkipProvider(AniSkipClient()),
+    // Local, exact, and immune to every outage — but only ~37% of files carry
+    // chapters, so it complements AniSkip rather than replacing it.
+    const ChaptersSkipProvider(),
+  ];
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
     parser: const HeuristicFilenameParser(),
