@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/metadata_failure.dart';
+import '../user_agent.dart';
 import '../../domain/models/series.dart';
 import 'anilist_mapper.dart';
 import 'anilist_queries.dart';
@@ -24,11 +25,6 @@ class AniListException implements Exception {
   @override
   String toString() => 'AniListException: $message';
 }
-
-/// Identifies the app to AniList. REQUIRED: AniList sits behind Cloudflare,
-/// which 403s requests sending the `http` package's default user agent. A
-/// stable, named UA gets through (and is good public-API citizenship).
-const String kAniLocalUserAgent = 'AniLocal/1.0';
 
 /// Read-only client for AniList's public GraphQL API.
 ///

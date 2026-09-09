@@ -6,7 +6,8 @@ to the detailed docs rather than repeating them.
 
 > **What AniLocal is:** a light, offline-first, distributable **macOS** desktop
 > anime player. It scans your folders, identifies files by parsing their names,
-> enriches them from **AniList** (public API, no account), caches everything
+> enriches them from an ordered list of metadata sources (**AniList** by default —
+> public API, no account), caches everything
 > locally (Drift/SQLite + art files), and plays via **libmpv** (media_kit). No
 > server, no account — point at a folder and go.
 
@@ -60,12 +61,15 @@ glance" + the five seams). Working rules for making changes: **`CLAUDE.md`**.
 | **App wiring / who-implements-what** | `lib/main.dart` — the composition root. Read it; it's short and heavily commented. |
 | **Domain models** (Series, Episode, Titles, SkipRange, ShowPreferences, …) | `lib/domain/models/` |
 | **Repository interfaces** (the UI's whole API surface) | `lib/domain/repositories/` (8: library, watch-state, source-selection, watch-order, missing-episodes, show-preferences, settings, fix-match) |
-| **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v13**; 10 tables; migration comments narrate v2→v13) |
+| **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v15**; 11 tables; migration comments narrate v2→v15) |
 | **Cache → domain mapping + all reads/writes** | `lib/data/cache/drift_library_repository.dart` (one class implements six of the interfaces — see below) |
 | **Settings** (auto-play, skip mode, watched threshold, layout fractions, …) | `lib/domain/repositories/settings_repository.dart` + `lib/data/cache/drift_settings_repository.dart` — ONE injected object |
 | **Watched / resume state** | `WatchStateRepository` (impl in `drift_library_repository.dart`); the single write path lives in the player's `video_zone.dart` |
-| **AniList access** | `lib/data/anilist/` (GraphQL client + queries) — the ONLY place |
-| **OP/ED skip data** | `lib/data/aniskip/` (its own client, like AniList) |
+| **Metadata sources** ("what is this show") | `lib/data/metadata/` — the `MetadataProvider` seam + one adapter per source. The composition root holds ONE ordered list, shared by scan and fix-match |
+| **AniList access** | `lib/data/anilist/` (GraphQL client + queries) — the ONLY place; reached solely by its adapter and `main.dart` |
+| **Series identity** | `lib/data/cache/series_identity.dart` — the three id bands. `series_id` is AniLocal's OWN surrogate; provider ids live in `series_external_ids`. `CacheDatabase.ensureSeriesId` is the sole minting site |
+| **Cross-database id map** | `lib/data/crossmap/` — AniList↔MAL↔Kitsu, so AniSkip doesn't depend on AniList being reachable |
+| **OP/ED skip data** | `lib/data/aniskip/` (its own client, like AniList). NOT yet behind a provider seam — that is phase D |
 | **Filename identification** | `lib/data/scanner/` (parser + matcher, behind an interface — swappable) |
 | **The scan/refresh pipeline** | `lib/sync/library_sync.dart` (`sync`, `refreshMetadata`); fix-match writes live in `lib/sync/fix_match_service.dart` |
 | **Playback engine** | `lib/playback/playback_controller.dart` (owns the media_kit `Player`), `media_remote.dart` |
@@ -109,7 +113,7 @@ The governing test for any change: **"to change X, how many places must I edit?"
 - **One getter for a shared value:** e.g. `Series.displayTitle` (title fallback
   policy in one place). New shared value/format → one getter/util, not inlined
   twice.
-- **The five seams** (UI↔repository, cache-is-read-path, AniList-in-one-module,
+- **The five seams** (UI↔repository, cache-is-read-path, each-source-in-one-module,
   identification-behind-an-interface, **user overrides are sacred**) are spelled
   out in `CLAUDE.md` → "Architecture — the seams." **Seam #5** especially: a
   rescan/refresh (the fill path, `applySync`) NEVER overwrites a manual match

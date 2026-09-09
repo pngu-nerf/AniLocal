@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import '../anilist/anilist_client.dart' show kAniLocalUserAgent;
+import '../user_agent.dart';
 import 'cross_map.dart';
 
 /// Fetches, derives and caches the cross-database id map.

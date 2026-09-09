@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/skip_range.dart';
-import '../anilist/anilist_client.dart' show kAniLocalUserAgent;
+import '../user_agent.dart';
 
 /// Thrown for an AniSkip request that failed transport-side (network / non-404
 /// HTTP). "No data" is NOT an exception — it returns null.
