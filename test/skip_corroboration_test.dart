@@ -71,7 +71,7 @@ void main() {
       expect(result.intro?.confidence, SkipConfidence.corroborated);
     });
 
-    test('beyond the tolerance is a CONFLICT, and never auto-skips', () {
+    test('a window in a different PLACE conflicts, and never auto-skips', () {
       final result = reconcileSkips([
         _answer('aniskip', intro: _r(0, 90)),
         _answer('chapters', intro: _r(60, 150)),
@@ -85,13 +85,147 @@ void main() {
       );
     });
 
-    test('a disagreeing END alone is enough to conflict', () {
-      final result = reconcileSkips([
-        _answer('a', intro: _r(0, 90)),
-        _answer('b', intro: _r(0, 130)),
-      ]);
+    test('edges may differ — what matters is WHERE the theme is', () {
+      // Real pairs from the reference library, all previously condemned by the
+      // ±2s edge rule. Each is the same theme with a legitimately different
+      // boundary, and the leading source supplies the times regardless.
+      const cases = <(String, SkipRange, SkipRange)>[
+        // AniSkip's submission targeted a different release: uniform ~5s late.
+        (
+          'Cyberpunk ep2, 5.2s offset',
+          SkipRange(
+            start: Duration(milliseconds: 71000),
+            end: Duration(milliseconds: 161000),
+          ),
+          SkipRange(
+            start: Duration(milliseconds: 76168),
+            end: Duration(milliseconds: 166168),
+          ),
+        ),
+        // The chapter bundles a streaming ident in with the opening.
+        (
+          'Cyberpunk ep3, ident bundled',
+          SkipRange(start: Duration.zero, end: Duration(milliseconds: 95600)),
+          SkipRange(
+            start: Duration(milliseconds: 11300),
+            end: Duration(milliseconds: 101300),
+          ),
+        ),
+        // Start agreed within a second; AniSkip's credits ran ~4s longer.
+        (
+          'Ore dake ep6 outro, long end',
+          SkipRange(
+            start: Duration(milliseconds: 1326000),
+            end: Duration(milliseconds: 1416000),
+          ),
+          SkipRange(
+            start: Duration(milliseconds: 1325000),
+            end: Duration(milliseconds: 1420100),
+          ),
+        ),
+        // Same end, 38s different start — the loosest real pair, 70%.
+        (
+          'Sakamoto ep11, loosest real pair',
+          SkipRange(
+            start: Duration(milliseconds: 38000),
+            end: Duration(milliseconds: 128000),
+          ),
+          SkipRange(start: Duration.zero, end: Duration(milliseconds: 128100)),
+        ),
+      ];
+      for (final (label, a, b) in cases) {
+        expect(
+          reconcileSkips([
+            _answer('chapters', intro: a),
+            _answer('aniskip', intro: b),
+          ]).intro?.confidence,
+          SkipConfidence.corroborated,
+          reason: label,
+        );
+      }
+    });
 
-      expect(result.intro?.confidence, SkipConfidence.conflicting);
+    test('a genuinely DIFFERENT place still conflicts', () {
+      // Also real, and every one of these was the leading source having picked
+      // a cold open of theme-like length while the true opening began where
+      // that window ended. Refusing to auto-skip these is the whole point.
+      const cases = <(String, SkipRange, SkipRange)>[
+        (
+          'Boushoku ep5, adjacent not equal',
+          SkipRange(start: Duration.zero, end: Duration(milliseconds: 88000)),
+          SkipRange(
+            start: Duration(milliseconds: 87900),
+            end: Duration(milliseconds: 177900),
+          ),
+        ),
+        (
+          'Sakamoto ep5, 126s apart',
+          SkipRange(start: Duration.zero, end: Duration(milliseconds: 86000)),
+          SkipRange(
+            start: Duration(milliseconds: 125800),
+            end: Duration(milliseconds: 210800),
+          ),
+        ),
+        (
+          'Boushoku ep1, 60s apart',
+          SkipRange(
+            start: Duration(milliseconds: 35000),
+            end: Duration(milliseconds: 125000),
+          ),
+          SkipRange(
+            start: Duration(milliseconds: 95500),
+            end: Duration(milliseconds: 185500),
+          ),
+        ),
+        (
+          'Sakamoto ep2, tightest real conflict',
+          SkipRange(
+            start: Duration(milliseconds: 38000),
+            end: Duration(milliseconds: 127800),
+          ),
+          SkipRange(
+            start: Duration(milliseconds: 2700),
+            end: Duration(milliseconds: 92700),
+          ),
+        ),
+      ];
+      for (final (label, a, b) in cases) {
+        expect(
+          reconcileSkips([
+            _answer('chapters', intro: a),
+            _answer('aniskip', intro: b),
+          ]).intro?.confidence,
+          SkipConfidence.conflicting,
+          reason: label,
+        );
+      }
+    });
+
+    test('a wildly different LENGTH is a disagreement too', () {
+      // Overlap is intersection over UNION, so it penalises a mismatched length
+      // and not only a shifted window. One source calling the theme 90s and
+      // another 200s is not agreement, even though they start together.
+      expect(
+        reconcileSkips([
+          _answer('a', intro: _r(0, 90)),
+          _answer('b', intro: _r(0, 200)),
+        ]).intro?.confidence,
+        SkipConfidence.conflicting,
+      );
+    });
+
+    test('the threshold sits in an EMPTY band, so it is not tuned', () {
+      // Across all 59 disagreeing pairs on the reference library, none landed
+      // between 45% and 69% overlap: 50 were 70-97%, 9 were 0-44%. Assert
+      // against the named constant rather than a literal, so moving it cannot
+      // silently invalidate the cases above.
+      expect(kSkipCorroborationMinOverlap, greaterThan(0.45));
+      expect(kSkipCorroborationMinOverlap, lessThan(0.70));
+      // And the metric itself: identical windows agree totally, disjoint ones
+      // not at all.
+      expect(windowOverlap(_r(0, 90), _r(0, 90)), 1.0);
+      expect(windowOverlap(_r(0, 90), _r(200, 290)), 0.0);
+      expect(windowOverlap(_r(0, 90), _r(45, 135)), closeTo(1 / 3, 0.001));
     });
 
     test('agreement with ANY source is enough — one outlier cannot veto', () {

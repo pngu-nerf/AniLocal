@@ -668,6 +668,23 @@ void main() {
       );
     });
 
+    test(
+      'the RULE is an input too — a rule change invalidates stored keys',
+      () {
+        // Without this, changing how agreement is judged would leave every
+        // existing row carrying a verdict computed under the old rule, and
+        // nothing would ever re-ask them. Asserts the shape rather than the
+        // number, so bumping the generation does not break this test.
+        final key = skipResolutionKey(const ['aniskip'], corroborate: true);
+        expect(
+          key.split('|').length,
+          3,
+          reason: 'sources | cross-checking | rule generation',
+        );
+        expect(key.split('|').last, matches(RegExp(r'^r\d+$')));
+      },
+    );
+
     test('a row written before the key existed never matches', () {
       // '' is the v18 default and MEANS "unknown inputs", so it has to differ
       // from every real key — including the one for an empty source list.

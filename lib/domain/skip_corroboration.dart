@@ -6,18 +6,29 @@ import 'models/skip_range.dart';
 /// automatic skip, because skipping into real content is the one failure a
 /// user cannot undo mid-episode, while an unoffered skip is a button press.
 enum SkipConfidence {
-  /// Two sources that derive their answer independently agree. Chapters come
-  /// from the release group's authoring, AniSkip from human submissions — so
-  /// agreement between them is genuine evidence, not one source echoing another.
+  /// Two sources that derive their answer independently place the theme in the
+  /// same span. Chapters come from the release group's authoring, AniSkip from
+  /// human submissions — so agreement between them is genuine evidence, not one
+  /// source echoing another.
+  ///
+  /// "Same span", not "identical": the two disagree at the edges routinely and
+  /// for legitimate reasons (a bundled service ident, a longer credits roll),
+  /// and the leading source supplies the times regardless. See
+  /// [kSkipCorroborationMinOverlap].
   corroborated,
 
   /// Exactly one source had anything to say. Ordinary, and by far the common
   /// case: nothing is wrong, there is simply nothing to check against.
   single,
 
-  /// Two sources both answered and disagree beyond the tolerance. Something is
-  /// wrong and we cannot tell which one, so the window is offered but never
-  /// fired automatically.
+  /// Two sources both answered and put the theme in materially DIFFERENT
+  /// places. Something is wrong and we cannot tell which one, so the window is
+  /// offered but never fired automatically.
+  ///
+  /// Not merely "the edges differ" — see [kSkipCorroborationMinOverlap]. Every
+  /// such pair measured on the reference library turned out to be the leading
+  /// source having picked the wrong chapter entirely, which is exactly the case
+  /// worth refusing to auto-skip.
   conflicting;
 
   /// Stored form, so the DB never holds a magic number.
@@ -37,13 +48,46 @@ enum SkipConfidence {
   bool get allowsAutoSkip => this != conflicting;
 }
 
-/// How far apart two sources may be and still be considered to agree.
+/// How much two windows must overlap to count as the same window.
 ///
-/// ±2s, from measurement rather than taste: on the reference library AniSkip
-/// and the release groups' own chapter marks agreed to within 0.5–0.7s. The
-/// remaining margin covers chapter boundaries snapping to keyframes and
-/// AniSkip's roughly one-second resolution.
-const Duration kSkipCorroborationTolerance = Duration(seconds: 2);
+/// Intersection over union, so it penalises BOTH a shifted window and a
+/// mismatched length, and 0.60 is measured rather than picked. On the reference
+/// library all 59 disagreeing pairs (28 intros, 31 outros) fell into two
+/// populations with **nothing at all between 45% and 69%**:
+///
+/// * 50 pairs at 70–97%: the same theme, differing at the edges. Causes seen —
+///   a uniform ~5s offset where AniSkip's submission targeted a different
+///   release; a ~11s offset where the chapter bundles a streaming-service ident
+///   in with the opening (skipping both is what a viewer wants); and an outro
+///   whose start matched within a second but ran ~4s longer.
+/// * 9 pairs at 0–44%: genuinely different places, and every one was the local
+///   chapters being WRONG — `inferSkipsFromChapters` took a cold open of
+///   coincidentally theme-like length, and the real opening began exactly where
+///   that window ended.
+///
+/// The gap is so wide that the threshold is not a tuned number; anywhere in the
+/// fifties or sixties separates the same two sets.
+///
+/// This REPLACED a ±2s test on each edge, which condemned the first population
+/// along with the second — it treated a five-second edge difference exactly as
+/// severely as a sixty-second difference in location, and a pair could conflict
+/// on one loose edge while the other matched to within a second. What the gate
+/// actually has to catch, now that the local source leads, is the top source
+/// picking the wrong chapter, and that shows up as low overlap every time.
+const double kSkipCorroborationMinOverlap = 0.60;
+
+/// Intersection over union of two windows, 0 (disjoint) to 1 (identical).
+double windowOverlap(SkipRange a, SkipRange b) {
+  final start = a.start > b.start ? a.start : b.start;
+  final end = a.end < b.end ? a.end : b.end;
+  final intersection = end - start;
+  if (intersection <= Duration.zero) return 0;
+  final unionStart = a.start < b.start ? a.start : b.start;
+  final unionEnd = a.end > b.end ? a.end : b.end;
+  final union = unionEnd - unionStart;
+  if (union <= Duration.zero) return 0;
+  return intersection.inMicroseconds / union.inMicroseconds;
+}
 
 /// The inputs a skip row was resolved from, as one comparable string.
 ///
@@ -63,11 +107,26 @@ const Duration kSkipCorroborationTolerance = Duration(seconds: 2);
 /// instead of stopping at the first, and only then can a window be judged
 /// corroborated or conflicting.
 ///
+/// [_ruleGeneration] is part of it because THE RULE IS AN INPUT TOO. The key
+/// has to capture everything that could change the answer, and a stored verdict
+/// computed under an older reconciliation rule is exactly as stale as one
+/// computed from a different set of sources. Bumping it re-resolves every row
+/// once, which is the only way a rule change reaches a library that has already
+/// been scanned. Bump it whenever [reconcileWindow]'s notion of agreement
+/// changes — not for a refactor that cannot alter a verdict.
+///
 /// Deliberately opaque and compared only for equality — nothing parses it back.
 String skipResolutionKey(
   Iterable<String> sourcesInOrder, {
   required bool corroborate,
-}) => '${sourcesInOrder.join(',')}|${corroborate ? 'x' : '-'}';
+}) =>
+    '${sourcesInOrder.join(',')}|${corroborate ? 'x' : '-'}'
+    '|r$_ruleGeneration';
+
+/// Generation of the agreement rule itself. 1 = the original ±2s test on each
+/// edge; 2 = overlap (see [kSkipCorroborationMinOverlap]), which reclassified
+/// 50 of 59 disagreeing pairs on the reference library as agreement.
+const int _ruleGeneration = 2;
 
 /// Drop a window shorter than [minimum].
 ///
@@ -107,8 +166,7 @@ class ResolvedWindow {
 }
 
 bool _agree(SkipRange a, SkipRange b) =>
-    (a.start - b.start).abs() <= kSkipCorroborationTolerance &&
-    (a.end - b.end).abs() <= kSkipCorroborationTolerance;
+    windowOverlap(a, b) >= kSkipCorroborationMinOverlap;
 
 /// Reconcile what several sources said about ONE window (the intro, or the
 /// outro), given [candidates] already in the user's source-priority order.
@@ -120,7 +178,8 @@ bool _agree(SkipRange a, SkipRange b) =>
 /// disable auto-skip across the library.
 ///
 /// The highest-priority candidate always supplies the times; corroboration only
-/// decides how much to trust them. So reordering sources still determines what
+/// decides how much to trust them — which is why agreement is judged on WHERE
+/// the theme is rather than on the edges matching. So reordering sources still determines what
 /// you get, exactly as it does with corroboration switched off.
 ResolvedWindow? reconcileWindow(List<SkipCandidate> candidates) {
   if (candidates.isEmpty) return null;

@@ -68,6 +68,40 @@ Ball — 153 files, 54% of the library, with only 40 AniSkip entries**. Roughly 
 have neither source. That gap is what fingerprinting was for, and it is the reason D4 was
 planned at all.
 
+### Why agreement is overlap, not matching edges (revised after shipping)
+
+D5 shipped with a ±2s test on each edge, taken from a small sample where AniSkip
+and chapters agreed to 0.5–0.7s. Measuring all 59 disagreeing pairs the pass produced
+(28 intros, 31 outros — AniSkip re-queried live and compared against the stored chapter
+windows) showed the rule was wrong, and showed it cleanly: **no pair fell between 45% and
+69% overlap.**
+
+| overlap | pairs | what they were |
+|---|---|---|
+| 70–97% | 50 | The same theme, different boundary. A uniform ~5s offset where AniSkip's submission targeted another release; a ~11s offset where the chapter bundles a streaming-service ident in with the opening; an outro whose start matched within one second but ran ~4s longer. |
+| 0–44% | 9 | Genuinely different places — and every one was the LEADING source being wrong: `inferSkipsFromChapters` took a cold open of theme-like length, and the real opening began exactly where that window ended. |
+
+The edge rule condemned both groups alike: it treated a 5s boundary difference exactly as
+severely as a 60s difference in location, and a pair could conflict on one loose edge while
+the other matched to within a second (nine `Ore dake Level Up` outros did). Since the top
+source supplies the times and is now the locally-authored one, what the gate must catch is
+the top source picking the wrong chapter — which is low overlap every time.
+
+So agreement became `kSkipCorroborationMinOverlap`, intersection over union at 0.60, which
+also penalises a mismatched length rather than only a shifted window. The gap is wide enough
+that the number is not tuned.
+
+**A rule change is a stale-data event.** `skipResolutionKey` therefore carries a
+`_ruleGeneration`, so bumping the agreement rule re-resolves every row once. Without it a
+new rule would apply only to episodes scanned afterwards — the same trap v18 was built to
+close, one level up.
+
+**Still open, deliberately:** the root cause of those 9 is `inferSkipsFromChapters` taking
+the EARLIEST qualifying span before the midpoint. Preferring the later one would fix them,
+but that rule exists for a measured case (an episode opening cold with its OP at 498s), so
+it needs a library-wide measurement before being touched — and corroboration already
+contains the damage by refusing to auto-skip them.
+
 ### Why chapters lead the skip order (revised after shipping)
 
 D1 and D2 shipped with AniSkip first, as the incumbent. The reference library then showed
