@@ -1,6 +1,6 @@
 # AniLocal — Build Roadmap
 
-> Canonical architecture + staging document. Lives in the repo root; read at the start of every session alongside `CLAUDE.md`. Update it when a decision changes — it is the single source of truth for *what we're building and in what order*.
+> **Stage history and the distribution track.** How the app got here, stage by stage, and what shipping it still needs. It is deliberately NOT the architecture document any more: the seams live in `CLAUDE.md`, the maintainer front door is `docs/ARCHITECTURE.md`, and the source-pluggability program (schema v14–v18, everything parked) is `docs/multi-source-plan.md`. Duplicating them here is what let seam #3 drift into saying two contradictory things, so the copies are gone rather than patched.
 
 ---
 
@@ -10,53 +10,22 @@
 |---|---|---|
 | UI framework | **Flutter** (Dart) | One codebase → macOS now, Linux/Windows later as recompile-and-package. |
 | Playback engine | **media_kit** (`media_kit` + `media_kit_video` + `media_kit_libs_video`) | Wraps **libmpv** — embedded video (no punch-out), libass ASS subtitles, mpv shaders. Bundles libmpv; no system install. MIT. |
-| Metadata source | **AniList GraphQL** (`https://graphql.anilist.co`) | Anime-specific, modern. **Public reads need NO account / NO API key.** One endpoint, no per-user login. This is what makes onboarding "point at a folder and go." |
-| Identification | **In-house filename parser** (Anitomy-style) → AniList match | No maintained Dart Anitomy port exists. Build a small, swappable parsing module. Matching is by title+episode, NOT file hash → fallible by design → manual fix-match required. |
+| Metadata source | **An ordered list behind `MetadataProvider`** — AniList (`https://graphql.anilist.co`) first, then Kitsu, then Jikan | Originally AniList alone; it went 403 for days, which proved one provider is a single point of failure (`docs/multi-source-plan.md`). All three are **keyless — no account, no API key, no per-user login**, which is what keeps onboarding "point at a folder and go". No key is ever shipped in the binary. |
+| Identification | **In-house filename parser** (Anitomy-style) → matched against whichever source answers | No maintained Dart Anitomy port exists. Build a small, swappable parsing module. Matching is by title+episode, NOT file hash → fallible by design → manual fix-match required. |
 | Local cache | **Drift** (SQLite) + cached art files | Offline-first. Cache is the primary read path. |
-| Networking | AniList only, at scan/refresh time | Once cached, the app runs fully offline. No trackers, no server, no daemon. |
+| Networking | Metadata + skip sources, at scan/refresh time ONLY | Once cached, the app runs fully offline — the read path never touches the network. No trackers, no server, no daemon. |
 
 **Why this shape:** this is the "Kodi model" — a metadata source with one embeddable, account-free endpoint + filename-based matching. It trades Shoko's bulletproof hash matching for zero-friction onboarding and a genuinely light, distributable app.
 
 ---
 
-## Architecture at a glance
+## Architecture
 
-```
-┌──────────────────────────────────────────────┐
-│                    UI layer                    │  Flutter widgets. Reads ONLY from repositories.
-│   (library grid, detail, player, settings)     │  Knows nothing about AniList, Drift, or the scanner.
-└───────────────────────┬────────────────────────┘
-                        │  (repository interfaces only)
-┌───────────────────────▼────────────────────────┐
-│               Repository layer                  │  LibraryRepository, WatchStateRepository.
-│  (cache is the PRIMARY read path; UI sees this) │
-└───────┬───────────────────────────┬────────────┘
-        │                            │
-┌───────▼─────────┐        ┌─────────▼───────────────────────────┐
-│  Local cache     │        │  Metadata pipeline (lib/sync)        │
-│  (Drift + art    │◄───────┤  Scanner → Identifier → AniList      │
-│   files on disk) │  fills │  fetch → write cache. Runs at scan/  │
-└──────────────────┘        │  refresh, never on the read path.    │
-                            └──────────────┬───────────────────────┘
-                                           │
-                        ┌──────────────────┼───────────────────┐
-                        ▼                  ▼                   ▼
-                 lib/data/scanner   (filename identifier)  lib/data/anilist
-                 walk folders,      parse title+ep,        GraphQL client,
-                 find video files   produce candidate      public reads,
-                                    AniList matches        no auth
+Moved, not deleted. One copy each, so they cannot disagree:
 
-         Playback: media_kit/libmpv ← local file path
-```
-
-**The seams that prevent debt:**
-1. **UI ↔ Repository** — UI never imports AniList, Drift, or scanner types. Domain models only.
-2. **Cache is the primary read path.** The pipeline fills it; the UI never waits on the network. Online vs offline is invisible to the UI.
-3. **All AniList access lives in `lib/data/anilist` only.** A GraphQL/schema change touches one module.
-4. **Identification lives behind an interface.** The filename parser is swappable — today heuristic, tomorrow a better port — without touching anything else.
-5. **Manual match overrides are sacred.** A rescan MUST NEVER overwrite a user's manual correction.
-
----
+- **The five seams** — `CLAUDE.md`, "Architecture — the seams". Binding.
+- **Layer diagram, module map, "if you're looking for X"** — `docs/ARCHITECTURE.md`.
+- **The source families (metadata + skip) and everything parked** — `docs/multi-source-plan.md`.
 
 ## Staging — build in this order
 
@@ -67,7 +36,7 @@ Each stage ends *runnable*. Don't start a stage until the previous "Done when" i
 
 - Flutter project, **macOS desktop target first** (structure stays cross-platform).
 - Folders: `lib/ui`, `lib/domain` (models + repository *interfaces*), `lib/data/cache`, `lib/data/anilist`, `lib/data/scanner` (scan + identify), `lib/sync` (pipeline orchestration), `lib/playback`.
-- Domain models (minimal projection): `Series` (anilistId, titles {romaji, english, native}, format, art ref), `Episode` (number, title, fileRef, watched, resumePosition), `LibraryFolder` (path).
+- Domain models (minimal projection): `Series` (anilistId, titles {romaji, english, native}, format, art ref), `Episode` (number, title, fileRef, watched, resumePosition), `LibraryFolder` (path). *(Since v14: `Series` is keyed by `seriesId`, our own surrogate, and carries `ExternalIds{anilist, mal, kitsu, anidb}` with `anilistId` nullable alongside it.)*
 - Repository interfaces (no implementations yet). `CLAUDE.md`. Light CI: `flutter analyze` + `dart format --set-exit-if-changed`.
 
 **Done when:** empty app launches on macOS; folder/interface skeleton compiles. **Not yet:** any data or feature.
@@ -104,7 +73,7 @@ Each stage ends *runnable*. Don't start a stage until the previous "Done when" i
 **Goal:** the real cement for offline.
 
 - Add Drift. Cache is the **primary read path**: UI/repository read from cache only.
-- The pipeline (scan → identify → AniList → cache) fills it. Cache AniList metadata + downloaded art files (store paths in Drift), keyed by `series_id` (a surrogate since v14).
+- The pipeline (scan → identify → fetch → cache) fills it. Cache the metadata projection + downloaded art files (store paths in Drift), keyed by `series_id` (a surrogate since v14). *(The fetch was AniList-only until the provider seam; it is now the first source in the ordered list that answers.)*
 - **Incremental "update as needed":** rescan detects new / moved / removed files and re-identifies + re-fetches ONLY the deltas. Never refetch unchanged items (respect AniList; respect the user's bandwidth).
 - Offline: with the network off, browse + play everything already cached.
 
@@ -115,7 +84,7 @@ Each stage ends *runnable*. Don't start a stage until the previous "Done when" i
 
 - Multiple `LibraryFolder`s the user adds/removes; the scanner walks all of them.
 - **Manual fix-match UI:** when auto-ID is wrong/uncertain, the user picks the correct AniList entry. Store the override; rescans MUST respect it (seam rule #5).
-  - **Carryover from Stage 4:** `file_cache` is per-path with its own `anilistId` (different files / same folder can map to different series — the shape is right). Two *additive* migrations make overrides robust: (1) add a `matchOverridden` flag and have the sync classifier skip re-matching overridden rows (so an override survives even if the file's bytes change, not just when unchanged); (2) build the title→id reuse map (`knownTitleToId` in `LibrarySync`) from auto-matched rows only, so an override on one file doesn't leak onto new siblings of the same title.
+  - **Carryover from Stage 4:** `file_cache` is per-file with its own series id (different files / same folder can map to different series — the shape is right; keyed by `(folder_path, relative_path)` since v9, and the column is `series_id` since v14). Two *additive* migrations make overrides robust: (1) add a `matchOverridden` flag and have the sync classifier skip re-matching overridden rows (so an override survives even if the file's bytes change, not just when unchanged); (2) build the title→id reuse map (`knownTitleToId` in `LibrarySync`) from auto-matched rows only, so an override on one file doesn't leak onto new siblings of the same title.
 - First-run onboarding: add your first folder → scan → done. No accounts, no servers.
 
 **Done when:** a fresh user adds folders, scans, and corrects any mismatch — and the correction sticks across rescans.
@@ -138,27 +107,16 @@ Thin modules slotting into existing seams. One at a time.
 - **Manual watched-override** — ✅ **BUILT** (schema v12: `watch_state.watched_manual`). A **sticky per-episode mark-watched/unwatched** that beats the auto-threshold and survives refresh/rescan; it does not touch the saved resume position. Single write path in the player. *Full detail in `CLAUDE.md`.*
 - **Per-show preferences** — ✅ **BUILT** (schema v13: `show_preferences`). Per-show cover **picture-mode** (normal / blur / removed) + **hide-next-episode**, keyed by `series_id`, **sacred across refresh/rescan** (seam #5). Purely display (the cached cover is never altered); modeled as an extensible value object so new per-show prefs are one field + one column. *Full detail in `CLAUDE.md`.*
 - **Anime4K** — load GLSL shaders via an mpv property through media_kit. Near-free. Quality toggle.
-- **OP/ED auto-skip** — ✅ **BUILT** (schema v8: `series_cache.idMal` + `skip_segments`). **Offline-first:** AniSkip v2 timestamps (`GET /v2/skip-times/{malId}/{ep}?types=op&types=ed&episodeLength=0`, verified live) are fetched online at scan time — keyed by MAL id (AniList `idMal`, now fetched + cached) per anchored episode — and cached in `skip_segments` (episode-identity keyed); **playback reads skips ONLY from cache, no live fetch.** No data → no affordance (partial AniSkip coverage is normal, handled gracefully). AniSkip client is its own data module (`lib/data/aniskip`); UI consumes domain (`Episode.introSkip/outroSkip`, `SkipMode`). Three-mode setting (No skip / Skip button / Auto skip) governs playback only — data is cached regardless of mode, so switching modes later works offline on synced episodes. Both intro AND outro skip seek WITHIN the episode (intro → window end; outro → credits-window end, clamped to file end so post-credits stingers still play — outro never advances). Advancing is decoupled: only the end-of-episode up-next countdown advances (`min(5s, remaining)`; completion always advances). Trigger is state-based (`contains(pos)`) with a once-per-episode auto-skip guard. *MKV-chapter fallback not built (AniSkip-only) — a possible future add on the same `skip_segments` cache.* A **refresh-metadata backfill** (`LibrarySync.refreshMetadata()`, ⚙ Settings) re-fetches AniList by id + fills missing skips via no-prune upserts — backfills new fields (idMal, skips; later `series_relations`) onto an existing library without a wipe and without touching fix-matches/watch-state. **Timeline markers** ✅ BUILT: a thin skip-region strip over the player seek area shades the cached intro/outro spans (`_SkipMarkersBar`, reads `Episode.introSkip/outroSkip`; span fractions clamped to `[0,1]` so an overhanging outro never draws past the bar; a missing window draws nothing). UI-only, offline. (A future player-controls redesign could fuse it into a custom seek bar.)
-- **Relation / watch-order surfacing** — from AniList `relations` (fetched since Stage 2). **"Up Next" / next-episode + auto-play** is ✅ **BUILT — within-season only, NO schema change** (uses the existing episode list + watch-state). A single resolver, `WatchOrderRepository.nextEpisode(episode) → NextResult` in `data/`, is the one source of "what's next" (next anchored episode in the same series, else `NoNextEpisode`); every caller routes through it — the player's auto-advance (via the one `PlaybackController.advanceToNext()` entry point) and each series' "Next: Ep N". The auto-play overlay is a **pre-roll** countdown (last ~5s, advances at end; cancelable; persisted on/off setting). **`nextEpisode` returns `NoNextEpisode` at season boundaries today; cross-season via the AniList SEQUEL relation is the PLANNED EXTENSION at exactly that point — a deliberate seam, not unfinished work** (it slots into the resolver's boundary branch, plus a `series_relations` table, when built — S1→S2 is a *different* AniList entry, Sakamoto/OPM, so it must use relations, not `episode+1`). That table will be a **new migration (the next free version after the current v13)**. *(Historical note: schemaVersion v8 was first burned on this unshipped relations overshoot, then reverted with no shipped DB left at 8 — and has since been **reused by OP/ED auto-skip** for `idMal` + `skip_segments`. So relations no longer maps to v8; see the migration note in `cache_database.dart`.)* **Also still to build:** broader relation browsing (the full relation graph / watch-order list).
+- **OP/ED auto-skip** — ✅ **BUILT** (schema v8: `series_cache.idMal` + `skip_segments`). **Offline-first:** AniSkip v2 timestamps (`GET /v2/skip-times/{malId}/{ep}?types=op&types=ed&episodeLength=0`, verified live) are fetched online at scan time — keyed by MAL id (AniList `idMal`, now fetched + cached) per anchored episode — and cached in `skip_segments` (episode-identity keyed); **playback reads skips ONLY from cache, no live fetch.** No data → no affordance (partial AniSkip coverage is normal, handled gracefully). AniSkip client is its own data module (`lib/data/aniskip`); UI consumes domain (`Episode.introSkip/outroSkip`, `SkipMode`). Three-mode setting (No skip / Skip button / Auto skip) governs playback only — data is cached regardless of mode, so switching modes later works offline on synced episodes. Both intro AND outro skip seek WITHIN the episode (intro → window end; outro → credits-window end, clamped to file end so post-credits stingers still play — outro never advances). Advancing is decoupled: only the end-of-episode up-next countdown advances (`min(5s, remaining)`; completion always advances). Trigger is state-based (`contains(pos)`) with a once-per-episode auto-skip guard. *The MKV-chapter fallback this once listed as unbuilt is now BUILT — `lib/data/chapters/`, a second skip source on the same `skip_segments` cache. See `docs/multi-source-plan.md`.* A **refresh-metadata backfill** (`LibrarySync.refreshMetadata()`, ⚙ Settings) re-fetches AniList by id + fills missing skips via no-prune upserts — backfills new fields (idMal, skips; later `series_relations`) onto an existing library without a wipe and without touching fix-matches/watch-state. **Timeline markers** ✅ BUILT: a thin skip-region strip over the player seek area shades the cached intro/outro spans (`_SkipMarkersBar`, reads `Episode.introSkip/outroSkip`; span fractions clamped to `[0,1]` so an overhanging outro never draws past the bar; a missing window draws nothing). UI-only, offline. (A future player-controls redesign could fuse it into a custom seek bar.)
+- **Relation / watch-order surfacing** — from AniList `relations` (fetched since Stage 2). **"Up Next" / next-episode + auto-play** is ✅ **BUILT — within-season only, NO schema change** (uses the existing episode list + watch-state). A single resolver, `WatchOrderRepository.nextEpisode(episode) → NextResult` in `data/`, is the one source of "what's next" (next anchored episode in the same series, else `NoNextEpisode`); every caller routes through it — the player's auto-advance (via the one `PlaybackController.advanceToNext()` entry point) and each series' "Next: Ep N". The auto-play overlay is a **pre-roll** countdown (last ~5s, advances at end; cancelable; persisted on/off setting). **`nextEpisode` returns `NoNextEpisode` at season boundaries today; cross-season via the AniList SEQUEL relation is the PLANNED EXTENSION at exactly that point — a deliberate seam, not unfinished work** (it slots into the resolver's boundary branch, plus a `series_relations` table, when built — S1→S2 is a *different* AniList entry, Sakamoto/OPM, so it must use relations, not `episode+1`). That table will be a **new migration (v19 — v14 through v18 have since been used)**. *(Historical note: schemaVersion v8 was first burned on this unshipped relations overshoot, then reverted with no shipped DB left at 8 — and has since been **reused by OP/ED auto-skip** for `idMal` + `skip_segments`. So relations no longer maps to v8; see the migration note in `cache_database.dart`.)* **Also still to build:** broader relation browsing (the full relation graph / watch-order list).
 - **JP-study dual subtitles** — *maybe*. Secondary subtitle track + dictionary/Anki hook. First to cut.
 - **Multi-source episodes** — ✅ **BUILT** (schema v7; depends on Part B identity + Stage 6 watch-state). One logical episode = files sharing `(AniList entry, anchored position)` — the dedup key comes straight from Part B's anchored episode position; the repository collapses matching files into one `Episode` with a priority-ordered `sources` list. **Library folders are an ordered priority list** (top = default source — this is why Stage 5 stores `library_folders.sortOrder`); an episode resolves its default from the highest-priority folder containing it, falling down the order. The order is user-set by **drag-reorder** in the folders screen (no schema change — reuses `sortOrder`); a reorder re-resolves Automatic defaults on the next read (no rescan) and leaves per-episode pins untouched. A **per-episode manual source override** (`source_overrides`, keyed by episode identity) beats the folder-priority default and survives rescans (seam #5, source dimension — `applySync` has no write path to it), holding even when a higher-priority folder later gains the episode. Files never move or get deleted — "switch source" only changes which file the player opens; duplicates across drives are legitimate. **UI de-duplication** (one row per episode, not 1,1,2,2) is done in the data layer; series-detail shows a source count + an "Automatic vs pinned" picker. Watch state stays per logical episode (shared across sources). Resolution lives entirely in `data/` — the UI never sees a source-resolution type.
 
 ---
 
-## Anti-debt rules (enforce every session)
+## Anti-debt rules · out of scope
 
-- **UI never touches AniList, Drift, or scanner types.** Domain models via repositories only. A widget importing one of those is a leak — fix it now.
-- **Cache is a projection, not a clone.** Store only rendered fields, keyed by `series_id` (AniLocal's own surrogate since v14, not a provider's id). New field = deliberate Drift migration.
-- **AniList access lives in one module.** Identification lives behind one interface (swappable).
-- **Manual match overrides are never clobbered by rescan.**
-- **Incremental scans only** — never refetch unchanged items.
-- **No dependency without logging it** in CLAUDE.md with a one-line reason. Vibe-coding's main debt vector is silent dependency sprawl.
-- **One vertical slice per session, ending runnable.**
-- Tests at the seams (repositories, identifier, pipeline) — not everywhere.
-
-## Explicitly OUT of scope (the "don't run away" list)
-
-Trackers / AniList list-sync (needs per-user OAuth — deliberately deferred) · server-side transcoding · download/torrent automation · watch-together sync · multi-user accounts · re-adding Shoko or any bundled server. Each is a separate product. If a task drifts toward these, STOP and flag it.
+Both live in `CLAUDE.md` ("Anti-debt rules", "Single-source-of-truth rules", "OUT of scope"). They were duplicated here and the wordings had already started to diverge.
 
 ## Distribution track (now central — this is a shipped app)
 

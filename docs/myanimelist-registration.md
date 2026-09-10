@@ -93,7 +93,9 @@ provider, so the guide is a UI addition, not a redesign.
 ## What is still live while it's parked
 
 The flag hides the SOURCE, not the machinery. These stay wired and tested, and
-**Anime Skip (phase D) needs the same mechanism**, so none of it is dead weight:
+**Anime Skip needs the same mechanism** — it is parked too, for the same reason
+(see `docs/multi-source-plan.md` for the parked set as a whole), so none of it is
+dead weight:
 
 - `SettingsRepository.loadSourceClientId` / `setSourceClientId` — per-source
   keys, token-keyed, stored plain in `app_settings` (a client ID identifies an

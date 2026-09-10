@@ -4,8 +4,21 @@
 that work by luck, inconsistent patterns, dead code. Not tidiness.
 **Method:** for every finding, the test is *"to change X, how many places must I
 edit?"* — more than one ⇒ flagged.
-**Status:** diagnosis only. Nothing here is fixed. Triage and we do targeted
-fixes one at a time.
+**Status (updated 2026-09-10): PARTLY FIXED, and the line numbers have rotted.**
+This was written as a pure diagnosis and said "nothing here is fixed"; that is no
+longer true. Since then: **A1** is fixed (settings come from ONE injected
+`SettingsRepository`; `SettingsActions` is constructed nowhere in `lib/`, and
+`settings_dialog.dart` — cited repeatedly below — no longer exists, having become
+`lib/ui/settings/settings_window.dart`). **A3** is fixed (`Series.displayTitle`).
+**B1**'s three header approaches are fixed (one `AppShell` + `XpTitleBar`; see
+`docs/ARCHITECTURE.md`). **§E**'s `trafficLightBackButton()` + `kAppBarLeadingWidth`
+are now DELETED; its `metadata_screen.dart` item landed too. **A4–A6, B2, F1, F2,
+F4** are still open. **§F, the fragile-machinery catalogue, is current** and is
+cited by both `CLAUDE.md` and `docs/ARCHITECTURE.md` — that section is the reason
+to keep this file.
+
+**Treat every `file.dart:NNN` citation below as unreliable** — the files have moved
+under them. Grep the symbol, don't trust the line.
 
 Findings are ordered by **bug-risk** (most likely to cause the next bug first),
 not by size.

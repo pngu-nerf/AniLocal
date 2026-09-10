@@ -30,10 +30,12 @@ to the detailed docs rather than repeating them.
                      implements      │
         ┌────────────────────────────▼────────────────────────┐
   DATA  │  lib/data — the concrete world. cache/ (Drift, the    │
-   +    │  PRIMARY read path) · anilist/ · aniskip/ · scanner/ ·│
-  SYNC  │  folders/. lib/sync — the fill pipeline (scan →       │
-        │  identify → fetch → write cache). lib/playback — owns │
-        │  the media_kit Player/VideoController.                │
+   +    │  PRIMARY read path) · scanner/ · folders/ · crossmap/ │
+  SYNC  │  · metadata/ (the seam) + anilist/ kitsu/ jikan/ mal/ │
+        │  · skip/ (the seam) + aniskip/ chapters/.             │
+        │  lib/sync — the fill pipeline (scan → identify →     │
+        │  fetch → write cache). lib/playback — owns the        │
+        │  media_kit Player/VideoController.                    │
         └───────────────────────────────────────────────────── ┘
 ```
 
@@ -49,8 +51,11 @@ not a data-layer type.)
 on the network** — online vs offline is invisible to it. AniList is *enrichment
 at scan/refresh time*, never a read-path dependency.
 
-Full layer rationale + staging history: **`ROADMAP.md`** ("Architecture at a
-glance" + the five seams). Working rules for making changes: **`CLAUDE.md`**.
+**The five seams are defined in ONE place — `CLAUDE.md` ("Architecture — the
+seams").** Read them there; they are not restated here or in `ROADMAP.md`,
+because when they were, seam #3 drifted into saying two contradictory things.
+Stage history + the distribution track: **`ROADMAP.md`**. The source-pluggability
+program and what is parked: **`docs/multi-source-plan.md`**.
 
 ---
 
@@ -61,15 +66,19 @@ glance" + the five seams). Working rules for making changes: **`CLAUDE.md`**.
 | **App wiring / who-implements-what** | `lib/main.dart` — the composition root. Read it; it's short and heavily commented. |
 | **Domain models** (Series, Episode, Titles, SkipRange, ShowPreferences, …) | `lib/domain/models/` |
 | **Repository interfaces** (the UI's whole API surface) | `lib/domain/repositories/` (8: library, watch-state, source-selection, watch-order, missing-episodes, show-preferences, settings, fix-match) |
-| **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v15**; 11 tables; migration comments narrate v2→v15) |
+| **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v18**; 11 tables; migration comments narrate v2→v18) |
 | **Cache → domain mapping + all reads/writes** | `lib/data/cache/drift_library_repository.dart` (one class implements six of the interfaces — see below) |
-| **Settings** (auto-play, skip mode, watched threshold, layout fractions, …) | `lib/domain/repositories/settings_repository.dart` + `lib/data/cache/drift_settings_repository.dart` — ONE injected object |
+| **Settings** (auto-play, skip mode, watched threshold, layout fractions, the two source orders, the minimum skip length, cross-checking, …) | `lib/domain/repositories/settings_repository.dart` + `lib/data/cache/drift_settings_repository.dart` — ONE injected object |
 | **Watched / resume state** | `WatchStateRepository` (impl in `drift_library_repository.dart`); the single write path lives in the player's `video_zone.dart` |
 | **Metadata sources** ("what is this show") | `lib/data/metadata/` — the `MetadataProvider` seam + one adapter per source. The composition root holds ONE ordered list, shared by scan and fix-match |
 | **AniList access** | `lib/data/anilist/` (GraphQL client + queries) — the ONLY place; reached solely by its adapter and `main.dart` |
 | **Series identity** | `lib/data/cache/series_identity.dart` — the three id bands. `series_id` is AniLocal's OWN surrogate; provider ids live in `series_external_ids`. `CacheDatabase.ensureSeriesId` is the sole minting site |
 | **Cross-database id map** | `lib/data/crossmap/` — AniList↔MAL↔Kitsu, so AniSkip doesn't depend on AniList being reachable |
-| **OP/ED skip data** | `lib/data/aniskip/` (its own client, like AniList). NOT yet behind a provider seam — that is phase D |
+| **OP/ED skip data** | Behind the `SkipProvider` seam: `lib/data/skip/` (contract + the ordered chain), with each source in its own module — `lib/data/aniskip/` (network, MAL-id keyed) and `lib/data/chapters/` (LOCAL: hand-written MKV EBML + MP4 `chpl` parsers, since `ffprobe` can't ship) |
+| **"Is this skip window trustworthy?"** | `lib/domain/skip_corroboration.dart` — per-window verdicts, the ±2s tolerance, the minimum-length floor, and `skipResolutionKey` (why a row gets re-asked) |
+| **"Is that ~90s chapter an OP?"** | `lib/domain/chapter_skips.dart` — inferred by LENGTH, never position |
+| **Metadata sources** | `lib/data/metadata/` is the seam + one adapter per source; the HTTP/JSON for each lives in its own module (`lib/data/anilist/`, `kitsu/`, `jikan/`, `mal/`). Shared failure attribution: `lib/data/http_failure.dart` → `lib/domain/models/metadata_failure.dart` (and its UI copy, `lib/ui/metadata_failure_message.dart`) |
+| **Source order + on/off** | `lib/domain/models/source_preference.dart` (`applySourceOrder` — THE ordering rule, shared by scan, fix-match and both settings panels) + `source_descriptor.dart` (what a row is, in either family) |
 | **Filename identification** | `lib/data/scanner/` (parser + matcher, behind an interface — swappable) |
 | **The scan/refresh pipeline** | `lib/sync/library_sync.dart` (`sync`, `refreshMetadata`); fix-match writes live in `lib/sync/fix_match_service.dart` |
 | **Playback engine** | `lib/playback/playback_controller.dart` (owns the media_kit `Player`), `media_remote.dart` |
@@ -77,7 +86,7 @@ glance" + the five seams). Working rules for making changes: **`CLAUDE.md`**.
 | **Screens** (home/library, detail, folders, unmatched, fix-match, settings) | `lib/ui/` (+ `lib/ui/library/`) |
 | **The instrument look** (VFD "fine-instrument" theme, Technics SC-CH900) | `lib/ui/theme/` — tokens (`xp_tokens`), widgets (`xp_widgets`), theme (`xp_theme`), readouts (`vfd_readout`, `header_readout`), brand mark (`brand_wordmark`) |
 | **The app shell / persistent header** | `lib/ui/shell/` — `app_shell` (the ONE window chrome, mounted above the Navigator in `MaterialApp.builder`), `header_controller` (route-keyed spec stack + spinner grace), `header_scope` (`HeaderPublisher` mixin), `header_spec` |
-| **Shared UI shells/components** | `lib/ui/widgets/` — `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list`, `xp_reorderable_list` (the ONE priority-list widget: library folders + metadata sources) |
+| **Shared UI shells/components** | `lib/ui/widgets/` — `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list`, `xp_reorderable_list` (the ONE priority-list widget — three users: library folders, metadata sources, skip sources) |
 
 ---
 
@@ -173,8 +182,14 @@ at the code site with the exact crash/symptom):
 
 - **`CLAUDE.md`** — always-loaded working rules: the seams, the single-source
   rules, the anti-debt rules, the dependency log, macOS/build notes.
-- **`ROADMAP.md`** — what's being built and in what order (staging 0–6 done,
-  Stage 7+ features), the locked stack decisions, distribution track.
+- **`ROADMAP.md`** — stage history (0–6 done, Stage 7+ features) and the
+  distribution track (notarization, Windows/Linux, auto-update).
+- **`docs/multi-source-plan.md`** — the source-pluggability program: the slice
+  ledger, the measured research behind it, and the three PARKED sources whose
+  framework is deliberately kept. **Read it before deleting anything that looks
+  unreachable** near the source lists.
+- **`docs/myanimelist-registration.md`** — MyAnimeList's un-park runbook: the
+  registration flow field by field and the live-probed error shapes.
 - **`docs/tech-debt-audit.md`** — duplication/single-source findings (some fixed,
   some open) + §F fragile-machinery catalogue.
 - **`docs/maintainability-assessment.md`** — the "safe to inherit?" review this
@@ -191,6 +206,15 @@ at the code site with the exact crash/symptom):
 - Run: `flutter run -d macos`
 - Check (what CI-equivalent runs): `tool/check.sh` = `flutter analyze` +
   `dart format --set-exit-if-changed`; add `flutter test` when touching a seam.
+- **Live-API tests: `flutter test test_live/`** — three harnesses (Jikan, Kitsu,
+  and the chapter parsers against the whole real library) that hit real services
+  and real files. They sit OUTSIDE `test/` deliberately: `flutter test` walks
+  `test/` only, and the tag-preset flag that would re-include tagged tests is
+  `dart test -P`, which `flutter test` rejects. So `tool/check.sh` never runs
+  them — a suite whose result depends on someone else's uptime stops meaning
+  anything — but mocked fixtures can only prove we parse what we THINK is
+  returned, which is why they exist at all. They fail rather than pass when a
+  service never answers, so they can't be vacuously green.
 - **Don't auto-launch the app for visual checks** — verify by build + tests;
   leave visual confirmation to a human. (See `CLAUDE.md` → "Verification
   workflow.")

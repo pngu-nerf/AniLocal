@@ -1,5 +1,17 @@
 # Maintainability assessment (read-only)
 
+> **Status (updated 2026-09-10): STALE — the oldest doc here. Read it for its
+> framing, not its facts.** Its headline finding #1 ("there is no read-this-first
+> doc for a human maintainer") was FIXED: `docs/ARCHITECTURE.md` exists and is the
+> front door. Finding #2's premise is gone too — the README it calls a "7-line
+> stub" has been rewritten with a documentation index. Every concrete number below
+> predates the multi-source program (schema v14–v18, eleven new modules): where it
+> says schema v11/v13, current is **v18**; where it says "~45 test files", there are
+> **70** plus `test_live/`; where it lists a five-directory `lib/data`, there are
+> twelve. Its dead-symbol finding for `window_chrome.dart` is now discharged
+> (deleted). The *lens* — legibility and safety-to-change — is still the right one,
+> which is why this is annotated rather than rewritten.
+
 **Framing question:** *If a senior engineer inherited this codebase today to own and
 maintain, what would make them uneasy — and what would need to be true for them to be
 genuinely content taking it over?*

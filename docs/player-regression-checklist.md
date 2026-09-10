@@ -88,9 +88,11 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] **Cursor-hide scoped to the video overlay only** — the rail and series-info keep their cursors.
 - [ ] **Media-remote** (AirPods/media keys/Bluetooth) route to the same `play`/`pause`/`playOrPause`/next paths; `updateNowPlaying` current; `dispose()` relinquishes.
 - [ ] **Auto-skip** (off/button/auto; auto seeks once per window; outro seeks within the episode, never advances; outro button hidden during the up-next pre-roll).
+- [ ] **Confidence gate** — a **conflicting** window (two sources disagreeing beyond ±2s, recorded when cross-checking is on) still shows its Skip button but **never fires on its own**, in auto mode. Skipping into real content is what a viewer cannot undo; an unoffered skip is a keypress. Corroborated and single windows auto-skip normally.
+- [ ] **Minimum skip length** — with Settings → Skip → "Ignore skips shorter than" set, a window below the floor shows **no button, no marker, no auto-skip**, consistently in the player, the timeline strip and the detail page (it is filtered on the READ path, so no rescan is needed and the change is immediate).
 - [ ] **Up-next / auto-advance** (pre-roll last ~5s, countdown, cancelable; completion advances when enabled & not cancelled; season boundary stops cleanly; single `advanceToNext()`).
 - [ ] **Resume position** (`open(startAt: resumePosition)`; persists on 5s timer / episode switch / dispose; skips saving once watched or at zero; watched at 0.90).
-- [ ] **Swap-in-place** (`VideoZone` `ValueKey(series.anilistId)`) — episodes swap on the same controller; a different series gets a fresh frame.
+- [ ] **Swap-in-place** (`ValueKey(widget.series.seriesId)`, in `theater_screen.dart`) — episodes swap on the same controller; a different series gets a fresh frame.
 - [ ] **Bar surface fades WITH the controls** — the solid VFD panel is inside the same `AnimatedOpacity` (200ms) + `IgnorePointer` as the bar, so idle-while-playing clears panel *and* controls and the picture is left pristine. It must never become a permanent strip over the video.
 
 ## E. States

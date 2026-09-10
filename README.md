@@ -2,9 +2,10 @@
 
 A light, **offline-first**, distributable **macOS** desktop anime library player.
 Point it at your anime folders: it scans them, identifies files by parsing their
-names, enriches them with metadata from **AniList** (public API — no account, no
-key), caches everything locally, and plays via **libmpv** (media_kit). No server,
-no account, no tracker.
+names, enriches them from an ordered list of metadata sources you control
+(**AniList** by default, with **Kitsu** and **Jikan** as fallbacks — all public,
+no account, no key), caches everything locally, and plays via **libmpv**
+(media_kit). No server, no account, no tracker.
 
 ## Getting started
 

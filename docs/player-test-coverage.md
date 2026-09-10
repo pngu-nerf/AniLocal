@@ -11,6 +11,28 @@ one to fill the gap.
 > no test. Where the harness genuinely can't exercise a path, a documented
 > manual-verify note is the honest answer — not a shallow test.
 
+> **Scope note (2026-09-10).** This file covers the PLAYER only, and it predates
+> the source-pluggability program, so it does not enumerate that work's ~12 test
+> files (`provider_fallback_test`, `skip_provider_test`, `skip_corroboration_test`,
+> `chapter_reader_test`, `chapter_skips_test`, `cross_map_test`,
+> `series_identity_test`, `source_order_test`, the three client tests, and
+> `migration_v14_test` — which despite its name covers the whole v13 → v18 chain
+> plus two leapfrogs). Two additions belong to this file's own subject, and both
+> are covered: the auto-skip **confidence gate** and the **minimum skip length**
+> floor (`skip_provider_test.dart`, `skip_corroboration_test.dart`).
+>
+> One thing this file's own principle demands recording: **`test_live/`**. Three
+> harnesses hit real services and the real library, and they sit OUTSIDE `test/`
+> because `flutter test` walks `test/` only and rejects the `dart test -P` preset
+> flag that would re-include tagged tests. They are never run by `tool/check.sh` —
+> a suite whose result depends on someone else's uptime stops meaning anything —
+> but mocked fixtures can only prove we parse what we THINK is returned, which is
+> exactly the gap this doc exists to name. Run them by hand:
+> `flutter test test_live/`. They fail rather than pass when a service never
+> answers, so they cannot be vacuously green. One result is worth knowing:
+> Jikan's `/v4/anime?q=` has **never** been reached live — fifteen minutes of
+> retrying returned only 504 — so its search mapping still rests on fixtures alone.
+
 ## The harness constraint (why some of this is manual-only)
 
 `flutter test` runs headless with **no libmpv** — constructing media_kit's
