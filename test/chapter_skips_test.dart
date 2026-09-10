@@ -91,9 +91,8 @@ void main() {
     expect(skips?.outro?.start, const Duration(seconds: 1331));
   });
 
-  test('position only separates the two — the EARLIEST before the midpoint '
-      'and the LATEST after it win', () {
-    // A repeated ~90s span mid-episode is a scene, not a second opening.
+  test('position only separates the two — the LATEST qualifying span on each '
+      'side wins', () {
     final skips = inferSkipsFromChapters([
       _at(0),
       _at(90),
@@ -104,13 +103,50 @@ void main() {
     ], const Duration(seconds: 1400));
 
     // Spans are 90 / 310 / 90 / 710 / 90 / 110. Three qualify; the last
-    // (1290-1400 = 110s) does not, so the latest QUALIFYING one wins.
-    expect(skips?.intro?.start, Duration.zero, reason: 'earliest before mid');
+    // (1290-1400 = 110s) does not, so the latest QUALIFYING one wins on each
+    // side. This asserted `0` for the opening until the live harness measured
+    // it: two candidates before the midpoint means a cold open followed by the
+    // real opening, five times out of five on the reference library.
+    expect(
+      skips?.intro?.start,
+      const Duration(seconds: 400),
+      reason: 'latest qualifying span before the midpoint',
+    );
     expect(
       skips?.outro?.start,
       const Duration(seconds: 1200),
       reason: 'latest qualifying span after the midpoint',
     );
+  });
+
+  test('a COLD OPEN of theme-like length does not steal the opening', () {
+    // `Boushoku no Berserk` ep5, verbatim from the live measurement: a first
+    // chapter of 88s (inside the band) followed by the real opening at 88→178.
+    // AniSkip independently says 87.9→177.9. Earliest-wins picked the cold open
+    // and scored 0% overlap against that; this is the case the rule got wrong.
+    final skips = inferSkipsFromChapters([
+      _at(0),
+      _at(88),
+      _at(178),
+      _at(1325),
+    ], const Duration(milliseconds: 1415000));
+
+    expect(skips?.intro?.start, const Duration(seconds: 88));
+    expect(skips?.intro?.end, const Duration(seconds: 178));
+  });
+
+  test('a SINGLE candidate is unaffected by which side wins', () {
+    // The case that justified earliest-wins in the first place, and the reason
+    // flipping it is safe: episode 1 opening cold with its OP at 498s carries
+    // exactly ONE qualifying span before the midpoint, so both rules agree.
+    final skips = inferSkipsFromChapters([
+      _at(0),
+      _at(498),
+      _at(588),
+      _at(1331),
+    ], const Duration(milliseconds: 1422100));
+
+    expect(skips?.intro?.start, const Duration(seconds: 498));
   });
 
   test('no chapters, or no duration, means no answer', () {

@@ -61,9 +61,32 @@ List<ChapterSpan> chapterSpans(List<ChapterMark> marks, Duration duration) {
 ///
 /// Position is used only to TELL THEM APART once both look like themes: a
 /// qualifying span starting before the midpoint is the opening, one starting
-/// after it is the ending. When several qualify on the same side, the outermost
-/// wins — earliest for the opening, latest for the ending — because a repeated
-/// ~90s span in the middle of an episode is a scene, not a second OP.
+/// after it is the ending.
+///
+/// When several qualify on the same side, **the LATEST wins**, and for the
+/// opening that is measured rather than reasoned. It shipped the other way —
+/// earliest-wins, on the theory that a repeated ~90s span later in the episode
+/// is a scene rather than a second OP — and
+/// `test_live/opening_span_choice_live_test.dart` shows that was backwards. Of
+/// 105 chaptered files only SIX carry more than one candidate, and on the five
+/// AniSkip can judge, the latest is right every time and by a wide margin: the
+/// earliest scores 0–1% overlap with AniSkip's answer, the latest 92–100%. The
+/// pattern is always the same — a cold open of coincidentally theme-like length
+/// comes first, and the real opening starts exactly where it ends
+/// (`Boushoku no Berserk` ep5: `0→88` then `88→178`, AniSkip `87.9→177.9`).
+///
+/// The earlier rationale conflated two different things. That an episode may
+/// open cold with its OP at 498s while its neighbours start theirs at 0s proves
+/// only that no rule may key on WHICH chapter it is — and that case carries a
+/// single candidate, so it is decided identically either way.
+///
+/// The residual risk is the mirror image: an episode whose real OP comes first
+/// and is followed by a coincidentally ~90s scene before the midpoint. That
+/// shape does not occur anywhere in the reference library, while the cold-open
+/// shape occurs five times; and corroboration is the backstop either way, since
+/// a wrong pick disagrees with AniSkip and is then never auto-skipped. The
+/// ending side keeps latest-wins, which it always had — multi-candidate endings
+/// are UNMEASURED, so nothing there was changed on the strength of this.
 ///
 /// Returns null rather than guessing when nothing is in the band. A file with
 /// chapters that are merely scene divisions must yield NO skip data, not a
@@ -83,7 +106,7 @@ EpisodeSkips? inferSkipsFromChapters(
     final length = span.length;
     if (length < kOpeningMinLength || length > kOpeningMaxLength) continue;
     if (span.start < midpoint) {
-      opening ??= span; // earliest qualifying span before the midpoint
+      opening = span; // LATEST qualifying span before the midpoint — measured
     } else {
       ending = span; // latest qualifying span after it
     }

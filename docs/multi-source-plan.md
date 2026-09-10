@@ -96,25 +96,54 @@ that the number is not tuned.
 new rule would apply only to episodes scanned afterwards — the same trap v18 was built to
 close, one level up.
 
-**Still open, deliberately:** the root cause of those 9 is `inferSkipsFromChapters` taking
-the EARLIEST qualifying span before the midpoint. Preferring the later one would fix them,
-but that rule exists for a measured case (an episode opening cold with its OP at 498s), so
-flipping it blind could trade nine known errors for an unknown number of new ones —
-and corroboration already contains the damage by refusing to auto-skip them.
+### The nine, and why the opening is now the LATEST candidate — SETTLED
 
-`test_live/opening_span_choice_live_test.dart` is the measurement that would settle it:
-for every file with two or more theme-length spans before its midpoint, it asks which
-candidate is closer to AniSkip's answer, using the same overlap metric the corroboration
-rule uses. Run it with `flutter test test_live/opening_span_choice_live_test.dart`; it
-writes `build/opening_span_report.txt`. Switching to latest-wins is justified only if
-LATEST clearly outnumbers earliest — if earliest wins even a handful, the inference rule is
-right as it stands and those nine stay a corroboration matter rather than an inference one.
+The nine windows generation 2 could only refuse to auto-skip all shared one cause:
+`inferSkipsFromChapters` took the EARLIEST theme-length span before the midpoint, and on
+those files that span was a cold open while the real opening began exactly where it ended.
+Rather than flip the rule on that inference — it existed for a measured case, and could have
+traded nine known errors for an unknown number of new ones —
+`test_live/opening_span_choice_live_test.dart` measured it. The result was one-sided:
 
-Note it must be run from a shell whose **responsible process** holds macOS's
-removable-volume permission. TCC grants attach per app, and `ChapterReader` turns any read
-failure into "no chapters", so a permission denial would otherwise look identical to a
-library with no chapter marks — the harness therefore probes readability first and fails
-loudly with that distinction spelled out.
+```
+with readable chapters   : 105
+  exactly ONE candidate  :  89   (nothing to decide)
+  TWO OR MORE candidates :   6   (the whole question)
+    LATEST wins          :   5
+    earliest wins        :   0
+    AniSkip had no answer:   1
+```
+
+And not close: the earliest candidate scored **0–1%** overlap against AniSkip's answer, the
+latest **92–100%**. `Sakamoto desu ga?` ep1's latest candidate matches AniSkip to the
+decimal (134.1→224.1 both). `Boushoku no Berserk` ep5 is the canonical shape — `0→88` then
+`88→178`, with AniSkip at `87.9→177.9`.
+
+The original rationale had conflated two different claims. That an episode may open cold
+with its OP at 498s while its neighbours start theirs at 0s proves only that no rule may key
+on WHICH chapter it is — and that case carries a **single** candidate, so both rules decide
+it identically. Preferring the earliest of *several* was never tested against anything.
+
+Residual risk is the mirror image: a real OP followed by a coincidentally ~90s scene before
+the midpoint. That shape appears nowhere in the reference library while the cold-open shape
+appears five times, and corroboration backstops it either way. **Multi-candidate endings are
+UNMEASURED**, so the ending side kept latest-wins unchanged rather than being touched on the
+strength of an opening measurement.
+
+`_ruleGeneration` went to 3, so every stored row re-resolves once and the nine pick up
+correct windows instead of merely being refused.
+
+**Running the harness:** it must run from a shell whose **responsible process** holds macOS's
+removable-volume permission — TCC grants attach per app, not per user. `ChapterReader` turns
+any read failure into "no chapters" by design, so a permission denial would otherwise look
+identical to a library with no chapter marks; the harness therefore probes readability first
+and fails loudly with that distinction spelled out. This bit a diagnosis during the work.
+
+**One obligation is not enforceable by a test:** bumping `_ruleGeneration` when a rule
+changes. Any test asserting the current value would break on every legitimate bump and add
+no safety, so the key's test asserts only its SHAPE. It is a documented obligation at the
+constant, and the failure mode is silent — a rule change that reaches only newly scanned
+episodes.
 
 ### Why chapters lead the skip order (revised after shipping)
 

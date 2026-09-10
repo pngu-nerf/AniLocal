@@ -107,13 +107,14 @@ double windowOverlap(SkipRange a, SkipRange b) {
 /// instead of stopping at the first, and only then can a window be judged
 /// corroborated or conflicting.
 ///
-/// [_ruleGeneration] is part of it because THE RULE IS AN INPUT TOO. The key
-/// has to capture everything that could change the answer, and a stored verdict
-/// computed under an older reconciliation rule is exactly as stale as one
-/// computed from a different set of sources. Bumping it re-resolves every row
-/// once, which is the only way a rule change reaches a library that has already
-/// been scanned. Bump it whenever [reconcileWindow]'s notion of agreement
-/// changes — not for a refactor that cannot alter a verdict.
+/// [_ruleGeneration] is part of it because THE RULES ARE INPUTS TOO. The key has
+/// to capture everything that could change the answer, and a row produced under
+/// an older rule is exactly as stale as one produced from a different set of
+/// sources. Bumping it re-resolves every row once, which is the only way a rule
+/// change reaches a library that has already been scanned. Bump it whenever any
+/// rule that could alter a stored window or verdict changes — the agreement
+/// test in [reconcileWindow], or the inference in `inferSkipsFromChapters` —
+/// but not for a refactor that cannot alter either.
 ///
 /// Deliberately opaque and compared only for equality — nothing parses it back.
 String skipResolutionKey(
@@ -123,10 +124,13 @@ String skipResolutionKey(
     '${sourcesInOrder.join(',')}|${corroborate ? 'x' : '-'}'
     '|r$_ruleGeneration';
 
-/// Generation of the agreement rule itself. 1 = the original ±2s test on each
-/// edge; 2 = overlap (see [kSkipCorroborationMinOverlap]), which reclassified
-/// 50 of 59 disagreeing pairs on the reference library as agreement.
-const int _ruleGeneration = 2;
+/// Generation of the rules that decide a stored row. 1 = the original ±2s test
+/// on each edge; 2 = overlap (see [kSkipCorroborationMinOverlap]), which
+/// reclassified 50 of 59 disagreeing pairs on the reference library as
+/// agreement; 3 = the opening is the LATEST theme-length chapter before the
+/// midpoint rather than the earliest, which fixed the nine windows that
+/// generation 2 could only refuse to auto-skip.
+const int _ruleGeneration = 3;
 
 /// Drop a window shorter than [minimum].
 ///
