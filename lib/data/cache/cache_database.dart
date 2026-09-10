@@ -224,6 +224,21 @@ class SkipSegments extends Table {
   IntColumn get introConfidence => integer().withDefault(const Constant(0))();
   IntColumn get outroConfidence => integer().withDefault(const Constant(0))();
 
+  /// The resolution INPUTS this row was produced from (`skipResolutionKey`):
+  /// the enabled skip sources in order, plus whether cross-checking was on.
+  ///
+  /// This is what stops the first writer winning forever. A refresh re-asks an
+  /// episode that already has a row exactly when this key no longer matches the
+  /// current settings — so reordering sources, switching one off, or turning
+  /// cross-checking on re-resolves the affected rows ONCE and then costs
+  /// nothing. Without it the two states are indistinguishable: a row with one
+  /// source and no verdict looks identical whether cross-checking examined it
+  /// and found nothing to compare, or never ran at all.
+  ///
+  /// Empty on rows written before v18, which is exactly right — we don't know
+  /// what produced them, so they are re-resolved once on the next refresh.
+  TextColumn get resolvedKey => text().withDefault(const Constant(''))();
+
   @override
   Set<Column> get primaryKey => {seriesId, episode};
 
@@ -346,7 +361,7 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
@@ -361,7 +376,12 @@ class CacheDatabase extends _$CacheDatabase {
   // v12 watch_state.watched_manual — the sticky manual watched-override flag (an
   // additive column, default 0, so existing rows stay threshold-derived); v13
   // show_preferences — per-show prefs (cover display mode + hide-next-episode),
-  // a brand-new table so existing populated caches are untouched.
+  // a brand-new table so existing populated caches are untouched; v14 surrogate
+  // series identity; v15 series_cache.id_mal dropped; v16 skip_segments.source;
+  // v17 per-window skip confidence; v18 skip_segments.resolved_key — the
+  // resolution inputs a skip row came from, so a source reorder or a
+  // cross-checking toggle re-resolves the affected rows once instead of never
+  // (an additive column defaulting to '' = "unknown inputs, re-resolve once").
   //
   // v8 RECLAIMED: it was briefly scratch on an unshipped branch (series_relations,
   // the "Up Next" overshoot) then reverted — it never reached main and no DB sits
@@ -485,6 +505,18 @@ class CacheDatabase extends _$CacheDatabase {
           await m.dropColumn(skipSegments, 'confidence');
           await m.addColumn(skipSegments, skipSegments.introConfidence);
           await m.addColumn(skipSegments, skipSegments.outroConfidence);
+        }
+      }
+      if (from < 18) {
+        // Additive and defaulted to '', which MEANS "produced by unknown
+        // inputs" — so every pre-v18 row is re-resolved once on the next
+        // refresh and then left alone. Backfilling it to the current key
+        // would be the wrong default: it would assert that rows written
+        // before the rule existed already satisfy it, and the 140 rows on
+        // the reference library that predate even `source` would keep their
+        // first-writer-wins state forever.
+        if (from >= 8) {
+          await m.addColumn(skipSegments, skipSegments.resolvedKey);
         }
       }
     },

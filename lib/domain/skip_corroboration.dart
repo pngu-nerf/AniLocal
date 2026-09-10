@@ -45,6 +45,30 @@ enum SkipConfidence {
 /// AniSkip's roughly one-second resolution.
 const Duration kSkipCorroborationTolerance = Duration(seconds: 2);
 
+/// The inputs a skip row was resolved from, as one comparable string.
+///
+/// Stored on the row (`skip_segments.resolved_key`) so a refresh can tell
+/// whether re-asking this episode could possibly produce a different answer.
+/// That is the whole mechanism that stops the FIRST WRITER WINNING FOREVER:
+/// without it, a refresh either re-asks every episode every time (unacceptable
+/// — it is one network call per episode) or, as it did, never re-asks an
+/// episode that already has a row, which silently made reordering sources and
+/// switching on cross-checking inert on any library that had already been
+/// scanned.
+///
+/// [sourcesInOrder] is the enabled, askable sources IN PRIORITY ORDER — order
+/// is part of the key because it decides who supplies the times, and a source
+/// that is switched off is simply absent. [corroborate] is part of it because
+/// cross-checking changes the ANSWER, not just its cost: it asks every source
+/// instead of stopping at the first, and only then can a window be judged
+/// corroborated or conflicting.
+///
+/// Deliberately opaque and compared only for equality — nothing parses it back.
+String skipResolutionKey(
+  Iterable<String> sourcesInOrder, {
+  required bool corroborate,
+}) => '${sourcesInOrder.join(',')}|${corroborate ? 'x' : '-'}';
+
 /// Drop a window shorter than [minimum].
 ///
 /// A user-set floor on how short a skip may be. Sources occasionally mark a

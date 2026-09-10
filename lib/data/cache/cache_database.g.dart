@@ -2957,6 +2957,18 @@ class $SkipSegmentsTable extends SkipSegments
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _resolvedKeyMeta = const VerificationMeta(
+    'resolvedKey',
+  );
+  @override
+  late final GeneratedColumn<String> resolvedKey = GeneratedColumn<String>(
+    'resolved_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     seriesId,
@@ -2968,6 +2980,7 @@ class $SkipSegmentsTable extends SkipSegments
     source,
     introConfidence,
     outroConfidence,
+    resolvedKey,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3057,6 +3070,15 @@ class $SkipSegmentsTable extends SkipSegments
         ),
       );
     }
+    if (data.containsKey('resolved_key')) {
+      context.handle(
+        _resolvedKeyMeta,
+        resolvedKey.isAcceptableOrUnknown(
+          data['resolved_key']!,
+          _resolvedKeyMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3102,6 +3124,10 @@ class $SkipSegmentsTable extends SkipSegments
         DriftSqlType.int,
         data['${effectivePrefix}outro_confidence'],
       )!,
+      resolvedKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}resolved_key'],
+      )!,
     );
   }
 
@@ -3138,6 +3164,21 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   /// the intro's corroboration or overstate the outro's.
   final int introConfidence;
   final int outroConfidence;
+
+  /// The resolution INPUTS this row was produced from (`skipResolutionKey`):
+  /// the enabled skip sources in order, plus whether cross-checking was on.
+  ///
+  /// This is what stops the first writer winning forever. A refresh re-asks an
+  /// episode that already has a row exactly when this key no longer matches the
+  /// current settings — so reordering sources, switching one off, or turning
+  /// cross-checking on re-resolves the affected rows ONCE and then costs
+  /// nothing. Without it the two states are indistinguishable: a row with one
+  /// source and no verdict looks identical whether cross-checking examined it
+  /// and found nothing to compare, or never ran at all.
+  ///
+  /// Empty on rows written before v18, which is exactly right — we don't know
+  /// what produced them, so they are re-resolved once on the next refresh.
+  final String resolvedKey;
   const SkipSegmentRow({
     required this.seriesId,
     required this.episode,
@@ -3148,6 +3189,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     required this.source,
     required this.introConfidence,
     required this.outroConfidence,
+    required this.resolvedKey,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3169,6 +3211,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     map['source'] = Variable<String>(source);
     map['intro_confidence'] = Variable<int>(introConfidence);
     map['outro_confidence'] = Variable<int>(outroConfidence);
+    map['resolved_key'] = Variable<String>(resolvedKey);
     return map;
   }
 
@@ -3191,6 +3234,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       source: Value(source),
       introConfidence: Value(introConfidence),
       outroConfidence: Value(outroConfidence),
+      resolvedKey: Value(resolvedKey),
     );
   }
 
@@ -3209,6 +3253,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       source: serializer.fromJson<String>(json['source']),
       introConfidence: serializer.fromJson<int>(json['introConfidence']),
       outroConfidence: serializer.fromJson<int>(json['outroConfidence']),
+      resolvedKey: serializer.fromJson<String>(json['resolvedKey']),
     );
   }
   @override
@@ -3224,6 +3269,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       'source': serializer.toJson<String>(source),
       'introConfidence': serializer.toJson<int>(introConfidence),
       'outroConfidence': serializer.toJson<int>(outroConfidence),
+      'resolvedKey': serializer.toJson<String>(resolvedKey),
     };
   }
 
@@ -3237,6 +3283,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     String? source,
     int? introConfidence,
     int? outroConfidence,
+    String? resolvedKey,
   }) => SkipSegmentRow(
     seriesId: seriesId ?? this.seriesId,
     episode: episode ?? this.episode,
@@ -3247,6 +3294,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     source: source ?? this.source,
     introConfidence: introConfidence ?? this.introConfidence,
     outroConfidence: outroConfidence ?? this.outroConfidence,
+    resolvedKey: resolvedKey ?? this.resolvedKey,
   );
   SkipSegmentRow copyWithCompanion(SkipSegmentsCompanion data) {
     return SkipSegmentRow(
@@ -3271,6 +3319,9 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       outroConfidence: data.outroConfidence.present
           ? data.outroConfidence.value
           : this.outroConfidence,
+      resolvedKey: data.resolvedKey.present
+          ? data.resolvedKey.value
+          : this.resolvedKey,
     );
   }
 
@@ -3285,7 +3336,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
           ..write('outroEndMs: $outroEndMs, ')
           ..write('source: $source, ')
           ..write('introConfidence: $introConfidence, ')
-          ..write('outroConfidence: $outroConfidence')
+          ..write('outroConfidence: $outroConfidence, ')
+          ..write('resolvedKey: $resolvedKey')
           ..write(')'))
         .toString();
   }
@@ -3301,6 +3353,7 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     source,
     introConfidence,
     outroConfidence,
+    resolvedKey,
   );
   @override
   bool operator ==(Object other) =>
@@ -3314,7 +3367,8 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
           other.outroEndMs == this.outroEndMs &&
           other.source == this.source &&
           other.introConfidence == this.introConfidence &&
-          other.outroConfidence == this.outroConfidence);
+          other.outroConfidence == this.outroConfidence &&
+          other.resolvedKey == this.resolvedKey);
 }
 
 class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
@@ -3327,6 +3381,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
   final Value<String> source;
   final Value<int> introConfidence;
   final Value<int> outroConfidence;
+  final Value<String> resolvedKey;
   final Value<int> rowid;
   const SkipSegmentsCompanion({
     this.seriesId = const Value.absent(),
@@ -3338,6 +3393,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     this.source = const Value.absent(),
     this.introConfidence = const Value.absent(),
     this.outroConfidence = const Value.absent(),
+    this.resolvedKey = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SkipSegmentsCompanion.insert({
@@ -3350,6 +3406,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     this.source = const Value.absent(),
     this.introConfidence = const Value.absent(),
     this.outroConfidence = const Value.absent(),
+    this.resolvedKey = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : seriesId = Value(seriesId),
        episode = Value(episode);
@@ -3363,6 +3420,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     Expression<String>? source,
     Expression<int>? introConfidence,
     Expression<int>? outroConfidence,
+    Expression<String>? resolvedKey,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3375,6 +3433,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
       if (source != null) 'source': source,
       if (introConfidence != null) 'intro_confidence': introConfidence,
       if (outroConfidence != null) 'outro_confidence': outroConfidence,
+      if (resolvedKey != null) 'resolved_key': resolvedKey,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3389,6 +3448,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     Value<String>? source,
     Value<int>? introConfidence,
     Value<int>? outroConfidence,
+    Value<String>? resolvedKey,
     Value<int>? rowid,
   }) {
     return SkipSegmentsCompanion(
@@ -3401,6 +3461,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
       source: source ?? this.source,
       introConfidence: introConfidence ?? this.introConfidence,
       outroConfidence: outroConfidence ?? this.outroConfidence,
+      resolvedKey: resolvedKey ?? this.resolvedKey,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3435,6 +3496,9 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     if (outroConfidence.present) {
       map['outro_confidence'] = Variable<int>(outroConfidence.value);
     }
+    if (resolvedKey.present) {
+      map['resolved_key'] = Variable<String>(resolvedKey.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3453,6 +3517,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
           ..write('source: $source, ')
           ..write('introConfidence: $introConfidence, ')
           ..write('outroConfidence: $outroConfidence, ')
+          ..write('resolvedKey: $resolvedKey, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5988,6 +6053,7 @@ typedef $$SkipSegmentsTableCreateCompanionBuilder =
       Value<String> source,
       Value<int> introConfidence,
       Value<int> outroConfidence,
+      Value<String> resolvedKey,
       Value<int> rowid,
     });
 typedef $$SkipSegmentsTableUpdateCompanionBuilder =
@@ -6001,6 +6067,7 @@ typedef $$SkipSegmentsTableUpdateCompanionBuilder =
       Value<String> source,
       Value<int> introConfidence,
       Value<int> outroConfidence,
+      Value<String> resolvedKey,
       Value<int> rowid,
     });
 
@@ -6055,6 +6122,11 @@ class $$SkipSegmentsTableFilterComposer
 
   ColumnFilters<int> get outroConfidence => $composableBuilder(
     column: $table.outroConfidence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get resolvedKey => $composableBuilder(
+    column: $table.resolvedKey,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6112,6 +6184,11 @@ class $$SkipSegmentsTableOrderingComposer
     column: $table.outroConfidence,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get resolvedKey => $composableBuilder(
+    column: $table.resolvedKey,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SkipSegmentsTableAnnotationComposer
@@ -6161,6 +6238,11 @@ class $$SkipSegmentsTableAnnotationComposer
     column: $table.outroConfidence,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get resolvedKey => $composableBuilder(
+    column: $table.resolvedKey,
+    builder: (column) => column,
+  );
 }
 
 class $$SkipSegmentsTableTableManager
@@ -6203,6 +6285,7 @@ class $$SkipSegmentsTableTableManager
                 Value<String> source = const Value.absent(),
                 Value<int> introConfidence = const Value.absent(),
                 Value<int> outroConfidence = const Value.absent(),
+                Value<String> resolvedKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SkipSegmentsCompanion(
                 seriesId: seriesId,
@@ -6214,6 +6297,7 @@ class $$SkipSegmentsTableTableManager
                 source: source,
                 introConfidence: introConfidence,
                 outroConfidence: outroConfidence,
+                resolvedKey: resolvedKey,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6227,6 +6311,7 @@ class $$SkipSegmentsTableTableManager
                 Value<String> source = const Value.absent(),
                 Value<int> introConfidence = const Value.absent(),
                 Value<int> outroConfidence = const Value.absent(),
+                Value<String> resolvedKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SkipSegmentsCompanion.insert(
                 seriesId: seriesId,
@@ -6238,6 +6323,7 @@ class $$SkipSegmentsTableTableManager
                 source: source,
                 introConfidence: introConfidence,
                 outroConfidence: outroConfidence,
+                resolvedKey: resolvedKey,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

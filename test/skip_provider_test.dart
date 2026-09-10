@@ -16,6 +16,7 @@ import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/domain/models/metadata_failure.dart';
 import 'package:anilocal/domain/models/skip_range.dart';
+import 'package:anilocal/domain/skip_corroboration.dart';
 import 'package:anilocal/domain/models/source_preference.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -203,6 +204,32 @@ void main() {
       ).sync([dir.path]);
     }
 
+    Future<void> refreshWith(
+      List<SkipProvider> providers, {
+      bool corroborate = false,
+      List<SourcePreference> order = const [],
+    }) async {
+      final mock = MockClient((req) async {
+        if (req.method == 'POST') return _anilistPage();
+        return http.Response.bytes([1, 2, 3], 200);
+      });
+      await LibrarySync(
+        scanner: const FileSystemFolderScanner(),
+        parser: const HeuristicFilenameParser(),
+        matcher: SeriesMatcher(
+          providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
+        ),
+        cache: db,
+        art: ArtCache(
+          httpClient: mock,
+          directory: () async => Directory('${dir.path}/.art')..createSync(),
+        ),
+        skipProviders: providers,
+        loadSkipOrder: () async => order,
+        loadCorroborateSkips: () async => corroborate,
+      ).refreshMetadata();
+    }
+
     test('the first source WITH DATA wins, and is recorded', () async {
       // "No data" is not failure: partial coverage is normal, so an empty
       // answer must fall through silently rather than end the chain.
@@ -264,23 +291,7 @@ void main() {
         windows: _op(),
         onLookup: (l) => seen = l,
       );
-      final mock = MockClient((req) async {
-        if (req.method == 'POST') return _anilistPage();
-        return http.Response.bytes([1, 2, 3], 200);
-      });
-      await LibrarySync(
-        scanner: const FileSystemFolderScanner(),
-        parser: const HeuristicFilenameParser(),
-        matcher: SeriesMatcher(
-          providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
-        ),
-        cache: db,
-        art: ArtCache(
-          httpClient: mock,
-          directory: () async => Directory('${dir.path}/.art')..createSync(),
-        ),
-        skipProviders: [spy],
-      ).refreshMetadata();
+      await refreshWith([spy]);
 
       expect(
         seen.filePath,
@@ -409,6 +420,258 @@ void main() {
       expect(lookup.filePath, endsWith('ep3.mkv'));
       expect(lookup.siblingPaths, hasLength(2));
       expect(lookup.episodeLength?.inMinutes, 24);
+    });
+  });
+
+  group('re-resolution: the first writer does not win forever', () {
+    // Every one of these is about an ALREADY SCANNED library, which is the only
+    // situation that matters here: a scan re-fetches skips for the files it is
+    // reprocessing anyway, so a change of sources or settings can only reach
+    // the existing 285 episodes through refresh. Before this, refresh skipped
+    // any episode that had a row at all, so reordering sources and switching on
+    // cross-checking were both silently inert on a real library.
+    late Directory dir;
+    late CacheDatabase db;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('anilocal_reresolve_');
+      db = CacheDatabase(NativeDatabase.memory());
+      final f = File('${dir.path}/Cowboy Bebop - 01.mkv');
+      await f.create(recursive: true);
+      await f.writeAsString('xxxxx');
+    });
+    tearDown(() async {
+      await db.close();
+      await dir.delete(recursive: true);
+    });
+
+    MockClient mock() => MockClient((req) async {
+      if (req.method == 'POST') return _anilistPage();
+      return http.Response.bytes([1, 2, 3], 200);
+    });
+
+    LibrarySync sync(
+      List<SkipProvider> providers, {
+      bool corroborate = false,
+      List<SourcePreference> order = const [],
+    }) {
+      final client = mock();
+      return LibrarySync(
+        scanner: const FileSystemFolderScanner(),
+        parser: const HeuristicFilenameParser(),
+        matcher: SeriesMatcher(
+          providers: [
+            AniListMetadataProvider(AniListClient(httpClient: client)),
+          ],
+        ),
+        cache: db,
+        art: ArtCache(
+          httpClient: client,
+          directory: () async => Directory('${dir.path}/.art')..createSync(),
+        ),
+        skipProviders: providers,
+        loadSkipOrder: () async => order,
+        loadCorroborateSkips: () async => corroborate,
+      );
+    }
+
+    test(
+      'UNCHANGED settings re-ask nothing — refresh stays incremental',
+      () async {
+        // The load-bearing half of the feature. Re-resolving on every refresh
+        // would be one network call per episode, every time, which is exactly
+        // the cost the original short-circuit existed to avoid.
+        final aniskip = _FakeSkip('aniskip', windows: _op());
+        await sync([aniskip]).sync([dir.path]);
+        expect((await db.allSkipRows()).single.source, 'aniskip');
+        final callsAfterScan = aniskip.calls;
+
+        await sync([aniskip]).refreshMetadata();
+
+        expect(
+          aniskip.calls,
+          callsAfterScan,
+          reason: 'same sources, same settings, so nothing can have changed',
+        );
+      },
+    );
+
+    test('a REORDER lets a now-higher source replace the stored one', () async {
+      // The user drags AniSkip above chapters. The existing row came from
+      // chapters only because AniSkip had nothing at the time; it must get
+      // another chance, or the order they just set does nothing.
+      final chapters = _FakeSkip('chapters', windows: _op());
+      final aniskip = _FakeSkip('aniskip');
+      // Built-in order, chapters on top: it answers, so the row is its.
+      await sync([chapters, aniskip]).sync([dir.path]);
+      expect((await db.allSkipRows()).single.source, 'chapters');
+
+      // AniSkip now has data, and the user has put it on top.
+      final aniskipNow = _FakeSkip(
+        'aniskip',
+        windows: const EpisodeSkips(
+          intro: SkipRange(
+            start: Duration(seconds: 5),
+            end: Duration(seconds: 95),
+          ),
+        ),
+      );
+      await sync(
+        [chapters, aniskipNow],
+        order: const [
+          SourcePreference(token: 'aniskip'),
+          SourcePreference(token: 'chapters'),
+        ],
+      ).refreshMetadata();
+
+      final row = (await db.allSkipRows()).single;
+      expect(row.source, 'aniskip');
+      expect(
+        row.introStartMs,
+        5000,
+        reason: 'the new top source supplies the times',
+      );
+    });
+
+    test('switching a source OFF re-resolves the rows it wrote', () async {
+      final chapters = _FakeSkip('chapters', windows: _op());
+      final aniskip = _FakeSkip(
+        'aniskip',
+        windows: const EpisodeSkips(
+          intro: SkipRange(
+            start: Duration(seconds: 5),
+            end: Duration(seconds: 95),
+          ),
+        ),
+      );
+      await sync([chapters, aniskip]).sync([dir.path]);
+      expect((await db.allSkipRows()).single.source, 'chapters');
+
+      await sync(
+        [chapters, aniskip],
+        order: const [
+          SourcePreference(token: 'chapters', enabled: false),
+          SourcePreference(token: 'aniskip'),
+        ],
+      ).refreshMetadata();
+
+      expect(
+        (await db.allSkipRows()).single.source,
+        'aniskip',
+        reason: 'a disabled source must not keep supplying the times it wrote',
+      );
+    });
+
+    test('turning CROSS-CHECKING on re-judges existing rows', () async {
+      // The one the user actually hit: 157 rows, every intro_confidence 0,
+      // because corroboration could only ever reach episodes that gained
+      // their FIRST row after it was switched on.
+      final chapters = _FakeSkip('chapters', windows: _op());
+      final aniskip = _FakeSkip('aniskip', windows: _op());
+      await sync([chapters, aniskip]).sync([dir.path]);
+      expect((await db.allSkipRows()).single.introConfidence, 0);
+      expect(aniskip.calls, 0, reason: 'cheap path stopped at chapters');
+
+      await sync([chapters, aniskip], corroborate: true).refreshMetadata();
+
+      final row = (await db.allSkipRows()).single;
+      expect(row.introConfidence, 1, reason: 'now corroborated');
+      expect(row.source, 'chapters', reason: 'top source still supplies times');
+    });
+
+    test(
+      'a pre-v18 row with no recorded inputs is re-asked EXACTLY once',
+      () async {
+        // The 140 rows on the reference library that predate the provenance
+        // column: unknown inputs, so re-resolve them once — and then leave them
+        // alone, rather than re-asking every refresh forever.
+        await sync([
+          _FakeSkip('aniskip'),
+        ]).sync([dir.path]); // identify the file
+        await db.upsertSkipSegment(
+          SkipSegmentRow(
+            seriesId: 1,
+            episode: 1,
+            introStartMs: 0,
+            introEndMs: 89000,
+            source: '',
+            introConfidence: 0,
+            outroConfidence: 0,
+            resolvedKey: '', // what a migrated v17 row looks like
+          ),
+        );
+
+        final aniskip = _FakeSkip('aniskip', windows: _op());
+        await sync([aniskip]).refreshMetadata();
+        expect(
+          aniskip.calls,
+          1,
+          reason: 'unknown provenance -> re-resolve once',
+        );
+        expect((await db.allSkipRows()).single.source, 'aniskip');
+
+        await sync([aniskip]).refreshMetadata();
+        expect(aniskip.calls, 1, reason: 'and then it is settled');
+      },
+    );
+
+    test('when nobody answers, the existing row is LEFT ALONE', () async {
+      // Degrade toward keeping data. A source being down must not blank a
+      // window the user has been using, and the row stays unstamped so the
+      // next refresh tries again — the same retry an episode with no row at
+      // all has always had.
+      final chapters = _FakeSkip('chapters', windows: _op());
+      await sync([chapters]).sync([dir.path]);
+      expect((await db.allSkipRows()).single.introEndMs, 90000);
+
+      final down = _FakeSkip('aniskip', failure: MetadataFailure.service);
+      await sync(
+        [down],
+        order: const [SourcePreference(token: 'aniskip')],
+      ).refreshMetadata();
+
+      final row = (await db.allSkipRows()).single;
+      expect(row.introEndMs, 90000, reason: 'not blanked, not deleted');
+      expect(row.source, 'chapters');
+      // Still carries the key the SCAN stamped, which is the point: it does
+      // not match the inputs in force now, so the next refresh tries again.
+      expect(
+        row.resolvedKey,
+        isNot(skipResolutionKey(const ['aniskip'], corroborate: false)),
+        reason: 'stale key -> retried next time',
+      );
+    });
+  });
+
+  group('the resolution key', () {
+    test(
+      'order is part of it — the same sources ranked differently differ',
+      () {
+        expect(
+          skipResolutionKey(['aniskip', 'chapters'], corroborate: false),
+          isNot(skipResolutionKey(['chapters', 'aniskip'], corroborate: false)),
+        );
+      },
+    );
+
+    test('cross-checking is part of it', () {
+      expect(
+        skipResolutionKey(['aniskip'], corroborate: true),
+        isNot(skipResolutionKey(['aniskip'], corroborate: false)),
+      );
+    });
+
+    test('and it is stable for identical inputs', () {
+      expect(
+        skipResolutionKey(['aniskip', 'chapters'], corroborate: true),
+        skipResolutionKey(['aniskip', 'chapters'], corroborate: true),
+      );
+    });
+
+    test('a row written before the key existed never matches', () {
+      // '' is the v18 default and MEANS "unknown inputs", so it has to differ
+      // from every real key — including the one for an empty source list.
+      expect(skipResolutionKey(const [], corroborate: false), isNot(''));
     });
   });
 }

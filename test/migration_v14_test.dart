@@ -84,6 +84,14 @@ CREATE TABLE app_settings (key TEXT NOT NULL, value TEXT NOT NULL,
 /// which hold sacred user data. The rename is schema-text-only (SQLite rewrites
 /// the stored CREATE TABLE and touches zero rows), so the guarantee under test
 /// is total preservation: every row, every field, byte for byte.
+///
+/// It has outgrown its name: opening a seeded cache runs the migration to the
+/// CURRENT schemaVersion, so every case here exercises v13 -> v18 end to end,
+/// and the later versions are asserted at the bottom. There is deliberately no
+/// separate v15/v16/v17/v18 file — a per-version file would re-run this same
+/// chain and assert one more column, while the failures that actually happen
+/// here are about which STARTING version you come from. Those get their own
+/// cases instead (the v8 and v16 leapfrogs).
 void main() {
   /// Every sacred table populated with DISTINCTIVE, NON-DEFAULT values — a row
   /// that survives by accident (defaults, zeroes) would prove nothing.
@@ -283,6 +291,90 @@ void main() {
     expect(names, contains('intro_confidence'));
     expect(names, contains('outro_confidence'));
     expect(names, isNot(contains('confidence')));
+  });
+
+  test(
+    'v18 adds the skip resolution key, empty on every existing row',
+    () async {
+      // Empty MEANS "unknown inputs", so a migrated row is re-resolved once on
+      // the next refresh and then left alone. Backfilling it to whatever the
+      // current settings happen to be would assert that rows written before the
+      // rule existed already satisfy it, and freeze them as they are forever.
+      final db = openMigratedV13();
+      addTearDown(db.close);
+
+      final skip = (await db.allSkipRows()).single;
+      expect(skip.resolvedKey, '');
+      expect(skip.introEndMs, 91000, reason: 'the window is still untouched');
+    },
+  );
+
+  test('LEAPFROG v16 -> v18: the confidence drop still runs', () async {
+    // The one starting version no other case covers. From 16, the `from < 16`
+    // block is SKIPPED — `confidence` is already there from the real v16
+    // migration — so v17's drop is the only thing that can remove it. This is
+    // the same class of mistake as the guard that shipped wrong (`from >= 16`
+    // left the orphan behind); it just fails from a different direction.
+    final db = CacheDatabase(
+      NativeDatabase.memory(
+        setup: (raw) {
+          final v = raw.select('PRAGMA user_version').first.values.first as int;
+          if (v != 0) return;
+          raw.execute(_v13Ddl);
+          // Bring the seeded v13 DDL up to the v16 shape by hand: the rename
+          // plus the two columns v16 added.
+          for (final t in const [
+            'series_cache',
+            'file_cache',
+            'match_overrides',
+            'watch_state',
+            'source_overrides',
+            'skip_segments',
+            'hidden_episodes',
+            'show_preferences',
+          ]) {
+            raw.execute('ALTER TABLE $t RENAME COLUMN anilist_id TO series_id');
+          }
+          raw.execute('ALTER TABLE series_cache DROP COLUMN id_mal');
+          raw.execute(
+            'CREATE TABLE series_external_ids (series_id INTEGER NOT NULL, '
+            'provider TEXT NOT NULL, external_id TEXT NOT NULL, '
+            'PRIMARY KEY (series_id, provider), UNIQUE (provider, external_id))',
+          );
+          raw.execute(
+            "ALTER TABLE skip_segments ADD COLUMN source TEXT NOT NULL "
+            "DEFAULT ''",
+          );
+          raw.execute(
+            'ALTER TABLE skip_segments ADD COLUMN confidence INTEGER NOT NULL '
+            'DEFAULT 0',
+          );
+          raw.execute(
+            'INSERT INTO skip_segments (series_id, episode, intro_start_ms, '
+            "intro_end_ms, source) VALUES (21, 3, 1000, 91000, 'aniskip')",
+          );
+          raw.execute('PRAGMA user_version = 16');
+        },
+      ),
+    );
+    addTearDown(db.close);
+
+    final names =
+        (await db
+                .customSelect(
+                  "SELECT name FROM pragma_table_info('skip_segments')",
+                )
+                .get())
+            .map((r) => r.read<String>('name'))
+            .toSet();
+    expect(names, isNot(contains('confidence')), reason: 'v17 dropped it');
+    expect(names, containsAll(['intro_confidence', 'outro_confidence']));
+    expect(names, contains('resolved_key'), reason: 'v18');
+
+    final skip = (await db.allSkipRows()).single;
+    expect(skip.source, 'aniskip', reason: 'v16 provenance survives');
+    expect(skip.introEndMs, 91000);
+    expect(skip.resolvedKey, '');
   });
 
   test('LEAPFROG v8 -> v14 works (no such column: anilist_id)', () async {

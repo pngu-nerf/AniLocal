@@ -238,7 +238,7 @@ class LibrarySync {
     // series, or search.
     final resolved = <String, _Resolved>{};
     final erroredTitles = <String>{};
-    var anilistLookups = 0;
+    var attemptedLookups = 0;
     // Which source actually answered, so the scan can report where its results
     // came from rather than naming whichever one used to be the only option.
     final lookupsBySource = <String, int>{};
@@ -256,7 +256,7 @@ class LibrarySync {
         continue;
       }
       try {
-        anilistLookups++;
+        attemptedLookups++;
         final result = await matcher.match(sample);
         final found = result.series;
         // Identity is OURS, not the provider's. ensureSeriesId recognises a
@@ -284,13 +284,16 @@ class LibrarySync {
     }
 
     // RESILIENCE: if every lookup we attempted failed (403 / transport /
-    // timeout), AniList is unreachable — NOT "the content is gone". Treat it
-    // like an unreadable folder and PRESERVE the cache: skip all removals (which
-    // also makes the prune a no-op, since every cached series keeps its files).
-    // A transient API outage must never empty a populated library; the next
-    // healthy scan reconciles real moves/deletions.
+    // timeout), then NO metadata source could answer — which is not "the
+    // content is gone". The counter is per LOOKUP, not per source: each lookup
+    // has already fallen through the whole ordered chain, so this being total
+    // means every enabled source failed. Treat it like an unreadable folder and
+    // PRESERVE the cache: skip all removals (which also makes the prune a
+    // no-op, since every cached series keeps its files). A transient outage
+    // must never empty a populated library; the next healthy scan reconciles
+    // real moves/deletions.
     final apiUnreachable =
-        anilistLookups > 0 && erroredTitles.length == anilistLookups;
+        attemptedLookups > 0 && erroredTitles.length == attemptedLookups;
     // Only report a cause when EVERY lookup failed; a lone failure among
     // successes isn't an outage and must not accuse the user's connection.
     final reportedFailure = apiUnreachable ? apiFailure : null;
@@ -373,8 +376,7 @@ class LibrarySync {
           (f.seriesId!, f.episodeNumber!),
     };
     final malIds = await _resolveMalIds(idMalById, skipKeys.map((k) => k.$1));
-    final activeSkipSources = await _activeSkipProviders();
-    final corroborateSkips = await _corroborateSkips();
+    final skipPlan = await _skipPlan();
     // A LOCAL skip source reads the episode's own file, so the lookup has to
     // carry it. Absolute path, rebuilt from the folder identity + relative
     // path the cache is keyed by.
@@ -392,11 +394,11 @@ class LibrarySync {
           malId: malIds[seriesId],
           filePath: pathByIdentity[(seriesId, episode)],
         ),
-        activeSkipSources,
-        corroborate: corroborateSkips,
+        skipPlan.providers,
+        corroborate: skipPlan.corroborate,
       );
       if (found == null) continue; // no source had data -> no row (graceful)
-      skipUpserts.add(_skipRow(seriesId, episode, found));
+      skipUpserts.add(_skipRow(seriesId, episode, found, skipPlan.key));
     }
 
     // For every title that resolved to a real AniList id this scan, carry any
@@ -558,16 +560,30 @@ class LibrarySync {
       );
     }
 
-    // Fetch skips only for identities missing a cached row.
-    final haveSkips = {
-      for (final s in await cache.allSkipRows()) (s.seriesId, s.episode),
+    // Fetch skips for identities with no cached row — and RE-RESOLVE the ones
+    // whose row was produced by different inputs than the ones in force now.
+    //
+    // Re-resolution is what makes the skip list behave like the metadata list:
+    // dragging a source to the top, switching one off, or turning on
+    // cross-checking has to reach the episodes already in the library, not just
+    // ones scanned afterwards. Keyed on `skipResolutionKey` rather than on a
+    // rank comparison because "one source answered and there was nothing to
+    // compare it against" and "cross-checking never ran here" are the same row
+    // otherwise, so a rank rule would either re-ask everything on every refresh
+    // or never re-ask at all.
+    //
+    // A row whose key already matches is left completely alone: unchanged
+    // settings cost zero requests, which is what keeps refresh incremental.
+    final resolvedKeys = {
+      for (final s in await cache.allSkipRows())
+        (s.seriesId, s.episode): s.resolvedKey,
     };
     final malIds = await _resolveMalIds(idMalById, identities.map((i) => i.$1));
-    final activeSkipSources = await _activeSkipProviders();
-    final corroborateSkips = await _corroborateSkips();
+    final skipPlan = await _skipPlan();
     var skipsFetched = 0;
     for (final (seriesId, episode) in identities) {
-      if (haveSkips.contains((seriesId, episode))) continue;
+      final existing = resolvedKeys[(seriesId, episode)];
+      if (existing == skipPlan.key) continue; // same inputs -> same answer
       final found = await _resolveSkips(
         SkipLookup(
           seriesId: seriesId,
@@ -575,11 +591,17 @@ class LibrarySync {
           malId: malIds[seriesId],
           filePath: pathByIdentity[(seriesId, episode)],
         ),
-        activeSkipSources,
-        corroborate: corroborateSkips,
+        skipPlan.providers,
+        corroborate: skipPlan.corroborate,
       );
+      // Nobody has data for this episode now. The row (if any) is LEFT AS IT
+      // IS and its key left unstamped, so a source that is merely down gets
+      // asked again next refresh. That retry costs exactly what an episode
+      // with no row already costs, which this path has always paid.
       if (found == null) continue;
-      await cache.upsertSkipSegment(_skipRow(seriesId, episode, found));
+      await cache.upsertSkipSegment(
+        _skipRow(seriesId, episode, found, skipPlan.key),
+      );
       skipsFetched++;
     }
 
@@ -590,10 +612,33 @@ class LibrarySync {
     );
   }
 
-  /// Whether to cross-check skip sources against each other. Read fresh, like
-  /// the order, so toggling it takes effect on the next scan.
-  Future<bool> _corroborateSkips() async =>
-      await loadCorroborateSkips?.call() ?? false;
+  /// What to ask for skips, in order, and the key that labels that choice.
+  ///
+  /// ONE place decides this, so the scan and the refresh cannot disagree about
+  /// which sources are in play — and cannot stamp two different keys for the
+  /// same settings, which would make every row look stale to the other path.
+  ///
+  /// Read fresh on every call, like the metadata order, so reordering sources
+  /// or toggling cross-checking takes effect on the next scan or refresh
+  /// without a restart. Only sources that are actually ASKABLE go in: an
+  /// unconfigured one (awaiting a client ID) can't answer, so including it in
+  /// the key would mean configuring it later didn't count as a change.
+  Future<({List<SkipProvider> providers, bool corroborate, String key})>
+  _skipPlan() async {
+    final corroborate = await loadCorroborateSkips?.call() ?? false;
+    final askable = <SkipProvider>[];
+    for (final provider in await _activeSkipProviders()) {
+      if (await provider.isConfigured()) askable.add(provider);
+    }
+    return (
+      providers: askable,
+      corroborate: corroborate,
+      key: skipResolutionKey(
+        askable.map((p) => p.token),
+        corroborate: corroborate,
+      ),
+    );
+  }
 
   /// The enabled skip sources, in the user's order.
   Future<List<SkipProvider>> _activeSkipProviders() async {
@@ -615,6 +660,8 @@ class LibrarySync {
   /// the cheap path: no reason to call AniSkip once the file's own chapters
   /// have answered. With it on, every enabled source is asked so their answers
   /// can be cross-checked, which is the point and also the cost.
+  /// [providers] comes from [_skipPlan] and is already filtered to the enabled,
+  /// configured sources in priority order — this does not re-check either.
   Future<ReconciledSkips?> _resolveSkips(
     SkipLookup lookup,
     List<SkipProvider> providers, {
@@ -622,7 +669,6 @@ class LibrarySync {
   }) async {
     final answers = <({String source, EpisodeSkips skips})>[];
     for (final provider in providers) {
-      if (!await provider.isConfigured()) continue;
       try {
         final found = await provider.fetchSkips(lookup);
         if (found == null) continue; // no data here — ask the next source
@@ -641,21 +687,29 @@ class LibrarySync {
 
   /// One place that turns a reconciled episode into its row, so the scan and
   /// the refresh cannot disagree about how a verdict is stored.
-  SkipSegmentRow _skipRow(int seriesId, int episode, ReconciledSkips r) =>
-      SkipSegmentRow(
-        seriesId: seriesId,
-        episode: episode,
-        introStartMs: r.intro?.range.start.inMilliseconds,
-        introEndMs: r.intro?.range.end.inMilliseconds,
-        outroStartMs: r.outro?.range.start.inMilliseconds,
-        outroEndMs: r.outro?.range.end.inMilliseconds,
-        // Provenance names whichever window we actually have; when both exist
-        // and came from different sources the intro's wins, since it is the one
-        // a viewer meets first.
-        source: r.intro?.source ?? r.outro?.source ?? '',
-        introConfidence: (r.intro?.confidence ?? SkipConfidence.single).stored,
-        outroConfidence: (r.outro?.confidence ?? SkipConfidence.single).stored,
-      );
+  SkipSegmentRow _skipRow(
+    int seriesId,
+    int episode,
+    ReconciledSkips r,
+    String resolvedKey,
+  ) => SkipSegmentRow(
+    seriesId: seriesId,
+    episode: episode,
+    introStartMs: r.intro?.range.start.inMilliseconds,
+    introEndMs: r.intro?.range.end.inMilliseconds,
+    outroStartMs: r.outro?.range.start.inMilliseconds,
+    outroEndMs: r.outro?.range.end.inMilliseconds,
+    // Provenance names whichever window we actually have; when both exist
+    // and came from different sources the intro's wins, since it is the one
+    // a viewer meets first.
+    source: r.intro?.source ?? r.outro?.source ?? '',
+    introConfidence: (r.intro?.confidence ?? SkipConfidence.single).stored,
+    outroConfidence: (r.outro?.confidence ?? SkipConfidence.single).stored,
+    // Which sources, in which order, and whether they were cross-checked.
+    // Stamped by BOTH write paths, so neither sees the other's rows as
+    // stale and re-asks them.
+    resolvedKey: resolvedKey,
+  );
 
   /// MAL ids for [seriesIds]: whatever a provider already gave us, with the
   /// gaps filled from the cross-map.
