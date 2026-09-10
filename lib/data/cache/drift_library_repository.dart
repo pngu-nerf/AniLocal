@@ -9,6 +9,7 @@ import '../../domain/models/picture_mode.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/show_preferences.dart';
 import '../../domain/models/skip_range.dart';
+import '../../domain/skip_corroboration.dart';
 import '../../domain/models/titles.dart';
 import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/missing_episodes_repository.dart';
@@ -669,6 +670,8 @@ class DriftLibraryRepository
         pinnedSourceFolder: l.pinnedFolder,
         introSkip: _range(skip?.introStartMs, skip?.introEndMs),
         outroSkip: _range(skip?.outroStartMs, skip?.outroEndMs),
+        introConfidence: SkipConfidence.fromStored(skip?.introConfidence ?? 0),
+        outroConfidence: SkipConfidence.fromStored(skip?.outroConfidence ?? 0),
       );
 
   /// Build a [SkipRange] when both bounds are present, else null.

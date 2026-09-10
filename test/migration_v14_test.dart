@@ -251,7 +251,8 @@ void main() {
     },
   );
 
-  test('v16 adds skip provenance without disturbing existing rows', () async {
+  test('v16/v17 add skip provenance and per-window confidence, without '
+      'disturbing existing rows', () async {
     final db = openMigratedV13();
     addTearDown(db.close);
 
@@ -260,7 +261,28 @@ void main() {
     // Left EMPTY rather than backfilled to 'aniskip': "we don't know where this
     // came from" must stay distinguishable from "we recorded that it did".
     expect(skip.source, '');
-    expect(skip.confidence, 0, reason: 'never corroborated');
+    // v17 replaced v16's single verdict with one per window; both default to
+    // `single`, which is what a row nothing has cross-checked should say.
+    expect(skip.introConfidence, 0);
+    expect(skip.outroConfidence, 0);
+  });
+
+  test("v17 leaves no orphan of v16's replaced confidence column", () async {
+    // The upgrade a real cache takes: v16 ADDS `confidence` on the way through
+    // and v17 replaces it with a verdict per window. Guarding the drop on
+    // "came from v16 or later" left the column behind on exactly this path,
+    // which a single-hop test would never have shown.
+    final db = openMigratedV13();
+    addTearDown(db.close);
+
+    final columns = await db
+        .customSelect("SELECT name FROM pragma_table_info('skip_segments')")
+        .get();
+    final names = columns.map((r) => r.read<String>('name')).toSet();
+
+    expect(names, contains('intro_confidence'));
+    expect(names, contains('outro_confidence'));
+    expect(names, isNot(contains('confidence')));
   });
 
   test('LEAPFROG v8 -> v14 works (no such column: anilist_id)', () async {

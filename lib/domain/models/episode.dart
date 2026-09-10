@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import 'episode_source.dart';
 import 'skip_range.dart';
+import '../skip_corroboration.dart';
 
 /// One playable episode mapped to a [Series].
 ///
@@ -29,6 +30,8 @@ class Episode extends Equatable {
     this.pinnedSourceFolder,
     this.introSkip,
     this.outroSkip,
+    this.introConfidence = SkipConfidence.single,
+    this.outroConfidence = SkipConfidence.single,
   });
 
   /// Display number (a presentation choice — continuous or AniList-faithful).
@@ -63,6 +66,12 @@ class Episode extends Equatable {
   final SkipRange? introSkip;
   final SkipRange? outroSkip;
 
+  /// How much each window is trusted. A CONFLICTING window is still offered as
+  /// a button but never fired automatically — skipping into real content is
+  /// the failure a viewer cannot undo, an unoffered skip is a keypress.
+  final SkipConfidence introConfidence;
+  final SkipConfidence outroConfidence;
+
   /// True when the same episode exists in more than one library folder.
   bool get hasMultipleSources => sources.length > 1;
 
@@ -80,5 +89,7 @@ class Episode extends Equatable {
     pinnedSourceFolder,
     introSkip,
     outroSkip,
+    introConfidence,
+    outroConfidence,
   ];
 }

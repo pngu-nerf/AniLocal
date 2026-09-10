@@ -10,6 +10,7 @@ import 'panels/homepage_panel.dart';
 import 'panels/library_panel.dart';
 import 'panels/playback_panel.dart';
 import 'panels/source_list_panel.dart';
+import 'setting_row.dart';
 import 'panels/sources_panel.dart';
 import 'settings_actions.dart';
 import 'settings_model.dart';
@@ -152,6 +153,17 @@ class _SettingsWindow extends StatelessWidget {
         caption:
             'Top source is used first. The rest are tried only if it has no '
             'data for an episode.',
+        extra: SettingRow(
+          label: 'Cross-check sources',
+          subtitle:
+              'Ask every source and compare. Two that agree can auto-skip; '
+              'ones that disagree offer a button instead. A source with no '
+              'data for an episode is not a disagreement. Slower.',
+          control: SettingSwitch(
+            value: model.corroborateSkips,
+            onChanged: model.setCorroborateSkips,
+          ),
+        ),
       ),
     ),
     SettingsCategory(

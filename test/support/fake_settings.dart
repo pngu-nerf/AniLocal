@@ -28,6 +28,11 @@ class FakeSettings implements SettingsRepository {
 
   // No key by default. A test needing one subclasses and overrides.
   @override
+  Future<bool> loadCorroborateSkips() async => false;
+  @override
+  Future<void> setCorroborateSkips(bool enabled) async {}
+
+  @override
   Future<List<SourcePreference>> loadSkipSourceOrder() async => const [];
   @override
   Future<void> setSkipSourceOrder(List<SourcePreference> order) async {}

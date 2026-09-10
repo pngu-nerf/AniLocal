@@ -178,7 +178,10 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    Future<void> scanWith(List<SkipProvider> providers) async {
+    Future<void> scanWith(
+      List<SkipProvider> providers, {
+      bool corroborate = false,
+    }) async {
       final mock = MockClient((req) async {
         if (req.method == 'POST') return _anilistPage();
         return http.Response.bytes([1, 2, 3], 200);
@@ -195,6 +198,7 @@ void main() {
           directory: () async => Directory('${dir.path}/.art')..createSync(),
         ),
         skipProviders: providers,
+        loadCorroborateSkips: () async => corroborate,
       ).sync([dir.path]);
     }
 
@@ -283,6 +287,63 @@ void main() {
         reason: 'a local source cannot read a file it is never given',
       );
       expect((await db.allSkipRows()).single.source, 'chapters');
+    });
+
+    test('cross-check OFF stops at the first source with data', () async {
+      // The cheap path: no reason to call a network source once the file's own
+      // chapters have answered.
+      final first = _FakeSkip('chapters', windows: _op());
+      final second = _FakeSkip('aniskip', windows: _op());
+
+      await scanWith([first, second]);
+
+      expect(second.calls, 0, reason: 'never asked');
+      expect((await db.allSkipRows()).single.introConfidence, 0);
+    });
+
+    test('cross-check ON asks everyone and records agreement', () async {
+      final a = _FakeSkip('chapters', windows: _op());
+      final b = _FakeSkip('aniskip', windows: _op());
+
+      await scanWith([a, b], corroborate: true);
+
+      expect(b.calls, 1, reason: 'asked, so its answer can be compared');
+      final row = (await db.allSkipRows()).single;
+      expect(row.introConfidence, 1, reason: 'corroborated');
+      expect(row.source, 'chapters', reason: 'top source still supplies times');
+    });
+
+    test('cross-check ON records a conflict when they disagree', () async {
+      final a = _FakeSkip('chapters', windows: _op());
+      final b = _FakeSkip(
+        'aniskip',
+        windows: const EpisodeSkips(
+          intro: SkipRange(
+            start: Duration(seconds: 600),
+            end: Duration(seconds: 690),
+          ),
+        ),
+      );
+
+      await scanWith([a, b], corroborate: true);
+
+      expect((await db.allSkipRows()).single.introConfidence, -1);
+    });
+
+    test('a source with NO data is not counted as disagreement', () async {
+      // The rule that keeps auto-skip alive on a partially-covered library.
+      final a = _FakeSkip('chapters', windows: _op());
+      final silent = _FakeSkip('aniskip'); // asked, nothing to say
+
+      await scanWith([a, silent], corroborate: true);
+
+      final row = (await db.allSkipRows()).single;
+      expect(silent.calls, 1, reason: 'it WAS asked');
+      expect(
+        row.introConfidence,
+        0,
+        reason: 'single source, not a conflict — silence is not dissent',
+      );
     });
 
     test('the lookup carries the MAL id resolved for the series', () async {

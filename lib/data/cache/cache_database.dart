@@ -213,11 +213,16 @@ class SkipSegments extends Table {
   /// before v16, which all came from AniSkip.
   TextColumn get source => text().withDefault(const Constant(''))();
 
-  /// How much this window is trusted: 0 normal, 1 corroborated by a second
-  /// independent source, -1 conflicting. Auto-skip is gated on it in D5 —
-  /// skipping into real content is the bad outcome, an unoffered skip is
-  /// merely inconvenient.
-  IntColumn get confidence => integer().withDefault(const Constant(0))();
+  /// How much each window is trusted (see `SkipConfidence`): 0 single source,
+  /// 1 corroborated by a second independent source, -1 conflicting. Auto-skip
+  /// is gated on it — skipping into real content is the bad outcome, an
+  /// unoffered skip is merely inconvenient.
+  ///
+  /// PER WINDOW, not per row. A mixed library routinely produces a corroborated
+  /// intro alongside a lone outro; one verdict for both would either forfeit
+  /// the intro's corroboration or overstate the outro's.
+  IntColumn get introConfidence => integer().withDefault(const Constant(0))();
+  IntColumn get outroConfidence => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {seriesId, episode};
@@ -341,7 +346,7 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
@@ -457,7 +462,29 @@ class CacheDatabase extends _$CacheDatabase {
         // this came from" stays distinguishable from "we recorded that it did".
         if (from >= 8) {
           await m.addColumn(skipSegments, skipSegments.source);
-          await m.addColumn(skipSegments, skipSegments.confidence);
+          // Raw SQL: `confidence` no longer exists in the current table shape
+          // (v17 replaces it with a verdict per window). The historical step
+          // must still run so a v15 cache follows the same path every other
+          // cache did, and v17 then drops it.
+          await customStatement(
+            'ALTER TABLE skip_segments ADD COLUMN confidence '
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+      }
+      if (from < 17) {
+        // v16's single `confidence` was a placeholder written before the rule
+        // existed; D5 needs a verdict per window. Nothing is lost: every v16
+        // row was written 0, since nothing ever set it.
+        // `from >= 8`, matching v16's add: by the time this runs the column
+        // exists either way — it was already there for a v16+ cache, or the
+        // v16 step above just added it on the way through. Guarding this on
+        // `from >= 16` instead left the orphan behind on exactly the upgrade
+        // path a real cache takes.
+        if (from >= 8) {
+          await m.dropColumn(skipSegments, 'confidence');
+          await m.addColumn(skipSegments, skipSegments.introConfidence);
+          await m.addColumn(skipSegments, skipSegments.outroConfidence);
         }
       }
     },

@@ -358,16 +358,28 @@ class _VideoZoneState extends State<VideoZone> {
     final inIntro = intro != null && intro.contains(pos);
     final inOutro = outro != null && outro.contains(pos);
 
-    if (_skipMode == SkipMode.auto) {
-      if (inIntro && !_introSkipped) {
-        _introSkipped = true;
-        _playback.seekTo(intro.end);
-      } else if (inOutro && !_outroSkipped) {
-        _outroSkipped = true;
-        _seekPastOutro(outro);
-      }
+    // Auto-skip is gated on confidence: a window two sources DISAGREE about is
+    // still offered as a button but never fired on its own. Skipping into real
+    // content is the one thing a viewer cannot undo mid-episode; an unoffered
+    // skip costs a keypress. A window only one source knows about is fine —
+    // that is ordinary, not doubt.
+    final autoIntro =
+        _skipMode == SkipMode.auto && _shown.introConfidence.allowsAutoSkip;
+    final autoOutro =
+        _skipMode == SkipMode.auto && _shown.outroConfidence.allowsAutoSkip;
+
+    if (autoIntro && inIntro && !_introSkipped) {
+      _introSkipped = true;
+      _playback.seekTo(intro.end);
       return;
     }
+    if (autoOutro && inOutro && !_outroSkipped) {
+      _outroSkipped = true;
+      _seekPastOutro(outro);
+      return;
+    }
+    // In auto mode with nothing left to fire automatically, fall through to the
+    // buttons so a distrusted window is still reachable by hand.
 
     // Button mode: toggle the affordances. Hide the outro button while the
     // up-next pre-roll occupies the bar.

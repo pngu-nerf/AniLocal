@@ -48,6 +48,14 @@ abstract interface class SettingsRepository {
   Future<List<SourcePreference>> loadSkipSourceOrder();
   Future<void> setSkipSourceOrder(List<SourcePreference> order);
 
+  /// Cross-check skip sources against each other. Default false.
+  ///
+  /// Costs more — every enabled source is asked instead of stopping at the
+  /// first with data — and buys a confidence verdict per window, which gates
+  /// automatic skipping.
+  Future<bool> loadCorroborateSkips();
+  Future<void> setCorroborateSkips(bool enabled);
+
   /// OP/ED skip mode. Default [SkipMode.button].
   Future<SkipMode> loadSkipMode();
   Future<void> setSkipMode(SkipMode mode);

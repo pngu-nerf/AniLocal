@@ -26,6 +26,7 @@ class SourceListPanel extends StatefulWidget {
     required this.loadOrder,
     required this.saveOrder,
     required this.caption,
+    this.extra,
   });
 
   /// Every source of this family that the build ships, in built-in order.
@@ -39,6 +40,10 @@ class SourceListPanel extends StatefulWidget {
 
   /// One line explaining what being first means for THIS family.
   final String caption;
+
+  /// An optional control belonging to this family, shown under the caption —
+  /// a generic slot, so the panel stays ignorant of which family it is serving.
+  final Widget? extra;
 
   @override
   State<SourceListPanel> createState() => _SourceListPanelState();
@@ -172,6 +177,11 @@ class _SourceListPanelState extends State<SourceListPanel> {
             style: const TextStyle(color: Xp.textDim, fontSize: 11),
           ),
         ),
+        if (widget.extra != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: widget.extra,
+          ),
         Expanded(
           child: XpReorderableList<SourceDescriptor>(
             items: ordered,

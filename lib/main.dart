@@ -145,6 +145,7 @@ void main() {
     // network call. Chapters, Anime Skip and fingerprinting append here.
     skipProviders: skipProviders,
     loadSkipOrder: settings.loadSkipSourceOrder,
+    loadCorroborateSkips: settings.loadCorroborateSkips,
     // Fills a MAL id AniList didn't supply, so auto-skip survives an AniList
     // outage. Fetched lazily and only when something is actually missing.
     crossMap: crossMap,
