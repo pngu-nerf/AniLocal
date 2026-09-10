@@ -99,8 +99,22 @@ close, one level up.
 **Still open, deliberately:** the root cause of those 9 is `inferSkipsFromChapters` taking
 the EARLIEST qualifying span before the midpoint. Preferring the later one would fix them,
 but that rule exists for a measured case (an episode opening cold with its OP at 498s), so
-it needs a library-wide measurement before being touched — and corroboration already
-contains the damage by refusing to auto-skip them.
+flipping it blind could trade nine known errors for an unknown number of new ones —
+and corroboration already contains the damage by refusing to auto-skip them.
+
+`test_live/opening_span_choice_live_test.dart` is the measurement that would settle it:
+for every file with two or more theme-length spans before its midpoint, it asks which
+candidate is closer to AniSkip's answer, using the same overlap metric the corroboration
+rule uses. Run it with `flutter test test_live/opening_span_choice_live_test.dart`; it
+writes `build/opening_span_report.txt`. Switching to latest-wins is justified only if
+LATEST clearly outnumbers earliest — if earliest wins even a handful, the inference rule is
+right as it stands and those nine stay a corroboration matter rather than an inference one.
+
+Note it must be run from a shell whose **responsible process** holds macOS's
+removable-volume permission. TCC grants attach per app, and `ChapterReader` turns any read
+failure into "no chapters", so a permission denial would otherwise look identical to a
+library with no chapter marks — the harness therefore probes readability first and fails
+loudly with that distinction spelled out.
 
 ### Why chapters lead the skip order (revised after shipping)
 
