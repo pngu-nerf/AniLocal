@@ -2,34 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'xp_tokens.dart';
 
-/// The BODY font. Two options: the platform sans in [Xp.fontFamily]
-/// (Helvetica Neue — the default, currently in use) and the bundled OFL
-/// [archivo] (kept for an ongoing trial). Flip with the ONE `_bodyFont` line.
-///
-/// The DISPLAY role (dot-matrix) is a painter (`VfdReadout`) that uses NO font,
-/// so it is unaffected by this switch.
-enum BodyFont { helveticaNeue, archivo }
-
-/// ⇩⇩⇩  THE SWITCH — edit THIS ONE LINE to change the body face.  ⇩⇩⇩
-const BodyFont _bodyFont = BodyFont.helveticaNeue;
-
-/// The active body font's family + fallback, resolved from [_bodyFont]. A
-/// missing glyph still degrades through the sans fallback stack.
-({String family, List<String> fallback}) _resolveBodyFont() =>
-    switch (_bodyFont) {
-      BodyFont.helveticaNeue => (
-        family: Xp.fontFamily,
-        fallback: Xp.fontFallback,
-      ),
-      BodyFont.archivo => (family: 'Archivo', fallback: Xp.fontFallback),
-    };
-
 /// The VFD "fine-instrument" [ThemeData], derived from [Xp] tokens and applied
-/// app-wide. The body font comes from the [_bodyFont] switch (single source);
-/// the display role is the separate dot-matrix painter and never a font here.
+/// app-wide.
+///
+/// The body face is [Xp.fontFamily] — set by the ONE switch in `xp_tokens.dart`,
+/// which `Xp.chrome()` reads too, so the theme and the labels can never
+/// disagree. A missing glyph still degrades through [Xp.fontFallback]. The
+/// display role is the separate dot-matrix painter and never a font here.
 abstract final class XpTheme {
   static ThemeData data() {
-    final body = _resolveBodyFont();
     const scheme = ColorScheme.dark(
       primary: Xp.accent,
       onPrimary: Colors.white,
@@ -43,8 +24,8 @@ abstract final class XpTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: scheme,
-      fontFamily: body.family,
-      fontFamilyFallback: body.fallback,
+      fontFamily: Xp.fontFamily,
+      fontFamilyFallback: Xp.fontFallback,
       scaffoldBackgroundColor: Xp.desktop,
       dividerColor: Xp.divider,
       canvasColor: Xp.surface,
@@ -57,7 +38,7 @@ abstract final class XpTheme {
       // screen-printed labeling, not a separate weight. Sizes stay at the M3
       // metrics (copyWith preserves each role's height) so only weight/tracking/
       // color/family change — no layout shift. `.apply` then stamps the matte
-      // body color + the switched family onto EVERY role (dialogs, list tiles,
+      // body color + the active family onto EVERY role (dialogs, list tiles,
       // buttons included), so body text everywhere inherits it by construction.
       textTheme: t
           .copyWith(
@@ -80,8 +61,8 @@ abstract final class XpTheme {
           .apply(
             bodyColor: Xp.text,
             displayColor: Xp.text,
-            fontFamily: body.family,
-            fontFamilyFallback: body.fallback,
+            fontFamily: Xp.fontFamily,
+            fontFamilyFallback: Xp.fontFallback,
           ),
       textSelectionTheme: const TextSelectionThemeData(
         cursorColor: Xp.accentBright,
@@ -97,8 +78,8 @@ abstract final class XpTheme {
         decoration: const BoxDecoration(color: Xp.frame),
         textStyle: TextStyle(
           color: Xp.text,
-          fontFamily: body.family,
-          fontFamilyFallback: body.fallback,
+          fontFamily: Xp.fontFamily,
+          fontFamilyFallback: Xp.fontFallback,
           fontSize: 12,
         ),
       ),
@@ -107,8 +88,8 @@ abstract final class XpTheme {
         backgroundColor: Xp.surfaceAlt,
         contentTextStyle: TextStyle(
           color: Xp.text,
-          fontFamily: body.family,
-          fontFamilyFallback: body.fallback,
+          fontFamily: Xp.fontFamily,
+          fontFamilyFallback: Xp.fontFallback,
         ),
       ),
     );

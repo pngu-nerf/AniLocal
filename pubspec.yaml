@@ -96,10 +96,12 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
-  # Bundled LOCAL body font (offline-first: no runtime font fetching). Archivo
-  # is SIL OFL 1.1 (license file beside the TTF in fonts/); a variable font (the
-  # wght axis follows the requested weight). Selectable via the `_bodyFont`
-  # switch in lib/ui/theme/xp_theme.dart (default is the platform Helvetica Neue).
+  # Bundled LOCAL body font (offline-first: no runtime font fetching), and the
+  # ACTIVE body face. Archivo is SIL OFL 1.1 (license file beside the TTF in
+  # fonts/); a variable font, so its wght axis follows the requested weight
+  # rather than needing one file per weight. Bundled rather than using the
+  # platform sans so the body voice is IDENTICAL on macOS, Windows and Linux.
+  # Set by the ONE `fontFamily` switch in lib/ui/theme/xp_tokens.dart.
   fonts:
     - family: Archivo
       fonts:

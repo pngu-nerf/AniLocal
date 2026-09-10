@@ -122,5 +122,6 @@ Both live in `CLAUDE.md` ("Anti-debt rules", "Single-source-of-truth rules", "OU
 
 - **macOS:** Gatekeeper blocks unsigned downloaded apps. Needs Apple Developer Program ($99/yr), Developer ID cert, Hardened Runtime, **notarization** + staple. Ship a notarized `.dmg`.
 - **App Store is off the table:** libmpv/FFmpeg are GPL, incompatible with App Store terms. Self-distribute. (GPL also means you must make corresponding source available for what you ship.)
+- **Third-party license notices to surface in the shipped app:** the GPL duty above, plus **SIL OFL 1.1 for the bundled Archivo body font** (`fonts/Archivo-OFL.txt`). The font is now RENDERED rather than merely carried, so the attribution is genuinely owed. One "Licenses" surface should cover both — Flutter's `LicenseRegistry`/`showLicensePage` already collects package licenses, so the work is registering these two and giving it a way in.
 - **Later — Windows:** code-signing cert. **Linux:** AppImage/Flatpak/.deb. Flutter builds the binary; signing/packaging is per-platform regardless of framework.
 - **Auto-update:** note it now, build it later — a shipped app needs an update path.

@@ -166,8 +166,33 @@ abstract final class Xp {
   //    not something the machine is telling you, so it never sits on the lit
   //    screen ([wordmarkHi]/[wordmark]/[wordmarkLo] are its ramp).
 
+  /// The two body-face candidates. Named so the switch below reads as a choice
+  /// rather than a magic string.
+  ///
+  /// [archivoFamily] is bundled (`fonts/Archivo-Variable.ttf`, SIL OFL 1.1, a
+  /// variable font whose wght axis follows the requested weight), so it renders
+  /// IDENTICALLY on every platform. [platformSansFamily] is macOS's system
+  /// sans: nothing to ship, but it does not exist on Windows or Linux, where
+  /// the text would silently fall through [fontFallback] to Segoe UI or Roboto
+  /// — a different body voice per platform.
+  static const String archivoFamily = 'Archivo';
+  static const String platformSansFamily = 'Helvetica Neue';
+
   /// Legible technical sans — the BODY voice (running text, lists).
-  static const String fontFamily = 'Helvetica Neue';
+  ///
+  /// ⇩⇩⇩  THE SWITCH — this ONE line sets the app's body face.  ⇩⇩⇩
+  ///
+  /// It lives HERE, in the tokens, rather than in the theme, because the theme
+  /// is not the only reader: [chrome] — the label style behind every title,
+  /// section header, button and tab — also needs it. When the switch lived in
+  /// `xp_theme.dart`, [chrome] could not see it and hardcoded the platform
+  /// sans, so flipping the face would have changed running text and left every
+  /// label behind. One value, both readers, no way for them to disagree.
+  ///
+  /// The DISPLAY role (dot-matrix) is a painter (`VfdReadout`) that uses NO
+  /// font, and the BRAND role has its own serif ([brandFontFamily]); neither is
+  /// affected by this.
+  static const String fontFamily = archivoFamily;
   static const List<String> fontFallback = [
     'Helvetica',
     'Arial',
