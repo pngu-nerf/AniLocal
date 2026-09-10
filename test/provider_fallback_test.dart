@@ -323,6 +323,34 @@ void main() {
     });
   });
 
+  group('the scan reports WHICH source answered', () {
+    test('the match carries the answering provider token', () async {
+      // The snackbar used to say "N AniList lookups" whoever answered, so a
+      // scan that fell through to Kitsu because AniList was down looked
+      // identical to one AniList served.
+      final down = _FakeProvider('anilist', failure: MetadataFailure.service);
+      final up = _FakeProvider(
+        'kitsu',
+        results: [_series('Cowboy Bebop', const ExternalIds(kitsu: 1))],
+      );
+
+      final result = await SeriesMatcher(
+        providers: [down, up],
+      ).match('Cowboy Bebop');
+
+      expect(result.source, 'kitsu');
+    });
+
+    test('a no-match still names who was asked', () async {
+      final empty = _FakeProvider('anilist', results: const []);
+
+      final result = await SeriesMatcher(providers: [empty]).match('nothing');
+
+      expect(result.series, isNull);
+      expect(result.source, 'anilist', reason: 'it answered — with nothing');
+    });
+  });
+
   group('ensureSeriesId', () {
     test('an AniList id becomes the series id directly — no minting', () async {
       final id = await db.ensureSeriesId(const ExternalIds(anilist: 21));

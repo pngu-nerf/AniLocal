@@ -45,6 +45,21 @@ enum SkipConfidence {
 /// AniSkip's roughly one-second resolution.
 const Duration kSkipCorroborationTolerance = Duration(seconds: 2);
 
+/// Drop a window shorter than [minimum].
+///
+/// A user-set floor on how short a skip may be. Sources occasionally mark a
+/// few-second span — a logo sting, a scene divider a chapter parser read as a
+/// theme — and offering those as "skip the intro" is noise at best and a
+/// mis-skip at worst. A minimum of zero disables the filter entirely, which is
+/// the default: nothing is discarded unless the user asks for it.
+///
+/// Applied on the READ path, not at write time, so changing the setting takes
+/// effect immediately instead of needing a rescan of the whole library.
+SkipRange? dropIfShorterThan(SkipRange? range, Duration minimum) {
+  if (range == null || minimum <= Duration.zero) return range;
+  return (range.end - range.start) < minimum ? null : range;
+}
+
 /// One source's answer for a single window.
 class SkipCandidate {
   const SkipCandidate({required this.source, required this.range});

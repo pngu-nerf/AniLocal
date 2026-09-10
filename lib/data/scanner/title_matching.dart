@@ -1,7 +1,9 @@
 import '../../domain/models/series.dart';
 
 /// Result of ranking AniList candidates against a parsed title.
-typedef MatchResult = ({Series? series, double score});
+/// [source] is the token of the provider that answered, so a scan can report
+/// where its results came from. Null when nothing answered.
+typedef MatchResult = ({Series? series, double score, String? source});
 
 /// Below this similarity, the best candidate is treated as no match.
 const double kMatchFloor = 0.25;
@@ -47,9 +49,9 @@ MatchResult rankCandidates(
     }
   }
   if (best == null || bestScore < floor) {
-    return (series: null, score: bestScore);
+    return (series: null, score: bestScore, source: null);
   }
-  return (series: best, score: bestScore);
+  return (series: best, score: bestScore, source: null);
 }
 
 double _bestTitleScore(String parsed, Series candidate) {

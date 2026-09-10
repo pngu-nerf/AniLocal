@@ -48,6 +48,13 @@ abstract interface class SettingsRepository {
   Future<List<SourcePreference>> loadSkipSourceOrder();
   Future<void> setSkipSourceOrder(List<SourcePreference> order);
 
+  /// Ignore any skip window shorter than this. Default zero (no filter).
+  ///
+  /// An opening runs about ninety seconds, so a five-second "skip" is almost
+  /// always a source having mistaken something else for a theme.
+  Future<Duration> loadMinSkipLength();
+  Future<void> setMinSkipLength(Duration value);
+
   /// Cross-check skip sources against each other. Default false.
   ///
   /// Costs more — every enabled source is asked instead of stopping at the

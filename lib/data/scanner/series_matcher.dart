@@ -59,7 +59,14 @@ class SeriesMatcher {
       if (!await provider.isConfigured()) continue;
       tried++;
       try {
-        return await _matchWith(provider, title);
+        final result = await _matchWith(provider, title);
+        // Stamped here rather than in ranking: ranking compares titles and has
+        // no idea who supplied the candidates.
+        return (
+          series: result.series,
+          score: result.score,
+          source: provider.token,
+        );
       } on MetadataException catch (e) {
         lastFailure = e;
       }

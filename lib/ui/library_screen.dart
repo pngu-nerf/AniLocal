@@ -456,8 +456,34 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   String _summaryText(SyncSummary s) =>
       '${s.filesScanned} scanned · ${s.processed} new '
       '(${s.matched} matched / ${s.unmatched} unmatched) · '
-      '${s.unchanged} unchanged · ${s.removed} removed · '
-      '${s.anilistLookups} AniList lookups';
+      '${s.unchanged} unchanged · ${s.removed} removed · ${_lookupText(s)}';
+
+  /// "no lookups" / "3 lookups from AniList" / "3 from AniList, 1 from Kitsu".
+  ///
+  /// Names the sources that actually answered instead of a fixed one: a scan
+  /// that fell through to Kitsu because AniList was down otherwise looks
+  /// identical to one AniList served, and nothing else tells the user.
+  String _lookupText(SyncSummary s) {
+    if (s.lookupsBySource.isEmpty) return 'no lookups';
+    final byCount = s.lookupsBySource.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final parts = [
+      for (final e in byCount) '${e.value} from ${_sourceName(e.key)}',
+    ];
+    return parts.length == 1
+        ? '${parts.first} (lookups)'
+        : 'lookups: ${parts.join(', ')}';
+  }
+
+  /// A source's display name, from the SAME descriptor list the settings page
+  /// shows, so the two can never call one source different things. Falls back
+  /// to the raw token rather than inventing a name.
+  String _sourceName(String token) {
+    for (final source in widget.metadataSources) {
+      if (source.token == token) return source.displayName;
+    }
+    return token;
+  }
 
   void _openUnmatched() => Navigator.of(context).push(
     InstantPageRoute<void>(

@@ -5,6 +5,7 @@ import 'package:anilocal/data/anilist/anilist_client.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
+import 'package:anilocal/data/cache/drift_library_repository.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
@@ -343,6 +344,39 @@ void main() {
         row.introConfidence,
         0,
         reason: 'single source, not a conflict — silence is not dissent',
+      );
+    });
+
+    test('the floor is a LIVE read — no rescan needed to change it', () async {
+      // Applied where Episode is built rather than when the row is written, so
+      // raising or lowering it takes effect at once instead of needing the
+      // whole library re-scanned.
+      await scanWith([
+        _FakeSkip(
+          'chapters',
+          windows: const EpisodeSkips(
+            intro: SkipRange(start: Duration.zero, end: Duration(seconds: 8)),
+          ),
+        ),
+      ]);
+      expect((await db.allSkipRows()).single.introEndMs, 8000);
+
+      var floor = Duration.zero;
+      final repo = DriftLibraryRepository(db)
+        ..loadMinSkipLength = () async => floor;
+
+      final seriesId = (await db.allSkipRows()).single.seriesId;
+      expect(
+        (await repo.episodesFor(seriesId)).single.introSkip,
+        isNotNull,
+        reason: 'no floor set — the window is offered',
+      );
+
+      floor = const Duration(seconds: 30);
+      expect(
+        (await repo.episodesFor(seriesId)).single.introSkip,
+        isNull,
+        reason: 'same cached row, new floor, immediately hidden',
       );
     });
 

@@ -237,7 +237,7 @@ void main() {
       // unlike a pending file. Unchanged on disk -> counted unchanged, 0 looks.
       final s2 = await sync.sync([dir.path]);
       expect(s2.unchanged, 1);
-      expect(s2.anilistLookups, 0);
+      expect(s2.totalLookups, 0);
     },
   );
 

@@ -221,7 +221,7 @@ void main() {
 
       expect(second.unchanged, 2, reason: 'remount must not re-identify');
       expect(second.processed, 0);
-      expect(second.anilistLookups, 0, reason: 'no AniList refetch on remount');
+      expect(second.totalLookups, 0, reason: 'no AniList refetch on remount');
       expect(second.removed, 0, reason: 'same files at a new mount, not gone');
       expect((await repo.allSeries()).length, 1);
 
@@ -273,7 +273,7 @@ void main() {
 
       final s2 = await sync.sync(['${dir.path}/lib']);
       expect(s2.unchanged, 1);
-      expect(s2.anilistLookups, 0);
+      expect(s2.totalLookups, 0);
       expect((await repo.episodesFor(1)).single.fileRef, endsWith('- 01.mkv'));
     });
   });

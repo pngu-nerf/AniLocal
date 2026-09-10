@@ -13,7 +13,7 @@ class SyncSummary extends Equatable {
     required this.matched,
     required this.unmatched,
     required this.errored,
-    required this.anilistLookups,
+    this.lookupsBySource = const {},
     this.unreadableFolders = const [],
     this.apiFailure,
   });
@@ -40,9 +40,17 @@ class SyncSummary extends Equatable {
   /// changed file keeps its existing match.
   final int errored;
 
-  /// AniList title searches actually performed — 0 when every delta reused an
-  /// already-cached series (proves "never refetch unchanged").
-  final int anilistLookups;
+  /// Title searches actually performed, BY SOURCE TOKEN — empty when every
+  /// delta reused an already-cached series (proves "never refetch unchanged").
+  ///
+  /// Per source rather than one total because there are several now: a scan
+  /// that fell through to Kitsu because AniList was down looks identical to one
+  /// AniList served, and the user has no other way to tell.
+  final Map<String, int> lookupsBySource;
+
+  /// Total across every source.
+  int get totalLookups =>
+      lookupsBySource.values.fold(0, (sum, count) => sum + count);
 
   /// Watched folders that could not be read this scan (e.g. access lapsed or
   /// folder moved). Surfaced loudly; their cached files are preserved, never
@@ -70,7 +78,7 @@ class SyncSummary extends Equatable {
     matched,
     unmatched,
     errored,
-    anilistLookups,
+    lookupsBySource,
     unreadableFolders,
     apiFailure,
   ];

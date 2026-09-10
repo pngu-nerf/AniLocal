@@ -91,6 +91,10 @@ void main() {
     database,
     showPreferences: repository,
   );
+  // Wired back after settings exists: DriftSettingsRepository is built FROM the
+  // library repository (it delegates show-preferences to it), so the minimum-
+  // skip floor cannot be a constructor argument on either.
+  repository.loadMinSkipLength = settings.loadMinSkipLength;
   // Read fresh on every use, so pasting a key in Settings works immediately and
   // clearing one disables the source immediately.
   Future<String?> malClientId() =>

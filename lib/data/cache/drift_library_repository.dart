@@ -293,12 +293,14 @@ class DriftLibraryRepository
       for (final l in logical.values)
         if (l.seriesId == seriesId) l,
     ]..sort((a, b) => (a.displayNumber ?? 0).compareTo(b.displayNumber ?? 0));
+    final minSkip = await _minSkip();
     return [
       for (final l in mine)
         _toEpisode(
           l,
           watch[(seriesId, l.anchored)],
           skips[(seriesId, l.anchored)],
+          minSkip,
         ),
     ];
   }
@@ -499,6 +501,7 @@ class DriftLibraryRepository
     };
     final prefs = await allPreferences();
     final externalIds = await _db.externalIdsBySeriesId();
+    final minSkip = await _minSkip();
 
     final result = <ContinueWatching>[];
     for (final w in inProgress) {
@@ -512,7 +515,12 @@ class DriftLibraryRepository
             prefs[w.seriesId] ?? const ShowPreferences(),
             externalIds[w.seriesId] ?? ExternalIds.empty,
           ),
-          episode: _toEpisode(match, w, skips[(w.seriesId, w.episode)]),
+          episode: _toEpisode(
+            match,
+            w,
+            skips[(w.seriesId, w.episode)],
+            minSkip,
+          ),
         ),
       );
     }
@@ -608,7 +616,7 @@ class DriftLibraryRepository
     if (next == null) return const NoNextEpisode();
     final w = await _db.watchStateFor(next.seriesId, next.anchored);
     final skip = await _db.skipSegmentFor(next.seriesId, next.anchored);
-    return NextEpisode(_toEpisode(next, w, skip));
+    return NextEpisode(_toEpisode(next, w, skip, await _minSkip()));
   }
 
   @override
@@ -632,6 +640,7 @@ class DriftLibraryRepository
     }
 
     final result = <int, Episode>{};
+    final minSkip = await _minSkip();
     latestWatched.forEach((seriesId, anchored) {
       // Same resolver as nextEpisode — within-season next.
       final next = _resolveNext(seriesId, anchored, logical);
@@ -642,6 +651,7 @@ class DriftLibraryRepository
         next,
         w,
         skips[(next.seriesId, next.anchored)],
+        minSkip,
       );
     });
     return result;
@@ -656,23 +666,45 @@ class DriftLibraryRepository
     Map<(int, int), _Logical> logical,
   ) => logical[(seriesId, anchored + 1)];
 
-  Episode _toEpisode(_Logical l, WatchStateRow? w, SkipSegmentRow? skip) =>
-      Episode(
-        number: l.displayNumber ?? 0,
-        fileRef: l.activeFileRef,
-        title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
-        seriesId: l.seriesId,
-        anchoredNumber: l.anchored,
-        watched: w?.watched ?? false,
-        resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
-        duration: Duration(milliseconds: w?.durationMs ?? 0),
-        sources: l.sources,
-        pinnedSourceFolder: l.pinnedFolder,
-        introSkip: _range(skip?.introStartMs, skip?.introEndMs),
-        outroSkip: _range(skip?.outroStartMs, skip?.outroEndMs),
-        introConfidence: SkipConfidence.fromStored(skip?.introConfidence ?? 0),
-        outroConfidence: SkipConfidence.fromStored(skip?.outroConfidence ?? 0),
-      );
+  /// The user's minimum-skip floor, read fresh per query.
+  ///
+  /// Wired AFTER construction because the settings repository is built FROM
+  /// this one (it delegates show-preferences here), so the two cannot both be
+  /// constructor arguments. Null until wired, and null means no filter.
+  Future<Duration> Function()? loadMinSkipLength;
+
+  Future<Duration> _minSkip() async =>
+      await loadMinSkipLength?.call() ?? Duration.zero;
+
+  Episode _toEpisode(
+    _Logical l,
+    WatchStateRow? w,
+    SkipSegmentRow? skip,
+    Duration minSkip,
+  ) => Episode(
+    number: l.displayNumber ?? 0,
+    fileRef: l.activeFileRef,
+    title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
+    seriesId: l.seriesId,
+    anchoredNumber: l.anchored,
+    watched: w?.watched ?? false,
+    resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
+    duration: Duration(milliseconds: w?.durationMs ?? 0),
+    sources: l.sources,
+    pinnedSourceFolder: l.pinnedFolder,
+    // Filtered on the READ path so changing the floor takes effect at once
+    // rather than needing a rescan.
+    introSkip: dropIfShorterThan(
+      _range(skip?.introStartMs, skip?.introEndMs),
+      minSkip,
+    ),
+    outroSkip: dropIfShorterThan(
+      _range(skip?.outroStartMs, skip?.outroEndMs),
+      minSkip,
+    ),
+    introConfidence: SkipConfidence.fromStored(skip?.introConfidence ?? 0),
+    outroConfidence: SkipConfidence.fromStored(skip?.outroConfidence ?? 0),
+  );
 
   /// Build a [SkipRange] when both bounds are present, else null.
   SkipRange? _range(int? startMs, int? endMs) =>

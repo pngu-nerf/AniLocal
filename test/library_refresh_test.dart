@@ -30,7 +30,7 @@ const _summary = SyncSummary(
   matched: 1,
   unmatched: 0,
   errored: 0,
-  anilistLookups: 0,
+  lookupsBySource: {},
 );
 
 Series _s(int id, String title) => Series(

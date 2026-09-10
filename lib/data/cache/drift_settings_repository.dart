@@ -22,6 +22,7 @@ class DriftSettingsRepository implements SettingsRepository {
   static const _metadataSourceOrderKey = 'metadata_source_order';
   static const _skipSourceOrderKey = 'skip_source_order';
   static const _corroborateSkipsKey = 'corroborate_skips';
+  static const _minSkipLengthKey = 'min_skip_length_seconds';
   // Watched-threshold (time-from-end), stored as whole milliseconds.
   static const _watchedThresholdKey = 'watched_threshold_ms';
   static const _missingEpisodesKey = 'missing_episodes_enabled';
@@ -96,6 +97,18 @@ class DriftSettingsRepository implements SettingsRepository {
         key,
         order.map((p) => '${p.token}:${p.enabled ? 1 : 0}').join(','),
       );
+
+  @override
+  Future<Duration> loadMinSkipLength() async {
+    final raw = int.tryParse(await _db.getSetting(_minSkipLengthKey) ?? '');
+    // Clamped: a hand-edited store must not be able to hide every skip, and a
+    // negative floor is meaningless.
+    return Duration(seconds: (raw ?? 0).clamp(0, 600));
+  }
+
+  @override
+  Future<void> setMinSkipLength(Duration value) =>
+      _db.setSetting(_minSkipLengthKey, '${value.inSeconds.clamp(0, 600)}');
 
   @override
   Future<bool> loadCorroborateSkips() async =>

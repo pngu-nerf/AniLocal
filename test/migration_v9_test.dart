@@ -175,7 +175,7 @@ void main() {
         reason: 'migrated row recognized as the file',
       );
       expect(summary.processed, 0, reason: 'nothing re-identified');
-      expect(summary.anilistLookups, 0, reason: 'no AniList refetch — the fix');
+      expect(summary.totalLookups, 0, reason: 'no AniList refetch — the fix');
       expect(summary.removed, 0);
 
       // And the library reads back, resolved to the real file.

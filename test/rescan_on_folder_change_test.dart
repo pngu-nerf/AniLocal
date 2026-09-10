@@ -31,7 +31,7 @@ const _emptySummary = SyncSummary(
   matched: 0,
   unmatched: 0,
   errored: 0,
-  anilistLookups: 0,
+  lookupsBySource: {},
 );
 
 class _MutableRepo

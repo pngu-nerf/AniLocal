@@ -129,6 +129,39 @@ void main() {
     });
   });
 
+  group('the minimum-length floor', () {
+    test('a window shorter than the floor is dropped', () {
+      // Sources occasionally mark a few-second sting or scene divider; offering
+      // that as "skip the intro" is noise at best.
+      expect(dropIfShorterThan(_r(0, 5), const Duration(seconds: 30)), isNull);
+    });
+
+    test('a real opening is kept', () {
+      final op = _r(0, 90);
+      expect(dropIfShorterThan(op, const Duration(seconds: 30)), same(op));
+    });
+
+    test(
+      'exactly at the floor is kept — the floor is a minimum, not a gap',
+      () {
+        final window = _r(0, 30);
+        expect(
+          dropIfShorterThan(window, const Duration(seconds: 30)),
+          same(window),
+        );
+      },
+    );
+
+    test('a floor of zero keeps everything — the default changes nothing', () {
+      final tiny = _r(0, 2);
+      expect(dropIfShorterThan(tiny, Duration.zero), same(tiny));
+    });
+
+    test('a null window stays null', () {
+      expect(dropIfShorterThan(null, const Duration(seconds: 30)), isNull);
+    });
+  });
+
   test('no answers at all yields nothing', () {
     expect(reconcileSkips(const []).isEmpty, isTrue);
     expect(reconcileSkips([_answer('a')]).isEmpty, isTrue);

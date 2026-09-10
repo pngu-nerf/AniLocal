@@ -143,7 +143,12 @@ void main() {
 
       expect(s.processed, 1);
       expect(s.unchanged, 1);
-      expect(s.anilistLookups, 0, reason: 'known series reused from cache');
+      expect(s.totalLookups, 0, reason: 'known series reused from cache');
+      expect(
+        s.lookupsBySource,
+        isEmpty,
+        reason: 'nothing was asked, so no source is named',
+      );
       expect(anilistCalls, callsAfterFirst);
       final episodes = await repo.episodesFor(1);
       expect(episodes.map((e) => e.number), [1, 2]);

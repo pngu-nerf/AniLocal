@@ -28,6 +28,11 @@ class FakeSettings implements SettingsRepository {
 
   // No key by default. A test needing one subclasses and overrides.
   @override
+  Future<Duration> loadMinSkipLength() async => Duration.zero;
+  @override
+  Future<void> setMinSkipLength(Duration value) async {}
+
+  @override
   Future<bool> loadCorroborateSkips() async => false;
   @override
   Future<void> setCorroborateSkips(bool enabled) async {}

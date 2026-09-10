@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/repositories/settings_repository.dart';
@@ -10,6 +11,7 @@ import 'panels/homepage_panel.dart';
 import 'panels/library_panel.dart';
 import 'panels/playback_panel.dart';
 import 'panels/source_list_panel.dart';
+import '../theme/xp_tokens.dart';
 import 'setting_row.dart';
 import 'panels/sources_panel.dart';
 import 'settings_actions.dart';
@@ -153,16 +155,35 @@ class _SettingsWindow extends StatelessWidget {
         caption:
             'Top source is used first. The rest are tried only if it has no '
             'data for an episode.',
-        extra: SettingRow(
-          label: 'Cross-check sources',
-          subtitle:
-              'Ask every source and compare. Two that agree can auto-skip; '
-              'ones that disagree offer a button instead. A source with no '
-              'data for an episode is not a disagreement. Slower.',
-          control: SettingSwitch(
-            value: model.corroborateSkips,
-            onChanged: model.setCorroborateSkips,
-          ),
+        extra: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SettingRow(
+              label: 'Ignore skips shorter than',
+              subtitle:
+                  'An opening runs about 90 seconds, so a very short "skip" is '
+                  'usually a source mistaking something else for a theme. '
+                  '0 keeps every window.',
+              control: SizedBox(
+                width: 96,
+                child: _SecondsField(
+                  seconds: model.minSkipLength.inSeconds,
+                  onChanged: model.setMinSkipLength,
+                ),
+              ),
+            ),
+            SettingRow(
+              label: 'Cross-check sources',
+              subtitle:
+                  'Ask every source and compare. Two that agree can auto-skip; '
+                  'ones that disagree offer a button instead. A source with no '
+                  'data for an episode is not a disagreement. Slower.',
+              control: SettingSwitch(
+                value: model.corroborateSkips,
+                onChanged: model.setCorroborateSkips,
+              ),
+            ),
+          ],
         ),
       ),
     ),
@@ -214,5 +235,68 @@ class _SettingsWindow extends StatelessWidget {
     actions: [
       XpButton(label: 'Done', onPressed: () => Navigator.of(context).pop()),
     ],
+  );
+}
+
+/// A plain seconds field.
+///
+/// Deliberately not the m:ss control the watched-threshold uses: this is a
+/// short duration the user thinks about in seconds ("ignore anything under
+/// 30"), and m:ss would make them type a colon to say so.
+class _SecondsField extends StatefulWidget {
+  const _SecondsField({required this.seconds, required this.onChanged});
+
+  final int seconds;
+  final void Function(int) onChanged;
+
+  @override
+  State<_SecondsField> createState() => _SecondsFieldState();
+}
+
+class _SecondsFieldState extends State<_SecondsField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: '${widget.seconds}',
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Committed on blur/submit rather than per keystroke: mid-typing "3" on the
+  /// way to "30" is a different setting, and saving it would briefly hide
+  /// windows the user never meant to exclude.
+  void _commit() {
+    final parsed = int.tryParse(_controller.text.trim());
+    if (parsed == null) {
+      _controller.text = '${widget.seconds}'; // unparseable -> leave it alone
+      return;
+    }
+    final clamped = parsed.clamp(0, 600);
+    _controller.text = '$clamped';
+    widget.onChanged(clamped);
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    onFocusChange: (hasFocus) {
+      if (!hasFocus) _commit();
+    },
+    child: TextField(
+      controller: _controller,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(3),
+      ],
+      keyboardType: TextInputType.number,
+      style: const TextStyle(color: Xp.text, fontSize: 13),
+      decoration: const InputDecoration(
+        isDense: true,
+        suffixText: 's',
+        border: OutlineInputBorder(),
+      ),
+      onSubmitted: (_) => _commit(),
+    ),
   );
 }

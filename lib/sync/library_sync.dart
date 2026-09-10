@@ -239,6 +239,9 @@ class LibrarySync {
     final resolved = <String, _Resolved>{};
     final erroredTitles = <String>{};
     var anilistLookups = 0;
+    // Which source actually answered, so the scan can report where its results
+    // came from rather than naming whichever one used to be the only option.
+    final lookupsBySource = <String, int>{};
     MetadataFailure? apiFailure;
     for (final entry in deltaTitles.entries) {
       final norm = entry.key;
@@ -263,6 +266,10 @@ class LibrarySync {
         final seriesId = found == null
             ? null
             : await cache.ensureSeriesId(found.externalIds);
+        final source = result.source;
+        if (source != null) {
+          lookupsBySource[source] = (lookupsBySource[source] ?? 0) + 1;
+        }
         resolved[norm] = _Resolved(
           seriesId: seriesId,
           score: result.score,
@@ -419,7 +426,7 @@ class LibrarySync {
       matched: matched,
       unmatched: unmatched,
       errored: errored,
-      anilistLookups: anilistLookups,
+      lookupsBySource: lookupsBySource,
       unreadableFolders: unreadableFolders.toList(),
       apiFailure: reportedFailure,
     );

@@ -166,7 +166,7 @@ void main() {
           matched: 0,
           unmatched: 0,
           errored: 0,
-          anilistLookups: 0,
+          lookupsBySource: {},
         ),
         onRefreshMetadata: () async =>
             const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),

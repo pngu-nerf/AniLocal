@@ -26,6 +26,7 @@ class SettingsModel extends ChangeNotifier {
     required this.watchedThreshold,
     required this.missingEnabled,
     required this.corroborateSkips,
+    required this.minSkipLength,
     required this.hideNextEpisode,
     required this.showContinueWatching,
     required this.showSearchBar,
@@ -45,6 +46,7 @@ class SettingsModel extends ChangeNotifier {
     watchedThreshold: await repository.loadWatchedThreshold(),
     missingEnabled: await repository.loadMissingEnabled(),
     corroborateSkips: await repository.loadCorroborateSkips(),
+    minSkipLength: await repository.loadMinSkipLength(),
     hideNextEpisode: await repository.loadHideNextEpisode(),
     showContinueWatching: await repository.loadShowContinueWatching(),
     showSearchBar: await repository.loadShowSearchBar(),
@@ -72,6 +74,9 @@ class SettingsModel extends ChangeNotifier {
   /// Cross-check skip sources against each other (Settings > Skip).
   bool corroborateSkips;
 
+  /// Ignore skip windows shorter than this. Zero = no filter.
+  Duration minSkipLength;
+
   /// NOTE the stored sense: true means the next-episode button is HIDDEN. The
   /// Homepage panel presents it as the positive "Next episode", inverting only
   /// the DISPLAY — what gets persisted is unchanged, including the
@@ -96,6 +101,12 @@ class SettingsModel extends ChangeNotifier {
   void setMissingEnabled(bool v) {
     missingEnabled = v;
     repository.setMissingEnabled(v);
+    notifyListeners();
+  }
+
+  void setMinSkipLength(int seconds) {
+    minSkipLength = Duration(seconds: seconds.clamp(0, 600));
+    repository.setMinSkipLength(minSkipLength);
     notifyListeners();
   }
 
