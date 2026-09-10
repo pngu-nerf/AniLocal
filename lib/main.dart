@@ -135,11 +135,34 @@ void main() {
         loadClientId: malClientId,
       ),
   ];
+  // Built-in skip order: the FILE'S OWN chapters first, then AniSkip.
+  //
+  // Chapters lead because of where their data comes from: a chapter mark was
+  // authored against the exact encode sitting on disk, while AniSkip is
+  // crowd-sourced timings submitted against whatever release the submitter had.
+  // When those differ, the local one is right by construction.
+  //
+  // Measured, not assumed. On the reference library, cross-checking flagged
+  // Cyberpunk: Edgerunners as disagreeing on all 9 episodes; AniSkip put the
+  // opening at 76.2s and the opening actually starts at 71s. Its window is
+  // exactly 90s, so the 5.2s late start pushes the END 5.2s past the opening
+  // and INTO the episode — the one skip error a viewer cannot undo. Sakamoto
+  // desu ga? showed the same total disagreement, and six more shows disagreed
+  // on 13-36% of episodes.
+  //
+  // This costs nothing in coverage: only ~37% of files carry chapters, and a
+  // source with no data falls through silently, so AniSkip still answers
+  // everything else. It complements AniSkip rather than replacing it — the
+  // order just decides who wins where BOTH have an answer.
+  //
+  // The residual risk runs the other way: a chapters window is INFERRED from a
+  // duration band, so a non-theme span of about 90s could in principle be
+  // picked, where AniSkip's answer is human-curated. `inferSkipsFromChapters`
+  // declines rather than guesses, and cross-checking is the backstop — a bogus
+  // chapters window disagrees with AniSkip and is then never auto-skipped.
   final skipProviders = <SkipProvider>[
-    AniSkipSkipProvider(AniSkipClient()),
-    // Local, exact, and immune to every outage — but only ~37% of files carry
-    // chapters, so it complements AniSkip rather than replacing it.
     const ChaptersSkipProvider(),
+    AniSkipSkipProvider(AniSkipClient()),
   ];
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),

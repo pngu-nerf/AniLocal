@@ -33,8 +33,8 @@ why there are two settings categories and two saved orders, sharing one mechanis
 | | **Metadata** — "what is this show" | **Skip** — "where is the OP/ED" |
 |---|---|---|
 | supplies | titles, format, episode count, cover, external ids | intro/outro windows |
-| source of truth | AniList | AniSkip |
-| shipped backups | Kitsu · Jikan (fallback-only) | embedded chapters |
+| source of truth | AniList | **embedded chapters** (see below) |
+| shipped backups | Kitsu · Jikan (fallback-only) | AniSkip |
 | parked | MyAnimeList | Anime Skip · fingerprinting |
 
 ### What the research measured (2026-09-08, on the real library — not assumed)
@@ -67,6 +67,29 @@ Chapters are sub-second accurate where present but three shows have none, **incl
 Ball — 153 files, 54% of the library, with only 40 AniSkip entries**. Roughly 113 episodes
 have neither source. That gap is what fingerprinting was for, and it is the reason D4 was
 planned at all.
+
+### Why chapters lead the skip order (revised after shipping)
+
+D1 and D2 shipped with AniSkip first, as the incumbent. The reference library then showed
+that was the wrong way round wherever both sources answer, and the corroboration pass is what
+exposed it: **Cyberpunk: Edgerunners disagreed on all 9 episodes, and AniSkip is the one that
+is wrong** — it puts the opening at 76.2s when it actually starts at 71s (confirmed by eye).
+Its window is exactly 90s, so a 5.2s late start drags the END 5.2s past the opening and into
+the episode, which is the one skip error a viewer cannot undo. `Sakamoto desu ga?` showed the
+same 100% disagreement, and six further shows disagreed on 13–36% of episodes.
+
+The cause is structural, not bad luck: **a chapter mark was authored against the exact encode
+on disk**, while AniSkip is crowd-sourced timings submitted against whatever release the
+submitter had. A uniform per-episode offset is exactly what a different release looks like.
+So the local source is right by construction where it has an answer at all.
+
+Reordering costs nothing in coverage — only ~37% of files carry chapters and a source with no
+data falls through silently, so AniSkip still answers everything else. The order only decides
+who wins where BOTH answer. The residual risk runs the other way: a chapters window is
+INFERRED from a duration band, so a ~90s span that is not a theme could in principle be
+picked where AniSkip's answer is curated. `inferSkipsFromChapters` declines rather than
+guesses, and corroboration is the backstop — a bogus chapters window disagrees with AniSkip
+and is then never auto-skipped.
 
 Because chapter titles are effectively always absent, OP/ED is inferred from **duration, not
 position**: 197 spans fall in the 80–100s band, mode exactly 90s. Episode 1 opens cold with
