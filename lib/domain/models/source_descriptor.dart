@@ -44,6 +44,10 @@ class SourceDescriptor extends Equatable {
   final bool fallbackOnly;
 
   /// One-line prompt shown under the row when no key is stored.
+  ///
+  /// These three are always null in the shipped app — they are filled only for
+  /// a source with [requiresClientId], and both such sources are parked
+  /// (`docs/multi-source-plan.md`). Retained, not dead by accident.
   final String? setupHint;
 
   /// Where to create a key, and what to do there — shown in the key dialog so

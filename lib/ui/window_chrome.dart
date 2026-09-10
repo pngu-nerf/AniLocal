@@ -12,19 +12,6 @@ import 'package:flutter/services.dart';
 /// content (app glyph, back button) indents clear of them.
 const double kTrafficLightInset = 78;
 
-/// A stock-[AppBar] leading width that fits [trafficLightBackButton]. Pair the
-/// two on any Material screen still using a default [AppBar] (the routes pushed
-/// above the XP-chromed library) so the traffic lights don't cover the back
-/// button.
-const double kAppBarLeadingWidth = kTrafficLightInset + 48;
-
-/// An automatic-style back button indented past the traffic lights. Use with
-/// `leadingWidth: kAppBarLeadingWidth`.
-Widget trafficLightBackButton() => const Padding(
-  padding: EdgeInsets.only(left: kTrafficLightInset),
-  child: BackButton(),
-);
-
 /// The Dart end of the runner's window channel. Because we hid the standard
 /// title bar, the window can no longer be moved/zoomed by grabbing a system
 /// title bar — these hand off to `NSWindow` so a designated region of our own

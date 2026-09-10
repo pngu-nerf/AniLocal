@@ -59,6 +59,14 @@ const List<String> kEpisodicAnimeFormats = [
 /// true and MAL appears in Settings > Metadata, inert until a key is pasted.
 /// `docs/myanimelist-registration.md` records the registration flow so the
 /// decision can be revisited without re-deriving it.
+///
+/// It is not only MAL's flag in effect: MAL is currently the ONLY source that
+/// sets `requiresClientId`, so hiding it is what makes the whole client-ID
+/// subsystem — the key dialog, the per-source key storage, `setupUrl` /
+/// `setupInstructions`, `MetadataFailure.unauthorized` — unreachable at
+/// runtime. That code is retained for the same reason MAL is, and Anime Skip
+/// (also parked, also account-gated) would light up the identical path. See
+/// `docs/multi-source-plan.md` for the parked set as a whole.
 const bool kShipMyAnimeListSource = false;
 
 void main() {

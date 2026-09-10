@@ -34,5 +34,8 @@ enum MetadataFailure {
   /// or revoked. Distinct from every other kind because it is neither end
   /// FAILING: both are working, and the fix is a setting the user controls.
   /// Nothing will improve by waiting.
+  ///
+  /// Nothing can produce this while MAL and Anime Skip are parked — MalClient
+  /// is its only source. Kept with them; see `docs/multi-source-plan.md`.
   unauthorized,
 }

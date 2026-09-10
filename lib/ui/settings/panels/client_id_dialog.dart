@@ -7,6 +7,13 @@ import '../../widgets/xp_dialog.dart';
 
 /// Collects the client ID for a source that needs one.
 ///
+/// **UNREACHABLE in the shipped app, on purpose.** No shipped source sets
+/// `requiresClientId`, because both sources that would — MyAnimeList and Anime
+/// Skip — are parked (`docs/multi-source-plan.md`). This is retained rather
+/// than deleted because it is the whole cost of un-parking either one, and
+/// `test/source_list_panel_test.dart` drives it through a synthetic descriptor
+/// so it cannot rot while it waits. Do not remove it for having no caller.
+///
 /// Returns the entered value, `''` to clear a stored key, or null when the user
 /// cancelled — cancel must leave an existing key untouched, which a plain empty
 /// string could not express.

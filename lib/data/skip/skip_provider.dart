@@ -7,6 +7,16 @@ import '../../domain/models/skip_range.dart';
 /// family owns the vocabulary.
 const String kAniSkipSource = 'aniskip';
 const String kChaptersSource = 'chapters';
+
+/// PARKED, and kept deliberately — see `docs/multi-source-plan.md`.
+///
+/// Neither has an implementing class. Anime Skip is account-gated (an
+/// `X-Client-ID` per user), which is the same wall that parked MyAnimeList, and
+/// fingerprinting is blocked on a dependency decision that was never settled.
+/// Both are unlikely to be built. The tokens stay so that a source order saved
+/// by a build which HAD them keeps meaning what it said, and so building either
+/// is an edit rather than a rebuild. **Do not garbage-collect these** because
+/// nothing references them; that is the expected state.
 const String kAnimeSkipSource = 'animeskip';
 const String kFingerprintSource = 'fingerprint';
 
@@ -45,7 +55,7 @@ class SkipLookup {
   /// Anchored episode number, the other half of episode identity.
   final int episode;
 
-  /// For sources keyed by MyAnimeList — AniSkip, and Anime Skip.
+  /// For sources keyed by MyAnimeList — AniSkip, and Anime Skip (parked).
   final int? malId;
 
   /// For LOCAL sources: the file this episode actually plays from.
@@ -53,6 +63,12 @@ class SkipLookup {
 
   /// Other episodes of the same series, for a source that finds the OP by
   /// looking for what repeats across them (fingerprinting).
+  ///
+  /// **Has no reader today** and that is expected, not an oversight: the only
+  /// source that would use it is parked (`kFingerprintSource`). Kept because it
+  /// is the one part of the request shape a fingerprinter cannot work without,
+  /// and re-deriving which paths count as siblings — anchored position, same
+  /// series, resolved through source overrides — is the fiddly half.
   final List<String> siblingPaths;
 
   /// Improves AniSkip's matching when known.

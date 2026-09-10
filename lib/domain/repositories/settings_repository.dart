@@ -39,6 +39,10 @@ abstract interface class SettingsRepository {
   /// Stored in the local settings table in plain text: a MAL/Anime Skip client
   /// ID identifies an APPLICATION, not a person, and grants no access to any
   /// account — it is not a password. It is never logged.
+  ///
+  /// No runtime path reaches either method today: the only callers sit behind
+  /// `requiresClientId`, which no shipped source sets while MAL and Anime Skip
+  /// are parked. Kept deliberately — see `docs/multi-source-plan.md`.
   Future<String?> loadSourceClientId(String token);
   Future<void> setSourceClientId(String token, String? clientId);
 
