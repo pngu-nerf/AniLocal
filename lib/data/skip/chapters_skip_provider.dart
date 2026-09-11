@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../../domain/chapter_skips.dart';
 import '../../domain/models/skip_range.dart';
 import '../chapters/chapter_reader.dart';
@@ -43,8 +45,18 @@ class ChaptersSkipProvider implements SkipProvider {
   /// scan path has the path and the refresh path gained it later, so recording
   /// an answer from a lookup without one would freeze the wrong result.
   @override
-  bool canAnswer(SkipLookup lookup) =>
-      lookup.filePath != null && lookup.filePath!.isNotEmpty;
+  bool canAnswer(SkipLookup lookup) {
+    final path = lookup.filePath;
+    if (path == null || path.isEmpty) return false;
+    // The file must be THERE. A drive that is unplugged or remounted elsewhere
+    // makes the path dangle, and `ChapterReader` reports a missing file as "no
+    // chapters" — which the fill path would then record as this source's
+    // permanent answer and never ask again. One refresh with the library
+    // offline used to erase chapter skips for every episode on that drive,
+    // silently. Existence is checked here, where "could not try" is the
+    // meaning that stops the row being written.
+    return File(path).existsSync();
+  }
 
   @override
   Future<EpisodeSkips?> fetchSkips(SkipLookup lookup) async {

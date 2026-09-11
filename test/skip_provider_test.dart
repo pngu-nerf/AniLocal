@@ -364,6 +364,26 @@ void main() {
       expect((await db.allSkipAnswers()).from('aniskip')!.introEndMs, 90000);
     });
 
+    test(
+      'a CHANGED file does not re-ask sources that already answered',
+      () async {
+        // The scan reprocesses a file whose size or mtime changed. Before v19's
+        // contract was applied to this path too, it re-asked every source for
+        // it — one wasted request per source per changed file, and (worse) a
+        // fresh "nothing" answer could not clear a stale window.
+        final chapters = _FakeSkip('chapters', windows: _op());
+        await scanWith([chapters]);
+        final afterFirst = chapters.calls;
+
+        await File(
+          '${dir.path}/Cowboy Bebop - 01.mkv',
+        ).writeAsString('yyyyyyyy');
+        await scanWith([chapters]); // reprocessed: the fingerprint changed
+
+        expect(chapters.calls, afterFirst, reason: 'its answer is on file');
+      },
+    );
+
     test('a source already answered is never asked again', () async {
       // What keeps refresh incremental now that there is no resolution key:
       // presence of a row IS the record that we asked.

@@ -35,6 +35,7 @@ import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
 import 'settings/sources_actions.dart';
 import '../diagnostics/app_log.dart';
+import '../domain/models/source_descriptor.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -83,6 +84,8 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.settings,
     required this.onRefreshMetadata,
     required this.sources,
+    this.metadataSources = const [],
+    this.skipSources = const [],
     // Shared header actions, so the detail header matches the home header.
     required this.onScan,
     required this.onUnmatched,
@@ -112,6 +115,14 @@ class SeriesDetailScreen extends StatefulWidget {
   /// Sources (folders) dependencies, forwarded so this screen's settings window
   /// carries the same Sources tab the home one does.
   final SourcesActions sources;
+
+  /// The shipped metadata and skip sources, for the Settings window opened
+  /// from here. Without these the Metadata and Skip tabs rendered EMPTY from
+  /// the show page and the player — a shipped feature silently missing from
+  /// two of its three entry points, because this screen built its own
+  /// `SettingsDialogActions` and omitted them.
+  final List<SourceDescriptor> metadataSources;
+  final List<SourceDescriptor> skipSources;
 
   /// Shared header actions (Sync / Unmatched), forwarded so the detail header
   /// is identical to the home header. [unmatchedCount] is a snapshot. Sources
@@ -292,11 +303,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   /// would leave the page showing the old source until you navigated away and
   /// back.
   Future<void> _openSettings() async {
-    final outcome = await showAppSettingsDialog(
+    await showAppSettingsDialog(
       context,
       settings: widget.settings,
       actions: SettingsDialogActions(
         sources: widget.sources,
+        metadataSources: widget.metadataSources,
+        skipSources: widget.skipSources,
         onRefreshMetadata: widget.onRefreshMetadata,
         onRefreshed: _reload,
         loadUnmatchedCount: () async =>
@@ -314,7 +327,11 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     if (!mounted) return;
     // A rescan is the library screen's job (it owns the scan); this screen just
     // needs its episode list re-resolved against the new priority order.
-    if (outcome.sourcesChanged) await _reload();
+    // Reload after ANY settings visit, not only a folder change: missing-episode
+    // placeholders and the skip floor are read fresh by `_reload`, and gating
+    // on `sourcesChanged` left both stale until you navigated away and back.
+    // The read is local and cheap; the stale page was a visible bug.
+    await _reload();
   }
 
   /// Header "Sync" on the detail screen: run the home-provided sync, then reload

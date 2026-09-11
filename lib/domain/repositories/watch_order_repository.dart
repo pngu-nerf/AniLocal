@@ -16,6 +16,6 @@ abstract interface class WatchOrderRepository {
   /// The next episode to watch, per series the user has STARTED (watched ≥1):
   /// the within-season episode after their furthest-watched one. Omits series
   /// not started, or caught up (resolver returns [NoNextEpisode]). Keyed by the
-  /// series' AniList id — powers the per-series "Next: Ep N" affordance.
+  /// series' id — powers the per-series "Next: Ep N" affordance.
   Future<Map<int, Episode>> upNextBySeries();
 }

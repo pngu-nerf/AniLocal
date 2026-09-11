@@ -25,6 +25,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/fake_settings.dart';
 import 'support/shell_harness.dart';
 import 'package:anilocal/ui/settings/sources_actions.dart';
+import 'package:anilocal/domain/models/source_descriptor.dart';
 
 /// The detail page's FIRST FRAME.
 ///
@@ -192,6 +193,7 @@ Widget _app(_Repo repo) {
 }
 
 void main() {
+  _settingsFromShowPageTests();
   testWidgets('the hero paints on the FIRST frame, while the episode query is '
       'still outstanding', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
@@ -309,5 +311,73 @@ void main() {
     ) async {
       expect(await derived(tester, [ep(1), ep(2, watched: true)]), isNull);
     });
+  });
+}
+
+void _settingsFromShowPageTests() {
+  testWidgets('Settings opened FROM the show page lists the sources', (
+    tester,
+  ) async {
+    // The show page built its own SettingsDialogActions and left the two
+    // source lists at their empty defaults, so Metadata and Skip rendered
+    // EMPTY from two of the window's three entry points. This drives the real
+    // shell header (the ⚙ lives there), opens Settings from the show page, and
+    // looks for a source by name.
+    tester.view.physicalSize = const Size(1200, 820);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repo = _Repo();
+    final shell = ShellHarness();
+    await tester.pumpWidget(
+      shell.app(
+        home: SeriesDetailScreen(
+          series: _series(),
+          repository: repo,
+          fixMatch: _FixMatch(),
+          watchState: repo,
+          sourceSelection: repo,
+          watchOrder: repo,
+          playback: PlaybackController(resolver: repo),
+          missing: repo,
+          settings: const FakeSettings(),
+          onRefreshMetadata: () async =>
+              const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+          metadataSources: const [
+            SourceDescriptor(token: 'kitsu', displayName: 'Kitsu Probe'),
+          ],
+          skipSources: const [
+            SourceDescriptor(token: 'chapters', displayName: 'Chapters Probe'),
+          ],
+          sources: SourcesActions(
+            repository: repo,
+            onAddFolder: () async => (added: false, deniedLabel: null),
+            onOpenAccessSettings: () async => false,
+          ),
+          onScan: () async {},
+          onUnmatched: () {},
+          unmatchedCount: 0,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Metadata'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Kitsu Probe'),
+      findsOneWidget,
+      reason: 'metadata list populated',
+    );
+
+    await tester.tap(find.text('Skip'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Chapters Probe'),
+      findsOneWidget,
+      reason: 'skip list populated',
+    );
   });
 }

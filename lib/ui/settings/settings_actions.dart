@@ -33,7 +33,7 @@ class SettingsDialogActions {
   /// Every skip source this build ships, in built-in order.
   final List<SourceDescriptor> skipSources;
 
-  /// Re-fetch metadata (idMal + skip data) for cached series. Returns counts.
+  /// Re-fetch metadata (ids + skip data) for cached series. Returns counts.
   final Future<RefreshSummary> Function() onRefreshMetadata;
 
   /// Called after a successful refresh so the opening screen can reload.

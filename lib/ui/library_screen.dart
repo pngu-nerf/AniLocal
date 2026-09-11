@@ -117,7 +117,7 @@ class LibraryScreen extends StatefulWidget {
   /// wires it to a reload so the grid paints placeholders immediately.
   final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
 
-  /// Re-fetch metadata (idMal + skip data) for cached series — no file scan, no
+  /// Re-fetch metadata (ids + skip data) for cached series — no file scan, no
   /// pruning, preserves overrides/watch-state. Returns counts for a snackbar.
   final Future<RefreshSummary> Function() onRefreshMetadata;
 
@@ -690,6 +690,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                         onPlay: _play,
                         onReturn: _reload,
                         sources: widget.sources,
+                        metadataSources: widget.metadataSources,
+                        skipSources: widget.skipSources,
                         onScan: _scan,
                         onUnmatched: _openUnmatched,
                         unmatchedCount: _unmatchedCount,
@@ -871,6 +873,8 @@ class _SeriesCard extends StatefulWidget {
     required this.onReturn,
     // Header actions forwarded to the detail screen so its header matches home.
     required this.sources,
+    required this.metadataSources,
+    required this.skipSources,
     required this.onScan,
     required this.onUnmatched,
     required this.unmatchedCount,
@@ -909,6 +913,8 @@ class _SeriesCard extends StatefulWidget {
 
   /// Forwarded so the detail screen's settings window has the Sources tab too.
   final SourcesActions sources;
+  final List<SourceDescriptor> metadataSources;
+  final List<SourceDescriptor> skipSources;
 
   /// Header actions forwarded to the detail screen (Sync / Unmatched) so its
   /// header matches the home header. [unmatchedCount] is a snapshot.
@@ -952,6 +958,8 @@ class _SeriesCardState extends State<_SeriesCard> {
           settings: widget.settings,
           onRefreshMetadata: widget.onRefreshMetadata,
           sources: widget.sources,
+          metadataSources: widget.metadataSources,
+          skipSources: widget.skipSources,
           onScan: widget.onScan,
           onUnmatched: widget.onUnmatched,
           unmatchedCount: widget.unmatchedCount,

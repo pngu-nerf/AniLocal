@@ -7,11 +7,18 @@ SkipRange _r(int startS, int endS) => SkipRange(
   end: Duration(seconds: endS),
 );
 
-({String source, EpisodeSkips skips}) _answer(
-  String source, {
-  SkipRange? intro,
-  SkipRange? outro,
-}) => (source: source, skips: EpisodeSkips(intro: intro, outro: outro));
+SourceAnswer _answer(String source, {SkipRange? intro, SkipRange? outro}) =>
+    SourceAnswer(source: source, intro: intro, outro: outro);
+
+/// Cross-check [answers] in the order given — the read-path resolver with
+/// every listed source active. `reconcileSkips`, the write-time predecessor,
+/// was deleted with v19; these tests pin the same rules on its successor.
+ReconciledSkips reconcileSkips(List<SourceAnswer> answers) =>
+    resolveEpisodeSkips(
+      answers,
+      sourceOrder: [for (final a in answers) a.source],
+      corroborate: true,
+    );
 
 void main() {
   group('silence is not disagreement', () {
@@ -299,16 +306,5 @@ void main() {
   test('no answers at all yields nothing', () {
     expect(reconcileSkips(const []).isEmpty, isTrue);
     expect(reconcileSkips([_answer('a')]).isEmpty, isTrue);
-  });
-
-  test('confidence round-trips through its stored form', () {
-    for (final c in SkipConfidence.values) {
-      expect(SkipConfidence.fromStored(c.stored), c);
-    }
-    expect(
-      SkipConfidence.fromStored(99),
-      SkipConfidence.single,
-      reason: 'an unknown stored value must degrade to the neutral verdict',
-    );
   });
 }

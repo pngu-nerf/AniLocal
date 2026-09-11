@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:anilocal/data/chapters/chapter_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:anilocal/data/skip/chapters_skip_provider.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 
 /// The MP4 half of the container parsing, built from bytes rather than a real
 /// file so it runs everywhere.
@@ -148,5 +150,45 @@ void main() {
 
     // Whatever survives, it must not throw.
     await expectLater(reader.read(file.path), completes);
+  });
+
+  group('ChaptersSkipProvider.canAnswer', () {
+    test(
+      'a file that is not there is "could not try", not "no chapters"',
+      () async {
+        // A drive unplugged or remounted elsewhere makes the path dangle. The
+        // reader reports a missing file as no chapters; if that were recorded
+        // as this source's answer it would never be asked again — one refresh
+        // with the library offline erased chapter skips for the whole drive.
+        const provider = ChaptersSkipProvider();
+        expect(
+          provider.canAnswer(
+            const SkipLookup(
+              seriesId: 1,
+              episode: 1,
+              filePath: '/no/such/file.mkv',
+            ),
+          ),
+          isFalse,
+        );
+        expect(
+          provider.canAnswer(const SkipLookup(seriesId: 1, episode: 1)),
+          isFalse,
+          reason: 'no path at all is also not an attempt',
+        );
+      },
+    );
+
+    test('a file that IS there can be attempted', () async {
+      final dir = await Directory.systemTemp.createTemp('anilocal_chap_');
+      addTearDown(() => dir.delete(recursive: true));
+      final f = File('${dir.path}/ep.mkv')..writeAsStringSync('x');
+      expect(
+        const ChaptersSkipProvider().canAnswer(
+          SkipLookup(seriesId: 1, episode: 1, filePath: f.path),
+        ),
+        isTrue,
+      );
+    });
   });
 }

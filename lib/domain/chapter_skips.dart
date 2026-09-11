@@ -29,7 +29,7 @@ class ChapterSpan {
 
 /// Openings and endings are ~90 seconds by long-standing convention, and the
 /// data agrees: across the reference library, 197 chapter spans fell in the
-/// 80–100s band with a mode of exactly 90s (then 91s, then 93s).
+/// 85–100s band with a mode of exactly 90s (then 91s, then 93s).
 ///
 /// The band is kept TIGHT on purpose. Widening it to catch an unusual OP would
 /// start catching ordinary scenes, and the two errors are not equal: failing to

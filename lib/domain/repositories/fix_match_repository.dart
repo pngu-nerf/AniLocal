@@ -4,7 +4,7 @@ import '../models/series.dart';
 /// layer by the service that exclusively owns the override store — the UI never
 /// imports that service, and the auto-matcher never imports this (seam #5).
 abstract interface class FixMatchRepository {
-  /// Ranked AniList candidates for a query (top result is unreliable; the user
+  /// Ranked candidates for a query across the configured sources (the top result is unreliable; the user
   /// picks).
   Future<List<Series>> searchCandidates(String query);
 

@@ -1,7 +1,7 @@
 import '../models/picture_mode.dart';
 import '../models/show_preferences.dart';
 
-/// Per-show preferences store — keyed to show identity (AniList id), sacred user
+/// Per-show preferences store — keyed to show identity (series id), sacred user
 /// data that survives metadata refresh/rescan (no fill-path writer, seam #5).
 /// Extensible: future per-show prefs add a method + a field on [ShowPreferences]
 /// (and a column), not a parallel store.
@@ -9,7 +9,7 @@ abstract interface class ShowPreferencesRepository {
   /// Current preferences for a show; all-default when nothing is stored.
   Future<ShowPreferences> preferencesFor(int seriesId);
 
-  /// All stored preferences, keyed by AniList id — for batch reads (the grid).
+  /// All stored preferences, keyed by series id — for batch reads (the grid).
   /// Shows without an override are simply absent (treat as [ShowPreferences]()).
   Future<Map<int, ShowPreferences>> allPreferences();
 

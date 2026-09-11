@@ -42,21 +42,22 @@ class Series extends Equatable {
 
   final Titles titles;
 
-  /// AniList format, e.g. `TV`, `MOVIE`, `OVA`. Free-form for now.
+  /// Series format in AniList's vocabulary, e.g. `TV`, `MOVIE`, `OVA` — other
+  /// sources are normalised to it (`normalizeSeriesFormat`).
   final String? format;
 
   /// Reference to cover art — a remote URL now, a local cached file path once
   /// the cache lands (Stage 4). The UI does not care which.
   final String? coverImageRef;
 
-  /// Total episode count reported by AniList, when known.
+  /// Total episode count reported by whichever source identified it, when known.
   final int? episodeCount;
 
   /// Related entries (sequels, prequels, side stories, adaptations).
   final List<RelatedSeries> relations;
 
   /// True when this is a PLACEHOLDER for a show that's on disk but not yet
-  /// identified (AniList not yet consulted, offline, or the lookup failed). It
+  /// identified (no source consulted yet, offline, or the lookup failed). It
   /// carries the parsed title as [titles] and no [coverImageRef]; the UI shows
   /// a named placeholder card. It upgrades in place to a real entry once
   /// identification succeeds on a later scan/refresh. Distinct from a

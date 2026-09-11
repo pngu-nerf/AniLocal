@@ -4,7 +4,7 @@
 remain are **parked with their framework kept** — not scheduled, not expected. Everything
 below is either shipped or explicitly parked; there is no in-flight slice.
 
-This file exists because the program that produced schema v14–v18 and eleven new modules
+This file exists because the program that produced schema v14–v19 and eleven new modules
 was tracked only in an approved plan that lived outside the repository, and in feature
 paragraphs scattered through `CLAUDE.md`. Reconstructing "what is left" required diffing
 eight of those paragraphs against one stale bullet list. It should require reading one file.
@@ -211,11 +211,12 @@ been wrong immediately.
 | **D2** | Chapters provider — hand-written MKV/MP4 parsers | `093940a`, `541a8ef` | — |
 | **D5** | Skip corroboration, per-window verdicts | `685cd23` | **v17** |
 | — | Revisions: minimum skip length; sync summary names its sources | `a7da350` | — |
-| — | Skip re-resolution — a source reorder reaches the existing library | *(this slice)* | **v18** |
+| — | Skip re-resolution — a source reorder reaches the existing library | `30bc1d4` | **v18** |
+| — | Skip ANSWERS stored, verdicts derived on read — `skip_segments` retired | `4990869` | **v19** |
 | **D3** | Anime Skip provider | **parked** | — |
 | **D4** | Fingerprinting provider | **parked** | — |
 
-Four schema versions shipped where the plan anticipated two (v14 and one for D1). The extras
+Six schema versions shipped where the plan anticipated two (v14 and one for D1). The extras
 are honest: v15 discharged an obligation C1 created, and v17 replaced a v16 column that had
 been added before the rule that would use it existed.
 
@@ -241,7 +242,7 @@ been added before the rule that would use it existed.
   failing, and no amount of waiting fixes it.
 - **The `createTable` rename guard was generalised.** The plan named one table (`file_cache`);
   five needed it, so it became `renameIfPreExisting(createdAtVersion, …)`.
-- **Three live harnesses instead of one.** The plan asked only for D4's accuracy report — the
+- **Four live harnesses instead of one.** The plan asked only for D4's accuracy report — the
   one harness not built, because D4 wasn't. `test_live/` exists instead, outside `test/`
   because `flutter test` walks `test/` only and rejects `dart test -P`.
 

@@ -10,7 +10,7 @@ import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import '../diagnostics/app_log.dart';
 
-/// Minimal manual fix-match: search AniList → pick from ranked candidates →
+/// Minimal manual fix-match: search the metadata sources → pick from ranked candidates →
 /// assign. For a split (multiple files), an optional toggle chooses continuous
 /// vs AniList-faithful display numbering. Pops `true` when an override is set.
 class FixMatchScreen extends StatefulWidget {
@@ -114,7 +114,7 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
                 child: TextField(
                   controller: _query,
                   decoration: const InputDecoration(
-                    labelText: 'Search AniList',
+                    labelText: 'Search',
                     border: OutlineInputBorder(),
                   ),
                   onSubmitted: (_) => _search(),

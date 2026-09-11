@@ -60,7 +60,12 @@ void main() {
       ),
     );
 
-    expect(find.textContaining("AniList's API is down"), findsOneWidget);
+    expect(
+      find.textContaining('metadata service is down'),
+      findsOneWidget,
+      reason:
+          'copy names the ROLE, not AniList — any source can be the one down',
+    );
     expect(
       find.textContaining('Refreshed'),
       findsNothing,

@@ -90,7 +90,7 @@ class AniLocalApp extends StatelessWidget {
   /// reload and paint them immediately.
   final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
 
-  /// Re-fetch metadata (idMal + skip data) for already-cached series, without
+  /// Re-fetch metadata (ids + skip data) for already-cached series, without
   /// scanning files or touching overrides/watch-state. Returns counts.
   final Future<RefreshSummary> Function() onRefreshMetadata;
 

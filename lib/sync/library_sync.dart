@@ -93,6 +93,11 @@ class LibrarySync {
     // (or that we can't read) is surfaced and its cached files are PRESERVED.
     final stats = <(String folderPath, String relativePath), FileStat>{};
     final unreadableFolders = <String>{}; // stable folder identities
+    // Stable folder identity -> where it is mounted RIGHT NOW. Kept because a
+    // local skip source reads the episode's file, and building that path from
+    // the stable identity (as this used to) handed it a dangling path whenever
+    // a volume had remounted under another name.
+    final mountByFolder = <String, String>{};
     for (final folderPath in folderPaths) {
       final row = folderRows[folderPath];
       final current = await resolveFolderPath(
@@ -105,6 +110,7 @@ class LibrarySync {
         unreadableFolders.add(folderPath); // volume not mounted -> missing
         continue;
       }
+      mountByFolder[folderPath] = current;
       // Backfill the volume UUID once we can resolve an as-yet-unbound folder
       // (migrated folders + freshly added ones). The resolver returns null for
       // internal-disk paths, so only removable/network volumes get bound — they
@@ -381,11 +387,29 @@ class LibrarySync {
     // path the cache is keyed by.
     final pathByIdentity = <(int, int), String>{
       for (final f in fileUpserts)
-        if (f.seriesId != null && f.episodeNumber != null)
-          (f.seriesId!, f.episodeNumber!): '${f.folderPath}/${f.relativePath}',
+        if (f.seriesId != null &&
+            f.episodeNumber != null &&
+            mountByFolder[f.folderPath] != null)
+          (f.seriesId!, f.episodeNumber!):
+              '${mountByFolder[f.folderPath]}/${f.relativePath}',
     };
+    // Same contract as the refresh path: a source that already answered for
+    // an episode — even to say it had nothing — is never asked again. A CHANGED
+    // file comes through here with its answers intact, and re-asking would
+    // both waste a request per source and (see `_askSkipSources`) risk a stale
+    // window that a later "nothing" answer could not clear.
+    final answered = <(int, int), Set<String>>{};
+    for (final a in await cache.allSkipAnswers()) {
+      (answered[(a.seriesId, a.episode)] ??= <String>{}).add(a.source);
+    }
     final skipUpserts = <SkipSourceAnswerRow>[];
     for (final (seriesId, episode) in skipKeys) {
+      final already = answered[(seriesId, episode)] ?? const <String>{};
+      final missing = [
+        for (final p in askable)
+          if (!already.contains(p.token)) p,
+      ];
+      if (missing.isEmpty) continue;
       skipUpserts.addAll(
         await _askSkipSources(
           SkipLookup(
@@ -394,7 +418,7 @@ class LibrarySync {
             malId: malIds[seriesId],
             filePath: pathByIdentity[(seriesId, episode)],
           ),
-          askable,
+          missing,
         ),
       );
     }
@@ -435,8 +459,8 @@ class LibrarySync {
   /// Re-fetch metadata for ALREADY-cached series (the "refresh metadata"
   /// backfill) WITHOUT scanning files or pruning anything — fix-matches,
   /// watch-state, and file matches are untouched. Re-fetches each referenced
-  /// entry by AniList id to pick up fields added later (notably `idMal`), then
-  /// fetches AniSkip for episode identities that don't yet have a cached skip
+  /// entry by each provider's own ids to pick up fields added later (ids, skip data), then
+  /// asks every enabled skip source for episode identities that don't yet have a cached skip
   /// row. Idempotent and rate-friendly: already-cached skips aren't re-fetched.
   ///
   /// Online action; the cache stays the offline read path. Returns counts for
@@ -541,6 +565,26 @@ class LibrarySync {
     // is already reprocessing (new or changed), so for a library that is
     // already scanned, refresh is the ONLY way a newly-added skip source ever
     // reaches the existing episodes.
+    // Where each folder is mounted NOW — see the same map in sync(). An
+    // unmounted folder yields no path, so a local source records nothing for
+    // its episodes rather than "asked, had nothing".
+    final refreshFolderRows = {
+      for (final r in await cache.allFolderRows()) r.path: r,
+    };
+    final mountByFolder = <String, String>{};
+    // Every folder a cached file lives in — not only the ones with a
+    // library_folders row, since a folder scanned by path alone still has files
+    // here (and an internal-disk folder resolves by existence with no row).
+    for (final folderPath in {for (final f in files) f.folderPath}) {
+      final row = refreshFolderRows[folderPath];
+      final current = await resolveFolderPath(
+        storedPath: folderPath,
+        volumeId: row?.volumeId,
+        volumeSubpath: row?.volumeSubpath,
+        resolver: resolver,
+      );
+      if (current != null) mountByFolder[folderPath] = current;
+    }
     final identities = <(int, int)>{};
     final pathByIdentity = <(int, int), String>{};
     for (final f in files) {
@@ -552,10 +596,10 @@ class LibrarySync {
           : null;
       if (identity == null) continue;
       identities.add(identity);
-      pathByIdentity.putIfAbsent(
-        identity,
-        () => '${f.folderPath}/${f.relativePath}',
-      );
+      final mount = mountByFolder[f.folderPath];
+      if (mount != null) {
+        pathByIdentity.putIfAbsent(identity, () => '$mount/${f.relativePath}');
+      }
     }
 
     // Fetch skips for identities with no cached row — and RE-RESOLVE the ones

@@ -47,7 +47,7 @@ class LibraryPanel extends StatelessWidget {
                 ? 'Nothing needs fixing'
                 : '${model.unmatchedCount} file(s) we could not identify',
             info:
-                'Files we scanned and parsed but could not match to an AniList '
+                'Files that were scanned and parsed but matched nothing in any '
                 'entry.\n\n'
                 'They stay in the library and can be matched by hand; nothing '
                 'is deleted or moved.',

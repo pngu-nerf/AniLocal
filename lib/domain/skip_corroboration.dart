@@ -31,19 +31,6 @@ enum SkipConfidence {
   /// worth refusing to auto-skip.
   conflicting;
 
-  /// Stored form, so the DB never holds a magic number.
-  int get stored => switch (this) {
-    corroborated => 1,
-    single => 0,
-    conflicting => -1,
-  };
-
-  static SkipConfidence fromStored(int value) => switch (value) {
-    1 => corroborated,
-    -1 => conflicting,
-    _ => single,
-  };
-
   /// Whether a window this trusted may be skipped WITHOUT asking.
   bool get allowsAutoSkip => this != conflicting;
 }
@@ -178,31 +165,6 @@ class ReconciledSkips {
 
 /// Reconcile every source's answer for one episode.
 ///
-/// [answers] is in the user's source-priority order. The two windows are judged
-/// SEPARATELY: a corroborated intro alongside a lone outro is exactly what a
-/// mixed library produces, and collapsing them to one verdict would either
-/// forfeit the intro's corroboration or overstate the outro's.
-ReconciledSkips reconcileSkips(
-  List<({String source, EpisodeSkips skips})> answers,
-) {
-  final intros = <SkipCandidate>[];
-  final outros = <SkipCandidate>[];
-  for (final answer in answers) {
-    final intro = answer.skips.intro;
-    final outro = answer.skips.outro;
-    // Only sources that actually HAVE this window take part in judging it.
-    if (intro != null) {
-      intros.add(SkipCandidate(source: answer.source, range: intro));
-    }
-    if (outro != null) {
-      outros.add(SkipCandidate(source: answer.source, range: outro));
-    }
-  }
-  return ReconciledSkips(
-    intro: reconcileWindow(intros),
-    outro: reconcileWindow(outros),
-  );
-}
 
 /// A source's RAW answer for one episode: what it said, not what we concluded.
 class SourceAnswer {

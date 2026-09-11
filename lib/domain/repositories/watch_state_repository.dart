@@ -2,7 +2,7 @@ import '../models/continue_watching.dart';
 import '../models/episode.dart';
 
 /// Local-only watch state — watched flags + resume positions, keyed by EPISODE
-/// IDENTITY (AniList entry + anchored position), never by file path or player
+/// IDENTITY (series + anchored position), never by file path or player
 /// session. No tracker, no sync, no network, no outbox (roadmap Stage 6).
 abstract interface class WatchStateRepository {
   /// Persist an in-progress resume position for [episode].

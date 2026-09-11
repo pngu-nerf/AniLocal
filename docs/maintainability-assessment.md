@@ -5,7 +5,7 @@
 > doc for a human maintainer") was FIXED: `docs/ARCHITECTURE.md` exists and is the
 > front door. Finding #2's premise is gone too — the README it calls a "7-line
 > stub" has been rewritten with a documentation index. Every concrete number below
-> predates the multi-source program (schema v14–v18, eleven new modules): where it
+> predates the multi-source program (schema v14–v19, eleven new modules): where it
 > says schema v11/v13, current is **v18**; where it says "~45 test files", there are
 > **70** plus `test_live/`; where it lists a five-directory `lib/data`, there are
 > twelve. Its dead-symbol finding for `window_chrome.dart` is now discharged
