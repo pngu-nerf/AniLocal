@@ -46,3 +46,6 @@ app.*.map.json
 
 # Stray Flutter screenshot captures (flutter screenshot / device captures)
 flutter_*.png
+
+# Claude Code session state (personal permission allowlists etc.)
+.claude/

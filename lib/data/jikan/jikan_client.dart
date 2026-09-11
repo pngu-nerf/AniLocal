@@ -146,9 +146,9 @@ class JikanClient {
           pathSegments: [..._base.pathSegments, ...path.split('/')],
           queryParameters: query.isEmpty ? null : query,
         ),
-        headers: const {
+        headers: {
           'Accept': 'application/json',
-          'User-Agent': kAniLocalUserAgent,
+          'User-Agent': aniLocalUserAgent,
         },
       );
     } on Exception catch (e) {

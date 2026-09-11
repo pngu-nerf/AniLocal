@@ -59,10 +59,10 @@ class AniSkipClient {
     try {
       response = await _http.get(
         uri,
-        headers: const {
+        headers: {
           'Accept': 'application/json',
           // A named UA — same reason as AniList: avoid edge/WAF blocks.
-          'User-Agent': kAniLocalUserAgent,
+          'User-Agent': aniLocalUserAgent,
         },
       );
     } on Exception catch (e) {

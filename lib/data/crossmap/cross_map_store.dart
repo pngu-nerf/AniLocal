@@ -139,9 +139,9 @@ class CrossMapStore {
     try {
       response = await _http.get(
         _endpoint,
-        headers: const {
+        headers: {
           'Accept': 'application/json',
-          'User-Agent': kAniLocalUserAgent,
+          'User-Agent': aniLocalUserAgent,
         },
       );
     } on Exception catch (e) {

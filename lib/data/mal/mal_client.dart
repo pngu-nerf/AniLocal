@@ -174,7 +174,7 @@ class MalClient {
         ),
         headers: {
           'Accept': 'application/json',
-          'User-Agent': kAniLocalUserAgent,
+          'User-Agent': aniLocalUserAgent,
           'X-MAL-CLIENT-ID': clientId,
         },
       );

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'diagnostics/diagnostics.dart';
 import 'diagnostics/app_log.dart';
+import 'data/user_agent.dart';
 import 'data/timeout_client.dart';
 import 'data/anilist/anilist_client.dart';
 import 'data/aniskip/aniskip_client.dart';
@@ -99,10 +101,33 @@ void main() {
   };
   unawaited(AppLog.attachFile(logsDirectory, debugEcho: kDebugMode));
   unawaited(
-    PackageInfo.fromPlatform().then(
-      (info) => Diagnostics.appVersion = '${info.version}+${info.buildNumber}',
-    ),
+    PackageInfo.fromPlatform().then((info) {
+      final version = '${info.version}+${info.buildNumber}';
+      Diagnostics.appVersion = version;
+      aniLocalUserAgent = userAgentFor(version);
+    }),
   );
+  // What we owe for what we ship, reachable from Settings > About > Licences.
+  // Flutter collects every pub package's licence for free; these three are
+  // the ones it cannot know about: the app's own GPL, the font (its OFL
+  // requires the text to travel with the font), and the GPL media stack that
+  // media_kit bundles — whose corresponding source is the project repository.
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(const [
+      'AniLocal',
+    ], await rootBundle.loadString('LICENSE'));
+    yield LicenseEntryWithLineBreaks(const [
+      'Archivo (font)',
+    ], await rootBundle.loadString('fonts/Archivo-OFL.txt'));
+    yield const LicenseEntryWithLineBreaks(
+      ['libmpv', 'FFmpeg', 'libass'],
+      'AniLocal plays video through libmpv, FFmpeg and libass, bundled by '
+      'media_kit (github.com/media-kit/libmpv-darwin-build). These are '
+      'licensed under the GNU GPL (v2 or later) and LGPL; AniLocal as a whole '
+      'is therefore distributed under the GNU GPL v3 or later. Corresponding '
+      'source for AniLocal: $kAniLocalProjectUrl',
+    );
+  });
   AppLog.info(
     'AniLocal starting · schema v${CacheDatabase.currentSchemaVersion} · '
     '${Platform.operatingSystem} ${Platform.operatingSystemVersion}',

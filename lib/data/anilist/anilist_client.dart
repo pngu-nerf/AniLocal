@@ -99,11 +99,11 @@ class AniListClient {
     try {
       response = await _http.post(
         _endpoint,
-        headers: const {
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           // Without this, AniList's Cloudflare returns HTTP 403.
-          'User-Agent': kAniLocalUserAgent,
+          'User-Agent': aniLocalUserAgent,
         },
         body: jsonEncode(body),
       );

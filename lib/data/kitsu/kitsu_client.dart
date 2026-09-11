@@ -189,9 +189,9 @@ class KitsuClient {
           pathSegments: [..._base.pathSegments, 'anime'],
           queryParameters: query,
         ),
-        headers: const {
+        headers: {
           'Accept': 'application/vnd.api+json',
-          'User-Agent': kAniLocalUserAgent,
+          'User-Agent': aniLocalUserAgent,
         },
       );
     } on Exception catch (e) {

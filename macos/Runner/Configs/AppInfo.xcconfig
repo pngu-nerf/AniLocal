@@ -11,4 +11,4 @@ PRODUCT_NAME = anilocal
 PRODUCT_BUNDLE_IDENTIFIER = com.anilocal.anilocal
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.anilocal. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 pngu · GPL-3.0-or-later
