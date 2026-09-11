@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/domain/skip_corroboration.dart';
 import 'package:drift/native.dart';
@@ -6,8 +8,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// The complete v13 schema — every table still keyed by `anilist_id`, plus
 /// show_preferences. Copied forward from `migration_v13_test.dart`'s `_v12Ddl`
 /// with the show_preferences table appended, deliberately rather than retyped:
-/// hand-authored DDL is the weak point of this test style, and this repo has no
-/// schema-dump artifacts to check it against.
+/// hand-authored DDL is the weak point of this test style. (It bit once: this
+/// DDL declared a `show_preferences.updated_at_ms` that the real v13 never had,
+/// so the tests protecting the riskiest code were checked against fiction. The
+/// "fresh == upgraded" test at the bottom is the schema-dump artefact that
+/// makes such a slip detectable.)
 const _v13Ddl = '''
 CREATE TABLE series_cache (anilist_id INTEGER NOT NULL, id_mal INTEGER,
   romaji TEXT, english TEXT, native_title TEXT, format TEXT,
@@ -45,8 +50,38 @@ CREATE TABLE hidden_episodes (anilist_id INTEGER NOT NULL,
   PRIMARY KEY (anilist_id, episode));
 CREATE TABLE show_preferences (anilist_id INTEGER NOT NULL,
   picture_mode TEXT NOT NULL DEFAULT 'normal',
-  next_episode_hidden INTEGER NOT NULL DEFAULT 0,
-  updated_at_ms INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (anilist_id));
+  next_episode_hidden INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (anilist_id));
+''';
+
+/// The v1 schema, verbatim from the first commit that had a cache: two tables,
+/// `anilist_id` everywhere, an absolute-path `file_cache`, no `id_mal`. The
+/// earliest possible start, and the one whose upgrade used to abort — the v2
+/// step emits `library_folders` in its CURRENT shape, so the v4 `addColumn
+/// sort_order` that followed was a duplicate-column error.
+const _v1Ddl = '''
+CREATE TABLE series_cache (anilist_id INTEGER NOT NULL,
+  romaji TEXT, english TEXT, native_title TEXT, format TEXT,
+  episode_count INTEGER, cover_image_url TEXT, cover_image_path TEXT,
+  PRIMARY KEY (anilist_id));
+CREATE TABLE file_cache (path TEXT NOT NULL, file_size INTEGER NOT NULL,
+  modified_at_ms INTEGER NOT NULL, anilist_id INTEGER, episode_number INTEGER,
+  parsed_title TEXT NOT NULL, match_score REAL NOT NULL DEFAULT 0,
+  release_group TEXT, PRIMARY KEY (path));
+''';
+
+/// v4: v1 plus library_folders (with sort_order, v4's own addition) and
+/// match_overrides. The other start that used to abort: the v5 step emits
+/// watch_state with `watched_manual`, then v12 tried to add it again.
+const _v4Ddl =
+    '''
+$_v1Ddl
+CREATE TABLE library_folders (path TEXT NOT NULL, added_at_ms INTEGER NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (path));
+CREATE TABLE match_overrides (file_size INTEGER NOT NULL,
+  modified_at_ms INTEGER NOT NULL, anilist_id INTEGER NOT NULL,
+  anchored_episode INTEGER, continuous_offset INTEGER NOT NULL DEFAULT 0,
+  display_continuous INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (file_size, modified_at_ms));
 ''';
 
 /// The v8 schema: absolute-path file_cache, no pending_identification, no
@@ -140,7 +175,7 @@ void main() {
         );
         raw.execute(
           "INSERT INTO show_preferences (anilist_id, picture_mode, "
-          "next_episode_hidden, updated_at_ms) VALUES (21, 'blur', 1, 88)",
+          "next_episode_hidden) VALUES (21, 'blur', 1)",
         );
         // Without this drift sees a brand-new database and runs onCreate, so
         // the migration under test never executes.
@@ -436,5 +471,257 @@ void main() {
     expect(file.seriesId, 21);
     expect(file.folderPath, '/lib', reason: 'v9 rebasing still applied');
     expect(file.relativePath, 'cb-01.mkv');
+  });
+
+  group('the chain is ATOMIC and refuses newer caches', () {
+    // Drift does not wrap onUpgrade in a transaction and stamps the version
+    // last, so before the wrapper a crash between two statements left a
+    // half-migrated database still at the OLD version; every later launch
+    // replayed the same step against the new shape, failed, and drift's sticky
+    // migration error refused every open for the process. These pin the two
+    // guarantees that replace that: nothing changes unless everything does, and
+    // a cache from a newer build is refused before any statement runs.
+
+    /// A v18-shaped database with skip_segments DELIBERATELY MISSING, so the
+    /// v19 backfill's `INSERT … FROM skip_segments` throws mid-step — after
+    /// createTable(skip_source_answers) has already run. Built from the v13
+    /// DDL by hand, the same way the v16 leapfrog builds its start.
+    void seedBrokenV18(dynamic raw) {
+      raw.execute(_v13Ddl);
+      for (final t in const [
+        'series_cache',
+        'file_cache',
+        'match_overrides',
+        'watch_state',
+        'source_overrides',
+        'skip_segments',
+        'hidden_episodes',
+        'show_preferences',
+      ]) {
+        raw.execute('ALTER TABLE $t RENAME COLUMN anilist_id TO series_id');
+      }
+      raw.execute('ALTER TABLE series_cache DROP COLUMN id_mal');
+      raw.execute(
+        'CREATE TABLE series_external_ids (series_id INTEGER NOT NULL, '
+        'provider TEXT NOT NULL, external_id TEXT NOT NULL, '
+        'PRIMARY KEY (series_id, provider), UNIQUE (provider, external_id))',
+      );
+      raw.execute('DROP TABLE skip_segments'); // the sabotage
+      raw.execute(
+        "INSERT INTO series_cache (series_id, romaji) VALUES (21, 'Bebop')",
+      );
+      raw.execute(
+        'INSERT INTO watch_state (series_id, episode, resume_position_ms, '
+        'duration_ms, watched, watched_manual, updated_at_ms) '
+        'VALUES (21, 3, 987654, 1440000, 1, 1, 55)',
+      );
+      raw.execute('PRAGMA user_version = 18');
+    }
+
+    test('a step that fails mid-chain leaves the database UNTOUCHED', () async {
+      final dir = await Directory.systemTemp.createTemp('anilocal_atomic_');
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/cache.sqlite');
+      late List<Map<String, Object?>> Function(String) rawQuery;
+
+      final broken = CacheDatabase(
+        NativeDatabase(
+          file,
+          setup: (raw) {
+            final v = raw.select('PRAGMA user_version').first.values.first;
+            if (v == 0) seedBrokenV18(raw);
+            rawQuery = (sql) => raw.select(sql).map((r) => r).toList();
+          },
+        ),
+      );
+
+      await expectLater(broken.allSeriesRows(), throwsA(anything));
+
+      // The v19 step got as far as creating its new table before the backfill
+      // threw. Without the transaction that table would now exist alongside an
+      // unchanged version number — the half-migrated state that bricked the
+      // cache. With it, nothing happened.
+      expect(
+        rawQuery('PRAGMA user_version').single.values.first,
+        18,
+        reason: 'version must not advance when the chain failed',
+      );
+      final tables = rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      ).map((r) => r['name']).toSet();
+      expect(
+        tables,
+        isNot(contains('skip_source_answers')),
+        reason: 'the step that ran before the failure was rolled back',
+      );
+      expect(
+        rawQuery('SELECT resume_position_ms FROM watch_state').single.values,
+        [987654],
+        reason: 'user data is exactly as it was',
+      );
+      await broken.close();
+
+      // Repair the underlying file (restore the table the sabotage removed)
+      // and open again: a clean retry from a clean state must succeed. This is
+      // the whole point — the failure is recoverable, not sticky on disk.
+      final repaired = CacheDatabase(
+        NativeDatabase(
+          file,
+          setup: (raw) {
+            final v = raw.select('PRAGMA user_version').first.values.first;
+            if (v == 18) {
+              raw.execute(
+                'CREATE TABLE skip_segments (series_id INTEGER NOT NULL, '
+                'episode INTEGER NOT NULL, intro_start_ms INTEGER, '
+                'intro_end_ms INTEGER, outro_start_ms INTEGER, '
+                'outro_end_ms INTEGER, '
+                "source TEXT NOT NULL DEFAULT '', "
+                'intro_confidence INTEGER NOT NULL DEFAULT 0, '
+                'outro_confidence INTEGER NOT NULL DEFAULT 0, '
+                "resolved_key TEXT NOT NULL DEFAULT '', "
+                'PRIMARY KEY (series_id, episode))',
+              );
+            }
+          },
+        ),
+      );
+      addTearDown(repaired.close);
+      expect((await repaired.allSeriesRows()).single.romaji, 'Bebop');
+      expect(
+        (await repaired.select(repaired.watchStates).get())
+            .single
+            .resumePositionMs,
+        987654,
+      );
+    });
+
+    test(
+      'a cache from a NEWER build is refused, and its version untouched',
+      () async {
+        late List<Map<String, Object?>> Function(String) rawQuery;
+        final db = CacheDatabase(
+          NativeDatabase.memory(
+            setup: (raw) {
+              final v = raw.select('PRAGMA user_version').first.values.first;
+              if (v == 0) {
+                raw.execute(_v13Ddl);
+                raw.execute('PRAGMA user_version = 99');
+              }
+              rawQuery = (sql) => raw.select(sql).map((r) => r).toList();
+            },
+          ),
+        );
+        addTearDown(db.close);
+
+        await expectLater(
+          db.allSeriesRows(),
+          throwsA(isA<CacheNewerThanAppException>()),
+        );
+        // Drift treats a downgrade as an "upgrade" and would have re-stamped 99
+        // down to 19 after running nothing — leaving the schema at 99's shape
+        // with a 19 label, so the next real upgrade would fail. Refusing before
+        // any statement keeps the label honest.
+        expect(rawQuery('PRAGMA user_version').single.values.first, 99);
+      },
+    );
+  });
+
+  group('every starting version reaches v19', () {
+    /// Opens a database seeded with [ddl] at [version], plus one series row
+    /// and one path-keyed file row (both present since v1), and migrates it.
+    CacheDatabase openFrom(String ddl, int version) => CacheDatabase(
+      NativeDatabase.memory(
+        setup: (raw) {
+          final v = raw.select('PRAGMA user_version').first.values.first;
+          if (v != 0) return;
+          raw.execute(ddl);
+          raw.execute(
+            "INSERT INTO series_cache (anilist_id, romaji) VALUES (21, 'Bebop')",
+          );
+          raw.execute(
+            'INSERT INTO file_cache (path, file_size, modified_at_ms, '
+            'anilist_id, episode_number, parsed_title) '
+            "VALUES ('/lib/cb-01.mkv', 111, 222, 21, 1, 'Cowboy Bebop')",
+          );
+          raw.execute('PRAGMA user_version = $version');
+        },
+      ),
+    );
+
+    for (final (label, ddl, version) in [
+      ('v1 — the very first cache', _v1Ddl, 1),
+      ('v4 — watch_state not yet created', _v4Ddl, 4),
+    ]) {
+      test(
+        'LEAPFROG $label -> v19 (used to abort on a duplicate column)',
+        () async {
+          // The v2 and v5 steps emit library_folders and watch_state in their
+          // CURRENT shape; the later addColumn steps for sort_order, volume_id,
+          // volume_subpath and watched_manual then collided. The chain must now
+          // run end to end and carry the two seeded rows across.
+          final db = openFrom(ddl, version);
+          addTearDown(db.close);
+
+          expect((await db.allSeriesRows()).single.romaji, 'Bebop');
+          final f = (await db.allFileRows()).single;
+          expect(f.seriesId, 21, reason: 'anilist_id -> series_id survived');
+          expect(f.relativePath, 'cb-01.mkv', reason: 'v9 rebased the path');
+        },
+      );
+    }
+
+    test('an UPGRADED database has exactly the schema of a FRESH one', () async {
+      // The schema-dump artefact this repo never had. Column ORDER may differ
+      // (ALTER appends), so compare each table's columns as a set of
+      // (name, type, notnull, default, pk) — anything else is a fork: a column
+      // one install has and the other doesn't, or a table left behind.
+      Future<Map<String, Set<String>>> schemaOf(CacheDatabase db) async {
+        final tables =
+            (await db
+                    .customSelect(
+                      "SELECT name FROM sqlite_master WHERE type='table' "
+                      "AND name NOT LIKE 'sqlite_%' ORDER BY name",
+                    )
+                    .get())
+                .map((r) => r.read<String>('name'))
+                .toList();
+        final out = <String, Set<String>>{};
+        for (final t in tables) {
+          final cols = await db
+              .customSelect(
+                "SELECT name, type, \"notnull\", dflt_value, pk "
+                "FROM pragma_table_info('$t')",
+              )
+              .get();
+          out[t] = {
+            for (final c in cols)
+              '${c.read<String>('name')}|${c.read<String>('type')}|'
+                  '${c.read<int>('notnull')}|${c.readNullable<String>('dflt_value')}|'
+                  '${c.read<int>('pk')}',
+          };
+        }
+        return out;
+      }
+
+      final fresh = CacheDatabase(NativeDatabase.memory());
+      addTearDown(fresh.close);
+      final upgraded = openFrom(_v1Ddl, 1);
+      addTearDown(upgraded.close);
+
+      final a = await schemaOf(fresh);
+      final b = await schemaOf(upgraded);
+      expect(
+        b.keys.toSet(),
+        a.keys.toSet(),
+        reason: 'same set of tables — no orphan left behind by the chain',
+      );
+      for (final t in a.keys) {
+        expect(
+          b[t],
+          a[t],
+          reason: 'columns of $t differ between fresh and upgraded',
+        );
+      }
+    });
   });
 }
