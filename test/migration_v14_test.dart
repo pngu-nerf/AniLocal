@@ -1,4 +1,5 @@
 import 'package:anilocal/data/cache/cache_database.dart';
+import 'package:anilocal/domain/skip_corroboration.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -169,7 +170,7 @@ void main() {
     expect(watch.watchedManual, isTrue);
 
     // skip_segments — all four windows.
-    final skip = (await db.allSkipRows()).single;
+    final skip = (await db.allSkipAnswers()).single;
     expect(skip.seriesId, 21);
     expect(skip.introStartMs, 1000);
     expect(skip.introEndMs, 91000);
@@ -213,7 +214,11 @@ void main() {
     expect(await count('match_overrides'), 1);
     expect(await count('watch_state'), 1);
     expect(await count('source_overrides'), 1);
-    expect(await count('skip_segments'), 1);
+    expect(
+      await count('skip_source_answers'),
+      1,
+      reason: 'v19 carries the skip row over as that source\'s answer',
+    );
     expect(await count('hidden_episodes'), 1);
     expect(await count('show_preferences'), 1);
   });
@@ -264,15 +269,13 @@ void main() {
     final db = openMigratedV13();
     addTearDown(db.close);
 
-    final skip = (await db.allSkipRows()).single;
+    final skip = (await db.allSkipAnswers()).single;
     expect(skip.introEndMs, 91000, reason: 'the window itself is untouched');
-    // Left EMPTY rather than backfilled to 'aniskip': "we don't know where this
-    // came from" must stay distinguishable from "we recorded that it did".
-    expect(skip.source, '');
-    // v17 replaced v16's single verdict with one per window; both default to
-    // `single`, which is what a row nothing has cross-checked should say.
-    expect(skip.introConfidence, 0);
-    expect(skip.outroConfidence, 0);
+    // v19 turns each stored window into that source's ANSWER. This one was
+    // written before v16 recorded provenance, so it becomes `legacy`: still
+    // usable, but it can never outrank a known source or vote on agreement,
+    // because we cannot say who produced it.
+    expect(skip.source, kLegacySource);
   });
 
   test("v17 leaves no orphan of v16's replaced confidence column", () async {
@@ -283,14 +286,20 @@ void main() {
     final db = openMigratedV13();
     addTearDown(db.close);
 
-    final columns = await db
-        .customSelect("SELECT name FROM pragma_table_info('skip_segments')")
-        .get();
-    final names = columns.map((r) => r.read<String>('name')).toSet();
-
-    expect(names, contains('intro_confidence'));
-    expect(names, contains('outro_confidence'));
-    expect(names, isNot(contains('confidence')));
+    // v19 retires skip_segments entirely, so the orphan cannot survive by
+    // construction — what this now guards is that the whole v16→v17→v19
+    // sequence RUNS on the path a real cache takes, and that the row arrives.
+    final tables =
+        (await db
+                .customSelect(
+                  "SELECT name FROM sqlite_master WHERE type='table'",
+                )
+                .get())
+            .map((r) => r.read<String>('name'))
+            .toSet();
+    expect(tables, isNot(contains('skip_segments')));
+    expect(tables, contains('skip_source_answers'));
+    expect((await db.allSkipAnswers()).single.introEndMs, 91000);
   });
 
   test(
@@ -303,9 +312,18 @@ void main() {
       final db = openMigratedV13();
       addTearDown(db.close);
 
-      final skip = (await db.allSkipRows()).single;
-      expect(skip.resolvedKey, '');
+      final skip = (await db.allSkipAnswers()).single;
       expect(skip.introEndMs, 91000, reason: 'the window is still untouched');
+      expect(
+        await db
+            .customSelect(
+              "SELECT name FROM sqlite_master WHERE type='table' "
+              "AND name='skip_segments'",
+            )
+            .get(),
+        isEmpty,
+        reason: 'v19 retires the table once its rows have been carried over',
+      );
     },
   );
 
@@ -359,22 +377,22 @@ void main() {
     );
     addTearDown(db.close);
 
-    final names =
+    // v19 retires skip_segments, so what a v16 START must prove is that the
+    // whole v17 → v19 sequence runs and the row survives the hand-off.
+    final tables =
         (await db
                 .customSelect(
-                  "SELECT name FROM pragma_table_info('skip_segments')",
+                  "SELECT name FROM sqlite_master WHERE type='table'",
                 )
                 .get())
             .map((r) => r.read<String>('name'))
             .toSet();
-    expect(names, isNot(contains('confidence')), reason: 'v17 dropped it');
-    expect(names, containsAll(['intro_confidence', 'outro_confidence']));
-    expect(names, contains('resolved_key'), reason: 'v18');
+    expect(tables, isNot(contains('skip_segments')));
+    expect(tables, contains('skip_source_answers'));
 
-    final skip = (await db.allSkipRows()).single;
-    expect(skip.source, 'aniskip', reason: 'v16 provenance survives');
+    final skip = (await db.allSkipAnswers()).single;
+    expect(skip.source, 'aniskip', reason: 'v16 provenance survives to v19');
     expect(skip.introEndMs, 91000);
-    expect(skip.resolvedKey, '');
   });
 
   test('LEAPFROG v8 -> v14 works (no such column: anilist_id)', () async {

@@ -139,11 +139,29 @@ any read failure into "no chapters" by design, so a permission denial would othe
 identical to a library with no chapter marks; the harness therefore probes readability first
 and fails loudly with that distinction spelled out. This bit a diagnosis during the work.
 
-**One obligation is not enforceable by a test:** bumping `_ruleGeneration` when a rule
-changes. Any test asserting the current value would break on every legitimate bump and add
-no safety, so the key's test asserts only its SHAPE. It is a documented obligation at the
-constant, and the failure mode is silent — a rule change that reaches only newly scanned
-episodes.
+**That obligation is now gone (v19).** It was real debt: bumping `_ruleGeneration` when a
+rule changed could not be enforced by any test — one asserting its current value would break
+on every legitimate bump and buy no safety — and its failure was silent, a rule change
+reaching only newly scanned episodes.
+
+The counter was a symptom, not the debt. The debt was **storing a derived value at all**:
+persist something a rule computes and you own a cache-invalidation problem forever. So v19
+stores the INPUTS instead — `skip_source_answers`, one row per (episode, source), holding
+what each source said and nothing derived — and resolves on the read path
+(`resolveEpisodeSkips`). Reordering sources, switching one off or on, toggling
+cross-checking, and changing the agreement rule itself now take effect on the next read,
+with nothing to invalidate and therefore nothing to forget.
+
+The same choice the minimum-skip floor had already made, one feature over. Two things fell
+out of it for free: each window resolves independently, so an episode whose top source knows
+only the intro no longer loses an outro a lower source had; and conflicts became
+self-diagnosing, since both answers are on disk rather than only the winner's.
+
+It also forced a distinction the old shape hid. A source that **could not even try** —
+AniSkip before the cross-map supplies a MAL id — must record nothing, because recording "I
+have no data" would freeze in and the id arriving later could never reach it. That is
+`SkipProvider.canAnswer`, and the existing cross-map test caught the regression the moment
+the answer table landed.
 
 ### Why chapters lead the skip order (revised after shipping)
 

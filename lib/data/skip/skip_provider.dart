@@ -90,6 +90,17 @@ abstract interface class SkipProvider {
   /// Stable identifier; also what the user's saved order persists.
   String get token;
 
+  /// Whether this source has enough to even ATTEMPT [lookup].
+  ///
+  /// Distinct from returning null, and the difference is load-bearing since
+  /// v19: an answer of null is recorded as "asked, had nothing" and the source
+  /// is never asked again, whereas a source that could not try is left alone
+  /// and retried once the inputs improve. AniSkip with no MAL id is the case
+  /// that proves it — the id often arrives later from the cross-map, and
+  /// recording "nothing" before it does would silently cost that episode its
+  /// skips forever, which is the exact dependency the cross-map removed.
+  bool canAnswer(SkipLookup lookup) => true;
+
   /// Shown in the settings source list.
   String get displayName;
 

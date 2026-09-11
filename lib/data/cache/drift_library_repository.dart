@@ -286,21 +286,22 @@ class DriftLibraryRepository
     final watch = {
       for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
     };
-    final skips = {
-      for (final s in await _db.allSkipRows()) (s.seriesId, s.episode): s,
-    };
+    final skips = <(int, int), List<SkipSourceAnswerRow>>{};
+    for (final a in await _db.allSkipAnswers()) {
+      (skips[(a.seriesId, a.episode)] ??= []).add(a);
+    }
     final mine = [
       for (final l in logical.values)
         if (l.seriesId == seriesId) l,
     ]..sort((a, b) => (a.displayNumber ?? 0).compareTo(b.displayNumber ?? 0));
-    final minSkip = await _minSkip();
+    final view = await _skipView();
     return [
       for (final l in mine)
         _toEpisode(
           l,
           watch[(seriesId, l.anchored)],
           skips[(seriesId, l.anchored)],
-          minSkip,
+          view,
         ),
     ];
   }
@@ -496,12 +497,13 @@ class DriftLibraryRepository
     final seriesById = {
       for (final r in await _db.allSeriesRows()) r.seriesId: r,
     };
-    final skips = {
-      for (final s in await _db.allSkipRows()) (s.seriesId, s.episode): s,
-    };
+    final skips = <(int, int), List<SkipSourceAnswerRow>>{};
+    for (final a in await _db.allSkipAnswers()) {
+      (skips[(a.seriesId, a.episode)] ??= []).add(a);
+    }
     final prefs = await allPreferences();
     final externalIds = await _db.externalIdsBySeriesId();
-    final minSkip = await _minSkip();
+    final view = await _skipView();
 
     final result = <ContinueWatching>[];
     for (final w in inProgress) {
@@ -515,12 +517,7 @@ class DriftLibraryRepository
             prefs[w.seriesId] ?? const ShowPreferences(),
             externalIds[w.seriesId] ?? ExternalIds.empty,
           ),
-          episode: _toEpisode(
-            match,
-            w,
-            skips[(w.seriesId, w.episode)],
-            minSkip,
-          ),
+          episode: _toEpisode(match, w, skips[(w.seriesId, w.episode)], view),
         ),
       );
     }
@@ -615,8 +612,8 @@ class DriftLibraryRepository
     );
     if (next == null) return const NoNextEpisode();
     final w = await _db.watchStateFor(next.seriesId, next.anchored);
-    final skip = await _db.skipSegmentFor(next.seriesId, next.anchored);
-    return NextEpisode(_toEpisode(next, w, skip, await _minSkip()));
+    final answers = await _db.skipAnswersFor(next.seriesId, next.anchored);
+    return NextEpisode(_toEpisode(next, w, answers, await _skipView()));
   }
 
   @override
@@ -625,9 +622,10 @@ class DriftLibraryRepository
     final watch = {
       for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
     };
-    final skips = {
-      for (final s in await _db.allSkipRows()) (s.seriesId, s.episode): s,
-    };
+    final skips = <(int, int), List<SkipSourceAnswerRow>>{};
+    for (final a in await _db.allSkipAnswers()) {
+      (skips[(a.seriesId, a.episode)] ??= []).add(a);
+    }
 
     // Furthest WATCHED anchored position per series the user has started.
     final latestWatched = <int, int>{};
@@ -640,7 +638,7 @@ class DriftLibraryRepository
     }
 
     final result = <int, Episode>{};
-    final minSkip = await _minSkip();
+    final view = await _skipView();
     latestWatched.forEach((seriesId, anchored) {
       // Same resolver as nextEpisode — within-season next.
       final next = _resolveNext(seriesId, anchored, logical);
@@ -651,7 +649,7 @@ class DriftLibraryRepository
         next,
         w,
         skips[(next.seriesId, next.anchored)],
-        minSkip,
+        view,
       );
     });
     return result;
@@ -666,45 +664,70 @@ class DriftLibraryRepository
     Map<(int, int), _Logical> logical,
   ) => logical[(seriesId, anchored + 1)];
 
-  /// The user's minimum-skip floor, read fresh per query.
+  /// Everything the READ path needs to turn stored answers into skip windows.
   ///
-  /// Wired AFTER construction because the settings repository is built FROM
-  /// this one (it delegates show-preferences here), so the two cannot both be
-  /// constructor arguments. Null until wired, and null means no filter.
+  /// All three are wired AFTER construction because the settings repository is
+  /// built FROM this one (it delegates show-preferences here), so the two
+  /// cannot both be constructor arguments. Null until wired, and the nulls
+  /// degrade to "no filter, built-in order, no cross-checking".
+  ///
+  /// [loadActiveSkipSources] yields the enabled source TOKENS in priority
+  /// order. The composition root supplies it because only it knows which
+  /// sources this build ships; the repository must not see a provider (seam
+  /// #1). A source absent from that list is one the user switched off, and its
+  /// stored answers stop being used the moment they do — no refresh.
   Future<Duration> Function()? loadMinSkipLength;
+  Future<List<String>> Function()? loadActiveSkipSources;
+  Future<bool> Function()? loadCorroborateSkips;
 
-  Future<Duration> _minSkip() async =>
-      await loadMinSkipLength?.call() ?? Duration.zero;
+  /// Read fresh per query, never snapshotted, so changing any of these takes
+  /// effect on the next read instead of needing a rescan.
+  Future<({Duration floor, List<String> order, bool corroborate})>
+  _skipView() async => (
+    floor: await loadMinSkipLength?.call() ?? Duration.zero,
+    order: await loadActiveSkipSources?.call() ?? const <String>[],
+    corroborate: await loadCorroborateSkips?.call() ?? false,
+  );
 
   Episode _toEpisode(
     _Logical l,
     WatchStateRow? w,
-    SkipSegmentRow? skip,
-    Duration minSkip,
-  ) => Episode(
-    number: l.displayNumber ?? 0,
-    fileRef: l.activeFileRef,
-    title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
-    seriesId: l.seriesId,
-    anchoredNumber: l.anchored,
-    watched: w?.watched ?? false,
-    resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
-    duration: Duration(milliseconds: w?.durationMs ?? 0),
-    sources: l.sources,
-    pinnedSourceFolder: l.pinnedFolder,
-    // Filtered on the READ path so changing the floor takes effect at once
-    // rather than needing a rescan.
-    introSkip: dropIfShorterThan(
-      _range(skip?.introStartMs, skip?.introEndMs),
-      minSkip,
-    ),
-    outroSkip: dropIfShorterThan(
-      _range(skip?.outroStartMs, skip?.outroEndMs),
-      minSkip,
-    ),
-    introConfidence: SkipConfidence.fromStored(skip?.introConfidence ?? 0),
-    outroConfidence: SkipConfidence.fromStored(skip?.outroConfidence ?? 0),
-  );
+    List<SkipSourceAnswerRow>? answers,
+    ({Duration floor, List<String> order, bool corroborate}) view,
+  ) {
+    // Resolved HERE, not at write time. Order picks the times, cross-checking
+    // picks the verdict, the floor filters — so all three take effect at once
+    // across the whole library, and none of it is a stored value that could go
+    // stale when its rule changes.
+    final resolved = resolveEpisodeSkips(
+      [
+        for (final a in answers ?? const <SkipSourceAnswerRow>[])
+          SourceAnswer(
+            source: a.source,
+            intro: _range(a.introStartMs, a.introEndMs),
+            outro: _range(a.outroStartMs, a.outroEndMs),
+          ),
+      ],
+      sourceOrder: view.order,
+      corroborate: view.corroborate,
+    );
+    return Episode(
+      number: l.displayNumber ?? 0,
+      fileRef: l.activeFileRef,
+      title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
+      seriesId: l.seriesId,
+      anchoredNumber: l.anchored,
+      watched: w?.watched ?? false,
+      resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
+      duration: Duration(milliseconds: w?.durationMs ?? 0),
+      sources: l.sources,
+      pinnedSourceFolder: l.pinnedFolder,
+      introSkip: dropIfShorterThan(resolved.intro?.range, view.floor),
+      outroSkip: dropIfShorterThan(resolved.outro?.range, view.floor),
+      introConfidence: resolved.intro?.confidence ?? SkipConfidence.single,
+      outroConfidence: resolved.outro?.confidence ?? SkipConfidence.single,
+    );
+  }
 
   /// Build a [SkipRange] when both bounds are present, else null.
   SkipRange? _range(int? startMs, int? endMs) =>

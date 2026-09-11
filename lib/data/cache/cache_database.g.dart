@@ -2851,12 +2851,12 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
   }
 }
 
-class $SkipSegmentsTable extends SkipSegments
-    with TableInfo<$SkipSegmentsTable, SkipSegmentRow> {
+class $SkipSourceAnswersTable extends SkipSourceAnswers
+    with TableInfo<$SkipSourceAnswersTable, SkipSourceAnswerRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $SkipSegmentsTable(this.attachedDatabase, [this._alias]);
+  $SkipSourceAnswersTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _seriesIdMeta = const VerificationMeta(
     'seriesId',
   );
@@ -2877,6 +2877,15 @@ class $SkipSegmentsTable extends SkipSegments
     aliasedName,
     false,
     type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _introStartMsMeta = const VerificationMeta(
@@ -2923,73 +2932,37 @@ class $SkipSegmentsTable extends SkipSegments
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
-  @override
-  late final GeneratedColumn<String> source = GeneratedColumn<String>(
-    'source',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(''),
-  );
-  static const VerificationMeta _introConfidenceMeta = const VerificationMeta(
-    'introConfidence',
+  static const VerificationMeta _askedAtMsMeta = const VerificationMeta(
+    'askedAtMs',
   );
   @override
-  late final GeneratedColumn<int> introConfidence = GeneratedColumn<int>(
-    'intro_confidence',
+  late final GeneratedColumn<int> askedAtMs = GeneratedColumn<int>(
+    'asked_at_ms',
     aliasedName,
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _outroConfidenceMeta = const VerificationMeta(
-    'outroConfidence',
-  );
-  @override
-  late final GeneratedColumn<int> outroConfidence = GeneratedColumn<int>(
-    'outro_confidence',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _resolvedKeyMeta = const VerificationMeta(
-    'resolvedKey',
-  );
-  @override
-  late final GeneratedColumn<String> resolvedKey = GeneratedColumn<String>(
-    'resolved_key',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(''),
   );
   @override
   List<GeneratedColumn> get $columns => [
     seriesId,
     episode,
+    source,
     introStartMs,
     introEndMs,
     outroStartMs,
     outroEndMs,
-    source,
-    introConfidence,
-    outroConfidence,
-    resolvedKey,
+    askedAtMs,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'skip_segments';
+  static const String $name = 'skip_source_answers';
   @override
   VerificationContext validateIntegrity(
-    Insertable<SkipSegmentRow> instance, {
+    Insertable<SkipSourceAnswerRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -3009,6 +2982,14 @@ class $SkipSegmentsTable extends SkipSegments
       );
     } else if (isInserting) {
       context.missing(_episodeMeta);
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceMeta);
     }
     if (data.containsKey('intro_start_ms')) {
       context.handle(
@@ -3046,48 +3027,21 @@ class $SkipSegmentsTable extends SkipSegments
         ),
       );
     }
-    if (data.containsKey('source')) {
+    if (data.containsKey('asked_at_ms')) {
       context.handle(
-        _sourceMeta,
-        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
-      );
-    }
-    if (data.containsKey('intro_confidence')) {
-      context.handle(
-        _introConfidenceMeta,
-        introConfidence.isAcceptableOrUnknown(
-          data['intro_confidence']!,
-          _introConfidenceMeta,
-        ),
-      );
-    }
-    if (data.containsKey('outro_confidence')) {
-      context.handle(
-        _outroConfidenceMeta,
-        outroConfidence.isAcceptableOrUnknown(
-          data['outro_confidence']!,
-          _outroConfidenceMeta,
-        ),
-      );
-    }
-    if (data.containsKey('resolved_key')) {
-      context.handle(
-        _resolvedKeyMeta,
-        resolvedKey.isAcceptableOrUnknown(
-          data['resolved_key']!,
-          _resolvedKeyMeta,
-        ),
+        _askedAtMsMeta,
+        askedAtMs.isAcceptableOrUnknown(data['asked_at_ms']!, _askedAtMsMeta),
       );
     }
     return context;
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {seriesId, episode};
+  Set<GeneratedColumn> get $primaryKey => {seriesId, episode, source};
   @override
-  SkipSegmentRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+  SkipSourceAnswerRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return SkipSegmentRow(
+    return SkipSourceAnswerRow(
       seriesId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}series_id'],
@@ -3095,6 +3049,10 @@ class $SkipSegmentsTable extends SkipSegments
       episode: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}episode'],
+      )!,
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
       )!,
       introStartMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -3112,90 +3070,56 @@ class $SkipSegmentsTable extends SkipSegments
         DriftSqlType.int,
         data['${effectivePrefix}outro_end_ms'],
       ),
-      source: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}source'],
-      )!,
-      introConfidence: attachedDatabase.typeMapping.read(
+      askedAtMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}intro_confidence'],
-      )!,
-      outroConfidence: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}outro_confidence'],
-      )!,
-      resolvedKey: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}resolved_key'],
+        data['${effectivePrefix}asked_at_ms'],
       )!,
     );
   }
 
   @override
-  $SkipSegmentsTable createAlias(String alias) {
-    return $SkipSegmentsTable(attachedDatabase, alias);
+  $SkipSourceAnswersTable createAlias(String alias) {
+    return $SkipSourceAnswersTable(attachedDatabase, alias);
   }
 }
 
-class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
+class SkipSourceAnswerRow extends DataClass
+    implements Insertable<SkipSourceAnswerRow> {
   final int seriesId;
   final int episode;
+
+  /// The source's token (`aniskip`, `chapters`, …), or `legacy` for a window
+  /// migrated from v18 whose provenance was never recorded. A legacy answer is
+  /// used only when no known source has anything, and never votes on
+  /// agreement — unknown provenance must not corroborate.
+  final String source;
+
+  /// Null when this source has nothing for this window. Times are ms from the
+  /// start of the file.
   final int? introStartMs;
   final int? introEndMs;
   final int? outroStartMs;
   final int? outroEndMs;
 
-  /// WHICH skip source produced this row (`aniskip`, `chapters`, …).
-  ///
-  /// Needed for three things: telling the user where a window came from,
-  /// letting a higher-priority source replace a lower one rather than the
-  /// first writer winning forever, and distinguishing an INFERRED window
-  /// (chapters, fingerprinting) from a curated one. Empty on rows written
-  /// before v16, which all came from AniSkip.
-  final String source;
-
-  /// How much each window is trusted (see `SkipConfidence`): 0 single source,
-  /// 1 corroborated by a second independent source, -1 conflicting. Auto-skip
-  /// is gated on it — skipping into real content is the bad outcome, an
-  /// unoffered skip is merely inconvenient.
-  ///
-  /// PER WINDOW, not per row. A mixed library routinely produces a corroborated
-  /// intro alongside a lone outro; one verdict for both would either forfeit
-  /// the intro's corroboration or overstate the outro's.
-  final int introConfidence;
-  final int outroConfidence;
-
-  /// The resolution INPUTS this row was produced from (`skipResolutionKey`):
-  /// the enabled skip sources in order, plus whether cross-checking was on.
-  ///
-  /// This is what stops the first writer winning forever. A refresh re-asks an
-  /// episode that already has a row exactly when this key no longer matches the
-  /// current settings — so reordering sources, switching one off, or turning
-  /// cross-checking on re-resolves the affected rows ONCE and then costs
-  /// nothing. Without it the two states are indistinguishable: a row with one
-  /// source and no verdict looks identical whether cross-checking examined it
-  /// and found nothing to compare, or never ran at all.
-  ///
-  /// Empty on rows written before v18, which is exactly right — we don't know
-  /// what produced them, so they are re-resolved once on the next refresh.
-  final String resolvedKey;
-  const SkipSegmentRow({
+  /// When we asked. Not read today; it is what a future "re-ask answers older
+  /// than N" policy would need, and it costs one integer.
+  final int askedAtMs;
+  const SkipSourceAnswerRow({
     required this.seriesId,
     required this.episode,
+    required this.source,
     this.introStartMs,
     this.introEndMs,
     this.outroStartMs,
     this.outroEndMs,
-    required this.source,
-    required this.introConfidence,
-    required this.outroConfidence,
-    required this.resolvedKey,
+    required this.askedAtMs,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['series_id'] = Variable<int>(seriesId);
     map['episode'] = Variable<int>(episode);
+    map['source'] = Variable<String>(source);
     if (!nullToAbsent || introStartMs != null) {
       map['intro_start_ms'] = Variable<int>(introStartMs);
     }
@@ -3208,17 +3132,15 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     if (!nullToAbsent || outroEndMs != null) {
       map['outro_end_ms'] = Variable<int>(outroEndMs);
     }
-    map['source'] = Variable<String>(source);
-    map['intro_confidence'] = Variable<int>(introConfidence);
-    map['outro_confidence'] = Variable<int>(outroConfidence);
-    map['resolved_key'] = Variable<String>(resolvedKey);
+    map['asked_at_ms'] = Variable<int>(askedAtMs);
     return map;
   }
 
-  SkipSegmentsCompanion toCompanion(bool nullToAbsent) {
-    return SkipSegmentsCompanion(
+  SkipSourceAnswersCompanion toCompanion(bool nullToAbsent) {
+    return SkipSourceAnswersCompanion(
       seriesId: Value(seriesId),
       episode: Value(episode),
+      source: Value(source),
       introStartMs: introStartMs == null && nullToAbsent
           ? const Value.absent()
           : Value(introStartMs),
@@ -3231,29 +3153,24 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       outroEndMs: outroEndMs == null && nullToAbsent
           ? const Value.absent()
           : Value(outroEndMs),
-      source: Value(source),
-      introConfidence: Value(introConfidence),
-      outroConfidence: Value(outroConfidence),
-      resolvedKey: Value(resolvedKey),
+      askedAtMs: Value(askedAtMs),
     );
   }
 
-  factory SkipSegmentRow.fromJson(
+  factory SkipSourceAnswerRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return SkipSegmentRow(
+    return SkipSourceAnswerRow(
       seriesId: serializer.fromJson<int>(json['seriesId']),
       episode: serializer.fromJson<int>(json['episode']),
+      source: serializer.fromJson<String>(json['source']),
       introStartMs: serializer.fromJson<int?>(json['introStartMs']),
       introEndMs: serializer.fromJson<int?>(json['introEndMs']),
       outroStartMs: serializer.fromJson<int?>(json['outroStartMs']),
       outroEndMs: serializer.fromJson<int?>(json['outroEndMs']),
-      source: serializer.fromJson<String>(json['source']),
-      introConfidence: serializer.fromJson<int>(json['introConfidence']),
-      outroConfidence: serializer.fromJson<int>(json['outroConfidence']),
-      resolvedKey: serializer.fromJson<String>(json['resolvedKey']),
+      askedAtMs: serializer.fromJson<int>(json['askedAtMs']),
     );
   }
   @override
@@ -3262,44 +3179,39 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
     return <String, dynamic>{
       'seriesId': serializer.toJson<int>(seriesId),
       'episode': serializer.toJson<int>(episode),
+      'source': serializer.toJson<String>(source),
       'introStartMs': serializer.toJson<int?>(introStartMs),
       'introEndMs': serializer.toJson<int?>(introEndMs),
       'outroStartMs': serializer.toJson<int?>(outroStartMs),
       'outroEndMs': serializer.toJson<int?>(outroEndMs),
-      'source': serializer.toJson<String>(source),
-      'introConfidence': serializer.toJson<int>(introConfidence),
-      'outroConfidence': serializer.toJson<int>(outroConfidence),
-      'resolvedKey': serializer.toJson<String>(resolvedKey),
+      'askedAtMs': serializer.toJson<int>(askedAtMs),
     };
   }
 
-  SkipSegmentRow copyWith({
+  SkipSourceAnswerRow copyWith({
     int? seriesId,
     int? episode,
+    String? source,
     Value<int?> introStartMs = const Value.absent(),
     Value<int?> introEndMs = const Value.absent(),
     Value<int?> outroStartMs = const Value.absent(),
     Value<int?> outroEndMs = const Value.absent(),
-    String? source,
-    int? introConfidence,
-    int? outroConfidence,
-    String? resolvedKey,
-  }) => SkipSegmentRow(
+    int? askedAtMs,
+  }) => SkipSourceAnswerRow(
     seriesId: seriesId ?? this.seriesId,
     episode: episode ?? this.episode,
+    source: source ?? this.source,
     introStartMs: introStartMs.present ? introStartMs.value : this.introStartMs,
     introEndMs: introEndMs.present ? introEndMs.value : this.introEndMs,
     outroStartMs: outroStartMs.present ? outroStartMs.value : this.outroStartMs,
     outroEndMs: outroEndMs.present ? outroEndMs.value : this.outroEndMs,
-    source: source ?? this.source,
-    introConfidence: introConfidence ?? this.introConfidence,
-    outroConfidence: outroConfidence ?? this.outroConfidence,
-    resolvedKey: resolvedKey ?? this.resolvedKey,
+    askedAtMs: askedAtMs ?? this.askedAtMs,
   );
-  SkipSegmentRow copyWithCompanion(SkipSegmentsCompanion data) {
-    return SkipSegmentRow(
+  SkipSourceAnswerRow copyWithCompanion(SkipSourceAnswersCompanion data) {
+    return SkipSourceAnswerRow(
       seriesId: data.seriesId.present ? data.seriesId.value : this.seriesId,
       episode: data.episode.present ? data.episode.value : this.episode,
+      source: data.source.present ? data.source.value : this.source,
       introStartMs: data.introStartMs.present
           ? data.introStartMs.value
           : this.introStartMs,
@@ -3312,32 +3224,21 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
       outroEndMs: data.outroEndMs.present
           ? data.outroEndMs.value
           : this.outroEndMs,
-      source: data.source.present ? data.source.value : this.source,
-      introConfidence: data.introConfidence.present
-          ? data.introConfidence.value
-          : this.introConfidence,
-      outroConfidence: data.outroConfidence.present
-          ? data.outroConfidence.value
-          : this.outroConfidence,
-      resolvedKey: data.resolvedKey.present
-          ? data.resolvedKey.value
-          : this.resolvedKey,
+      askedAtMs: data.askedAtMs.present ? data.askedAtMs.value : this.askedAtMs,
     );
   }
 
   @override
   String toString() {
-    return (StringBuffer('SkipSegmentRow(')
+    return (StringBuffer('SkipSourceAnswerRow(')
           ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
+          ..write('source: $source, ')
           ..write('introStartMs: $introStartMs, ')
           ..write('introEndMs: $introEndMs, ')
           ..write('outroStartMs: $outroStartMs, ')
           ..write('outroEndMs: $outroEndMs, ')
-          ..write('source: $source, ')
-          ..write('introConfidence: $introConfidence, ')
-          ..write('outroConfidence: $outroConfidence, ')
-          ..write('resolvedKey: $resolvedKey')
+          ..write('askedAtMs: $askedAtMs')
           ..write(')'))
         .toString();
   }
@@ -3346,122 +3247,105 @@ class SkipSegmentRow extends DataClass implements Insertable<SkipSegmentRow> {
   int get hashCode => Object.hash(
     seriesId,
     episode,
+    source,
     introStartMs,
     introEndMs,
     outroStartMs,
     outroEndMs,
-    source,
-    introConfidence,
-    outroConfidence,
-    resolvedKey,
+    askedAtMs,
   );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is SkipSegmentRow &&
+      (other is SkipSourceAnswerRow &&
           other.seriesId == this.seriesId &&
           other.episode == this.episode &&
+          other.source == this.source &&
           other.introStartMs == this.introStartMs &&
           other.introEndMs == this.introEndMs &&
           other.outroStartMs == this.outroStartMs &&
           other.outroEndMs == this.outroEndMs &&
-          other.source == this.source &&
-          other.introConfidence == this.introConfidence &&
-          other.outroConfidence == this.outroConfidence &&
-          other.resolvedKey == this.resolvedKey);
+          other.askedAtMs == this.askedAtMs);
 }
 
-class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
+class SkipSourceAnswersCompanion extends UpdateCompanion<SkipSourceAnswerRow> {
   final Value<int> seriesId;
   final Value<int> episode;
+  final Value<String> source;
   final Value<int?> introStartMs;
   final Value<int?> introEndMs;
   final Value<int?> outroStartMs;
   final Value<int?> outroEndMs;
-  final Value<String> source;
-  final Value<int> introConfidence;
-  final Value<int> outroConfidence;
-  final Value<String> resolvedKey;
+  final Value<int> askedAtMs;
   final Value<int> rowid;
-  const SkipSegmentsCompanion({
+  const SkipSourceAnswersCompanion({
     this.seriesId = const Value.absent(),
     this.episode = const Value.absent(),
+    this.source = const Value.absent(),
     this.introStartMs = const Value.absent(),
     this.introEndMs = const Value.absent(),
     this.outroStartMs = const Value.absent(),
     this.outroEndMs = const Value.absent(),
-    this.source = const Value.absent(),
-    this.introConfidence = const Value.absent(),
-    this.outroConfidence = const Value.absent(),
-    this.resolvedKey = const Value.absent(),
+    this.askedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  SkipSegmentsCompanion.insert({
+  SkipSourceAnswersCompanion.insert({
     required int seriesId,
     required int episode,
+    required String source,
     this.introStartMs = const Value.absent(),
     this.introEndMs = const Value.absent(),
     this.outroStartMs = const Value.absent(),
     this.outroEndMs = const Value.absent(),
-    this.source = const Value.absent(),
-    this.introConfidence = const Value.absent(),
-    this.outroConfidence = const Value.absent(),
-    this.resolvedKey = const Value.absent(),
+    this.askedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : seriesId = Value(seriesId),
-       episode = Value(episode);
-  static Insertable<SkipSegmentRow> custom({
+       episode = Value(episode),
+       source = Value(source);
+  static Insertable<SkipSourceAnswerRow> custom({
     Expression<int>? seriesId,
     Expression<int>? episode,
+    Expression<String>? source,
     Expression<int>? introStartMs,
     Expression<int>? introEndMs,
     Expression<int>? outroStartMs,
     Expression<int>? outroEndMs,
-    Expression<String>? source,
-    Expression<int>? introConfidence,
-    Expression<int>? outroConfidence,
-    Expression<String>? resolvedKey,
+    Expression<int>? askedAtMs,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (seriesId != null) 'series_id': seriesId,
       if (episode != null) 'episode': episode,
+      if (source != null) 'source': source,
       if (introStartMs != null) 'intro_start_ms': introStartMs,
       if (introEndMs != null) 'intro_end_ms': introEndMs,
       if (outroStartMs != null) 'outro_start_ms': outroStartMs,
       if (outroEndMs != null) 'outro_end_ms': outroEndMs,
-      if (source != null) 'source': source,
-      if (introConfidence != null) 'intro_confidence': introConfidence,
-      if (outroConfidence != null) 'outro_confidence': outroConfidence,
-      if (resolvedKey != null) 'resolved_key': resolvedKey,
+      if (askedAtMs != null) 'asked_at_ms': askedAtMs,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
-  SkipSegmentsCompanion copyWith({
+  SkipSourceAnswersCompanion copyWith({
     Value<int>? seriesId,
     Value<int>? episode,
+    Value<String>? source,
     Value<int?>? introStartMs,
     Value<int?>? introEndMs,
     Value<int?>? outroStartMs,
     Value<int?>? outroEndMs,
-    Value<String>? source,
-    Value<int>? introConfidence,
-    Value<int>? outroConfidence,
-    Value<String>? resolvedKey,
+    Value<int>? askedAtMs,
     Value<int>? rowid,
   }) {
-    return SkipSegmentsCompanion(
+    return SkipSourceAnswersCompanion(
       seriesId: seriesId ?? this.seriesId,
       episode: episode ?? this.episode,
+      source: source ?? this.source,
       introStartMs: introStartMs ?? this.introStartMs,
       introEndMs: introEndMs ?? this.introEndMs,
       outroStartMs: outroStartMs ?? this.outroStartMs,
       outroEndMs: outroEndMs ?? this.outroEndMs,
-      source: source ?? this.source,
-      introConfidence: introConfidence ?? this.introConfidence,
-      outroConfidence: outroConfidence ?? this.outroConfidence,
-      resolvedKey: resolvedKey ?? this.resolvedKey,
+      askedAtMs: askedAtMs ?? this.askedAtMs,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3475,6 +3359,9 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     if (episode.present) {
       map['episode'] = Variable<int>(episode.value);
     }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
     if (introStartMs.present) {
       map['intro_start_ms'] = Variable<int>(introStartMs.value);
     }
@@ -3487,17 +3374,8 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
     if (outroEndMs.present) {
       map['outro_end_ms'] = Variable<int>(outroEndMs.value);
     }
-    if (source.present) {
-      map['source'] = Variable<String>(source.value);
-    }
-    if (introConfidence.present) {
-      map['intro_confidence'] = Variable<int>(introConfidence.value);
-    }
-    if (outroConfidence.present) {
-      map['outro_confidence'] = Variable<int>(outroConfidence.value);
-    }
-    if (resolvedKey.present) {
-      map['resolved_key'] = Variable<String>(resolvedKey.value);
+    if (askedAtMs.present) {
+      map['asked_at_ms'] = Variable<int>(askedAtMs.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -3507,17 +3385,15 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegmentRow> {
 
   @override
   String toString() {
-    return (StringBuffer('SkipSegmentsCompanion(')
+    return (StringBuffer('SkipSourceAnswersCompanion(')
           ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
+          ..write('source: $source, ')
           ..write('introStartMs: $introStartMs, ')
           ..write('introEndMs: $introEndMs, ')
           ..write('outroStartMs: $outroStartMs, ')
           ..write('outroEndMs: $outroEndMs, ')
-          ..write('source: $source, ')
-          ..write('introConfidence: $introConfidence, ')
-          ..write('outroConfidence: $outroConfidence, ')
-          ..write('resolvedKey: $resolvedKey, ')
+          ..write('askedAtMs: $askedAtMs, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4565,7 +4441,8 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
   late final $SourceOverridesTable sourceOverrides = $SourceOverridesTable(
     this,
   );
-  late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
+  late final $SkipSourceAnswersTable skipSourceAnswers =
+      $SkipSourceAnswersTable(this);
   late final $HiddenEpisodesTable hiddenEpisodes = $HiddenEpisodesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $ShowPrefsTable showPrefs = $ShowPrefsTable(this);
@@ -4582,7 +4459,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     matchOverrides,
     watchStates,
     sourceOverrides,
-    skipSegments,
+    skipSourceAnswers,
     hiddenEpisodes,
     appSettings,
     showPrefs,
@@ -6042,38 +5919,34 @@ typedef $$SourceOverridesTableProcessedTableManager =
       SourceOverrideRow,
       PrefetchHooks Function()
     >;
-typedef $$SkipSegmentsTableCreateCompanionBuilder =
-    SkipSegmentsCompanion Function({
+typedef $$SkipSourceAnswersTableCreateCompanionBuilder =
+    SkipSourceAnswersCompanion Function({
       required int seriesId,
       required int episode,
+      required String source,
       Value<int?> introStartMs,
       Value<int?> introEndMs,
       Value<int?> outroStartMs,
       Value<int?> outroEndMs,
-      Value<String> source,
-      Value<int> introConfidence,
-      Value<int> outroConfidence,
-      Value<String> resolvedKey,
+      Value<int> askedAtMs,
       Value<int> rowid,
     });
-typedef $$SkipSegmentsTableUpdateCompanionBuilder =
-    SkipSegmentsCompanion Function({
+typedef $$SkipSourceAnswersTableUpdateCompanionBuilder =
+    SkipSourceAnswersCompanion Function({
       Value<int> seriesId,
       Value<int> episode,
+      Value<String> source,
       Value<int?> introStartMs,
       Value<int?> introEndMs,
       Value<int?> outroStartMs,
       Value<int?> outroEndMs,
-      Value<String> source,
-      Value<int> introConfidence,
-      Value<int> outroConfidence,
-      Value<String> resolvedKey,
+      Value<int> askedAtMs,
       Value<int> rowid,
     });
 
-class $$SkipSegmentsTableFilterComposer
-    extends Composer<_$CacheDatabase, $SkipSegmentsTable> {
-  $$SkipSegmentsTableFilterComposer({
+class $$SkipSourceAnswersTableFilterComposer
+    extends Composer<_$CacheDatabase, $SkipSourceAnswersTable> {
+  $$SkipSourceAnswersTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -6087,6 +5960,11 @@ class $$SkipSegmentsTableFilterComposer
 
   ColumnFilters<int> get episode => $composableBuilder(
     column: $table.episode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6110,30 +5988,15 @@ class $$SkipSegmentsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get source => $composableBuilder(
-    column: $table.source,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get introConfidence => $composableBuilder(
-    column: $table.introConfidence,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get outroConfidence => $composableBuilder(
-    column: $table.outroConfidence,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get resolvedKey => $composableBuilder(
-    column: $table.resolvedKey,
+  ColumnFilters<int> get askedAtMs => $composableBuilder(
+    column: $table.askedAtMs,
     builder: (column) => ColumnFilters(column),
   );
 }
 
-class $$SkipSegmentsTableOrderingComposer
-    extends Composer<_$CacheDatabase, $SkipSegmentsTable> {
-  $$SkipSegmentsTableOrderingComposer({
+class $$SkipSourceAnswersTableOrderingComposer
+    extends Composer<_$CacheDatabase, $SkipSourceAnswersTable> {
+  $$SkipSourceAnswersTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -6147,6 +6010,11 @@ class $$SkipSegmentsTableOrderingComposer
 
   ColumnOrderings<int> get episode => $composableBuilder(
     column: $table.episode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -6170,30 +6038,15 @@ class $$SkipSegmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get source => $composableBuilder(
-    column: $table.source,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get introConfidence => $composableBuilder(
-    column: $table.introConfidence,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get outroConfidence => $composableBuilder(
-    column: $table.outroConfidence,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get resolvedKey => $composableBuilder(
-    column: $table.resolvedKey,
+  ColumnOrderings<int> get askedAtMs => $composableBuilder(
+    column: $table.askedAtMs,
     builder: (column) => ColumnOrderings(column),
   );
 }
 
-class $$SkipSegmentsTableAnnotationComposer
-    extends Composer<_$CacheDatabase, $SkipSegmentsTable> {
-  $$SkipSegmentsTableAnnotationComposer({
+class $$SkipSourceAnswersTableAnnotationComposer
+    extends Composer<_$CacheDatabase, $SkipSourceAnswersTable> {
+  $$SkipSourceAnswersTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -6205,6 +6058,9 @@ class $$SkipSegmentsTableAnnotationComposer
 
   GeneratedColumn<int> get episode =>
       $composableBuilder(column: $table.episode, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
 
   GeneratedColumn<int> get introStartMs => $composableBuilder(
     column: $table.introStartMs,
@@ -6226,104 +6082,90 @@ class $$SkipSegmentsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get source =>
-      $composableBuilder(column: $table.source, builder: (column) => column);
-
-  GeneratedColumn<int> get introConfidence => $composableBuilder(
-    column: $table.introConfidence,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get outroConfidence => $composableBuilder(
-    column: $table.outroConfidence,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get resolvedKey => $composableBuilder(
-    column: $table.resolvedKey,
-    builder: (column) => column,
-  );
+  GeneratedColumn<int> get askedAtMs =>
+      $composableBuilder(column: $table.askedAtMs, builder: (column) => column);
 }
 
-class $$SkipSegmentsTableTableManager
+class $$SkipSourceAnswersTableTableManager
     extends
         RootTableManager<
           _$CacheDatabase,
-          $SkipSegmentsTable,
-          SkipSegmentRow,
-          $$SkipSegmentsTableFilterComposer,
-          $$SkipSegmentsTableOrderingComposer,
-          $$SkipSegmentsTableAnnotationComposer,
-          $$SkipSegmentsTableCreateCompanionBuilder,
-          $$SkipSegmentsTableUpdateCompanionBuilder,
+          $SkipSourceAnswersTable,
+          SkipSourceAnswerRow,
+          $$SkipSourceAnswersTableFilterComposer,
+          $$SkipSourceAnswersTableOrderingComposer,
+          $$SkipSourceAnswersTableAnnotationComposer,
+          $$SkipSourceAnswersTableCreateCompanionBuilder,
+          $$SkipSourceAnswersTableUpdateCompanionBuilder,
           (
-            SkipSegmentRow,
-            BaseReferences<_$CacheDatabase, $SkipSegmentsTable, SkipSegmentRow>,
+            SkipSourceAnswerRow,
+            BaseReferences<
+              _$CacheDatabase,
+              $SkipSourceAnswersTable,
+              SkipSourceAnswerRow
+            >,
           ),
-          SkipSegmentRow,
+          SkipSourceAnswerRow,
           PrefetchHooks Function()
         > {
-  $$SkipSegmentsTableTableManager(_$CacheDatabase db, $SkipSegmentsTable table)
-    : super(
+  $$SkipSourceAnswersTableTableManager(
+    _$CacheDatabase db,
+    $SkipSourceAnswersTable table,
+  ) : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$SkipSegmentsTableFilterComposer($db: db, $table: table),
+              $$SkipSourceAnswersTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$SkipSegmentsTableOrderingComposer($db: db, $table: table),
+              $$SkipSourceAnswersTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$SkipSegmentsTableAnnotationComposer($db: db, $table: table),
+              $$SkipSourceAnswersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
           updateCompanionCallback:
               ({
                 Value<int> seriesId = const Value.absent(),
                 Value<int> episode = const Value.absent(),
+                Value<String> source = const Value.absent(),
                 Value<int?> introStartMs = const Value.absent(),
                 Value<int?> introEndMs = const Value.absent(),
                 Value<int?> outroStartMs = const Value.absent(),
                 Value<int?> outroEndMs = const Value.absent(),
-                Value<String> source = const Value.absent(),
-                Value<int> introConfidence = const Value.absent(),
-                Value<int> outroConfidence = const Value.absent(),
-                Value<String> resolvedKey = const Value.absent(),
+                Value<int> askedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => SkipSegmentsCompanion(
+              }) => SkipSourceAnswersCompanion(
                 seriesId: seriesId,
                 episode: episode,
+                source: source,
                 introStartMs: introStartMs,
                 introEndMs: introEndMs,
                 outroStartMs: outroStartMs,
                 outroEndMs: outroEndMs,
-                source: source,
-                introConfidence: introConfidence,
-                outroConfidence: outroConfidence,
-                resolvedKey: resolvedKey,
+                askedAtMs: askedAtMs,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required int seriesId,
                 required int episode,
+                required String source,
                 Value<int?> introStartMs = const Value.absent(),
                 Value<int?> introEndMs = const Value.absent(),
                 Value<int?> outroStartMs = const Value.absent(),
                 Value<int?> outroEndMs = const Value.absent(),
-                Value<String> source = const Value.absent(),
-                Value<int> introConfidence = const Value.absent(),
-                Value<int> outroConfidence = const Value.absent(),
-                Value<String> resolvedKey = const Value.absent(),
+                Value<int> askedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => SkipSegmentsCompanion.insert(
+              }) => SkipSourceAnswersCompanion.insert(
                 seriesId: seriesId,
                 episode: episode,
+                source: source,
                 introStartMs: introStartMs,
                 introEndMs: introEndMs,
                 outroStartMs: outroStartMs,
                 outroEndMs: outroEndMs,
-                source: source,
-                introConfidence: introConfidence,
-                outroConfidence: outroConfidence,
-                resolvedKey: resolvedKey,
+                askedAtMs: askedAtMs,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -6334,21 +6176,25 @@ class $$SkipSegmentsTableTableManager
       );
 }
 
-typedef $$SkipSegmentsTableProcessedTableManager =
+typedef $$SkipSourceAnswersTableProcessedTableManager =
     ProcessedTableManager<
       _$CacheDatabase,
-      $SkipSegmentsTable,
-      SkipSegmentRow,
-      $$SkipSegmentsTableFilterComposer,
-      $$SkipSegmentsTableOrderingComposer,
-      $$SkipSegmentsTableAnnotationComposer,
-      $$SkipSegmentsTableCreateCompanionBuilder,
-      $$SkipSegmentsTableUpdateCompanionBuilder,
+      $SkipSourceAnswersTable,
+      SkipSourceAnswerRow,
+      $$SkipSourceAnswersTableFilterComposer,
+      $$SkipSourceAnswersTableOrderingComposer,
+      $$SkipSourceAnswersTableAnnotationComposer,
+      $$SkipSourceAnswersTableCreateCompanionBuilder,
+      $$SkipSourceAnswersTableUpdateCompanionBuilder,
       (
-        SkipSegmentRow,
-        BaseReferences<_$CacheDatabase, $SkipSegmentsTable, SkipSegmentRow>,
+        SkipSourceAnswerRow,
+        BaseReferences<
+          _$CacheDatabase,
+          $SkipSourceAnswersTable,
+          SkipSourceAnswerRow
+        >,
       ),
-      SkipSegmentRow,
+      SkipSourceAnswerRow,
       PrefetchHooks Function()
     >;
 typedef $$HiddenEpisodesTableCreateCompanionBuilder =
@@ -7013,8 +6859,8 @@ class $CacheDatabaseManager {
       $$WatchStatesTableTableManager(_db, _db.watchStates);
   $$SourceOverridesTableTableManager get sourceOverrides =>
       $$SourceOverridesTableTableManager(_db, _db.sourceOverrides);
-  $$SkipSegmentsTableTableManager get skipSegments =>
-      $$SkipSegmentsTableTableManager(_db, _db.skipSegments);
+  $$SkipSourceAnswersTableTableManager get skipSourceAnswers =>
+      $$SkipSourceAnswersTableTableManager(_db, _db.skipSourceAnswers);
   $$HiddenEpisodesTableTableManager get hiddenEpisodes =>
       $$HiddenEpisodesTableTableManager(_db, _db.hiddenEpisodes);
   $$AppSettingsTableTableManager get appSettings =>

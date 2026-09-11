@@ -38,11 +38,17 @@ class ChaptersSkipProvider implements SkipProvider {
   @override
   Future<bool> isConfigured() async => true; // nothing to configure
 
+  /// A local source cannot answer about a file it was never given. Like
+  /// AniSkip's missing MAL id this is "could not try", not "no data": the
+  /// scan path has the path and the refresh path gained it later, so recording
+  /// an answer from a lookup without one would freeze the wrong result.
+  @override
+  bool canAnswer(SkipLookup lookup) =>
+      lookup.filePath != null && lookup.filePath!.isNotEmpty;
+
   @override
   Future<EpisodeSkips?> fetchSkips(SkipLookup lookup) async {
     final path = lookup.filePath;
-    // No file to read means no answer — not a failure. This source simply has
-    // nothing to say about an episode whose file we don't know.
     if (path == null || path.isEmpty) return null;
     final chapters = await reader.read(path);
     if (chapters.isEmpty) return null;

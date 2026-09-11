@@ -30,10 +30,16 @@ class AniSkipSkipProvider implements SkipProvider {
   @override
   Future<bool> isConfigured() async => true; // public, no key
 
+  /// AniSkip is keyed by MAL id, so without one there is nothing to ask WITH.
+  /// Deliberately "could not try" rather than "no data": the id frequently
+  /// arrives later from the cross-map, and recording an answer now would stop
+  /// this source ever being asked again.
+  @override
+  bool canAnswer(SkipLookup lookup) => lookup.malId != null;
+
   @override
   Future<EpisodeSkips?> fetchSkips(SkipLookup lookup) async {
     final malId = lookup.malId;
-    // No MAL id means nothing to ask WITH — not a failure, just no answer.
     if (malId == null) return null;
     try {
       return await client.fetchSkips(

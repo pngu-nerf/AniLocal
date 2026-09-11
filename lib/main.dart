@@ -29,6 +29,7 @@ import 'data/scanner/heuristic_filename_parser.dart';
 import 'data/scanner/series_matcher.dart';
 import 'domain/models/external_ids.dart';
 import 'domain/models/source_descriptor.dart';
+import 'domain/models/source_preference.dart';
 import 'domain/models/sync_summary.dart';
 import 'playback/playback_controller.dart';
 import 'sync/fix_match_service.dart';
@@ -164,6 +165,21 @@ void main() {
     const ChaptersSkipProvider(),
     AniSkipSkipProvider(AniSkipClient()),
   ];
+  // The READ path resolves skips now, so it needs the same ordered, enabled
+  // source list the fill path uses — as TOKENS, because the repository must
+  // never see a provider (seam #1). Wired here because only the composition
+  // root knows which sources this build ships, and read fresh on every query
+  // so a reorder, a toggle, or switching cross-checking on takes effect
+  // immediately with no refresh and no rescan.
+  repository.loadActiveSkipSources = () async => [
+    for (final p in applySourceOrder(
+      skipProviders,
+      (p) => p.token,
+      await settings.loadSkipSourceOrder(),
+    ))
+      p.token,
+  ];
+  repository.loadCorroborateSkips = settings.loadCorroborateSkips;
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
     parser: const HeuristicFilenameParser(),
@@ -180,7 +196,6 @@ void main() {
     // network call. Chapters, Anime Skip and fingerprinting append here.
     skipProviders: skipProviders,
     loadSkipOrder: settings.loadSkipSourceOrder,
-    loadCorroborateSkips: settings.loadCorroborateSkips,
     // Fills a MAL id AniList didn't supply, so auto-skip survives an AniList
     // outage. Fetched lazily and only when something is actually missing.
     crossMap: crossMap,

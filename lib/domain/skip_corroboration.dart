@@ -89,49 +89,6 @@ double windowOverlap(SkipRange a, SkipRange b) {
   return intersection.inMicroseconds / union.inMicroseconds;
 }
 
-/// The inputs a skip row was resolved from, as one comparable string.
-///
-/// Stored on the row (`skip_segments.resolved_key`) so a refresh can tell
-/// whether re-asking this episode could possibly produce a different answer.
-/// That is the whole mechanism that stops the FIRST WRITER WINNING FOREVER:
-/// without it, a refresh either re-asks every episode every time (unacceptable
-/// — it is one network call per episode) or, as it did, never re-asks an
-/// episode that already has a row, which silently made reordering sources and
-/// switching on cross-checking inert on any library that had already been
-/// scanned.
-///
-/// [sourcesInOrder] is the enabled, askable sources IN PRIORITY ORDER — order
-/// is part of the key because it decides who supplies the times, and a source
-/// that is switched off is simply absent. [corroborate] is part of it because
-/// cross-checking changes the ANSWER, not just its cost: it asks every source
-/// instead of stopping at the first, and only then can a window be judged
-/// corroborated or conflicting.
-///
-/// [_ruleGeneration] is part of it because THE RULES ARE INPUTS TOO. The key has
-/// to capture everything that could change the answer, and a row produced under
-/// an older rule is exactly as stale as one produced from a different set of
-/// sources. Bumping it re-resolves every row once, which is the only way a rule
-/// change reaches a library that has already been scanned. Bump it whenever any
-/// rule that could alter a stored window or verdict changes — the agreement
-/// test in [reconcileWindow], or the inference in `inferSkipsFromChapters` —
-/// but not for a refactor that cannot alter either.
-///
-/// Deliberately opaque and compared only for equality — nothing parses it back.
-String skipResolutionKey(
-  Iterable<String> sourcesInOrder, {
-  required bool corroborate,
-}) =>
-    '${sourcesInOrder.join(',')}|${corroborate ? 'x' : '-'}'
-    '|r$_ruleGeneration';
-
-/// Generation of the rules that decide a stored row. 1 = the original ±2s test
-/// on each edge; 2 = overlap (see [kSkipCorroborationMinOverlap]), which
-/// reclassified 50 of 59 disagreeing pairs on the reference library as
-/// agreement; 3 = the opening is the LATEST theme-length chapter before the
-/// midpoint rather than the earliest, which fixed the nine windows that
-/// generation 2 could only refuse to auto-skip.
-const int _ruleGeneration = 3;
-
 /// Drop a window shorter than [minimum].
 ///
 /// A user-set floor on how short a skip may be. Sources occasionally mark a
@@ -245,4 +202,84 @@ ReconciledSkips reconcileSkips(
     intro: reconcileWindow(intros),
     outro: reconcileWindow(outros),
   );
+}
+
+/// A source's RAW answer for one episode: what it said, not what we concluded.
+class SourceAnswer {
+  const SourceAnswer({required this.source, this.intro, this.outro});
+
+  final String source;
+  final SkipRange? intro;
+  final SkipRange? outro;
+
+  bool get isEmpty => intro == null && outro == null;
+}
+
+/// Provenance for a window carried over from before v19, when only the winning
+/// source's times were stored and often not even which source that was.
+const String kLegacySource = 'legacy';
+
+/// Resolve one episode from what each source said — THE read-path entry point.
+///
+/// Everything that used to be decided at write time and stored is decided here
+/// instead: which source supplies the times ([sourceOrder]), and how far to
+/// trust them ([corroborate]). That is what makes reordering sources, toggling
+/// a source, and switching cross-checking on or off take effect immediately on
+/// the whole library rather than only on episodes scanned afterwards — and it
+/// is why no stored verdict needs invalidating when these rules change.
+///
+/// The two windows resolve INDEPENDENTLY across every source, each taking the
+/// highest-priority source that actually has it. The old write-time path
+/// stopped at the first source with ANY data, so an episode whose top source
+/// knew only the intro silently lost an outro a lower source could have
+/// supplied.
+///
+/// An answer from a source not in [sourceOrder] — [kLegacySource], or one the
+/// user has switched off — is a LAST RESORT: used only when nothing known has
+/// anything, and never allowed to vote on agreement, because a window of
+/// unknown provenance must not be able to corroborate one.
+ReconciledSkips resolveEpisodeSkips(
+  List<SourceAnswer> answers, {
+  required List<String> sourceOrder,
+  required bool corroborate,
+}) {
+  final byToken = {for (final a in answers) a.source: a};
+  final known = [
+    for (final token in sourceOrder)
+      if (byToken[token] != null) byToken[token]!,
+  ];
+
+  ResolvedWindow? resolve(SkipRange? Function(SourceAnswer) window) {
+    final candidates = [
+      for (final answer in known)
+        if (window(answer) != null)
+          SkipCandidate(source: answer.source, range: window(answer)!),
+    ];
+    if (candidates.isEmpty) return null;
+    // Without cross-checking the top candidate simply stands: judging it
+    // against the others is exactly the work the setting switches off.
+    return reconcileWindow(corroborate ? candidates : [candidates.first]);
+  }
+
+  final intro = resolve((a) => a.intro);
+  final outro = resolve((a) => a.outro);
+  if (intro != null || outro != null) {
+    return ReconciledSkips(intro: intro, outro: outro);
+  }
+
+  for (final answer in answers) {
+    if (sourceOrder.contains(answer.source) || answer.isEmpty) continue;
+    ResolvedWindow? lone(SkipRange? r) => r == null
+        ? null
+        : ResolvedWindow(
+            range: r,
+            source: answer.source,
+            confidence: SkipConfidence.single,
+          );
+    return ReconciledSkips(
+      intro: lone(answer.intro),
+      outro: lone(answer.outro),
+    );
+  }
+  return const ReconciledSkips();
 }

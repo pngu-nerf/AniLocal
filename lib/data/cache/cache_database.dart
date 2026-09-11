@@ -192,63 +192,59 @@ class SourceOverrides extends Table {
 /// scan time and read OFFLINE during playback — the player never hits the
 /// network. Keyed by EPISODE IDENTITY ([seriesId] + the anchored [episode]
 /// position), consistent with watch_state / source_overrides. A row exists only
-/// when AniSkip had data; absence = no skip affordance (partial coverage is
-/// normal). Either window may be null (intro-only or outro-only). Times are ms
-/// from the start of the file.
-@DataClassName('SkipSegmentRow')
-class SkipSegments extends Table {
+
+/// WHAT EACH SKIP SOURCE SAID about one episode — the raw answers, not a
+/// verdict. One row per (episode, source); a row EXISTS iff that source has
+/// been asked, and NULL windows mean "asked, and it had nothing", which is the
+/// distinction the chain has always cared about ("no data" is not "failed").
+///
+/// **Nothing derived is stored here, deliberately.** Which window you get, how
+/// far to trust it, and the minimum-length floor are all computed on the READ
+/// path from these answers (`resolveEpisodeSkips`). That is the same choice the
+/// minimum-skip floor already made, for the same reason: a stored verdict is a
+/// cache of a rule's output, so every change to the rule becomes a cache
+/// invalidation problem. Before v19 that was handled by a hand-bumped
+/// generation counter whose failure was SILENT — forget it and the new rule
+/// reaches only newly scanned episodes. Now there is nothing to invalidate:
+/// reordering sources, switching one off or on, toggling cross-checking, and
+/// changing the agreement rule itself all take effect immediately, everywhere,
+/// with no refresh at all.
+///
+/// A source is asked only when it has no row for that episode, so answers
+/// accumulate once and are never re-fetched. A FAILURE writes nothing, which is
+/// what leaves it to be retried.
+@DataClassName('SkipSourceAnswerRow')
+class SkipSourceAnswers extends Table {
   IntColumn get seriesId => integer()();
   IntColumn get episode => integer()();
+
+  /// The source's token (`aniskip`, `chapters`, …), or `legacy` for a window
+  /// migrated from v18 whose provenance was never recorded. A legacy answer is
+  /// used only when no known source has anything, and never votes on
+  /// agreement — unknown provenance must not corroborate.
+  TextColumn get source => text()();
+
+  /// Null when this source has nothing for this window. Times are ms from the
+  /// start of the file.
   IntColumn get introStartMs => integer().nullable()();
   IntColumn get introEndMs => integer().nullable()();
   IntColumn get outroStartMs => integer().nullable()();
   IntColumn get outroEndMs => integer().nullable()();
 
-  /// WHICH skip source produced this row (`aniskip`, `chapters`, …).
-  ///
-  /// Needed for three things: telling the user where a window came from,
-  /// letting a higher-priority source replace a lower one rather than the
-  /// first writer winning forever, and distinguishing an INFERRED window
-  /// (chapters, fingerprinting) from a curated one. Empty on rows written
-  /// before v16, which all came from AniSkip.
-  TextColumn get source => text().withDefault(const Constant(''))();
-
-  /// How much each window is trusted (see `SkipConfidence`): 0 single source,
-  /// 1 corroborated by a second independent source, -1 conflicting. Auto-skip
-  /// is gated on it — skipping into real content is the bad outcome, an
-  /// unoffered skip is merely inconvenient.
-  ///
-  /// PER WINDOW, not per row. A mixed library routinely produces a corroborated
-  /// intro alongside a lone outro; one verdict for both would either forfeit
-  /// the intro's corroboration or overstate the outro's.
-  IntColumn get introConfidence => integer().withDefault(const Constant(0))();
-  IntColumn get outroConfidence => integer().withDefault(const Constant(0))();
-
-  /// The resolution INPUTS this row was produced from (`skipResolutionKey`):
-  /// the enabled skip sources in order, plus whether cross-checking was on.
-  ///
-  /// This is what stops the first writer winning forever. A refresh re-asks an
-  /// episode that already has a row exactly when this key no longer matches the
-  /// current settings — so reordering sources, switching one off, or turning
-  /// cross-checking on re-resolves the affected rows ONCE and then costs
-  /// nothing. Without it the two states are indistinguishable: a row with one
-  /// source and no verdict looks identical whether cross-checking examined it
-  /// and found nothing to compare, or never ran at all.
-  ///
-  /// Empty on rows written before v18, which is exactly right — we don't know
-  /// what produced them, so they are re-resolved once on the next refresh.
-  TextColumn get resolvedKey => text().withDefault(const Constant(''))();
+  /// When we asked. Not read today; it is what a future "re-ask answers older
+  /// than N" policy would need, and it costs one integer.
+  IntColumn get askedAtMs => integer().withDefault(const Constant(0))();
 
   @override
-  Set<Column> get primaryKey => {seriesId, episode};
+  Set<Column> get primaryKey => {seriesId, episode, source};
 
   @override
-  String get tableName => 'skip_segments';
+  String get tableName => 'skip_source_answers';
 }
 
 /// User-hidden MISSING episodes (the missing-episodes feature). Keyed by EPISODE
 /// IDENTITY ([seriesId] + the anchored [episode] position), consistent with
-/// watch_state / source_overrides / skip_segments. A hidden episode is removed
+/// watch_state / source_overrides / skip_source_answers. A hidden episode is removed
 /// from the show's episode list (no ghost tile) and excluded from completeness
 /// counts. Hiding is always per-episode, even when the action targets a bundle.
 ///
@@ -350,7 +346,7 @@ class SeriesExternalIds extends Table {
     MatchOverrides,
     WatchStates,
     SourceOverrides,
-    SkipSegments,
+    SkipSourceAnswers,
     HiddenEpisodes,
     AppSettings,
     ShowPrefs,
@@ -361,7 +357,7 @@ class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;
@@ -423,7 +419,17 @@ class CacheDatabase extends _$CacheDatabase {
         await customStatement(
           'ALTER TABLE series_cache ADD COLUMN id_mal INTEGER',
         );
-        await m.createTable(skipSegments);
+        // Raw SQL for the same reason as id_mal above: skip_segments no
+        // longer exists in the current schema (v19 replaces it with
+        // skip_source_answers), so there is no generated table to create. The
+        // historical step must still run — v19's backfill reads this table.
+        await customStatement(
+          'CREATE TABLE skip_segments ('
+          'anilist_id INTEGER NOT NULL, episode INTEGER NOT NULL, '
+          'intro_start_ms INTEGER, intro_end_ms INTEGER, '
+          'outro_start_ms INTEGER, outro_end_ms INTEGER, '
+          'PRIMARY KEY (anilist_id, episode))',
+        );
       }
       if (from < 9) {
         await m.addColumn(libraryFolders, libraryFolders.volumeId);
@@ -481,7 +487,10 @@ class CacheDatabase extends _$CacheDatabase {
         // as '' rather than backfilled to 'aniskip' so "we don't know where
         // this came from" stays distinguishable from "we recorded that it did".
         if (from >= 8) {
-          await m.addColumn(skipSegments, skipSegments.source);
+          await customStatement(
+            "ALTER TABLE skip_segments ADD COLUMN source TEXT NOT NULL "
+            "DEFAULT ''",
+          );
           // Raw SQL: `confidence` no longer exists in the current table shape
           // (v17 replaces it with a verdict per window). The historical step
           // must still run so a v15 cache follows the same path every other
@@ -502,9 +511,17 @@ class CacheDatabase extends _$CacheDatabase {
         // `from >= 16` instead left the orphan behind on exactly the upgrade
         // path a real cache takes.
         if (from >= 8) {
-          await m.dropColumn(skipSegments, 'confidence');
-          await m.addColumn(skipSegments, skipSegments.introConfidence);
-          await m.addColumn(skipSegments, skipSegments.outroConfidence);
+          await customStatement(
+            'ALTER TABLE skip_segments DROP COLUMN confidence',
+          );
+          await customStatement(
+            'ALTER TABLE skip_segments ADD COLUMN intro_confidence '
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await customStatement(
+            'ALTER TABLE skip_segments ADD COLUMN outro_confidence '
+            'INTEGER NOT NULL DEFAULT 0',
+          );
         }
       }
       if (from < 18) {
@@ -516,7 +533,31 @@ class CacheDatabase extends _$CacheDatabase {
         // the reference library that predate even `source` would keep their
         // first-writer-wins state forever.
         if (from >= 8) {
-          await m.addColumn(skipSegments, skipSegments.resolvedKey);
+          await customStatement(
+            "ALTER TABLE skip_segments ADD COLUMN resolved_key TEXT NOT NULL "
+            "DEFAULT ''",
+          );
+        }
+      }
+      if (from < 19) {
+        // Stop storing a VERDICT and store the ANSWERS it was derived from.
+        // Everything derived moves to the read path, so a rule change no
+        // longer needs invalidating — see SkipSourceAnswers.
+        await m.createTable(skipSourceAnswers);
+        if (from >= 8) {
+          // Backfill, so nothing a user already had disappears. A row whose
+          // provenance was never recorded (pre-v16) becomes `legacy`: still
+          // usable, but it can never outrank a known source or vote on
+          // agreement, because we cannot say who produced it.
+          await customStatement(
+            'INSERT OR IGNORE INTO skip_source_answers '
+            '(series_id, episode, source, intro_start_ms, intro_end_ms, '
+            'outro_start_ms, outro_end_ms, asked_at_ms) '
+            "SELECT series_id, episode, CASE WHEN source = '' THEN 'legacy' "
+            'ELSE source END, intro_start_ms, intro_end_ms, outro_start_ms, '
+            'outro_end_ms, 0 FROM skip_segments',
+          );
+          await customStatement('DROP TABLE skip_segments');
         }
       }
     },
@@ -577,7 +618,13 @@ class CacheDatabase extends _$CacheDatabase {
     await renameIfPreExisting(3, matchOverrides, matchOverrides.seriesId);
     await renameIfPreExisting(5, watchStates, watchStates.seriesId);
     await renameIfPreExisting(7, sourceOverrides, sourceOverrides.seriesId);
-    await renameIfPreExisting(8, skipSegments, skipSegments.seriesId);
+    // skip_segments is gone from the current schema, so it cannot go through
+    // renameIfPreExisting (which needs a generated table). Same guard, raw.
+    if (from >= 8) {
+      await customStatement(
+        'ALTER TABLE skip_segments RENAME COLUMN anilist_id TO series_id',
+      );
+    }
     await renameIfPreExisting(11, hiddenEpisodes, hiddenEpisodes.seriesId);
     await renameIfPreExisting(13, showPrefs, showPrefs.seriesId);
 
@@ -951,18 +998,19 @@ class CacheDatabase extends _$CacheDatabase {
   // --- Skip segments (auto-skip). Filled at scan time from AniSkip; read
   //     offline during playback. ---
 
-  Future<List<SkipSegmentRow>> allSkipRows() => select(skipSegments).get();
+  Future<List<SkipSourceAnswerRow>> allSkipAnswers() =>
+      select(skipSourceAnswers).get();
 
-  Future<SkipSegmentRow?> skipSegmentFor(int seriesId, int episode) =>
-      (select(skipSegments)..where(
+  Future<List<SkipSourceAnswerRow>> skipAnswersFor(int seriesId, int episode) =>
+      (select(skipSourceAnswers)..where(
             (s) => s.seriesId.equals(seriesId) & s.episode.equals(episode),
           ))
-          .getSingleOrNull();
+          .get();
 
-  /// Upsert one skip row directly (the refresh-metadata backfill — no pruning,
-  /// so fix-matches / watch-state are untouched).
-  Future<void> upsertSkipSegment(SkipSegmentRow row) =>
-      into(skipSegments).insertOnConflictUpdate(row);
+  /// Record what ONE source said (the refresh backfill — no pruning, so
+  /// fix-matches and watch state are untouched).
+  Future<void> upsertSkipAnswer(SkipSourceAnswerRow row) =>
+      into(skipSourceAnswers).insertOnConflictUpdate(row);
 
   // --- Hidden episodes (missing-episodes feature). Written ONLY by the
   //     hide/unhide UI actions; the fill path (applySync) and refreshMetadata
@@ -1052,7 +1100,7 @@ class CacheDatabase extends _$CacheDatabase {
     required List<CachedSeriesRow> seriesUpserts,
     required List<CachedFileRow> fileUpserts,
     required List<(String folderPath, String relativePath)> removedKeys,
-    List<SkipSegmentRow> skipUpserts = const [],
+    List<SkipSourceAnswerRow> skipUpserts = const [],
     List<(int placeholderId, int realId)> promotions = const [],
   }) {
     return transaction(() async {
@@ -1064,7 +1112,7 @@ class CacheDatabase extends _$CacheDatabase {
         await into(fileCache).insertOnConflictUpdate(f);
       }
       for (final s in skipUpserts) {
-        await into(skipSegments).insertOnConflictUpdate(s);
+        await into(skipSourceAnswers).insertOnConflictUpdate(s);
       }
       for (final (placeholderId, realId) in promotions) {
         await customStatement(
@@ -1089,7 +1137,7 @@ class CacheDatabase extends _$CacheDatabase {
       );
       // Drop skip rows whose series is no longer cached.
       await customStatement(
-        'DELETE FROM skip_segments WHERE series_id NOT IN ('
+        'DELETE FROM skip_source_answers WHERE series_id NOT IN ('
         'SELECT series_id FROM series_cache)',
       );
     });

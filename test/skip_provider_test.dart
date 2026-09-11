@@ -30,6 +30,7 @@ class _FakeSkip implements SkipProvider {
     this.failure,
     this.configured = true,
     this.onLookup,
+    this.answerable = true,
   });
 
   @override
@@ -37,6 +38,7 @@ class _FakeSkip implements SkipProvider {
   final EpisodeSkips? windows;
   final MetadataFailure? failure;
   final bool configured;
+  final bool answerable;
   final void Function(SkipLookup)? onLookup;
 
   int calls = 0;
@@ -50,6 +52,8 @@ class _FakeSkip implements SkipProvider {
   @override
   String? get setupInstructions => null;
   @override
+  bool canAnswer(SkipLookup lookup) => answerable;
+  @override
   Future<bool> isConfigured() async => configured;
 
   @override
@@ -58,6 +62,16 @@ class _FakeSkip implements SkipProvider {
     onLookup?.call(lookup);
     if (failure != null) throw SkipException('$token down', failure: failure!);
     return windows;
+  }
+}
+
+/// The answer a given source recorded for episode 1, or null if never asked.
+extension on List<SkipSourceAnswerRow> {
+  SkipSourceAnswerRow? from(String source) {
+    for (final a in this) {
+      if (a.source == source) return a;
+    }
+    return null;
   }
 }
 
@@ -200,7 +214,6 @@ void main() {
           directory: () async => Directory('${dir.path}/.art')..createSync(),
         ),
         skipProviders: providers,
-        loadCorroborateSkips: () async => corroborate,
       ).sync([dir.path]);
     }
 
@@ -226,55 +239,69 @@ void main() {
         ),
         skipProviders: providers,
         loadSkipOrder: () async => order,
-        loadCorroborateSkips: () async => corroborate,
       ).refreshMetadata();
     }
 
-    test('the first source WITH DATA wins, and is recorded', () async {
-      // "No data" is not failure: partial coverage is normal, so an empty
-      // answer must fall through silently rather than end the chain.
+    test('every source is asked, and what each SAID is recorded', () async {
+      // Since v19 the fill path stores raw answers rather than a verdict, so
+      // "had nothing" is a recorded fact and not an absence. That is what lets
+      // the read path decide later without ever re-asking.
       final empty = _FakeSkip('aniskip');
       final has = _FakeSkip('chapters', windows: _op());
 
       await scanWith([empty, has]);
 
-      final row = (await db.allSkipRows()).single;
-      expect(row.introEndMs, 90000);
+      final answers = await db.allSkipAnswers();
+      expect(answers.length, 2);
+      expect(answers.from('chapters')!.introEndMs, 90000);
       expect(
-        row.source,
-        'chapters',
-        reason: 'provenance must say who actually answered',
+        answers.from('aniskip')!.introStartMs,
+        isNull,
+        reason: 'asked, had nothing — a row of nulls, not a missing row',
       );
-      expect(empty.calls, 1, reason: 'asked first, had nothing');
+      expect(empty.calls, 1);
     });
 
-    test('a FAILING source falls through to the next', () async {
+    test('a FAILING source records NOTHING, so it is retried', () async {
+      // The distinction the contract rests on: "had nothing" is a row of
+      // nulls and is never asked again; a failure is no row at all.
       final down = _FakeSkip('aniskip', failure: MetadataFailure.service);
       final up = _FakeSkip('chapters', windows: _op());
 
       await scanWith([down, up]);
 
-      expect((await db.allSkipRows()).single.source, 'chapters');
+      final answers = await db.allSkipAnswers();
+      expect(answers.from('chapters')!.introEndMs, 90000);
+      expect(answers.from('aniskip'), isNull, reason: 'failure leaves no row');
     });
 
-    test('an unconfigured source is never asked', () async {
-      final needsKey = _FakeSkip(
-        'animeskip',
-        configured: false,
-        windows: _op(),
-      );
-      final ok = _FakeSkip('aniskip', windows: _op());
+    test(
+      'an unconfigured source is never asked, and records nothing',
+      () async {
+        // It must not leave a row of nulls either: that would read as "asked,
+        // had nothing" and stop it being asked once a key is finally pasted.
+        final needsKey = _FakeSkip(
+          'animeskip',
+          configured: false,
+          windows: _op(),
+        );
+        final ok = _FakeSkip('aniskip', windows: _op());
 
-      await scanWith([needsKey, ok]);
+        await scanWith([needsKey, ok]);
 
-      expect(needsKey.calls, 0);
-      expect((await db.allSkipRows()).single.source, 'aniskip');
-    });
+        expect(needsKey.calls, 0);
+        final answers = await db.allSkipAnswers();
+        expect(answers.from('animeskip'), isNull);
+        expect(answers.from('aniskip')!.introEndMs, 90000);
+      },
+    );
 
-    test('no source with data means NO row, not an empty one', () async {
+    test('no source with data still records that both were asked', () async {
       await scanWith([_FakeSkip('aniskip'), _FakeSkip('chapters')]);
 
-      expect(await db.allSkipRows(), isEmpty);
+      final answers = await db.allSkipAnswers();
+      expect(answers.length, 2, reason: 'both answered "nothing"');
+      expect(answers.every((a) => a.introStartMs == null), isTrue);
     });
 
     test('REFRESH carries the file path too — the backfill path', () async {
@@ -283,7 +310,7 @@ void main() {
       // ONLY way a newly-added local source reaches episodes already scanned.
       // Without the file path a chapters-style source is silently inert here.
       await scanWith([_FakeSkip('aniskip')]); // scan first, no skip data
-      expect(await db.allSkipRows(), isEmpty);
+      expect((await db.allSkipAnswers()).from('chapters'), isNull);
 
       late SkipLookup seen;
       final spy = _FakeSkip(
@@ -298,64 +325,55 @@ void main() {
         endsWith('Cowboy Bebop - 01.mkv'),
         reason: 'a local source cannot read a file it is never given',
       );
-      expect((await db.allSkipRows()).single.source, 'chapters');
+      expect((await db.allSkipAnswers()).from('chapters')!.introEndMs, 90000);
     });
 
-    test('cross-check OFF stops at the first source with data', () async {
-      // The cheap path: no reason to call a network source once the file's own
-      // chapters have answered.
+    test('EVERY source is asked, whatever cross-checking is set to', () async {
+      // v19 moved cross-checking to the read path, so the fill path no longer
+      // knows about it. Asking everyone once is what makes toggling the
+      // setting instant later — the answers are already on disk.
       final first = _FakeSkip('chapters', windows: _op());
       final second = _FakeSkip('aniskip', windows: _op());
 
       await scanWith([first, second]);
 
-      expect(second.calls, 0, reason: 'never asked');
-      expect((await db.allSkipRows()).single.introConfidence, 0);
+      expect(second.calls, 1, reason: 'asked even with cross-checking off');
+      expect((await db.allSkipAnswers()).length, 2);
     });
 
-    test('cross-check ON asks everyone and records agreement', () async {
-      final a = _FakeSkip('chapters', windows: _op());
-      final b = _FakeSkip('aniskip', windows: _op());
+    test('"could not try" records NOTHING, so it is retried', () async {
+      // The distinction that keeps the cross-map useful. AniSkip asked before
+      // its MAL id is known has nothing to ask WITH — recording that as "I
+      // have no data" would stop it ever being asked again, so the id the
+      // cross-map supplies later could never reach it. The suite caught
+      // exactly this when the answer table first landed.
+      final notYet = _FakeSkip('aniskip', windows: _op(), answerable: false);
 
-      await scanWith([a, b], corroborate: true);
+      await scanWith([notYet]);
 
-      expect(b.calls, 1, reason: 'asked, so its answer can be compared');
-      final row = (await db.allSkipRows()).single;
-      expect(row.introConfidence, 1, reason: 'corroborated');
-      expect(row.source, 'chapters', reason: 'top source still supplies times');
-    });
-
-    test('cross-check ON records a conflict when they disagree', () async {
-      final a = _FakeSkip('chapters', windows: _op());
-      final b = _FakeSkip(
-        'aniskip',
-        windows: const EpisodeSkips(
-          intro: SkipRange(
-            start: Duration(seconds: 600),
-            end: Duration(seconds: 690),
-          ),
-        ),
-      );
-
-      await scanWith([a, b], corroborate: true);
-
-      expect((await db.allSkipRows()).single.introConfidence, -1);
-    });
-
-    test('a source with NO data is not counted as disagreement', () async {
-      // The rule that keeps auto-skip alive on a partially-covered library.
-      final a = _FakeSkip('chapters', windows: _op());
-      final silent = _FakeSkip('aniskip'); // asked, nothing to say
-
-      await scanWith([a, silent], corroborate: true);
-
-      final row = (await db.allSkipRows()).single;
-      expect(silent.calls, 1, reason: 'it WAS asked');
+      expect(notYet.calls, 0, reason: 'not even attempted');
       expect(
-        row.introConfidence,
-        0,
-        reason: 'single source, not a conflict — silence is not dissent',
+        await db.allSkipAnswers(),
+        isEmpty,
+        reason: 'no row at all — "nothing" would be a lie that sticks',
       );
+
+      // Once it CAN answer, the refresh picks it up.
+      final now = _FakeSkip('aniskip', windows: _op());
+      await refreshWith([now]);
+      expect((await db.allSkipAnswers()).from('aniskip')!.introEndMs, 90000);
+    });
+
+    test('a source already answered is never asked again', () async {
+      // What keeps refresh incremental now that there is no resolution key:
+      // presence of a row IS the record that we asked.
+      final chapters = _FakeSkip('chapters', windows: _op());
+      await scanWith([chapters]);
+      final afterScan = chapters.calls;
+
+      await refreshWith([chapters]);
+
+      expect(chapters.calls, afterScan, reason: 'nothing new to ask');
     });
 
     test('the floor is a LIVE read — no rescan needed to change it', () async {
@@ -370,13 +388,14 @@ void main() {
           ),
         ),
       ]);
-      expect((await db.allSkipRows()).single.introEndMs, 8000);
+      expect((await db.allSkipAnswers()).single.introEndMs, 8000);
 
       var floor = Duration.zero;
-      final repo = DriftLibraryRepository(db)
-        ..loadMinSkipLength = () async => floor;
+      final repo = DriftLibraryRepository(db);
+      repo.loadMinSkipLength = () async => floor;
+      repo.loadActiveSkipSources = () async => const ['chapters'];
 
-      final seriesId = (await db.allSkipRows()).single.seriesId;
+      final seriesId = (await db.allSkipAnswers()).single.seriesId;
       expect(
         (await repo.episodesFor(seriesId)).single.introSkip,
         isNotNull,
@@ -423,18 +442,16 @@ void main() {
     });
   });
 
-  group('re-resolution: the first writer does not win forever', () {
-    // Every one of these is about an ALREADY SCANNED library, which is the only
-    // situation that matters here: a scan re-fetches skips for the files it is
-    // reprocessing anyway, so a change of sources or settings can only reach
-    // the existing 285 episodes through refresh. Before this, refresh skipped
-    // any episode that had a row at all, so reordering sources and switching on
-    // cross-checking were both silently inert on a real library.
+  group('resolution happens on the READ path', () {
+    // The v19 guarantee, and the reason the hand-bumped generation counter is
+    // gone: nothing derived is stored, so changing how skips are resolved
+    // takes effect on the next READ. No refresh, no rescan, nothing to
+    // invalidate and therefore nothing to forget to invalidate.
     late Directory dir;
     late CacheDatabase db;
 
     setUp(() async {
-      dir = await Directory.systemTemp.createTemp('anilocal_reresolve_');
+      dir = await Directory.systemTemp.createTemp('anilocal_readpath_');
       db = CacheDatabase(NativeDatabase.memory());
       final f = File('${dir.path}/Cowboy Bebop - 01.mkv');
       await f.create(recursive: true);
@@ -445,250 +462,157 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    MockClient mock() => MockClient((req) async {
-      if (req.method == 'POST') return _anilistPage();
-      return http.Response.bytes([1, 2, 3], 200);
-    });
-
-    LibrarySync sync(
-      List<SkipProvider> providers, {
-      bool corroborate = false,
-      List<SourcePreference> order = const [],
-    }) {
-      final client = mock();
-      return LibrarySync(
+    /// Two sources that disagree about the intro by more than the overlap rule
+    /// tolerates, plus an outro only the second one knows.
+    Future<int> seed() async {
+      final mock = MockClient((req) async {
+        if (req.method == 'POST') return _anilistPage();
+        return http.Response.bytes([1, 2, 3], 200);
+      });
+      await LibrarySync(
         scanner: const FileSystemFolderScanner(),
         parser: const HeuristicFilenameParser(),
         matcher: SeriesMatcher(
-          providers: [
-            AniListMetadataProvider(AniListClient(httpClient: client)),
-          ],
+          providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
         ),
         cache: db,
         art: ArtCache(
-          httpClient: client,
+          httpClient: mock,
           directory: () async => Directory('${dir.path}/.art')..createSync(),
         ),
-        skipProviders: providers,
-        loadSkipOrder: () async => order,
-        loadCorroborateSkips: () async => corroborate,
-      );
+        skipProviders: [
+          _FakeSkip('chapters', windows: _op()),
+          _FakeSkip(
+            'aniskip',
+            windows: const EpisodeSkips(
+              intro: SkipRange(
+                start: Duration(seconds: 600),
+                end: Duration(seconds: 690),
+              ),
+              outro: SkipRange(
+                start: Duration(seconds: 1300),
+                end: Duration(seconds: 1390),
+              ),
+            ),
+          ),
+        ],
+      ).sync([dir.path]);
+      return (await db.allSkipAnswers()).first.seriesId;
     }
 
-    test(
-      'UNCHANGED settings re-ask nothing — refresh stays incremental',
-      () async {
-        // The load-bearing half of the feature. Re-resolving on every refresh
-        // would be one network call per episode, every time, which is exactly
-        // the cost the original short-circuit existed to avoid.
-        final aniskip = _FakeSkip('aniskip', windows: _op());
-        await sync([aniskip]).sync([dir.path]);
-        expect((await db.allSkipRows()).single.source, 'aniskip');
-        final callsAfterScan = aniskip.calls;
+    test('REORDERING sources changes the times with no refresh', () async {
+      final seriesId = await seed();
+      var order = const ['chapters', 'aniskip'];
+      final repo = DriftLibraryRepository(db);
+      repo.loadActiveSkipSources = () async => order;
 
-        await sync([aniskip]).refreshMetadata();
+      expect(
+        (await repo.episodesFor(seriesId)).single.introSkip?.end,
+        const Duration(seconds: 90),
+        reason: 'chapters is on top',
+      );
+
+      order = const ['aniskip', 'chapters']; // a drag in Settings, nothing else
+      expect(
+        (await repo.episodesFor(seriesId)).single.introSkip?.end,
+        const Duration(seconds: 690),
+        reason: 'the new top source supplies the times, immediately',
+      );
+    });
+
+    test(
+      'TOGGLING cross-checking changes the verdict with no refresh',
+      () async {
+        final seriesId = await seed();
+        var corroborate = false;
+        final repo = DriftLibraryRepository(db);
+        repo.loadActiveSkipSources = () async => const ['chapters', 'aniskip'];
+        repo.loadCorroborateSkips = () async => corroborate;
 
         expect(
-          aniskip.calls,
-          callsAfterScan,
-          reason: 'same sources, same settings, so nothing can have changed',
+          (await repo.episodesFor(seriesId)).single.introConfidence,
+          SkipConfidence.single,
+          reason: 'off: the top answer simply stands',
+        );
+
+        corroborate = true;
+        expect(
+          (await repo.episodesFor(seriesId)).single.introConfidence,
+          SkipConfidence.conflicting,
+          reason: 'on: the two disagree about where the theme is',
         );
       },
     );
 
-    test('a REORDER lets a now-higher source replace the stored one', () async {
-      // The user drags AniSkip above chapters. The existing row came from
-      // chapters only because AniSkip had nothing at the time; it must get
-      // another chance, or the order they just set does nothing.
-      final chapters = _FakeSkip('chapters', windows: _op());
-      final aniskip = _FakeSkip('aniskip');
-      // Built-in order, chapters on top: it answers, so the row is its.
-      await sync([chapters, aniskip]).sync([dir.path]);
-      expect((await db.allSkipRows()).single.source, 'chapters');
+    test('switching a source OFF stops using it, immediately', () async {
+      final seriesId = await seed();
+      var order = const ['chapters', 'aniskip'];
+      final repo = DriftLibraryRepository(db);
+      repo.loadActiveSkipSources = () async => order;
 
-      // AniSkip now has data, and the user has put it on top.
-      final aniskipNow = _FakeSkip(
-        'aniskip',
-        windows: const EpisodeSkips(
-          intro: SkipRange(
-            start: Duration(seconds: 5),
-            end: Duration(seconds: 95),
-          ),
+      expect((await repo.episodesFor(seriesId)).single.introSkip, isNotNull);
+
+      order = const ['aniskip']; // chapters unchecked
+      expect(
+        (await repo.episodesFor(seriesId)).single.introSkip?.start,
+        const Duration(seconds: 600),
+        reason: 'its stored answer is ignored while it is off',
+      );
+    });
+
+    test('each window takes the best source that HAS it', () async {
+      // The old write path stopped at the first source with any data, so an
+      // episode whose top source knew only the intro lost an outro a lower
+      // source could have supplied. Resolving per window fixes that.
+      final seriesId = await seed();
+      final repo = DriftLibraryRepository(db);
+      repo.loadActiveSkipSources = () async => const ['chapters', 'aniskip'];
+
+      final ep = (await repo.episodesFor(seriesId)).single;
+      expect(
+        ep.introSkip?.end,
+        const Duration(seconds: 90),
+        reason: 'chapters',
+      );
+      expect(
+        ep.outroSkip?.start,
+        const Duration(seconds: 1300),
+        reason: 'only aniskip has an outro — it is no longer lost',
+      );
+    });
+
+    test('a LEGACY answer is a last resort and never corroborates', () async {
+      // What a v18 row migrates to when its provenance was never recorded.
+      final seriesId = await seed();
+      await db.upsertSkipAnswer(
+        SkipSourceAnswerRow(
+          seriesId: seriesId,
+          episode: 1,
+          source: kLegacySource,
+          introStartMs: 0,
+          introEndMs: 90000,
+          askedAtMs: 0,
         ),
       );
-      await sync(
-        [chapters, aniskipNow],
-        order: const [
-          SourcePreference(token: 'aniskip'),
-          SourcePreference(token: 'chapters'),
-        ],
-      ).refreshMetadata();
+      final repo = DriftLibraryRepository(db);
+      repo.loadCorroborateSkips = () async => true;
 
-      final row = (await db.allSkipRows()).single;
-      expect(row.source, 'aniskip');
+      // With NO known source enabled, the legacy window still shows.
+      repo.loadActiveSkipSources = () async => const [];
+      var ep = (await repo.episodesFor(seriesId)).single;
+      expect(ep.introSkip?.end, const Duration(seconds: 90));
       expect(
-        row.introStartMs,
-        5000,
-        reason: 'the new top source supplies the times',
+        ep.introConfidence,
+        SkipConfidence.single,
+        reason: 'unknown provenance cannot corroborate anything',
       );
-    });
 
-    test('switching a source OFF re-resolves the rows it wrote', () async {
-      final chapters = _FakeSkip('chapters', windows: _op());
-      final aniskip = _FakeSkip(
-        'aniskip',
-        windows: const EpisodeSkips(
-          intro: SkipRange(
-            start: Duration(seconds: 5),
-            end: Duration(seconds: 95),
-          ),
-        ),
-      );
-      await sync([chapters, aniskip]).sync([dir.path]);
-      expect((await db.allSkipRows()).single.source, 'chapters');
-
-      await sync(
-        [chapters, aniskip],
-        order: const [
-          SourcePreference(token: 'chapters', enabled: false),
-          SourcePreference(token: 'aniskip'),
-        ],
-      ).refreshMetadata();
-
-      expect(
-        (await db.allSkipRows()).single.source,
-        'aniskip',
-        reason: 'a disabled source must not keep supplying the times it wrote',
-      );
-    });
-
-    test('turning CROSS-CHECKING on re-judges existing rows', () async {
-      // The one the user actually hit: 157 rows, every intro_confidence 0,
-      // because corroboration could only ever reach episodes that gained
-      // their FIRST row after it was switched on.
-      final chapters = _FakeSkip('chapters', windows: _op());
-      final aniskip = _FakeSkip('aniskip', windows: _op());
-      await sync([chapters, aniskip]).sync([dir.path]);
-      expect((await db.allSkipRows()).single.introConfidence, 0);
-      expect(aniskip.calls, 0, reason: 'cheap path stopped at chapters');
-
-      await sync([chapters, aniskip], corroborate: true).refreshMetadata();
-
-      final row = (await db.allSkipRows()).single;
-      expect(row.introConfidence, 1, reason: 'now corroborated');
-      expect(row.source, 'chapters', reason: 'top source still supplies times');
-    });
-
-    test(
-      'a pre-v18 row with no recorded inputs is re-asked EXACTLY once',
-      () async {
-        // The 140 rows on the reference library that predate the provenance
-        // column: unknown inputs, so re-resolve them once — and then leave them
-        // alone, rather than re-asking every refresh forever.
-        await sync([
-          _FakeSkip('aniskip'),
-        ]).sync([dir.path]); // identify the file
-        await db.upsertSkipSegment(
-          SkipSegmentRow(
-            seriesId: 1,
-            episode: 1,
-            introStartMs: 0,
-            introEndMs: 89000,
-            source: '',
-            introConfidence: 0,
-            outroConfidence: 0,
-            resolvedKey: '', // what a migrated v17 row looks like
-          ),
-        );
-
-        final aniskip = _FakeSkip('aniskip', windows: _op());
-        await sync([aniskip]).refreshMetadata();
-        expect(
-          aniskip.calls,
-          1,
-          reason: 'unknown provenance -> re-resolve once',
-        );
-        expect((await db.allSkipRows()).single.source, 'aniskip');
-
-        await sync([aniskip]).refreshMetadata();
-        expect(aniskip.calls, 1, reason: 'and then it is settled');
-      },
-    );
-
-    test('when nobody answers, the existing row is LEFT ALONE', () async {
-      // Degrade toward keeping data. A source being down must not blank a
-      // window the user has been using, and the row stays unstamped so the
-      // next refresh tries again — the same retry an episode with no row at
-      // all has always had.
-      final chapters = _FakeSkip('chapters', windows: _op());
-      await sync([chapters]).sync([dir.path]);
-      expect((await db.allSkipRows()).single.introEndMs, 90000);
-
-      final down = _FakeSkip('aniskip', failure: MetadataFailure.service);
-      await sync(
-        [down],
-        order: const [SourcePreference(token: 'aniskip')],
-      ).refreshMetadata();
-
-      final row = (await db.allSkipRows()).single;
-      expect(row.introEndMs, 90000, reason: 'not blanked, not deleted');
-      expect(row.source, 'chapters');
-      // Still carries the key the SCAN stamped, which is the point: it does
-      // not match the inputs in force now, so the next refresh tries again.
-      expect(
-        row.resolvedKey,
-        isNot(skipResolutionKey(const ['aniskip'], corroborate: false)),
-        reason: 'stale key -> retried next time',
-      );
-    });
-  });
-
-  group('the resolution key', () {
-    test(
-      'order is part of it — the same sources ranked differently differ',
-      () {
-        expect(
-          skipResolutionKey(['aniskip', 'chapters'], corroborate: false),
-          isNot(skipResolutionKey(['chapters', 'aniskip'], corroborate: false)),
-        );
-      },
-    );
-
-    test('cross-checking is part of it', () {
-      expect(
-        skipResolutionKey(['aniskip'], corroborate: true),
-        isNot(skipResolutionKey(['aniskip'], corroborate: false)),
-      );
-    });
-
-    test('and it is stable for identical inputs', () {
-      expect(
-        skipResolutionKey(['aniskip', 'chapters'], corroborate: true),
-        skipResolutionKey(['aniskip', 'chapters'], corroborate: true),
-      );
-    });
-
-    test(
-      'the RULE is an input too — a rule change invalidates stored keys',
-      () {
-        // Without this, changing how agreement is judged would leave every
-        // existing row carrying a verdict computed under the old rule, and
-        // nothing would ever re-ask them. Asserts the shape rather than the
-        // number, so bumping the generation does not break this test.
-        final key = skipResolutionKey(const ['aniskip'], corroborate: true);
-        expect(
-          key.split('|').length,
-          3,
-          reason: 'sources | cross-checking | rule generation',
-        );
-        expect(key.split('|').last, matches(RegExp(r'^r\d+$')));
-      },
-    );
-
-    test('a row written before the key existed never matches', () {
-      // '' is the v18 default and MEANS "unknown inputs", so it has to differ
-      // from every real key — including the one for an empty source list.
-      expect(skipResolutionKey(const [], corroborate: false), isNot(''));
+      // With a known source enabled, the legacy answer steps aside entirely —
+      // including as a corroborating voice for the chapters window it matches.
+      repo.loadActiveSkipSources = () async => const ['chapters'];
+      ep = (await repo.episodesFor(seriesId)).single;
+      expect(ep.introSkip?.end, const Duration(seconds: 90));
+      expect(ep.introConfidence, SkipConfidence.single);
     });
   });
 }

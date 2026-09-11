@@ -150,7 +150,12 @@ void main() {
       await buildSync(withCrossMap: false).sync([dir.path]);
 
       expect(skipRequests, isEmpty, reason: 'no MAL id -> nothing to ask for');
-      expect(await db.allSkipRows(), isEmpty);
+      // AniSkip IS asked and records "I have nothing" (a row of nulls) so it
+      // is never asked again. What must be absent is a WINDOW, not a row.
+      expect(
+        (await db.allSkipAnswers()).where((a) => a.introStartMs != null),
+        isEmpty,
+      );
     },
   );
 
@@ -162,7 +167,7 @@ void main() {
       contains('/60285/'),
       reason: 'AniSkip must be asked using the id the cross-map supplied',
     );
-    final rows = await db.allSkipRows();
+    final rows = await db.allSkipAnswers();
     expect(rows.single.seriesId, 500);
     expect(rows.single.introEndMs, 90000);
   });
@@ -186,7 +191,7 @@ void main() {
     // nothing and backfilled no skips even for shows whose MAL id was known.
     seriesIdMal = {'sakamoto': 12345};
     await buildSync(withCrossMap: false).sync([dir.path]);
-    await db.customStatement('DELETE FROM skip_segments');
+    await db.customStatement('DELETE FROM skip_source_answers');
     skipRequests.clear();
 
     final offline = LibrarySync(
@@ -224,7 +229,10 @@ void main() {
   test('refreshMetadata backfills skips offline, from cache + map', () async {
     // Populate while AniList is healthy but idMal-less, and with no skip data.
     await buildSync(withCrossMap: false).sync([dir.path]);
-    expect(await db.allSkipRows(), isEmpty);
+    expect(
+      (await db.allSkipAnswers()).where((a) => a.introStartMs != null),
+      isEmpty,
+    );
     skipRequests.clear();
 
     // Now AniList is entirely unreachable. The refresh must STILL resolve a MAL

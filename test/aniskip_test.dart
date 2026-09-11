@@ -276,7 +276,7 @@ void main() {
       // The MAL id was backfilled — into series_external_ids now.
       expect((await db.externalIdsBySeriesId())[1]?.mal, 999);
       // Skip data now cached for the matched episode.
-      expect(await db.skipSegmentFor(1, 3), isNotNull);
+      expect(await db.skipAnswersFor(1, 3), isNotEmpty);
       // User data untouched.
       expect((await db.watchStateFor(1, 3))!.resumePositionMs, 5000);
       expect((await db.allOverrideRows()).length, 1);
