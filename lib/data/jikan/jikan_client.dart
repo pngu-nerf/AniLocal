@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../request_throttle.dart';
+
 import '../../domain/models/external_ids.dart';
 import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/series.dart';
@@ -40,7 +42,9 @@ class JikanClient {
   JikanClient({http.Client? httpClient, Uri? baseUrl, Duration? minInterval})
     : _http = httpClient ?? http.Client(),
       _base = baseUrl ?? Uri.parse('https://api.jikan.moe/v4'),
-      _minInterval = minInterval ?? const Duration(milliseconds: 350);
+      _throttler = RequestThrottle(
+        minInterval ?? const Duration(milliseconds: 350),
+      );
 
   final http.Client _http;
   final Uri _base;
@@ -48,9 +52,8 @@ class JikanClient {
   /// Jikan documents 3 requests/second. Requests are spaced by at least this
   /// much so a scan can't trip the limiter and turn a working source into a
   /// failing one. Injectable so tests don't sleep.
-  final Duration _minInterval;
 
-  DateTime? _lastRequest;
+  final RequestThrottle _throttler;
 
   /// Ranked-candidate search. Returns `[]` for a genuine no-match.
   Future<List<Series>> searchCandidates(
@@ -189,16 +192,7 @@ class JikanClient {
   }
 
   /// Space requests out so a scan can't trip Jikan's 3/second limiter.
-  Future<void> _throttle() async {
-    final last = _lastRequest;
-    if (last != null) {
-      final since = DateTime.now().difference(last);
-      if (since < _minInterval) {
-        await Future<void>.delayed(_minInterval - since);
-      }
-    }
-    _lastRequest = DateTime.now();
-  }
+  Future<void> _throttle() => _throttler.wait();
 
   /// Jikan's error envelope, or null when the body isn't one.
   static String? _errorText(String body) {

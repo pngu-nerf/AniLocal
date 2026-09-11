@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../request_throttle.dart';
+
 import '../../domain/models/external_ids.dart';
 import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/series.dart';
@@ -41,7 +43,9 @@ class MalClient {
     Duration? minInterval,
   }) : _http = httpClient ?? http.Client(),
        _base = baseUrl ?? Uri.parse('https://api.myanimelist.net/v2'),
-       _minInterval = minInterval ?? const Duration(milliseconds: 1100);
+       _throttler = RequestThrottle(
+         minInterval ?? const Duration(milliseconds: 1100),
+       );
 
   final http.Client _http;
   final Uri _base;
@@ -54,9 +58,8 @@ class MalClient {
   /// nothing to back off from adaptively. ~1 req/s is the community's empirical
   /// guidance and the safest default; throttling shows up as a 403, which the
   /// docs list as "DoS detected".
-  final Duration _minInterval;
 
-  DateTime? _lastRequest;
+  final RequestThrottle _throttler;
 
   /// The fields MAL must be asked for explicitly — it returns only id, title
   /// and main_picture otherwise.
@@ -233,16 +236,7 @@ class MalClient {
     return classifyHttpFailure(status, carriesProviderError: code.isNotEmpty);
   }
 
-  Future<void> _throttle() async {
-    final last = _lastRequest;
-    if (last != null) {
-      final since = DateTime.now().difference(last);
-      if (since < _minInterval) {
-        await Future<void>.delayed(_minInterval - since);
-      }
-    }
-    _lastRequest = DateTime.now();
-  }
+  Future<void> _throttle() => _throttler.wait();
 
   static String? _errorMessage(String body) => _envelope(body)?['message'];
   static String? _errorCode(String body) => _envelope(body)?['error'];

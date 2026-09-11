@@ -148,7 +148,9 @@ class CrossMapStore {
 
     final Object? decoded;
     try {
-      decoded = jsonDecode(response.body);
+      // BYTES as UTF-8, never `.body` — same charset trap as every other
+      // client, and for a 5.8MB body the latin1 detour was a memory cost too.
+      decoded = jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
       return null;
     }

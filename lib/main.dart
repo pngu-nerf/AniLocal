@@ -1,6 +1,8 @@
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'data/timeout_client.dart';
 import 'data/anilist/anilist_client.dart';
 import 'data/aniskip/aniskip_client.dart';
 import 'data/cache/art_cache.dart';
@@ -91,7 +93,24 @@ void main() {
   final repository = DriftLibraryRepository(database, resolver: volumeResolver);
   // ONE cross-map instance: shared by the AniSkip id backfill and by Jikan's
   // MAL -> AniList enrichment, so the 5.8MB source is fetched and parsed once.
-  final crossMap = CrossMapStore(directory: derivedDataDirectory);
+  // ONE HTTP client for the whole app, and it is the one that times out.
+  // package:http has no default timeout, so a half-open socket to any of the
+  // six services used to hang a scan forever — before the outage guard could
+  // even run. Every client accepts an injected client precisely so that this
+  // can be decided once, here, rather than six times. Sharing it also means
+  // one connection pool and one owner, instead of seven independent clients
+  // (two of them for the same art directory) that nothing ever disposed.
+  final httpClient = TimeoutClient(http.Client());
+  // ONE art cache too — the scan and fix-match used to each build their own
+  // for the same directory.
+  final artCache = ArtCache(
+    directory: coverArtDirectory,
+    httpClient: httpClient,
+  );
+  final crossMap = CrossMapStore(
+    directory: derivedDataDirectory,
+    httpClient: httpClient,
+  );
   // ALL settings live behind one injected object (was ~20 threaded functions).
   // Adding a setting now touches SettingsRepository + its impl + the reader.
   // Built BEFORE the fill path because the matcher reads the user's metadata
@@ -114,17 +133,23 @@ void main() {
   // Built-in order; the user can reorder or disable any of them in
   // Settings > Metadata, and that order is read fresh on every lookup.
   final metadataProviders = <MetadataProvider>[
-    AniListMetadataProvider(AniListClient(), formatsIn: kEpisodicAnimeFormats),
+    AniListMetadataProvider(
+      AniListClient(httpClient: httpClient),
+      formatsIn: kEpisodicAnimeFormats,
+    ),
     // Keyless, and the only rich source still answering while AniList's API is
     // disabled. Slower, which the two-phase scan hides: placeholders paint from
     // phase 1 before any lookup runs.
-    KitsuMetadataProvider(KitsuClient()),
+    KitsuMetadataProvider(KitsuClient(httpClient: httpClient)),
     // MAL's data with no key — but through a volunteer-run proxy measured at
     // roughly 30% availability, so it is FALLBACK-ONLY and sorts last however
     // the user orders the list. The cross-map supplies the AniList id Jikan
     // doesn't publish, so its answers land on the same identities as everyone
     // else's.
-    JikanMetadataProvider(JikanClient(), crossMap: crossMap),
+    JikanMetadataProvider(
+      JikanClient(httpClient: httpClient),
+      crossMap: crossMap,
+    ),
     // MyAnimeList is BUILT AND TESTED but deliberately NOT SHIPPED — see
     // `docs/myanimelist-registration.md` for why, and for the registration flow
     // if it comes back. Flipping [kShipMyAnimeListSource] is the whole
@@ -132,7 +157,7 @@ void main() {
     // their tests all stay in the tree and keep running, so none of it rots.
     if (kShipMyAnimeListSource)
       MalMetadataProvider(
-        MalClient(loadClientId: () => malClientId()),
+        MalClient(httpClient: httpClient, loadClientId: () => malClientId()),
         loadClientId: malClientId,
       ),
   ];
@@ -163,7 +188,7 @@ void main() {
   // chapters window disagrees with AniSkip and is then never auto-skipped.
   final skipProviders = <SkipProvider>[
     const ChaptersSkipProvider(),
-    AniSkipSkipProvider(AniSkipClient()),
+    AniSkipSkipProvider(AniSkipClient(httpClient: httpClient)),
   ];
   // The READ path resolves skips now, so it needs the same ordered, enabled
   // source list the fill path uses — as TOKENS, because the repository must
@@ -190,7 +215,7 @@ void main() {
       loadOrder: settings.loadMetadataSourceOrder,
     ),
     cache: database,
-    art: ArtCache(directory: coverArtDirectory),
+    art: artCache,
     // ONE ordered skip-source list, mirroring the metadata one. Fetched at
     // scan time only; playback still reads skips from the cache and makes no
     // network call. Chapters, Anime Skip and fingerprinting append here.
@@ -204,7 +229,7 @@ void main() {
   // Fix-match: the ONLY writer of overrides (LibrarySync can't reach it).
   final fixMatch = FixMatchService(
     providers: metadataProviders,
-    art: ArtCache(directory: coverArtDirectory),
+    art: artCache,
     cache: database,
     loadOrder: settings.loadMetadataSourceOrder,
   );

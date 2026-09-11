@@ -88,7 +88,9 @@ class AniSkipClient {
 
     final Object? decoded;
     try {
-      decoded = jsonDecode(response.body);
+      // BYTES as UTF-8, never `.body`: with no charset in the content-type,
+      // package:http falls back to latin1 (the Kitsu mojibake trap).
+      decoded = jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException catch (e) {
       throw AniSkipException('Malformed AniSkip response: $e');
     }

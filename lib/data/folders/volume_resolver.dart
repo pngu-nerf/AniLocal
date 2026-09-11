@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 /// A volume's stable identity ([volumeId]) and where it is mounted RIGHT NOW
@@ -81,13 +82,25 @@ class DiskutilVolumeResolver implements VolumeResolver {
     return resolved;
   }
 
+  /// `diskutil info` against a wedged network volume can block for a long
+  /// time, and this runs on the READ path (every library load resolves each
+  /// folder). Bounded, so a stuck volume degrades to "missing" instead of
+  /// freezing the library screen.
+  static const Duration _diskutilTimeout = Duration(seconds: 10);
+
   Future<String?> _diskutilPlist(String arg) async {
     try {
-      final result = await Process.run(_diskutil, ['info', '-plist', arg]);
+      final result = await Process.run(_diskutil, [
+        'info',
+        '-plist',
+        arg,
+      ]).timeout(_diskutilTimeout);
       if (result.exitCode != 0) return null;
       return result.stdout as String;
     } on ProcessException {
       return null; // not macOS / diskutil missing -> caller falls back to null
+    } on TimeoutException {
+      return null; // volume wedged -> treated as missing, never a hang
     }
   }
 
