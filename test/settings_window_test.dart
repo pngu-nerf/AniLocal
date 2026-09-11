@@ -49,14 +49,16 @@ class _Recorder extends FakeSettings {
 SettingsDialogActions _actions({
   VoidCallback? onUnmatched,
   FakeSourcesRepository? sources,
-}) => SettingsDialogActions(
-  sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
-  onRefreshMetadata: () async =>
-      const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-  onRefreshed: () {},
-  loadUnmatchedCount: () async => 3,
-  onOpenUnmatched: onUnmatched ?? () {},
-);
+}) =>
+    SettingsActions(
+      sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
+      onRefreshMetadata: () async =>
+          const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+    ).forScreen(
+      onRefreshed: () {},
+      loadUnmatchedCount: () async => 3,
+      onOpenUnmatched: onUnmatched ?? () {},
+    );
 
 Future<_Recorder> _openSettings(
   WidgetTester tester, {

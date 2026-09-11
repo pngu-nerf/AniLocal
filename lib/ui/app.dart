@@ -19,6 +19,7 @@ import 'shell/header_scope.dart';
 import 'theme/xp_theme.dart';
 import 'tooltip_dismiss_observer.dart';
 import '../playback/playback_controller.dart';
+import 'settings/settings_actions.dart';
 import 'settings/sources_actions.dart';
 
 /// Dismisses tooltips on every root-navigator transition — the single guard that
@@ -184,14 +185,18 @@ class AniLocalApp extends StatelessWidget {
         settings: settings,
         playback: playback,
         onScan: onScan,
-        onRefreshMetadata: onRefreshMetadata,
-        sources: SourcesActions(
-          repository: repository,
-          onAddFolder: onAddFolder,
-          onOpenAccessSettings: onOpenAccessSettings,
+        // The ONE place the app-wide settings bundle is built; each screen's
+        // ⚙ completes it with its own hooks via `SettingsActions.forScreen`.
+        settingsActions: SettingsActions(
+          sources: SourcesActions(
+            repository: repository,
+            onAddFolder: onAddFolder,
+            onOpenAccessSettings: onOpenAccessSettings,
+          ),
+          metadataSources: metadataSources,
+          skipSources: skipSources,
+          onRefreshMetadata: onRefreshMetadata,
         ),
-        metadataSources: metadataSources,
-        skipSources: skipSources,
         accessIssues: accessIssues,
         missingFolders: missingFolders,
         missingFolderPaths: missingFolderPaths,

@@ -91,10 +91,13 @@ So agreement became `kSkipCorroborationMinOverlap`, intersection over union at 0
 also penalises a mismatched length rather than only a shifted window. The gap is wide enough
 that the number is not tuned.
 
-**A rule change is a stale-data event.** `skipResolutionKey` therefore carries a
-`_ruleGeneration`, so bumping the agreement rule re-resolves every row once. Without it a
-new rule would apply only to episodes scanned afterwards — the same trap v18 was built to
-close, one level up.
+**A rule change is a stale-data event — and v19 removed the category.** When this rule
+changed, v18's answer was a `_ruleGeneration` inside `skipResolutionKey`, so that bumping
+the rule re-resolved every stored verdict once. That obligation — remember to bump a counter
+whenever a rule changes, failing SILENTLY when forgotten — is exactly what v19 deleted:
+`skip_source_answers` stores what each source SAID, and `resolveEpisodeSkips` applies the
+current rule on every read. A rule change now reaches the whole library on the next read,
+with nothing to bump and nothing to invalidate. See the v19 ledger row.
 
 ### The nine, and why the opening is now the LATEST candidate — SETTLED
 

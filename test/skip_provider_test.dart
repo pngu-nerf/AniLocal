@@ -6,6 +6,7 @@ import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/folders/volume_resolver.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
@@ -63,6 +64,20 @@ class _FakeSkip implements SkipProvider {
     if (failure != null) throw SkipException('$token down', failure: failure!);
     return windows;
   }
+}
+
+/// A [VolumeResolver] a test configures directly: `mountById` says where a
+/// volume UUID is mounted RIGHT NOW (null = not mounted), so a test can move a
+/// library folder to a new mount name without diskutil.
+class _FakeVolumeResolver implements VolumeResolver {
+  final Map<String, String?> mountById = {};
+
+  @override
+  Future<VolumeInfo?> infoForPath(String path) async => null;
+
+  @override
+  Future<String?> mountPointForVolumeId(String volumeId) async =>
+      mountById[volumeId];
 }
 
 /// The answer a given source recorded for episode 1, or null if never asked.
@@ -197,6 +212,8 @@ void main() {
     Future<void> scanWith(
       List<SkipProvider> providers, {
       bool corroborate = false,
+      VolumeResolver? resolver,
+      List<String>? folders,
     }) async {
       final mock = MockClient((req) async {
         if (req.method == 'POST') return _anilistPage();
@@ -214,12 +231,15 @@ void main() {
           directory: () async => Directory('${dir.path}/.art')..createSync(),
         ),
         skipProviders: providers,
-      ).sync([dir.path]);
+        resolver: resolver,
+      ).sync(folders ?? [dir.path]);
     }
 
     Future<void> refreshWith(
       List<SkipProvider> providers, {
       bool corroborate = false,
+      VolumeResolver? resolver,
+      List<String>? folders,
       List<SourcePreference> order = const [],
     }) async {
       final mock = MockClient((req) async {
@@ -239,8 +259,65 @@ void main() {
         ),
         skipProviders: providers,
         loadSkipOrder: () async => order,
+        resolver: resolver,
       ).refreshMetadata();
     }
+
+    test(
+      'a folder whose volume REMOUNTED still hands sources the real file',
+      () async {
+        // The cache keys a file by its folder's STABLE identity (the path the
+        // folder was added under), and both fill paths used to build the skip
+        // lookup's file path from that identity. A removable volume that comes
+        // back under another `/Volumes` name therefore handed the local chapters
+        // source a dangling path — and, before `canAnswer` checked for the file,
+        // recorded "no chapters" for the whole drive. The lookup must carry the
+        // CURRENT mount.
+        final stored = dir.path; // the identity the folder was added under
+        final remounted = '${dir.path}-remounted';
+        await db.insertFolder(stored);
+        await scanWith([]);
+        await db.bindFolderVolume(stored, 'VOL-1', '');
+        await Directory(stored).rename(remounted);
+        addTearDown(() async {
+          // The group's tearDown deletes `dir`; put it back so that succeeds.
+          if (Directory(remounted).existsSync()) {
+            await Directory(remounted).rename(stored);
+          }
+        });
+        final resolver = _FakeVolumeResolver()..mountById['VOL-1'] = remounted;
+
+        // Refresh: the file is unchanged and was never asked about.
+        final seenOnRefresh = <SkipLookup>[];
+        await refreshWith([
+          _FakeSkip('chapters', onLookup: seenOnRefresh.add),
+        ], resolver: resolver);
+        expect(seenOnRefresh, hasLength(1));
+        expect(
+          seenOnRefresh.single.filePath,
+          '$remounted/Cowboy Bebop - 01.mkv',
+          reason: 'refresh builds the path from the CURRENT mount',
+        );
+        expect(File(seenOnRefresh.single.filePath!).existsSync(), isTrue);
+
+        // Scan: a file that arrives AFTER the remount is a delta under the
+        // stable folder identity, and its lookup must resolve the same way.
+        await File('$remounted/Cowboy Bebop - 02.mkv').writeAsString('xxxxx');
+        final seenOnScan = <SkipLookup>[];
+        await scanWith(
+          [_FakeSkip('aniskip', onLookup: seenOnScan.add)],
+          resolver: resolver,
+          folders: [stored],
+        );
+        final ep2 = seenOnScan.where((l) => l.episode == 2).toList();
+        expect(ep2, hasLength(1));
+        expect(
+          ep2.single.filePath,
+          '$remounted/Cowboy Bebop - 02.mkv',
+          reason: 'scan builds the path from the CURRENT mount',
+        );
+      },
+    );
 
     test('every source is asked, and what each SAID is recorded', () async {
       // Since v19 the fill path stores raw answers rather than a verdict, so

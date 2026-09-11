@@ -7,7 +7,6 @@ import '../domain/models/episode.dart';
 import '../domain/models/episode_list_row.dart';
 import '../domain/models/episode_slot.dart';
 import '../domain/models/episode_source.dart';
-import '../domain/models/refresh_summary.dart';
 import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
@@ -33,9 +32,7 @@ import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
-import 'settings/sources_actions.dart';
 import '../diagnostics/app_log.dart';
-import '../domain/models/source_descriptor.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -82,10 +79,7 @@ class SeriesDetailScreen extends StatefulWidget {
     required this.playback,
     required this.missing,
     required this.settings,
-    required this.onRefreshMetadata,
-    required this.sources,
-    this.metadataSources = const [],
-    this.skipSources = const [],
+    required this.settingsActions,
     // Shared header actions, so the detail header matches the home header.
     required this.onScan,
     required this.onUnmatched,
@@ -110,19 +104,11 @@ class SeriesDetailScreen extends StatefulWidget {
   /// shared settings dialog (opened identically from home + here).
   final SettingsRepository settings;
 
-  final Future<RefreshSummary> Function() onRefreshMetadata;
-
-  /// Sources (folders) dependencies, forwarded so this screen's settings window
-  /// carries the same Sources tab the home one does.
-  final SourcesActions sources;
-
-  /// The shipped metadata and skip sources, for the Settings window opened
-  /// from here. Without these the Metadata and Skip tabs rendered EMPTY from
-  /// the show page and the player — a shipped feature silently missing from
-  /// two of its three entry points, because this screen built its own
-  /// `SettingsDialogActions` and omitted them.
-  final List<SourceDescriptor> metadataSources;
-  final List<SourceDescriptor> skipSources;
+  /// The app-wide half of the Settings window, built ONCE in `AniLocalApp` and
+  /// forwarded here so the ⚙ on this page opens the SAME window as the home
+  /// header. This screen used to assemble its own bundle and left the source
+  /// lists empty — Settings › Metadata and › Skip were blank from the show page.
+  final SettingsActions settingsActions;
 
   /// Shared header actions (Sync / Unmatched), forwarded so the detail header
   /// is identical to the home header. [unmatchedCount] is a snapshot. Sources
@@ -306,11 +292,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     await showAppSettingsDialog(
       context,
       settings: widget.settings,
-      actions: SettingsDialogActions(
-        sources: widget.sources,
-        metadataSources: widget.metadataSources,
-        skipSources: widget.skipSources,
-        onRefreshMetadata: widget.onRefreshMetadata,
+      actions: widget.settingsActions.forScreen(
         onRefreshed: _reload,
         loadUnmatchedCount: () async =>
             (await widget.repository.unmatchedFiles()).length,

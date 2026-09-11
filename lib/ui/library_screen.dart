@@ -7,8 +7,6 @@ import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/picture_mode.dart';
 import '../domain/models/series.dart';
-import '../domain/models/source_descriptor.dart';
-import '../domain/models/refresh_summary.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
@@ -36,7 +34,6 @@ import '../playback/playback_controller.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
-import 'settings/sources_actions.dart';
 import 'package:flutter/services.dart';
 import '../diagnostics/app_log.dart';
 import '../domain/models/cache_errors.dart';
@@ -81,10 +78,7 @@ class LibraryScreen extends StatefulWidget {
     required this.showPreferences,
     required this.settings,
     required this.onScan,
-    required this.onRefreshMetadata,
-    required this.sources,
-    this.metadataSources = const [],
-    this.skipSources = const [],
+    required this.settingsActions,
     required this.accessIssues,
     required this.missingFolders,
     required this.missingFolderPaths,
@@ -117,21 +111,11 @@ class LibraryScreen extends StatefulWidget {
   /// wires it to a reload so the grid paints placeholders immediately.
   final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
 
-  /// Re-fetch metadata (ids + skip data) for cached series — no file scan, no
-  /// pruning, preserves overrides/watch-state. Returns counts for a snackbar.
-  final Future<RefreshSummary> Function() onRefreshMetadata;
-
-  /// Opens the native folder picker; reports whether a folder was added and the
-  /// denied TCC category label (if the folder's category access was refused).
-  /// Sources (folders) dependencies, as ONE object — used by this screen's
-  /// add-folder affordances and handed to the settings window's Sources tab.
-  final SourcesActions sources;
-
-  /// Metadata sources this build ships (descriptors), for Settings > Metadata.
-  final List<SourceDescriptor> metadataSources;
-
-  /// Skip sources this build ships (descriptors), for Settings > Skip.
-  final List<SourceDescriptor> skipSources;
+  /// The app-wide half of the Settings window — folder actions, the shipped
+  /// metadata and skip sources, refresh — built ONCE in `AniLocalApp`. This
+  /// screen's add-folder affordances and the scan summary's source names read
+  /// from it too, so the settings page and the snackbar can never disagree.
+  final SettingsActions settingsActions;
 
   /// Shared denied-state (category labels) — drives the banner; the add-dialog
   /// reads the same source via [onAddFolder]'s result.
@@ -399,13 +383,10 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     }
   }
 
-  /// The per-screen hooks the settings window needs, built in ONE place so the
-  /// header's Sources action and the ⚙ action cannot drift apart.
-  SettingsDialogActions _settingsActions() => SettingsDialogActions(
-    sources: widget.sources,
-    metadataSources: widget.metadataSources,
-    skipSources: widget.skipSources,
-    onRefreshMetadata: widget.onRefreshMetadata,
+  /// This screen's hooks for the settings window, completing the app-wide
+  /// bundle in ONE place so the header's Sources action and the ⚙ action
+  /// cannot drift apart.
+  SettingsDialogActions _settingsActions() => widget.settingsActions.forScreen(
     onRefreshed: _reload,
     loadUnmatchedCount: () async => _unmatchedCount,
     onOpenUnmatched: _openUnmatched,
@@ -464,13 +445,13 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   }
 
   Future<void> _addFolder() async {
-    final result = await widget.sources.onAddFolder();
+    final result = await widget.settingsActions.sources.onAddFolder();
     if (!mounted) return;
     if (result.deniedLabel != null) {
       await showAccessDeniedDialog(
         context,
         result.deniedLabel!,
-        widget.sources.onOpenAccessSettings,
+        widget.settingsActions.sources.onOpenAccessSettings,
       );
     }
     if (result.added && mounted) {
@@ -504,7 +485,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   /// shows, so the two can never call one source different things. Falls back
   /// to the raw token rather than inventing a name.
   String _sourceName(String token) {
-    for (final source in widget.metadataSources) {
+    for (final source in widget.settingsActions.metadataSources) {
       if (source.token == token) return source.displayName;
     }
     return token;
@@ -535,7 +516,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               ? const SizedBox.shrink()
               : AccessBanner(
                   labels: labels,
-                  onOpenSettings: widget.sources.onOpenAccessSettings,
+                  onOpenSettings:
+                      widget.settingsActions.sources.onOpenAccessSettings,
                   onRescan: _scanning ? () {} : _scan,
                 ),
         ),
@@ -683,15 +665,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                         missingRepo: widget.missing,
                         showPreferences: widget.showPreferences,
                         settings: widget.settings,
-                        onRefreshMetadata: widget.onRefreshMetadata,
                         nextEpisode: _upNext[series[i].seriesId],
                         downloaded: _downloadCounts[series[i].seriesId],
                         unavailable: unavailable,
                         onPlay: _play,
                         onReturn: _reload,
-                        sources: widget.sources,
-                        metadataSources: widget.metadataSources,
-                        skipSources: widget.skipSources,
+                        settingsActions: widget.settingsActions,
                         onScan: _scan,
                         onUnmatched: _openUnmatched,
                         unmatchedCount: _unmatchedCount,
@@ -865,16 +844,13 @@ class _SeriesCard extends StatefulWidget {
     required this.missingRepo,
     required this.showPreferences,
     required this.settings,
-    required this.onRefreshMetadata,
     required this.nextEpisode,
     required this.downloaded,
     required this.unavailable,
     required this.onPlay,
     required this.onReturn,
     // Header actions forwarded to the detail screen so its header matches home.
-    required this.sources,
-    required this.metadataSources,
-    required this.skipSources,
+    required this.settingsActions,
     required this.onScan,
     required this.onUnmatched,
     required this.unmatchedCount,
@@ -892,7 +868,6 @@ class _SeriesCard extends StatefulWidget {
   final MissingEpisodesRepository missingRepo;
   final ShowPreferencesRepository showPreferences;
   final SettingsRepository settings;
-  final Future<RefreshSummary> Function() onRefreshMetadata;
 
   /// The next episode to watch for this series (relations-aware), or null when
   /// the series isn't started / has nothing next. Drives the "Next" button.
@@ -911,10 +886,8 @@ class _SeriesCard extends StatefulWidget {
   final Future<void> Function(Episode, Series) onPlay;
   final VoidCallback onReturn;
 
-  /// Forwarded so the detail screen's settings window has the Sources tab too.
-  final SourcesActions sources;
-  final List<SourceDescriptor> metadataSources;
-  final List<SourceDescriptor> skipSources;
+  /// Forwarded so the detail screen's ⚙ opens the SAME settings window.
+  final SettingsActions settingsActions;
 
   /// Header actions forwarded to the detail screen (Sync / Unmatched) so its
   /// header matches the home header. [unmatchedCount] is a snapshot.
@@ -956,10 +929,7 @@ class _SeriesCardState extends State<_SeriesCard> {
           playback: widget.playback,
           missing: widget.missingRepo,
           settings: widget.settings,
-          onRefreshMetadata: widget.onRefreshMetadata,
-          sources: widget.sources,
-          metadataSources: widget.metadataSources,
-          skipSources: widget.skipSources,
+          settingsActions: widget.settingsActions,
           onScan: widget.onScan,
           onUnmatched: widget.onUnmatched,
           unmatchedCount: widget.unmatchedCount,

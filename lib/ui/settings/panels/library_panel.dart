@@ -59,7 +59,7 @@ class LibraryPanel extends StatelessWidget {
           ),
           SettingRow(
             label: 'Refresh metadata',
-            subtitle: 'Re-fetch idMal + skip data',
+            subtitle: 'Re-fetch ids and skip data',
             info:
                 'Re-fetches metadata for series already in the cache, by id, '
                 'and fills in any missing intro/outro skip data.\n\n'

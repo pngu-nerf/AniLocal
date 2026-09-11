@@ -26,6 +26,7 @@ import 'support/fake_settings.dart';
 import 'support/shell_harness.dart';
 import 'package:anilocal/ui/settings/sources_actions.dart';
 import 'package:anilocal/domain/models/source_descriptor.dart';
+import 'package:anilocal/ui/settings/settings_actions.dart';
 
 /// The detail page's FIRST FRAME.
 ///
@@ -178,12 +179,14 @@ Widget _app(_Repo repo) {
       playback: PlaybackController(resolver: repo),
       missing: repo,
       settings: const FakeSettings(),
-      onRefreshMetadata: () async =>
-          const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-      sources: SourcesActions(
-        repository: repo,
-        onAddFolder: () async => (added: false, deniedLabel: null),
-        onOpenAccessSettings: () async => false,
+      settingsActions: SettingsActions(
+        sources: SourcesActions(
+          repository: repo,
+          onAddFolder: () async => (added: false, deniedLabel: null),
+          onOpenAccessSettings: () async => false,
+        ),
+        onRefreshMetadata: () async =>
+            const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
       ),
       onScan: () async {},
       onUnmatched: () {},
@@ -341,18 +344,23 @@ void _settingsFromShowPageTests() {
           playback: PlaybackController(resolver: repo),
           missing: repo,
           settings: const FakeSettings(),
-          onRefreshMetadata: () async =>
-              const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-          metadataSources: const [
-            SourceDescriptor(token: 'kitsu', displayName: 'Kitsu Probe'),
-          ],
-          skipSources: const [
-            SourceDescriptor(token: 'chapters', displayName: 'Chapters Probe'),
-          ],
-          sources: SourcesActions(
-            repository: repo,
-            onAddFolder: () async => (added: false, deniedLabel: null),
-            onOpenAccessSettings: () async => false,
+          settingsActions: SettingsActions(
+            sources: SourcesActions(
+              repository: repo,
+              onAddFolder: () async => (added: false, deniedLabel: null),
+              onOpenAccessSettings: () async => false,
+            ),
+            metadataSources: const [
+              SourceDescriptor(token: 'kitsu', displayName: 'Kitsu Probe'),
+            ],
+            skipSources: const [
+              SourceDescriptor(
+                token: 'chapters',
+                displayName: 'Chapters Probe',
+              ),
+            ],
+            onRefreshMetadata: () async =>
+                const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
           ),
           onScan: () async {},
           onUnmatched: () {},

@@ -11,13 +11,15 @@ import 'support/fake_sources.dart';
 /// "Refresh metadata" swallowed an AniList outage and reported
 /// "Refreshed 0 series · 0 skip sets fetched" — a success message for a run
 /// that did nothing, which sends the user hunting for a local fault.
-SettingsDialogActions _actions(RefreshSummary result) => SettingsDialogActions(
-  sources: fakeSourcesActions(FakeSourcesRepository()),
-  onRefreshMetadata: () async => result,
-  onRefreshed: () {},
-  loadUnmatchedCount: () async => 0,
-  onOpenUnmatched: () {},
-);
+SettingsDialogActions _actions(RefreshSummary result) =>
+    SettingsActions(
+      sources: fakeSourcesActions(FakeSourcesRepository()),
+      onRefreshMetadata: () async => result,
+    ).forScreen(
+      onRefreshed: () {},
+      loadUnmatchedCount: () async => 0,
+      onOpenUnmatched: () {},
+    );
 
 /// Opens a dialog and fires the real `refreshMetadata` action from inside it
 /// (it pops its own route, so it needs a genuine dialog context).

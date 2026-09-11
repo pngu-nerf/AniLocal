@@ -27,14 +27,14 @@ import '../diagnostics/app_log.dart';
 /// Invariants:
 /// - Incremental: a file unchanged by (path, size, mtime) is skipped entirely.
 /// - Never refetch unchanged: a delta whose title already maps to a cached
-///   series reuses it (no AniList call).
+///   series reuses it (no metadata lookup).
 /// - Immediate population: a newly-seen, titled file is written as a PENDING
 ///   placeholder up front (phase 1, no network) and surfaced via [onDiscovered]
 ///   BEFORE identification runs — so the library shows it (named, blank art)
 ///   instantly, even offline. Identification (phase 2) then upgrades the row
 ///   in place: a match sets its seriesId; a genuine no-match flips it to
 ///   confirmed-unmatched; a transient lookup error LEAVES it pending (retried
-///   next scan). A failed/absent AniList never drops a file — at worst it
+///   next scan). A failed/absent metadata source never drops a file — at worst it
 ///   stays a named placeholder.
 class LibrarySync {
   LibrarySync({
@@ -64,8 +64,8 @@ class LibrarySync {
   /// without a restart. Null = use [skipProviders] as given.
   final Future<List<SourcePreference>> Function()? loadSkipOrder;
 
-  /// Cross-database id map, used ONLY to fill a MAL id AniList didn't give us
-  /// (so AniSkip keeps working when AniList is unreachable). Optional: null —
+  /// Cross-database id map, used ONLY to fill a MAL id the metadata source did
+  /// not supply (so AniSkip keeps working when it is unreachable). Optional: null —
   /// or a map that has never been fetched — leaves behaviour exactly as it was.
   final CrossMapStore? crossMap;
 
@@ -76,7 +76,7 @@ class LibrarySync {
   /// [onDiscovered] fires once, right after phase 1 has written the newly-seen
   /// files as pending placeholders (before any network). The UI wires it to a
   /// reload so the library paints placeholders immediately; identification then
-  /// upgrades them on the same scan when AniList is reachable.
+  /// upgrades them on the same scan when a metadata source is reachable.
   Future<SyncSummary> sync(
     List<String> folderPaths, {
     void Function()? onDiscovered,
@@ -150,7 +150,7 @@ class LibrarySync {
     };
 
     // Map a known title -> its cached series, so a delta of an already-known
-    // series never hits AniList.
+    // series never hits the network.
     final knownTitleToId = <String, int>{};
     for (final r in cachedFiles.values) {
       if (r.seriesId != null && r.parsedTitle.isNotEmpty) {
@@ -423,7 +423,7 @@ class LibrarySync {
       );
     }
 
-    // For every title that resolved to a real AniList id this scan, carry any
+    // For every title that resolved to a real series id this scan, carry any
     // watch progress recorded while it was a pending placeholder over to the
     // real id (rekeyed atomically in applySync). The placeholder id is the same
     // pure function the read path uses, so the keys line up; this is a no-op
@@ -472,7 +472,7 @@ class LibrarySync {
         (o.fileSize, o.modifiedAtMs): o,
     };
 
-    // Every AniList entry the library references (auto-matched files + overrides).
+    // Every series the library references (auto-matched files + overrides).
     final ids = <int>{
       for (final f in files)
         if (f.seriesId != null) f.seriesId!,

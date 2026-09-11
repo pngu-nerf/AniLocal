@@ -6,13 +6,61 @@ import '../metadata_failure_message.dart';
 import 'sources_actions.dart';
 import '../../diagnostics/app_log.dart';
 
-/// The few NON-setting, per-screen hooks the Settings window needs (the settings
-/// themselves come from the injected `SettingsRepository`). These genuinely
-/// differ per entry point — "reload THIS screen", this screen's unmatched count,
-/// where "open sources/unmatched" navigate — so they're passed in, while every
-/// actual setting is single-source.
+/// The app-wide half of what the Settings window needs, built ONCE at the
+/// composition root and handed down as a single object. Which sources this
+/// build ships and how metadata is refreshed do not depend on which screen
+/// opened the window, so no screen assembles them — the bundle a screen hands
+/// the window is minted in exactly one place, [forScreen], and the screen
+/// supplies only the hooks that genuinely differ per entry point.
+///
+/// Structural rather than a convention: the show page used to build its own
+/// [SettingsDialogActions] and left the two source lists at their defaults, so
+/// Settings › Metadata and › Skip rendered EMPTY from two of the window's three
+/// doors. The private constructor below makes that impossible to repeat.
+class SettingsActions {
+  const SettingsActions({
+    required this.sources,
+    this.metadataSources = const [],
+    this.skipSources = const [],
+    required this.onRefreshMetadata,
+  });
+
+  /// Everything the Sources tab needs. One object rather than three more
+  /// threaded callbacks — see [SourcesActions].
+  final SourcesActions sources;
+
+  /// Every metadata source this build ships, in built-in order. Descriptors,
+  /// not providers — the UI never sees a `MetadataProvider` (seam #1).
+  final List<SourceDescriptor> metadataSources;
+
+  /// Every skip source this build ships, in built-in order.
+  final List<SourceDescriptor> skipSources;
+
+  /// Re-fetch metadata (ids + skip data) for cached series. Returns counts.
+  final Future<RefreshSummary> Function() onRefreshMetadata;
+
+  /// Complete the bundle with this screen's own hooks.
+  SettingsDialogActions forScreen({
+    required VoidCallback onRefreshed,
+    required Future<int> Function() loadUnmatchedCount,
+    required VoidCallback onOpenUnmatched,
+  }) => SettingsDialogActions._(
+    sources: sources,
+    metadataSources: metadataSources,
+    skipSources: skipSources,
+    onRefreshMetadata: onRefreshMetadata,
+    onRefreshed: onRefreshed,
+    loadUnmatchedCount: loadUnmatchedCount,
+    onOpenUnmatched: onOpenUnmatched,
+  );
+}
+
+/// What the Settings window consumes: the app-wide [SettingsActions] plus the
+/// few per-screen hooks — "reload THIS screen", this screen's unmatched count,
+/// where "open unmatched" navigates. Only [SettingsActions.forScreen] builds
+/// one. Every actual setting comes from the injected `SettingsRepository`.
 class SettingsDialogActions {
-  const SettingsDialogActions({
+  const SettingsDialogActions._({
     required this.sources,
     this.metadataSources = const [],
     this.skipSources = const [],

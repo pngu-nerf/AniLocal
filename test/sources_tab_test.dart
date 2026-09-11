@@ -44,14 +44,18 @@ Future<_Closed> _open(
             onPressed: () async => closed.outcome = await showAppSettingsDialog(
               context,
               settings: const FakeSettings(),
-              actions: SettingsDialogActions(
-                sources: fakeSourcesActions(repo, onAddFolder: onAddFolder),
-                onRefreshMetadata: () async =>
-                    const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-                onRefreshed: () {},
-                loadUnmatchedCount: () async => 0,
-                onOpenUnmatched: () {},
-              ),
+              actions:
+                  SettingsActions(
+                    sources: fakeSourcesActions(repo, onAddFolder: onAddFolder),
+                    onRefreshMetadata: () async => const RefreshSummary(
+                      seriesRefreshed: 0,
+                      skipsFetched: 0,
+                    ),
+                  ).forScreen(
+                    onRefreshed: () {},
+                    loadUnmatchedCount: () async => 0,
+                    onOpenUnmatched: () {},
+                  ),
               initialCategory: sourcesCategoryId,
             ),
             child: const Text('open'),
