@@ -13,6 +13,17 @@ import '../domain/repositories/fix_match_repository.dart';
 ///
 /// Overrides are keyed by the file's content fingerprint (size + mtime), so
 /// they follow a moved/renamed file with no extra bookkeeping.
+/// A candidate that cannot be given a local identity — it carries no external
+/// id at all. No shipped provider produces one; this exists so the only
+/// alternative, writing the provider's provisional id into the AniList-seeded
+/// band as if it were ours, can never happen silently.
+class FixMatchException implements Exception {
+  const FixMatchException(this.message);
+  final String message;
+  @override
+  String toString() => 'FixMatchException: $message';
+}
+
 class FixMatchService implements FixMatchRepository {
   FixMatchService({
     required this.providers,
@@ -80,12 +91,12 @@ class FixMatchService implements FixMatchRepository {
     if (file == null) {
       throw StateError('File not in cache (scan first): $filePath');
     }
-    await _cacheSeries(chosen);
+    final seriesId = await _cacheSeries(chosen);
     await cache.upsertOverride(
       MatchOverrideRow(
         fileSize: stat.size,
         modifiedAtMs: modifiedAtMs,
-        seriesId: chosen.seriesId,
+        seriesId: seriesId,
         anchoredEpisode: anchoredEpisode ?? file.episodeNumber,
         continuousOffset: continuousOffset,
         displayContinuous: displayContinuous,
@@ -108,7 +119,7 @@ class FixMatchService implements FixMatchRepository {
     int continuousOffset = 0,
     bool displayContinuous = false,
   }) async {
-    await _cacheSeries(chosen);
+    final seriesId = await _cacheSeries(chosen);
     for (var i = 0; i < filePaths.length; i++) {
       final stat = await _statOrNull(filePaths[i]);
       if (stat == null) continue;
@@ -116,7 +127,7 @@ class FixMatchService implements FixMatchRepository {
         MatchOverrideRow(
           fileSize: stat.size,
           modifiedAtMs: stat.modified.millisecondsSinceEpoch,
-          seriesId: chosen.seriesId,
+          seriesId: seriesId,
           anchoredEpisode: anchorStart + i,
           continuousOffset: continuousOffset,
           displayContinuous: displayContinuous,
@@ -139,18 +150,34 @@ class FixMatchService implements FixMatchRepository {
     return File(path).stat();
   }
 
-  Future<void> _cacheSeries(Series s) async {
-    // Learn every id the chosen entry carries. Without this a fix-matched show
-    // got no MAL id and therefore no AniSkip data until some later refresh
-    // happened to backfill it — the auto-matched path recorded ids, this one
-    // silently did not.
-    if (s.externalIds.isNotEmpty) {
-      await cache.ensureSeriesId(s.externalIds);
+  /// Cache [s] under ITS LOCAL IDENTITY and return that id.
+  ///
+  /// `chosen.seriesId` is the provider's PROVISIONAL id — every provider stamps
+  /// its own (Kitsu's, Jikan's, MAL's are all different numbers for the same
+  /// show) and the scan path has always resolved it through `ensureSeriesId`
+  /// before writing anything. This path used to call `ensureSeriesId` for its
+  /// side effect and then write the provisional id anyway. Three things went
+  /// wrong at once: a Kitsu id landed in the AniList-seeded band and was
+  /// published as an AniList id; a show that already had a local identity got
+  /// a SECOND series_cache row with its watch state stranded on the first; and
+  /// the resulting external-id collision could surface as a raw UNIQUE
+  /// constraint error on screen. Resolving first and writing the answer is the
+  /// same rule the scan uses — one identity rule, not two.
+  Future<int> _cacheSeries(Series s) async {
+    if (s.externalIds.isEmpty) {
+      throw const FixMatchException(
+        'This entry carries no external id, so it cannot be given a local '
+        'identity.',
+      );
     }
-    final artPath = await art.ensureCover(s.seriesId, s.coverImageRef);
+    // ensureSeriesId recognises a show another provider already identified
+    // (matching on ANY id the answer carries) and mints only when nothing
+    // matches — and never re-points an id that belongs to a different series.
+    final seriesId = await cache.ensureSeriesId(s.externalIds);
+    final artPath = await art.ensureCover(seriesId, s.coverImageRef);
     await cache.upsertSeries(
       CachedSeriesRow(
-        seriesId: s.seriesId,
+        seriesId: seriesId,
         romaji: s.titles.romaji,
         english: s.titles.english,
         nativeTitle: s.titles.native,
@@ -160,5 +187,6 @@ class FixMatchService implements FixMatchRepository {
         coverImagePath: artPath,
       ),
     );
+    return seriesId;
   }
 }

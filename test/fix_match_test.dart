@@ -8,10 +8,13 @@ import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/series_identity.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
+import 'package:anilocal/domain/models/external_ids.dart';
 import 'package:anilocal/domain/models/series.dart';
+import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/sync/fix_match_service.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
@@ -252,5 +255,156 @@ void main() {
     final eps = await repo.episodesFor(300);
     expect(eps.single.number, 100, reason: 'auto-match just counts up');
     expect(await db.allOverrideRows(), isEmpty, reason: 'no split needed');
+  });
+
+  group('fix-match resolves identity the same way the scan does', () {
+    // Every provider stamps its OWN provisional id on a candidate; the scan has
+    // always run that through ensureSeriesId before writing. Fix-match used to
+    // call ensureSeriesId for its side effect and then write the provisional id
+    // anyway — so a Kitsu id landed in the AniList-seeded band, a show with an
+    // existing identity forked, and watch state stranded on the old row. The
+    // old tests never saw it because they only used AniList candidates, whose
+    // provisional id and local id happen to coincide.
+
+    /// A candidate as Kitsu would hand it over: its own id, no AniList id.
+    Series kitsuCandidate(int kitsuId, {int? mal}) => Series(
+      seriesId: kitsuId, // provisional — Kitsu's number, not ours
+      externalIds: ExternalIds(kitsu: kitsuId, mal: mal),
+      titles: const Titles(romaji: 'Kitsu Only Show'),
+      coverImageRef: 'http://a/k$kitsuId.jpg',
+    );
+
+    test(
+      'a Kitsu-only candidate gets a MINTED id, never Kitsu\'s number',
+      () async {
+        final f = await touch('Kitsu Only Show - 01.mkv', 1300);
+        await sync.sync([dir.path]); // unmatched: no provider knows this title
+
+        await fixMatch.assignFile(
+          filePath: f.path,
+          chosen: kitsuCandidate(5555),
+          anchoredEpisode: 1,
+        );
+
+        final override = (await db.allOverrideRows()).single;
+        expect(
+          isMintedSeriesId(override.seriesId),
+          isTrue,
+          reason: 'no AniList id -> our own minted band, not Kitsu\'s 5555',
+        );
+        expect(override.seriesId, isNot(5555));
+        final ids = await db.externalIdsBySeriesId();
+        expect(ids[override.seriesId]?.kitsu, 5555, reason: 'provenance kept');
+        expect(
+          ids[override.seriesId]?.anilist,
+          isNull,
+          reason: 'Kitsu\'s number must not be published as an AniList id',
+        );
+        // And the cached series row + its cover are keyed by the SAME id, so the
+        // fix-matched show renders under one identity, not two.
+        final cached = (await db.allSeriesRows())
+            .where((r) => r.romaji == 'Kitsu Only Show')
+            .single;
+        expect(cached.seriesId, override.seriesId);
+        expect(cached.coverImagePath, contains('${override.seriesId}'));
+      },
+    );
+
+    test('a show that ALREADY has a local identity is not forked', () async {
+      // Identified once via a Kitsu answer during a scan (minting M, watch
+      // state recorded), then fix-matched via a candidate carrying the same MAL
+      // id. Must resolve to M — not create a second series_cache row.
+      final m = await db.ensureSeriesId(
+        const ExternalIds(kitsu: 777, mal: 4224),
+      );
+      expect(isMintedSeriesId(m), isTrue);
+      await db.upsertWatchState(
+        WatchStateRow(
+          seriesId: m,
+          episode: 1,
+          resumePositionMs: 42000,
+          durationMs: 1,
+          watched: false,
+          watchedManual: false,
+          updatedAtMs: 1,
+        ),
+      );
+      final f = await touch('Some Show - 01.mkv', 1400);
+      await sync.sync([dir.path]);
+
+      await fixMatch.assignFile(
+        filePath: f.path,
+        chosen: kitsuCandidate(9999, mal: 4224), // different Kitsu id, same MAL
+        anchoredEpisode: 1,
+      );
+
+      expect(
+        (await db.allOverrideRows()).single.seriesId,
+        m,
+        reason: 'matched on the MAL id -> the existing identity',
+      );
+      expect(
+        (await db.allSeriesRows()).where((r) => r.seriesId == m).length,
+        1,
+        reason: 'one row, not a fork',
+      );
+      expect(
+        (await db.watchStateFor(m, 1))?.resumePositionMs,
+        42000,
+        reason: 'progress still attached',
+      );
+    });
+
+    test(
+      'an id owned by another show is never stolen, and no raw error escapes',
+      () async {
+        // AniList id 300 belongs to Hunter x Hunter after this scan.
+        await touch('Hunter x Hunter - 01.mkv', 1500);
+        await sync.sync([dir.path]);
+        expect((await db.externalIdsBySeriesId())[300]?.anilist, 300);
+
+        // Fix-match an UNRELATED file to a candidate that claims anilist 300 but
+        // carries a different Kitsu id. ensureSeriesId resolves to 300 (the
+        // AniList id wins) — and must not throw a UNIQUE violation on the way.
+        final other = await touch('Unrelated - 01.mkv', 1600);
+        await sync.sync([dir.path]);
+        await fixMatch.assignFile(
+          filePath: other.path,
+          chosen: Series(
+            seriesId: 8888,
+            externalIds: const ExternalIds(anilist: 300, kitsu: 8888),
+            titles: const Titles(romaji: 'Hunter x Hunter'),
+          ),
+          anchoredEpisode: 1,
+        );
+
+        final ov = (await db.allOverrideRows())
+            .where((o) => o.fileSize == 1600)
+            .single;
+        expect(
+          ov.seriesId,
+          300,
+          reason: 'the AniList-seeded identity, not 8888',
+        );
+        expect(
+          (await db.externalIdsBySeriesId())[300]?.anilist,
+          300,
+          reason: 'still owned by 300',
+        );
+      },
+    );
+
+    test('a candidate with NO ids at all is refused, not written', () async {
+      final f = await touch('Nothing - 01.mkv', 1700);
+      await sync.sync([dir.path]);
+      await expectLater(
+        fixMatch.assignFile(
+          filePath: f.path,
+          chosen: const Series(seriesId: 1, titles: Titles(romaji: 'Nothing')),
+        ),
+        throwsA(isA<FixMatchException>()),
+      );
+      expect(await db.allOverrideRows(), isEmpty);
+    });
   });
 }
