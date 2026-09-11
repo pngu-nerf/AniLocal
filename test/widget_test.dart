@@ -14,7 +14,6 @@ import 'package:anilocal/domain/repositories/source_selection_repository.dart';
 import 'package:anilocal/domain/repositories/watch_order_repository.dart';
 import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/ui/app.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/fake_settings.dart';
 import 'package:anilocal/domain/models/picture_mode.dart';
@@ -22,6 +21,8 @@ import 'package:anilocal/domain/models/show_preferences.dart';
 import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
 import 'package:anilocal/playback/playback_controller.dart';
+import 'package:anilocal/domain/models/cache_errors.dart';
+import 'package:flutter/material.dart';
 
 class _FakeFixMatch implements FixMatchRepository {
   @override
@@ -144,6 +145,7 @@ class _FakeRepository
 }
 
 void main() {
+  _errorPanelTests();
   testWidgets('library renders cached series from the repository', (
     tester,
   ) async {
@@ -186,5 +188,63 @@ void main() {
     expect(find.byType(HeaderReadout), findsOneWidget);
     expect(find.text('Frieren'), findsOneWidget);
     expect(find.textContaining('TV'), findsOneWidget);
+  });
+}
+
+/// The library repository failing to open — corrupt file, read-only support
+/// folder, or a cache from a newer build. Used to be an eternal spinner.
+class _ThrowingRepository extends _FakeRepository {
+  @override
+  Future<List<Series>> allSeries() async =>
+      throw const CacheNewerThanAppException(20, 19);
+}
+
+void _errorPanelTests() {
+  testWidgets('a cache from a newer build renders a message, not a spinner', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      AniLocalApp(
+        repository: _ThrowingRepository(),
+        fixMatch: _FakeFixMatch(),
+        watchState: _FakeRepository(),
+        sourceSelection: _FakeRepository(),
+        watchOrder: _FakeRepository(),
+        playback: PlaybackController(resolver: _FakeRepository()),
+        missing: _FakeRepository(),
+        showPreferences: _FakeRepository(),
+        settings: const FakeSettings(),
+        onScan: (_) async => const SyncSummary(
+          filesScanned: 0,
+          unchanged: 0,
+          processed: 0,
+          removed: 0,
+          matched: 0,
+          unmatched: 0,
+          errored: 0,
+          lookupsBySource: {},
+        ),
+        onRefreshMetadata: () async =>
+            const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+        onAddFolder: () async => (added: false, deniedLabel: null),
+        accessIssues: ValueNotifier<List<String>>(const []),
+        missingFolders: ValueNotifier<List<String>>(const []),
+        missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+        onOpenAccessSettings: () async => true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(
+      find.textContaining('newer version of AniLocal'),
+      findsOneWidget,
+      reason: 'the one open-failure with a specific remedy names it',
+    );
+    expect(
+      find.text('COPY DIAGNOSTICS'),
+      findsOneWidget,
+    ); // XpButton uppercases
   });
 }

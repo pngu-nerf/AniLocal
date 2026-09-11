@@ -17,6 +17,7 @@ import 'panels/sources_panel.dart';
 import 'settings_actions.dart';
 import 'settings_model.dart';
 import 'settings_shell.dart';
+import 'panels/about_panel.dart';
 
 /// Open the shared app Settings window. Reachable from the homepage title bar
 /// and the detail-page title bar; both pass the ONE injected
@@ -204,6 +205,12 @@ class _SettingsWindow extends StatelessWidget {
       label: 'Homepage',
       icon: Icons.home_outlined,
       builder: (_) => HomepagePanel(model: model),
+    ),
+    SettingsCategory(
+      id: 'about',
+      label: 'About',
+      icon: Icons.info_outline,
+      builder: (_) => const AboutPanel(),
     ),
   ];
 

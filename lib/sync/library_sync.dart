@@ -19,6 +19,7 @@ import '../domain/models/source_preference.dart';
 import '../domain/models/skip_range.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/models/titles.dart';
+import '../diagnostics/app_log.dart';
 
 /// The fill path: scan a folder, identify only the deltas, and write the cache.
 /// Runs on scan/refresh only — never on a UI read.
@@ -110,6 +111,9 @@ class LibrarySync {
       // are the ones whose mount name can change. Best-effort.
       if (row != null && row.volumeId == null) {
         final info = await resolver.infoForPath(current);
+        if (info == null) {
+          AppLog.warn('Volume binding skipped: no volume info for $current');
+        }
         if (info != null) {
           await cache.bindFolderVolume(
             folderPath,
@@ -657,8 +661,15 @@ class LibrarySync {
       final EpisodeSkips? found;
       try {
         found = await provider.fetchSkips(lookup);
-      } on SkipException {
-        continue; // transient — no row, so it is retried
+      } on SkipException catch (e) {
+        // Transient — no row, so it is retried. Logged: a source failing for
+        // 400 episodes in a row used to look identical to one that had nothing.
+        AppLog.warn(
+          'Skip source ${provider.token} failed for '
+          '${lookup.seriesId}/${lookup.episode}',
+          error: e,
+        );
+        continue;
       }
       rows.add(
         SkipSourceAnswerRow(

@@ -39,3 +39,14 @@ Future<Directory> coverArtDirectory() async {
   }
   return dir;
 }
+
+/// Directory for the app log (`app.log` + one rotated backup). Beside the
+/// cache, so "clear app data" is one folder and "open log folder" is one path.
+Future<Directory> logsDirectory() async {
+  final support = await getApplicationSupportDirectory();
+  final dir = Directory('${support.path}/anilocal/logs');
+  if (!await dir.exists()) {
+    await dir.create(recursive: true);
+  }
+  return dir;
+}

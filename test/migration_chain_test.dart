@@ -4,6 +4,7 @@ import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/domain/skip_corroboration.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:anilocal/domain/models/cache_errors.dart';
 
 /// The complete v13 schema — every table still keyed by `anilist_id`, plus
 /// show_preferences. Copied forward from `migration_v13_test.dart`'s `_v12Ddl`

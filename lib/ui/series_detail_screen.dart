@@ -34,6 +34,7 @@ import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
 import 'settings/sources_actions.dart';
+import '../diagnostics/app_log.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -210,8 +211,11 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         if (hidden.isEmpty) _viewingHidden = false;
         _next = _deriveNext(eps);
       });
-    } catch (_) {
-      // Don't hang on the spinner — surface an error state with retry.
+    } catch (e, stack) {
+      // Don't hang on the spinner — surface an error state with retry. And
+      // keep the cause: this used to discard the exception entirely, so
+      // "Couldn't load this show's episodes" had no diagnosis path behind it.
+      AppLog.error('Show page: episode load failed', error: e, stack: stack);
       if (!mounted) return;
       setState(() {
         _loading = false;

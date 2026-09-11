@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../../domain/models/cache_errors.dart';
 import '../../domain/models/external_ids.dart';
 import '../folders/volume_resolver.dart' show rebaseToFolderRelative;
 import 'series_identity.dart';
@@ -338,26 +339,6 @@ class SeriesExternalIds extends Table {
   String get tableName => 'series_external_ids';
 }
 
-/// The cache on disk was written by a NEWER build than this one.
-///
-/// Thrown before any migration statement runs, which matters: drift treats a
-/// downgrade as an "upgrade" and would otherwise re-stamp the version number
-/// DOWNWARD after running nothing — and the next real upgrade would then try
-/// to migrate from a version the schema isn't actually at (v19's backfill
-/// reading a table that v19 already dropped). Refusing is the only safe answer;
-/// the UI turns this into "update the app to open this library".
-class CacheNewerThanAppException implements Exception {
-  const CacheNewerThanAppException(this.onDisk, this.supported);
-
-  final int onDisk;
-  final int supported;
-
-  @override
-  String toString() =>
-      'CacheNewerThanAppException: cache is schema v$onDisk, this build '
-      'supports up to v$supported';
-}
-
 @DriftDatabase(
   tables: [
     SeriesCache,
@@ -376,8 +357,12 @@ class CacheNewerThanAppException implements Exception {
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase(super.e);
 
+  /// The schema this build writes, readable without an instance (the startup
+  /// log line and the diagnostics report want it before the database opens).
+  static const int currentSchemaVersion = 19;
+
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => currentSchemaVersion;
 
   // Migrations are set up deliberately (seam rule: a schema change is a real
   // migration). v2 library_folders; v3 match_overrides; v4 folder sort order;

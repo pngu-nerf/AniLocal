@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../../domain/chapter_skips.dart';
+import '../../diagnostics/app_log.dart';
 
 /// What a container told us about its chapters.
 class FileChapters {
@@ -53,8 +54,12 @@ class ChapterReader {
         return await _readMp4(handle, length);
       }
       return FileChapters.none;
-    } on Exception {
-      return FileChapters.none; // unreadable or malformed -> simply no chapters
+    } on Exception catch (e) {
+      // Unreadable or malformed -> simply no chapters. Logged with the PATH:
+      // a permission denial (macOS TCC on a removable volume) lands here too,
+      // and looked exactly like "this file has no chapters" until it was.
+      AppLog.warn('Chapters: could not read $path', error: e);
+      return FileChapters.none;
     } finally {
       await handle?.close();
     }

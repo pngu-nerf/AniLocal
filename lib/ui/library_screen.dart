@@ -37,6 +37,9 @@ import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
 import 'settings/sources_actions.dart';
+import 'package:flutter/services.dart';
+import '../diagnostics/app_log.dart';
+import '../domain/models/cache_errors.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -154,6 +157,10 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   /// `waiting`, flashed the whole layout through a spinner and dropped the
   /// grid's scroll position. See CLAUDE.md, "never clear known content".)
   List<Series>? _series;
+
+  /// Set when the FIRST load fails; cleared by any later success. Rendered
+  /// instead of the spinner, never instead of a list we already have.
+  Object? _loadError;
   // Continue-watching entries held in state (not a Future) so the layout knows
   // synchronously whether to allocate the side panel (no entries → no panel).
   List<ContinueWatching> _continueEntries = const [];
@@ -229,11 +236,25 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   void _reload() {
     // Assign ON ARRIVAL, exactly like the three fields below — nothing is
     // cleared, so the current library stays on screen while the new one loads.
-    widget.repository.allSeries().then((s) {
-      if (!mounted) return;
-      setState(() => _series = s);
-      _loadSeriesStats(s);
-    });
+    widget.repository.allSeries().then(
+      (s) {
+        if (!mounted) return;
+        setState(() {
+          _series = s;
+          _loadError = null;
+        });
+        _loadSeriesStats(s);
+      },
+      // Without this, every "cannot open the database" failure — corrupt
+      // file, read-only folder, a cache from a newer build, a migration that
+      // threw — left `_series` null forever: an eternal spinner, no message,
+      // nothing written anywhere. Now it is an error panel with the cause and
+      // a way to copy the log.
+      onError: (Object e, StackTrace stack) {
+        AppLog.error('Library load failed', error: e, stack: stack);
+        if (mounted) setState(() => _loadError = e);
+      },
+    );
     // Continue-watching: resolved off the cache into state so the panel's
     // presence (and thus the layout) is known without a FutureBuilder.
     widget.watchState.continueWatching().then((e) {
@@ -430,9 +451,13 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       _reload();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Sync failed: $e — details are in Settings › About.'),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+      AppLog.error('Sync failed', error: e);
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
@@ -536,6 +561,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               // Spinner ONLY before the first load has ever arrived; a
               // refresh keeps the current list on screen.
               if (all == null) {
+                final error = _loadError;
+                if (error != null) return _LoadErrorState(error: error);
                 return const Center(child: CircularProgressIndicator());
               }
               if (all.isEmpty) {
@@ -692,6 +719,47 @@ class _NoSearchResults extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(color: Xp.textDim, fontSize: 14),
         ),
+      ),
+    );
+  }
+}
+
+/// The library could not be read at all. Distinguishes the ONE failure with
+/// a specific remedy (a cache from a newer build → update the app) from every
+/// other, and hands the user the log so a report contains evidence.
+class _LoadErrorState extends StatelessWidget {
+  const _LoadErrorState({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    final newer = error is CacheNewerThanAppException;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            newer
+                ? 'This library was created by a newer version of AniLocal.'
+                : "Couldn't open the library cache.",
+            style: const TextStyle(color: Xp.text, fontSize: 15),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            newer ? 'Update the app to open it.' : '$error',
+            style: const TextStyle(color: Xp.textDim, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          XpButton(
+            icon: Icons.copy_outlined,
+            label: 'Copy diagnostics',
+            onPressed: () => Clipboard.setData(
+              ClipboardData(text: '${AppLog.dump()}\n\n$error'),
+            ),
+          ),
+        ],
       ),
     );
   }

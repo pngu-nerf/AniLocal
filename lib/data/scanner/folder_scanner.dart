@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../../diagnostics/app_log.dart';
 
 /// Walks a library folder and finds video files. Behind an interface so the
 /// traversal strategy is swappable and testable.
@@ -52,7 +53,10 @@ class FileSystemFolderScanner implements FolderScanner {
       final List<FileSystemEntity> entries;
       try {
         entries = await dir.list(followLinks: false).toList();
-      } on FileSystemException {
+      } on FileSystemException catch (e) {
+        // One unreadable subdirectory must not abort the walk — but it must
+        // not vanish silently either.
+        AppLog.warn('Scan: skipped unreadable ${dir.path}', error: e);
         continue;
       }
       _collect(entries, files, pending);

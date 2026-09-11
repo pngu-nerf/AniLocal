@@ -8,6 +8,7 @@ import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
+import '../diagnostics/app_log.dart';
 
 /// Minimal manual fix-match: search AniList → pick from ranked candidates →
 /// assign. For a split (multiple files), an optional toggle chooses continuous
@@ -88,9 +89,13 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
     } catch (e) {
       if (mounted) {
         setState(() => _busy = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Assign failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Assign failed: $e'),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+        AppLog.error('Fix-match assign failed', error: e);
       }
     }
   }
@@ -173,6 +178,7 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
+          AppLog.error('Fix-match search failed', error: snapshot.error);
           return _CandidatesMessage('Search failed: ${snapshot.error}');
         }
         final results = snapshot.data ?? const [];

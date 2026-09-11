@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import '../../diagnostics/app_log.dart';
 
 /// A volume's stable identity ([volumeId]) and where it is mounted RIGHT NOW
 /// ([mountPoint]). The id survives remounts; the mount point does not.
@@ -97,10 +98,14 @@ class DiskutilVolumeResolver implements VolumeResolver {
       ]).timeout(_diskutilTimeout);
       if (result.exitCode != 0) return null;
       return result.stdout as String;
-    } on ProcessException {
-      return null; // not macOS / diskutil missing -> caller falls back to null
+    } on ProcessException catch (e) {
+      // not macOS / diskutil missing -> caller falls back to null
+      AppLog.warn('diskutil unavailable for $arg', error: e);
+      return null;
     } on TimeoutException {
-      return null; // volume wedged -> treated as missing, never a hang
+      // volume wedged -> treated as missing, never a hang
+      AppLog.warn('diskutil timed out for $arg after $_diskutilTimeout');
+      return null;
     }
   }
 

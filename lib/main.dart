@@ -1,7 +1,13 @@
+import 'dart:io';
+import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'diagnostics/diagnostics.dart';
+import 'diagnostics/app_log.dart';
 import 'data/timeout_client.dart';
 import 'data/anilist/anilist_client.dart';
 import 'data/aniskip/aniskip_client.dart';
@@ -74,6 +80,33 @@ const bool kShipMyAnimeListSource = false;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Failures leave a trail. Before this there was no error hook and no log of
+  // any kind: an uncaught async error in a release build went to the unified
+  // system log where no user looks, and an uncaught build error drew a blank
+  // grey box. Both now land in AppLog, whose ring buffer is what the "Copy
+  // diagnostics" button hands back. The file attaches asynchronously; lines
+  // logged before it does are carried across.
+  FlutterError.onError = (details) {
+    AppLog.error(
+      'Flutter error: ${details.exceptionAsString()}',
+      stack: details.stack,
+    );
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLog.error('Uncaught: $error', stack: stack);
+    return true; // handled: logged, and the app keeps running
+  };
+  unawaited(AppLog.attachFile(logsDirectory, debugEcho: kDebugMode));
+  unawaited(
+    PackageInfo.fromPlatform().then(
+      (info) => Diagnostics.appVersion = '${info.version}+${info.buildNumber}',
+    ),
+  );
+  AppLog.info(
+    'AniLocal starting · schema v${CacheDatabase.currentSchemaVersion} · '
+    '${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
+  );
   // Initialize libmpv before any Player is constructed (library playback).
   MediaKit.ensureInitialized();
   // Start listening for native window-state callbacks (fullscreen enter/exit).
@@ -123,6 +156,20 @@ void main() {
   // library repository (it delegates show-preferences to it), so the minimum-
   // skip floor cannot be a constructor argument on either.
   repository.loadMinSkipLength = settings.loadMinSkipLength;
+  // The diagnostics report is built HERE because only the composition root can
+  // see the database, the repositories and the settings together; the About
+  // panel just asks for the string.
+  Diagnostics.reportBuilder = () async {
+    final series = await repository.allSeries();
+    final unmatched = await repository.unmatchedFiles();
+    return [
+      'schema v${CacheDatabase.currentSchemaVersion}',
+      'series: ${series.length} · unmatched files: ${unmatched.length}',
+      'skip sources: ${(await settings.loadSkipSourceOrder()).map((p) => '${p.token}:${p.enabled ? 1 : 0}').join(', ')}',
+      'cross-check: ${await settings.loadCorroborateSkips()}',
+      'min skip: ${(await settings.loadMinSkipLength()).inSeconds}s',
+    ].join('\n');
+  };
   // Read fresh on every use, so pasting a key in Settings works immediately and
   // clearing one disables the source immediately.
   Future<String?> malClientId() =>

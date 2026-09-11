@@ -4,6 +4,7 @@ import '../../domain/models/source_descriptor.dart';
 import '../../domain/models/refresh_summary.dart';
 import '../metadata_failure_message.dart';
 import 'sources_actions.dart';
+import '../../diagnostics/app_log.dart';
 
 /// The few NON-setting, per-screen hooks the Settings window needs (the settings
 /// themselves come from the injected `SettingsRepository`). These genuinely
@@ -87,6 +88,14 @@ Future<void> refreshMetadata(
   } catch (e) {
     messenger
       ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text('Refresh failed: $e')));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            'Refresh failed: $e — details are in Settings › About.',
+          ),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    AppLog.error('Refresh failed', error: e);
   }
 }

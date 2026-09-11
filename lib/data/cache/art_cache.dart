@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import '../../diagnostics/app_log.dart';
 
 /// Downloads and stores cover art on disk so offline browse shows real images.
 ///
@@ -53,13 +54,17 @@ class ArtCache {
         try {
           final stale = File(cachedPath);
           if (await stale.exists()) await stale.delete();
-        } on Exception {
+        } on Exception catch (e) {
           // A leftover file is harmless; failing the refresh over it is not.
+          AppLog.warn('Cover: could not delete stale $cachedPath', error: e);
         }
       }
       return file.path;
-    } on Exception {
-      return null; // metadata still cached; art retried next scan
+    } on Exception catch (e) {
+      // Metadata still cached; art retried next scan. Logged, because a cover
+      // that fails forever used to be invisible — a grey box with no trail.
+      AppLog.warn('Cover: download failed for $url', error: e);
+      return null;
     }
   }
 

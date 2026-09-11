@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../user_agent.dart';
 import 'cross_map.dart';
+import '../../diagnostics/app_log.dart';
 
 /// Fetches, derives and caches the cross-database id map.
 ///
@@ -102,9 +103,10 @@ class CrossMapStore {
         map: CrossMap(entries),
         fetchedAt: DateTime.fromMillisecondsSinceEpoch(fetchedAtMs),
       );
-    } on Exception {
+    } on Exception catch (e) {
       // Unreadable or corrupt cache (including a FormatException from
       // jsonDecode, which is an Exception) -> re-derive, never crash.
+      AppLog.warn('Cross-map: cached file unreadable, will refetch', error: e);
       return null;
     }
   }
@@ -123,8 +125,9 @@ class CrossMapStore {
         }),
         flush: true,
       );
-    } on Exception {
+    } on Exception catch (e) {
       // A cache we can't write just means we refetch next time. Not fatal.
+      AppLog.warn('Cross-map: could not write cache', error: e);
     }
   }
 
@@ -141,7 +144,11 @@ class CrossMapStore {
           'User-Agent': kAniLocalUserAgent,
         },
       );
-    } on Exception {
+    } on Exception catch (e) {
+      // The user is never told the map is unavailable; the symptom (no
+      // auto-skip for shows without an AniList id) was untraceable. Now it
+      // is at least in the log.
+      AppLog.warn('Cross-map: fetch failed', error: e);
       return null;
     }
     if (response.statusCode != 200) return null;

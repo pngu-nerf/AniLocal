@@ -250,7 +250,7 @@ void main() {
 
   testWidgets('no row is labelled with "show / hide" phrasing', (tester) async {
     await _openSettings(tester);
-    for (final category in ['Playback', 'Library', 'Homepage']) {
+    for (final category in ['Playback', 'Library', 'Homepage', 'About']) {
       await _openCategory(tester, category);
       for (final row in tester.widgetList<SettingRow>(
         find.byType(SettingRow),
