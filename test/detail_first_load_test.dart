@@ -185,6 +185,8 @@ Widget _app(_Repo repo) {
           onAddFolder: () async => (added: false, deniedLabel: null),
           onOpenAccessSettings: () async => false,
         ),
+        metadataSources: const [],
+        skipSources: const [],
         onRefreshMetadata: () async =>
             const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
       ),

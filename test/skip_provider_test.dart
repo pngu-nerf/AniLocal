@@ -32,6 +32,7 @@ class _FakeSkip implements SkipProvider {
     this.configured = true,
     this.onLookup,
     this.answerable = true,
+    this.readsFile = false,
   });
 
   @override
@@ -40,6 +41,8 @@ class _FakeSkip implements SkipProvider {
   final MetadataFailure? failure;
   final bool configured;
   final bool answerable;
+  @override
+  final bool readsFile;
   final void Function(SkipLookup)? onLookup;
 
   int calls = 0;
@@ -442,22 +445,31 @@ void main() {
     });
 
     test(
-      'a CHANGED file does not re-ask sources that already answered',
+      'a CHANGED file re-asks the sources that READ it, and only those',
       () async {
-        // The scan reprocesses a file whose size or mtime changed. Before v19's
-        // contract was applied to this path too, it re-asked every source for
-        // it — one wasted request per source per changed file, and (worse) a
-        // fresh "nothing" answer could not clear a stale window.
-        final chapters = _FakeSkip('chapters', windows: _op());
-        await scanWith([chapters]);
-        final afterFirst = chapters.calls;
+        // The scan reprocesses a file whose size or mtime changed. Chapters
+        // are read from the file, so a re-encode can move them and the stored
+        // answer must be replaced; AniSkip answers about the show and episode,
+        // which a re-encode does not change, so its row stands. An earlier
+        // version applied the refresh path's never-re-ask rule here and kept
+        // the previous encode's chapter windows forever.
+        final chapters = _FakeSkip('chapters', windows: _op(), readsFile: true);
+        final aniskip = _FakeSkip('aniskip', windows: _op());
+        await scanWith([chapters, aniskip]);
+        final chaptersBefore = chapters.calls;
+        final aniskipBefore = aniskip.calls;
 
         await File(
           '${dir.path}/Cowboy Bebop - 01.mkv',
         ).writeAsString('yyyyyyyy');
-        await scanWith([chapters]); // reprocessed: the fingerprint changed
+        await scanWith([chapters, aniskip]); // reprocessed: fingerprint changed
 
-        expect(chapters.calls, afterFirst, reason: 'its answer is on file');
+        expect(
+          chapters.calls,
+          chaptersBefore + 1,
+          reason: 'the file changed, so what it says may have too',
+        );
+        expect(aniskip.calls, aniskipBefore, reason: 'its answer is on file');
       },
     );
 

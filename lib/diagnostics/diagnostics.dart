@@ -31,7 +31,10 @@ abstract final class Diagnostics {
     if (body != null) {
       try {
         head.writeln(await body());
-      } on Exception catch (e) {
+      } catch (e) {
+        // `catch` everything, Errors included: this is the button you press
+        // when the app is already broken, so it must not be the thing that
+        // fails next.
         head.writeln('(report builder failed: $e)');
       }
       head.writeln();
@@ -39,7 +42,19 @@ abstract final class Diagnostics {
     head
       ..writeln('--- recent log ---')
       ..write(AppLog.dump());
-    return head.toString();
+    return redactHome(head.toString());
+  }
+
+  /// Replace the user's home directory with `~` wherever it appears.
+  ///
+  /// The log names library folders and the log file itself, which puts the
+  /// macOS username in every path; a report is written to be pasted into a
+  /// public issue, so the one identifier we can strip, we strip. Folder names
+  /// under it stay — they are what the report is about.
+  static String redactHome(String text) {
+    final home = Platform.environment['HOME'];
+    if (home == null || home.isEmpty) return text;
+    return text.replaceAll(home, '~');
   }
 
   /// Reveal the log folder in Finder. macOS only by construction (`open`);

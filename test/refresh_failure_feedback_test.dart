@@ -14,6 +14,8 @@ import 'support/fake_sources.dart';
 SettingsDialogActions _actions(RefreshSummary result) =>
     SettingsActions(
       sources: fakeSourcesActions(FakeSourcesRepository()),
+      metadataSources: const [],
+      skipSources: const [],
       onRefreshMetadata: () async => result,
     ).forScreen(
       onRefreshed: () {},

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../diagnostics/app_log.dart';
+import '../diagnostics/diagnostics.dart';
 import '../domain/models/cache_errors.dart';
 import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
@@ -743,13 +744,37 @@ class _NoSearchResults extends StatelessWidget {
 /// The library could not be read at all. Distinguishes the ONE failure with
 /// a specific remedy (a cache from a newer build → update the app) from every
 /// other, and hands the user the log so a report contains evidence.
-class _LoadErrorState extends StatelessWidget {
+class _LoadErrorState extends StatefulWidget {
   const _LoadErrorState({required this.error});
 
   final Object error;
 
   @override
+  State<_LoadErrorState> createState() => _LoadErrorStateState();
+}
+
+class _LoadErrorStateState extends State<_LoadErrorState> {
+  String _copyLabel = 'Copy diagnostics';
+
+  /// The same report Settings › About produces — one payload for one button
+  /// label — awaited so the label can confirm, and caught so the screen whose
+  /// whole job is "report this" cannot fail silently at the clipboard.
+  Future<void> _copy() async {
+    try {
+      final report = await Diagnostics.report();
+      await Clipboard.setData(
+        ClipboardData(text: '$report\n\n--- error ---\n${widget.error}'),
+      );
+      if (mounted) setState(() => _copyLabel = 'Copied');
+    } catch (e, stack) {
+      AppLog.error('Copy diagnostics failed', error: e, stack: stack);
+      if (mounted) setState(() => _copyLabel = 'Copy failed — see log file');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final error = widget.error;
     final newer = error is CacheNewerThanAppException;
     return Center(
       child: Column(
@@ -770,10 +795,8 @@ class _LoadErrorState extends StatelessWidget {
           const SizedBox(height: 16),
           XpButton(
             icon: Icons.copy_outlined,
-            label: 'Copy diagnostics',
-            onPressed: () => Clipboard.setData(
-              ClipboardData(text: '${AppLog.dump()}\n\n$error'),
-            ),
+            label: _copyLabel,
+            onPressed: _copy,
           ),
         ],
       ),

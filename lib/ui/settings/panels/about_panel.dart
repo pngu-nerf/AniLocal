@@ -22,10 +22,18 @@ class _AboutPanelState extends State<AboutPanel> {
   String? _copied;
 
   Future<void> _copyDiagnostics() async {
-    final text = await Diagnostics.report();
-    await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
-    setState(() => _copied = 'Copied ${AppLog.recent().length} log lines.');
+    try {
+      final text = await Diagnostics.report();
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      setState(() => _copied = 'Copied ${AppLog.recent().length} log lines.');
+    } catch (e, stack) {
+      // The clipboard can refuse (a PlatformException); the one button meant
+      // for "something is wrong" must say so rather than do nothing.
+      AppLog.error('Copy diagnostics failed', error: e, stack: stack);
+      if (!mounted) return;
+      setState(() => _copied = 'Copy failed — the log file below has it.');
+    }
   }
 
   @override
@@ -60,7 +68,8 @@ class _AboutPanelState extends State<AboutPanel> {
             subtitle:
                 _copied ??
                 'Version, library counts, active settings and the recent log — '
-                    'paste it into a bug report.',
+                    'paste it into a bug report. May include your library '
+                    'folder names; your home directory is shown as ~.',
             control: XpButton(
               icon: Icons.copy_outlined,
               label: 'Copy',
@@ -89,6 +98,8 @@ class _AboutPanelState extends State<AboutPanel> {
                 'To identify a show, its parsed title is sent to the metadata '
                 'services you have enabled (AniList, Kitsu, Jikan), and a '
                 'MyAnimeList id and episode number to AniSkip for skip times. '
+                'Cover images are downloaded from those services, and a public '
+                'id-mapping list is fetched from GitHub about once a week. '
                 'File names, folder paths and anything that identifies you or '
                 'this computer are never sent. There is no telemetry, no '
                 'analytics and no account.',

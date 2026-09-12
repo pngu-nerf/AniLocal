@@ -52,6 +52,8 @@ SettingsDialogActions _actions({
 }) =>
     SettingsActions(
       sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
+      metadataSources: const [],
+      skipSources: const [],
       onRefreshMetadata: () async =>
           const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
     ).forScreen(

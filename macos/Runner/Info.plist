@@ -26,6 +26,8 @@
 	<string>AniLocal reads this folder to find your anime files. Nothing is uploaded.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>AniLocal reads this drive to find your anime files. Nothing is uploaded.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>AniLocal reads this network share to find your anime files. Nothing is uploaded.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

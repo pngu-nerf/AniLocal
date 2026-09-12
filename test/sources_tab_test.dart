@@ -47,6 +47,8 @@ Future<_Closed> _open(
               actions:
                   SettingsActions(
                     sources: fakeSourcesActions(repo, onAddFolder: onAddFolder),
+                    metadataSources: const [],
+                    skipSources: const [],
                     onRefreshMetadata: () async => const RefreshSummary(
                       seriesRefreshed: 0,
                       skipsFetched: 0,

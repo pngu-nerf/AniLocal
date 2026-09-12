@@ -310,6 +310,34 @@ void main() {
       },
     );
 
+    test('a SPLIT (assignRange) resolves identity the same way', () async {
+      // The range path writes one override per file and caches the series
+      // once; every one of those writes must carry the RESOLVED id, or a
+      // split onto a Kitsu-only show would publish Kitsu's number as ours.
+      final a = await touch('Kitsu Split - 01.mkv', 1301);
+      final b = await touch('Kitsu Split - 02.mkv', 1302);
+      await sync.sync([dir.path]);
+
+      await fixMatch.assignRange(
+        filePaths: [a.path, b.path],
+        chosen: kitsuCandidate(6666),
+        anchorStart: 1,
+      );
+
+      final overrides = await db.allOverrideRows();
+      expect(overrides, hasLength(2));
+      final ids = overrides.map((o) => o.seriesId).toSet();
+      expect(ids, hasLength(1), reason: 'one identity for the whole split');
+      final id = ids.single;
+      expect(isMintedSeriesId(id), isTrue);
+      expect(id, isNot(6666));
+      expect((await db.externalIdsBySeriesId())[id]?.kitsu, 6666);
+      final cached = (await db.allSeriesRows())
+          .where((r) => r.seriesId == id)
+          .single;
+      expect(cached.coverImagePath, contains('$id'));
+    });
+
     test('a show that ALREADY has a local identity is not forked', () async {
       // Identified once via a Kitsu answer during a scan (minting M, watch
       // state recorded), then fix-matched via a candidate carrying the same MAL

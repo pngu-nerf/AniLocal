@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../domain/models/cache_errors.dart';
 import '../../domain/models/external_ids.dart';
+import '../../domain/skip_corroboration.dart';
 import '../folders/volume_resolver.dart' show rebaseToFolderRelative;
 import 'series_identity.dart';
 
@@ -397,213 +398,223 @@ class CacheDatabase extends _$CacheDatabase {
     // WAL: the standard single-writer desktop setting — a scan's multi-hundred
     // statement transaction stops fsyncing a rollback journal, and readers no
     // longer block on a writer. busy_timeout: a second instance of the app (or
-    // a stray tool holding the file) gets a five-second wait instead of an
-    // instant SQLITE_BUSY that would render as an eternal spinner. Both run
+    // a stray tool holding the file) waits up to five seconds for the lock
+    // rather than failing at once; a scan's transaction can hold it longer
+    // than that, in which case the failure is merely later, and it surfaces
+    // as the library screen's error panel rather than a spinner. Both run
     // OUTSIDE the migration transaction below — journal_mode cannot be changed
     // inside one — because drift calls beforeOpen after onUpgrade completes.
     beforeOpen: (details) async {
       await customStatement('PRAGMA journal_mode = WAL');
       await customStatement('PRAGMA busy_timeout = 5000');
     },
-    onUpgrade: (m, from, to) => transaction(() async {
-      // THE GUARANTEE, made real. Drift does NOT wrap onUpgrade in a
-      // transaction (verified against drift 2.33's runner: `_runMigrations`
-      // calls `beforeOpen` → `onUpgrade` bare, and the sqlite3 delegate is
-      // `NoTransactionDelegate`, so every statement autocommits and the
-      // version is stamped last). Without this wrapper a force-quit between
-      // two statements left a half-migrated database still stamped with the
-      // OLD version; the next launch replayed the same step against the new
-      // shape, failed, and drift's sticky `_migrationError` then refused every
-      // open for the rest of the process — all user data intact and
-      // unreachable, recoverable only by deleting the cache. SQLite DDL is
-      // transactional, so this one wrapper makes the whole chain atomic:
-      // either every step lands and the version advances, or nothing changed
-      // and the next launch retries from a clean state. Drift's own
-      // `Migrator.alterTable` opens `database.transaction()` inside a
-      // migration, so this is a supported pattern, not a trick.
+    onUpgrade: (m, from, to) async {
+      // Refused BEFORE the transaction opens, so "before any statement runs"
+      // is literally true and the version label on disk is never touched.
       if (from > to) throw CacheNewerThanAppException(from, to);
-      if (from < 2) {
-        await m.createTable(libraryFolders);
-      }
-      if (from < 3) {
-        await m.createTable(matchOverrides);
-      }
-      if (from < 4) {
-        // `from >= 2`: the v2 step above emits library_folders in its CURRENT
-        // shape, sort_order included, so adding it again on a from-<2 path is a
-        // duplicate-column error that aborts the whole upgrade. Same hazard the
-        // v10 step guards against; it had been missed here and at v9/v12.
-        if (from >= 2) {
-          await m.addColumn(libraryFolders, libraryFolders.sortOrder);
+      await transaction(() async {
+        // THE GUARANTEE, made real. Drift does NOT wrap onUpgrade in a
+        // transaction (verified against drift 2.33's runner: `_runMigrations`
+        // calls `beforeOpen` → `onUpgrade` bare, and the sqlite3 delegate is
+        // `NoTransactionDelegate`, so every statement autocommits and the
+        // version is stamped last). Without this wrapper a force-quit between
+        // two statements left a half-migrated database still stamped with the
+        // OLD version; the next launch replayed the same step against the new
+        // shape, failed, and drift's sticky `_migrationError` then refused every
+        // open for the rest of the process — all user data intact and
+        // unreachable, recoverable only by deleting the cache. SQLite DDL is
+        // transactional, so this one wrapper makes the whole chain atomic:
+        // either every step lands and the version advances, or nothing changed
+        // and the next launch retries from a clean state. Drift's own
+        // `Migrator.alterTable` opens `database.transaction()` inside a
+        // migration, so this is a supported pattern, not a trick.
+        if (from < 2) {
+          await m.createTable(libraryFolders);
         }
-        // Backfill existing rows so their order reflects add time.
-        await customStatement(
-          'UPDATE library_folders SET sort_order = added_at_ms',
-        );
-      }
-      if (from < 5) {
-        await m.createTable(watchStates);
-      }
-      if (from < 6) {
-        await m.createTable(appSettings);
-      }
-      if (from < 7) {
-        await m.createTable(sourceOverrides);
-      }
-      if (from < 8) {
-        // Raw SQL, not m.addColumn: id_mal no longer exists in the current
-        // table shape (v15 drops it), so there is no generated column to pass.
-        // The historical step must still run — v14's seeding reads id_mal, and
-        // v15 then drops it — so a pre-v8 cache follows the same path every
-        // other cache did.
-        await customStatement(
-          'ALTER TABLE series_cache ADD COLUMN id_mal INTEGER',
-        );
-        // Raw SQL for the same reason as id_mal above: skip_segments no
-        // longer exists in the current schema (v19 replaces it with
-        // skip_source_answers), so there is no generated table to create. The
-        // historical step must still run — v19's backfill reads this table.
-        await customStatement(
-          'CREATE TABLE skip_segments ('
-          'anilist_id INTEGER NOT NULL, episode INTEGER NOT NULL, '
-          'intro_start_ms INTEGER, intro_end_ms INTEGER, '
-          'outro_start_ms INTEGER, outro_end_ms INTEGER, '
-          'PRIMARY KEY (anilist_id, episode))',
-        );
-      }
-      if (from < 9) {
-        if (from >= 2) {
-          // See v4: a from-<2 library_folders already carries these.
-          await m.addColumn(libraryFolders, libraryFolders.volumeId);
-          await m.addColumn(libraryFolders, libraryFolders.volumeSubpath);
+        if (from < 3) {
+          await m.createTable(matchOverrides);
         }
-        await _migrateFileCacheToRelativeV9(m);
-      }
-      if (from >= 9 && from < 10) {
-        // Additive: existing rows default to 0 (pending = false), so every
-        // already-cached unmatched file stays "confirmed-unmatched" (its
-        // pre-v10 meaning) and matched files are untouched. New pending rows
-        // are written only by go-forward scans.
-        //
-        // Guarded `from >= 9` deliberately: a from-<9 upgrade RECREATES
-        // file_cache via createTable in the v9 step above, which already builds
-        // the current shape (with pending_identification), so adding it again
-        // here would be a duplicate-column error. Only a cache that was already
-        // at v9 (real column-less file_cache) needs the addColumn.
-        await m.addColumn(fileCache, fileCache.pendingIdentification);
-      }
-      if (from < 11) {
-        // Brand-new table for the missing-episodes feature; a from-<11 upgrade
-        // just creates it empty, so every existing populated cache is
-        // unaffected (no shows have hidden episodes until the user hides one).
-        await m.createTable(hiddenEpisodes);
-      }
-      if (from < 12) {
-        // Additive: the manual watched-override flag. Existing rows default to
-        // 0 (false) → their `watched` value keeps its threshold-derived meaning,
-        // so a populated cache is untouched and nothing is retroactively "manual".
-        // `from >= 5`: the v5 step emits watch_state in its CURRENT shape,
-        // watched_manual included.
-        if (from >= 5) {
-          await m.addColumn(watchStates, watchStates.watchedManual);
+        if (from < 4) {
+          // `from >= 2`: the v2 step above emits library_folders in its CURRENT
+          // shape, sort_order included, so adding it again on a from-<2 path is a
+          // duplicate-column error that aborts the whole upgrade. Same hazard the
+          // v10 step guards against; it had been missed here and at v9/v12.
+          if (from >= 2) {
+            await m.addColumn(libraryFolders, libraryFolders.sortOrder);
+          }
+          // Backfill existing rows so their order reflects add time.
+          await customStatement(
+            'UPDATE library_folders SET sort_order = added_at_ms',
+          );
         }
-      }
-      if (from < 13) {
-        // Brand-new per-show preferences table; a from-<13 upgrade just creates
-        // it empty, so every existing populated cache is unaffected (no show has
-        // an override until the user sets one).
-        await m.createTable(showPrefs);
-      }
-      if (from < 14) {
-        await _migrateToSurrogateIdentityV14(m, from);
-      }
-      if (from < 15) {
-        // series_cache.id_mal is now the 'mal' row in series_external_ids, and
-        // v14 already seeded it there. Two homes for one fact is exactly the
-        // duplication CLAUDE.md forbids, so the column goes; the AniSkip lookup
-        // reads the side table instead. Safe to drop: not indexed, not part of
-        // any primary key. (v14 seeded it BEFORE this runs, so no data is lost
-        // even on a single v13 -> v15 hop.) Unguarded on purpose: the v8 step
-        // ADDS id_mal on every path below 8, so the column exists here for
-        // every starting version — a `from >= 8` guard left it orphaned on a
-        // pre-v8 upgrade, making an upgraded schema differ from a fresh one.
-        await m.dropColumn(seriesCache, 'id_mal');
-      }
-      if (from < 16) {
-        // Additive and defaulted, so every existing row keeps its meaning: a
-        // pre-v16 skip row came from AniSkip and was never corroborated. Left
-        // as '' rather than backfilled to 'aniskip' so "we don't know where
-        // this came from" stays distinguishable from "we recorded that it did".
-        // The skip_segments steps (v14 rename, v16–v19) are all UNGUARDED: the
-        // v8 step creates the table on every path below 8, in its v8 shape, so
-        // each of these is valid from any starting version. The `from >= 8`
-        // guards they used to carry left a pre-v8 upgrade with an orphaned,
-        // never-migrated skip_segments a fresh install does not have.
-        await customStatement(
-          "ALTER TABLE skip_segments ADD COLUMN source TEXT NOT NULL "
-          "DEFAULT ''",
-        );
-        // Raw SQL: `confidence` no longer exists in the current table shape
-        // (v17 replaces it with a verdict per window). The historical step
-        // must still run so a v15 cache follows the same path every other
-        // cache did, and v17 then drops it.
-        await customStatement(
-          'ALTER TABLE skip_segments ADD COLUMN confidence '
-          'INTEGER NOT NULL DEFAULT 0',
-        );
-      }
-      if (from < 17) {
-        // v16's single `confidence` was a placeholder written before the rule
-        // existed; D5 needs a verdict per window. Nothing is lost: every v16
-        // row was written 0, since nothing ever set it. By the time this runs
-        // the column exists on every path — already there for a v16+ cache, or
-        // just added by the v16 step above. (An earlier `from >= 16` guard left
-        // the orphan behind on exactly the upgrade path a real cache takes.)
-        await customStatement(
-          'ALTER TABLE skip_segments DROP COLUMN confidence',
-        );
-        await customStatement(
-          'ALTER TABLE skip_segments ADD COLUMN intro_confidence '
-          'INTEGER NOT NULL DEFAULT 0',
-        );
-        await customStatement(
-          'ALTER TABLE skip_segments ADD COLUMN outro_confidence '
-          'INTEGER NOT NULL DEFAULT 0',
-        );
-      }
-      if (from < 18) {
-        // Additive and defaulted to '', which MEANS "produced by unknown
-        // inputs" — so every pre-v18 row is re-resolved once on the next
-        // refresh and then left alone. Backfilling it to the current key
-        // would be the wrong default: it would assert that rows written
-        // before the rule existed already satisfy it, and the 140 rows on
-        // the reference library that predate even `source` would keep their
-        // first-writer-wins state forever.
-        await customStatement(
-          "ALTER TABLE skip_segments ADD COLUMN resolved_key TEXT NOT NULL "
-          "DEFAULT ''",
-        );
-      }
-      if (from < 19) {
-        // Stop storing a VERDICT and store the ANSWERS it was derived from.
-        // Everything derived moves to the read path, so a rule change no
-        // longer needs invalidating — see SkipSourceAnswers.
-        await m.createTable(skipSourceAnswers);
-        // Backfill, so nothing a user already had disappears. A row whose
-        // provenance was never recorded (pre-v16) becomes `legacy`: still
-        // usable, but it can never outrank a known source or vote on
-        // agreement, because we cannot say who produced it.
-        await customStatement(
-          'INSERT OR IGNORE INTO skip_source_answers '
-          '(series_id, episode, source, intro_start_ms, intro_end_ms, '
-          'outro_start_ms, outro_end_ms, asked_at_ms) '
-          "SELECT series_id, episode, CASE WHEN source = '' THEN 'legacy' "
-          'ELSE source END, intro_start_ms, intro_end_ms, outro_start_ms, '
-          'outro_end_ms, 0 FROM skip_segments',
-        );
-        await customStatement('DROP TABLE skip_segments');
-      }
-    }),
+        if (from < 5) {
+          await m.createTable(watchStates);
+        }
+        if (from < 6) {
+          await m.createTable(appSettings);
+        }
+        if (from < 7) {
+          await m.createTable(sourceOverrides);
+        }
+        if (from < 8) {
+          // Raw SQL, not m.addColumn: id_mal no longer exists in the current
+          // table shape (v15 drops it), so there is no generated column to pass.
+          // The historical step must still run — v14's seeding reads id_mal, and
+          // v15 then drops it — so a pre-v8 cache follows the same path every
+          // other cache did.
+          await customStatement(
+            'ALTER TABLE series_cache ADD COLUMN id_mal INTEGER',
+          );
+          // Raw SQL for the same reason as id_mal above: skip_segments no
+          // longer exists in the current schema (v19 replaces it with
+          // skip_source_answers), so there is no generated table to create. The
+          // historical step must still run — v19's backfill reads this table.
+          await customStatement(
+            'CREATE TABLE skip_segments ('
+            'anilist_id INTEGER NOT NULL, episode INTEGER NOT NULL, '
+            'intro_start_ms INTEGER, intro_end_ms INTEGER, '
+            'outro_start_ms INTEGER, outro_end_ms INTEGER, '
+            'PRIMARY KEY (anilist_id, episode))',
+          );
+        }
+        if (from < 9) {
+          if (from >= 2) {
+            // See v4: a from-<2 library_folders already carries these.
+            await m.addColumn(libraryFolders, libraryFolders.volumeId);
+            await m.addColumn(libraryFolders, libraryFolders.volumeSubpath);
+          }
+          await _migrateFileCacheToRelativeV9(m);
+        }
+        if (from >= 9 && from < 10) {
+          // Additive: existing rows default to 0 (pending = false), so every
+          // already-cached unmatched file stays "confirmed-unmatched" (its
+          // pre-v10 meaning) and matched files are untouched. New pending rows
+          // are written only by go-forward scans.
+          //
+          // Guarded `from >= 9` deliberately: a from-<9 upgrade RECREATES
+          // file_cache via createTable in the v9 step above, which already builds
+          // the current shape (with pending_identification), so adding it again
+          // here would be a duplicate-column error. Only a cache that was already
+          // at v9 (real column-less file_cache) needs the addColumn.
+          await m.addColumn(fileCache, fileCache.pendingIdentification);
+        }
+        if (from < 11) {
+          // Brand-new table for the missing-episodes feature; a from-<11 upgrade
+          // just creates it empty, so every existing populated cache is
+          // unaffected (no shows have hidden episodes until the user hides one).
+          await m.createTable(hiddenEpisodes);
+        }
+        if (from < 12) {
+          // Additive: the manual watched-override flag. Existing rows default to
+          // 0 (false) → their `watched` value keeps its threshold-derived meaning,
+          // so a populated cache is untouched and nothing is retroactively "manual".
+          // `from >= 5`: the v5 step emits watch_state in its CURRENT shape,
+          // watched_manual included.
+          if (from >= 5) {
+            await m.addColumn(watchStates, watchStates.watchedManual);
+          }
+        }
+        if (from < 13) {
+          // Brand-new per-show preferences table; a from-<13 upgrade just creates
+          // it empty, so every existing populated cache is unaffected (no show has
+          // an override until the user sets one).
+          await m.createTable(showPrefs);
+        }
+        if (from < 14) {
+          await _migrateToSurrogateIdentityV14(m, from);
+        }
+        if (from < 15) {
+          // series_cache.id_mal is now the 'mal' row in series_external_ids, and
+          // v14 already seeded it there. Two homes for one fact is exactly the
+          // duplication CLAUDE.md forbids, so the column goes; the AniSkip lookup
+          // reads the side table instead. Safe to drop: not indexed, not part of
+          // any primary key. (v14 seeded it BEFORE this runs, so no data is lost
+          // even on a single v13 -> v15 hop.) Unguarded on purpose: the v8 step
+          // ADDS id_mal on every path below 8, so the column exists here for
+          // every starting version — a `from >= 8` guard left it orphaned on a
+          // pre-v8 upgrade, making an upgraded schema differ from a fresh one.
+          await m.dropColumn(seriesCache, 'id_mal');
+        }
+        if (from < 16) {
+          // Additive and defaulted, so every existing row keeps its meaning: a
+          // pre-v16 skip row came from AniSkip and was never corroborated. Left
+          // as '' rather than backfilled to 'aniskip' so "we don't know where
+          // this came from" stays distinguishable from "we recorded that it did".
+          // The skip_segments steps (v14 rename, v16–v19) are all UNGUARDED: the
+          // v8 step creates the table on every path below 8, in its v8 shape, so
+          // each of these is valid from any starting version. The `from >= 8`
+          // guards they used to carry left a pre-v8 upgrade with an orphaned,
+          // never-migrated skip_segments a fresh install does not have.
+          await customStatement(
+            "ALTER TABLE skip_segments ADD COLUMN source TEXT NOT NULL "
+            "DEFAULT ''",
+          );
+          // Raw SQL: `confidence` no longer exists in the current table shape
+          // (v17 replaces it with a verdict per window). The historical step
+          // must still run so a v15 cache follows the same path every other
+          // cache did, and v17 then drops it.
+          await customStatement(
+            'ALTER TABLE skip_segments ADD COLUMN confidence '
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+        if (from < 17) {
+          // v16's single `confidence` was a placeholder written before the rule
+          // existed; D5 needs a verdict per window. Nothing is lost: every v16
+          // row was written 0, since nothing ever set it. By the time this runs
+          // the column exists on every path — already there for a v16+ cache, or
+          // just added by the v16 step above. (An earlier `from >= 16` guard left
+          // the orphan behind on exactly the upgrade path a real cache takes.)
+          await customStatement(
+            'ALTER TABLE skip_segments DROP COLUMN confidence',
+          );
+          await customStatement(
+            'ALTER TABLE skip_segments ADD COLUMN intro_confidence '
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await customStatement(
+            'ALTER TABLE skip_segments ADD COLUMN outro_confidence '
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+        if (from < 18) {
+          // Additive and defaulted to '', which MEANS "produced by unknown
+          // inputs" — so every pre-v18 row is re-resolved once on the next
+          // refresh and then left alone. Backfilling it to the current key
+          // would be the wrong default: it would assert that rows written
+          // before the rule existed already satisfy it, and the 140 rows on
+          // the reference library that predate even `source` would keep their
+          // first-writer-wins state forever.
+          await customStatement(
+            "ALTER TABLE skip_segments ADD COLUMN resolved_key TEXT NOT NULL "
+            "DEFAULT ''",
+          );
+        }
+        if (from < 19) {
+          // Stop storing a VERDICT and store the ANSWERS it was derived from.
+          // Everything derived moves to the read path, so a rule change no
+          // longer needs invalidating — see SkipSourceAnswers.
+          await m.createTable(skipSourceAnswers);
+          // Backfill, so nothing a user already had disappears. A row whose
+          // provenance was never recorded (pre-v16) becomes `legacy`: still
+          // usable, but it can never outrank a known source or vote on
+          // agreement, because we cannot say who produced it.
+          // No `OR IGNORE`: the source key is `(series_id, episode)` and the
+          // target adds `source`, so a duplicate is impossible by construction
+          // and the clause could only have turned a real constraint failure
+          // into silent row loss. A failure here rolls the whole chain back.
+          await customStatement(
+            'INSERT INTO skip_source_answers '
+            '(series_id, episode, source, intro_start_ms, intro_end_ms, '
+            'outro_start_ms, outro_end_ms, asked_at_ms) '
+            "SELECT series_id, episode, CASE WHEN source = '' THEN '$kLegacySource' "
+            'ELSE source END, intro_start_ms, intro_end_ms, outro_start_ms, '
+            'outro_end_ms, 0 FROM skip_segments',
+          );
+          await customStatement('DROP TABLE skip_segments');
+        }
+      });
+    },
   );
 
   /// v9: move file_cache identity from an absolute `path` to (folder_path,

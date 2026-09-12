@@ -29,6 +29,9 @@ class ChaptersSkipProvider implements SkipProvider {
   String get displayName => 'Chapters in the file';
 
   @override
+  bool get readsFile => true;
+
+  @override
   bool get requiresClientId => false;
 
   @override

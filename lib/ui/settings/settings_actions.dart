@@ -16,12 +16,14 @@ import 'sources_actions.dart';
 /// Structural rather than a convention: the show page used to build its own
 /// [SettingsDialogActions] and left the two source lists at their defaults, so
 /// Settings › Metadata and › Skip rendered EMPTY from two of the window's three
-/// doors. The private constructor below makes that impossible to repeat.
+/// doors. Two things make that impossible to repeat: [SettingsDialogActions]
+/// has a private constructor, and the two lists here have NO default — a
+/// caller that forgets them does not compile.
 class SettingsActions {
   const SettingsActions({
     required this.sources,
-    this.metadataSources = const [],
-    this.skipSources = const [],
+    required this.metadataSources,
+    required this.skipSources,
     required this.onRefreshMetadata,
   });
 
@@ -121,7 +123,7 @@ Future<void> refreshMetadata(
                 ),
               )
             : SnackBar(
-                // An unreachable AniList is a FAILED refresh, not a refresh of
+                // An unreachable metadata service is a FAILED refresh, not a refresh of
                 // zero series: reporting success here sent the user hunting for
                 // a local bug during an AniList outage.
                 duration: const Duration(seconds: 8),

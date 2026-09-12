@@ -8,6 +8,7 @@ import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/show_preferences.dart';
+import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/sync_summary.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/domain/repositories/fix_match_repository.dart';
@@ -147,6 +148,7 @@ class _FakeRepository
 
 void main() {
   _errorPanelTests();
+  _settingsWiringTests();
   testWidgets('library renders cached series from the repository', (
     tester,
   ) async {
@@ -189,6 +191,79 @@ void main() {
     expect(find.byType(HeaderReadout), findsOneWidget);
     expect(find.text('Frieren'), findsOneWidget);
     expect(find.textContaining('TV'), findsOneWidget);
+  });
+}
+
+/// Settings opened from the SHOW PAGE lists the shipped sources.
+///
+/// The shipped bug was upstream of the show page: it assembled its own
+/// settings bundle and the library screen did not forward the source lists.
+/// So this drives the real wiring — `AniLocalApp` → library grid → card tap →
+/// show page → header ⚙ → Metadata — rather than constructing the show page
+/// with the lists already in hand, which would pass whatever the wiring did.
+void _settingsWiringTests() {
+  testWidgets('Settings from the show page shows the sources the app ships', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      AniLocalApp(
+        repository: _FakeRepository(),
+        fixMatch: _FakeFixMatch(),
+        watchState: _FakeRepository(),
+        sourceSelection: _FakeRepository(),
+        watchOrder: _FakeRepository(),
+        playback: PlaybackController(resolver: _FakeRepository()),
+        missing: _FakeRepository(),
+        showPreferences: _FakeRepository(),
+        settings: const FakeSettings(),
+        onScan: (_) async => const SyncSummary(
+          filesScanned: 0,
+          unchanged: 0,
+          processed: 0,
+          removed: 0,
+          matched: 0,
+          unmatched: 0,
+          errored: 0,
+          lookupsBySource: {},
+        ),
+        onRefreshMetadata: () async =>
+            const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+        onAddFolder: () async => (added: false, deniedLabel: null),
+        accessIssues: ValueNotifier<List<String>>(const []),
+        missingFolders: ValueNotifier<List<String>>(const []),
+        missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+        onOpenAccessSettings: () async => true,
+        metadataSources: const [
+          SourceDescriptor(token: 'kitsu', displayName: 'Kitsu Probe'),
+        ],
+        skipSources: const [
+          SourceDescriptor(token: 'chapters', displayName: 'Chapters Probe'),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    await tester.tap(find.text('Frieren'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('Metadata'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Kitsu Probe'), findsOneWidget);
+
+    await tester.tap(find.text('Skip'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Chapters Probe'), findsOneWidget);
   });
 }
 

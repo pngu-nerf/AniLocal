@@ -38,6 +38,9 @@ class AniSkipSkipProvider implements SkipProvider {
   bool canAnswer(SkipLookup lookup) => lookup.malId != null;
 
   @override
+  bool get readsFile => false;
+
+  @override
   Future<EpisodeSkips?> fetchSkips(SkipLookup lookup) async {
     final malId = lookup.malId;
     if (malId == null) return null;

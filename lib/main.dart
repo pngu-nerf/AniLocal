@@ -81,9 +81,9 @@ const List<String> kEpisodicAnimeFormats = [
 /// `docs/multi-source-plan.md` for the parked set as a whole.
 const bool kShipMyAnimeListSource = false;
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  // Failures leave a trail. Before this there was no error hook and no log of
+Future<void> main() async {
+  // Failures leave a trail. Installed FIRST, before the binding, so an error
+  // during binding initialisation is captured too. Before this there was no error hook and no log of
   // any kind: an uncaught async error in a release build went to the unified
   // system log where no user looks, and an uncaught build error drew a blank
   // grey box. Both now land in AppLog, whose ring buffer is what the "Copy
@@ -98,28 +98,46 @@ void main() {
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     AppLog.error('Uncaught: $error', stack: stack);
-    return true; // handled: logged, and the app keeps running
+    // Logged AND presented: returning true alone would silence the console
+    // dump a developer relies on, and the app keeps running either way.
+    FlutterError.presentError(
+      FlutterErrorDetails(exception: error, stack: stack, library: 'AniLocal'),
+    );
+    return true;
   };
+  WidgetsFlutterBinding.ensureInitialized();
   unawaited(AppLog.attachFile(logsDirectory, debugEcho: kDebugMode));
-  unawaited(
-    PackageInfo.fromPlatform().then((info) {
-      final version = '${info.version}+${info.buildNumber}';
-      Diagnostics.appVersion = version;
-      aniLocalUserAgent = userAgentFor(version);
-    }),
-  );
+  // Awaited: one method-channel call, and it decides the User-Agent every
+  // request carries. Unawaited, the first requests went out as
+  // `AniLocal/unknown`, which defeats the one signal the services get about
+  // which build sent them.
+  final info = await PackageInfo.fromPlatform();
+  final version = '${info.version}+${info.buildNumber}';
+  Diagnostics.appVersion = version;
+  aniLocalUserAgent = userAgentFor(version);
   // What we owe for what we ship, reachable from Settings > About > Licences.
   // Flutter collects every pub package's licence for free; these three are
   // the ones it cannot know about: the app's own GPL, the font (its OFL
   // requires the text to travel with the font), and the GPL media stack that
   // media_kit bundles — whose corresponding source is the project repository.
   LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithLineBreaks(const [
-      'AniLocal',
-    ], await rootBundle.loadString('LICENSE'));
+    // A missing asset must not take the Licences page down with it — for a
+    // GPL build that page IS the notice — so each text falls back to a
+    // pointer at the repository, where the same file lives.
+    Future<String> text(String asset) async {
+      try {
+        return await rootBundle.loadString(asset);
+      } catch (e) {
+        AppLog.error('Licence text $asset missing from the bundle', error: e);
+        return 'The text of this licence could not be loaded from the app '
+            'bundle. It is the file `$asset` at $kAniLocalProjectUrl.';
+      }
+    }
+
+    yield LicenseEntryWithLineBreaks(const ['AniLocal'], await text('LICENSE'));
     yield LicenseEntryWithLineBreaks(const [
       'Archivo (font)',
-    ], await rootBundle.loadString('fonts/Archivo-OFL.txt'));
+    ], await text('fonts/Archivo-OFL.txt'));
     yield const LicenseEntryWithLineBreaks(
       ['libmpv', 'FFmpeg', 'libass'],
       'AniLocal plays video through libmpv, FFmpeg and libass, bundled by '

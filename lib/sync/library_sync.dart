@@ -393,11 +393,12 @@ class LibrarySync {
           (f.seriesId!, f.episodeNumber!):
               '${mountByFolder[f.folderPath]}/${f.relativePath}',
     };
-    // Same contract as the refresh path: a source that already answered for
-    // an episode — even to say it had nothing — is never asked again. A CHANGED
-    // file comes through here with its answers intact, and re-asking would
-    // both waste a request per source and (see `_askSkipSources`) risk a stale
-    // window that a later "nothing" answer could not clear.
+    // A source that already answered for an episode — even to say it had
+    // nothing — is not asked again, UNLESS its answer is derived from the file
+    // itself: every file here is new or changed (that is why it is in
+    // `fileUpserts`), and a re-encode can move or remove its chapters, so a
+    // file-reading source is re-asked and its row overwritten. A service keyed
+    // by show and episode has nothing new to say about a changed encode.
     final answered = <(int, int), Set<String>>{};
     for (final a in await cache.allSkipAnswers()) {
       (answered[(a.seriesId, a.episode)] ??= <String>{}).add(a.source);
@@ -407,7 +408,7 @@ class LibrarySync {
       final already = answered[(seriesId, episode)] ?? const <String>{};
       final missing = [
         for (final p in askable)
-          if (!already.contains(p.token)) p,
+          if (p.readsFile || !already.contains(p.token)) p,
       ];
       if (missing.isEmpty) continue;
       skipUpserts.addAll(
@@ -442,6 +443,7 @@ class LibrarySync {
       promotions: promotions,
     );
 
+    _flushSkipFailures();
     return SyncSummary(
       filesScanned: scannedSet.length,
       unchanged: unchanged,
@@ -643,6 +645,7 @@ class LibrarySync {
       }
     }
 
+    _flushSkipFailures();
     return RefreshSummary(
       seriesRefreshed: seriesRefreshed,
       skipsFetched: skipsFetched,
@@ -676,6 +679,21 @@ class LibrarySync {
     );
   }
 
+  /// Skip-source failures seen during the current run, by source and cause;
+  /// written to the log as one line each by `_flushSkipFailures`.
+  final _skipFailures = <(String, MetadataFailure), int>{};
+
+  void _flushSkipFailures() {
+    for (final MapEntry(key: (source, failure), value: count)
+        in _skipFailures.entries) {
+      AppLog.warn(
+        'Skip source $source failed for $count episode(s): ${failure.name} — '
+        'no rows written, retried next run',
+      );
+    }
+    _skipFailures.clear();
+  }
+
   /// Ask each source and record WHAT IT SAID — no reconciliation here.
   ///
   /// Which window wins and how far to trust it are read-path decisions now
@@ -706,13 +724,12 @@ class LibrarySync {
       try {
         found = await provider.fetchSkips(lookup);
       } on SkipException catch (e) {
-        // Transient — no row, so it is retried. Logged: a source failing for
-        // 400 episodes in a row used to look identical to one that had nothing.
-        AppLog.warn(
-          'Skip source ${provider.token} failed for '
-          '${lookup.seriesId}/${lookup.episode}',
-          error: e,
-        );
+        // Transient — no row, so it is retried. Tallied, not logged here: a
+        // source failing for 400 episodes in a row used to look identical to
+        // one that had nothing, and then, once logged per episode, it evicted
+        // everything else from the diagnostics ring. One line per run instead.
+        final key = (provider.token, e.failure);
+        _skipFailures[key] = (_skipFailures[key] ?? 0) + 1;
         continue;
       }
       rows.add(

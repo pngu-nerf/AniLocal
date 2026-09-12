@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 
@@ -81,6 +82,7 @@ abstract final class AppLog {
 
   /// Forget everything. Tests only; production never resets.
   static void reset() {
+    _debug = false;
     _ring.clear();
     _file = null;
     _fileBytes = 0;
@@ -117,7 +119,7 @@ abstract final class AppLog {
       // is a log line that never lands. These are short writes to a local
       // file; the cost is invisible next to a single network request.
       file.writeAsStringSync('$line\n', mode: FileMode.append, flush: false);
-      _fileBytes += line.length + 1;
+      _fileBytes += utf8.encode(line).length + 1; // bytes, like the file
       if (_fileBytes > maxFileBytes) {
         _rotateSync(file);
       }

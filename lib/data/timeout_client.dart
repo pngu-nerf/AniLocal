@@ -33,15 +33,25 @@ class TimeoutClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final response = await _inner
-        .send(request)
-        .timeout(
-          timeout,
-          onTimeout: () => throw http.ClientException(
-            'No response within ${timeout.inSeconds}s',
-            request.url,
+    final pending = _inner.send(request);
+    final response = await pending.timeout(
+      timeout,
+      onTimeout: () {
+        // `Future.timeout` abandons the inner send rather than cancelling it.
+        // If headers do arrive later, drain and cancel that response so the
+        // socket is released instead of sitting open for the process life.
+        unawaited(
+          pending.then(
+            (late) => late.stream.listen(null).cancel(),
+            onError: (Object _) {},
           ),
         );
+        throw http.ClientException(
+          'No response within ${timeout.inSeconds}s',
+          request.url,
+        );
+      },
+    );
     return http.StreamedResponse(
       response.stream.timeout(
         timeout,

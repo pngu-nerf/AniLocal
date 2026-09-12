@@ -101,6 +101,16 @@ abstract interface class SkipProvider {
   /// skips forever, which is the exact dependency the cross-map removed.
   bool canAnswer(SkipLookup lookup) => true;
 
+  /// True when the answer is a function of the episode's FILE (chapters read
+  /// from the container), false when it comes from a service keyed by ids.
+  ///
+  /// Decides re-asking on the scan path. A file reaches the scan loop because
+  /// its size or date changed, so a file-derived answer may have changed with
+  /// it and is asked again; a service's answer for the same show and episode
+  /// has not, so the stored row stands. The refresh path re-asks nothing,
+  /// because nothing about the file changed there.
+  bool get readsFile => false;
+
   /// Shown in the settings source list.
   String get displayName;
 

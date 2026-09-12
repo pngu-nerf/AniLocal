@@ -104,7 +104,19 @@ void main() {
       final copy = File(
         '${Directory.systemTemp.path}/anilocal_span_probe.sqlite',
       );
-      live.copySync(copy.path);
+      // `VACUUM INTO`, not a file copy: the cache runs in WAL mode, so the
+      // most recent writes live in `cache.sqlite-wal` and a copy of the main
+      // file alone is a silently stale snapshot. VACUUM INTO reads through
+      // the WAL under a read transaction and writes one consistent file.
+      if (copy.existsSync()) copy.deleteSync();
+      final snapshot = Process.runSync('sqlite3', [
+        '-readonly',
+        live.path,
+        "VACUUM INTO '${copy.path}'",
+      ]);
+      if (snapshot.exitCode != 0) {
+        fail('could not snapshot the live cache: ${snapshot.stderr}');
+      }
 
       // One row per matched file, carrying the MAL id AniSkip is keyed by. Unit
       // separator rather than a comma: show titles contain commas.
