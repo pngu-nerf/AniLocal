@@ -7,10 +7,23 @@ names, enriches them from an ordered list of metadata sources you control
 no account, no key), caches everything locally, and plays via **libmpv**
 (media_kit). No server, no account, no tracker.
 
+Source: <https://github.com/pngu-nerf/AniLocal> · Licence: GPL-3.0-or-later ·
+Status: **0.1.0**, unsigned developer builds — see [`CHANGELOG.md`](CHANGELOG.md).
+
+## Requirements
+
+| | |
+|---|---|
+| Runs on | macOS 10.15 or later (Apple silicon and Intel) |
+| To build | Flutter 3.44.1 (stable), Xcode command-line tools, CocoaPods; network once for the first native build |
+| Media | Anything libmpv plays — MKV/MP4 with ASS/SSA subtitles is the target |
+| Metadata | AniList, Kitsu, Jikan and AniSkip over HTTPS — public, no account, no key; everything is cached and the app works offline afterwards |
+
 ## Getting started
 
 - Run: `flutter run -d macos`
-- Check: `tool/check.sh` (`flutter analyze` + `dart format --set-exit-if-changed`)
+- Check: `./tool/check.sh` — format, analyze and the whole test suite; the same gate CI runs
+- Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) · Security: [`SECURITY.md`](SECURITY.md)
 
 ## Building
 
@@ -26,10 +39,12 @@ no account, no key), caches everything locally, and plays via **libmpv**
 ## Licence
 
 AniLocal is free software under the **GNU GPL v3 or later** — see [`LICENSE`](LICENSE).
-It bundles libmpv, FFmpeg and libass (GPL/LGPL, via media_kit) and the Archivo font
-(SIL OFL 1.1, [`fonts/Archivo-OFL.txt`](fonts/Archivo-OFL.txt)). All notices are
-reachable in the app under Settings → About → Licences; this repository is the
-corresponding source.
+It comes with **absolutely no warranty**; you may redistribute it under the terms of
+that licence. It bundles libmpv and FFmpeg (GPL-2.0-or-later / LGPL-2.1-or-later —
+their texts are in [`third_party/licenses/`](third_party/licenses/) and in the app),
+libass (ISC) via media_kit, and the Archivo font (SIL OFL 1.1,
+[`fonts/Archivo-OFL.txt`](fonts/Archivo-OFL.txt)). All notices are reachable in the
+app under Settings → About → Licences; this repository is the corresponding source.
 
 ## Documentation
 
@@ -37,4 +52,5 @@ corresponding source.
   the maintainer front-door: the layer map, where things live, and what not to touch.
 - [`CLAUDE.md`](CLAUDE.md) — working rules, the seams, the dependency log.
 - [`ROADMAP.md`](ROADMAP.md) — what's built and what's planned, in order.
-- [`docs/`](docs/) — deeper audits (tech-debt, maintainability, player regression/test coverage).
+- [`docs/feature-log.md`](docs/feature-log.md) — how each shipped feature works and why.
+- [`docs/README.md`](docs/README.md) — the index of everything else (audits, player checklist, research).

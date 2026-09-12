@@ -1,2 +1,8 @@
 #include "../../Flutter/Flutter-Release.xcconfig"
 #include "Warnings.xcconfig"
+
+// Notarization requires the hardened runtime, and libmpv's JIT / library
+// validation issues surface only with it on — so it is on for every release
+// build, signed or not, rather than discovered at the first signed one. The
+// entitlements it needs live in Runner/Release.entitlements.
+ENABLE_HARDENED_RUNTIME = YES

@@ -17,7 +17,7 @@ repository: https://github.com/pngu-nerf/AniLocal
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+2
+version: 0.1.0+3
 
 environment:
   sdk: ^3.12.1
@@ -92,6 +92,11 @@ flutter:
   assets:
     - LICENSE
     - fonts/Archivo-OFL.txt
+    # The GPL-2.0 and LGPL-2.1 texts the bundled media stack (libmpv, FFmpeg,
+    # libass via media_kit) is licensed under: those licences require THEIR
+    # text to accompany the binaries, and GPLv3's text does not discharge it.
+    - third_party/licenses/GPL-2.0.txt
+    - third_party/licenses/LGPL-2.1.txt
 
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package

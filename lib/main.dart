@@ -142,11 +142,24 @@ Future<void> main() async {
     yield const LicenseEntryWithLineBreaks(
       ['libmpv', 'FFmpeg', 'libass'],
       'AniLocal plays video through libmpv, FFmpeg and libass, bundled by '
-      'media_kit (github.com/media-kit/libmpv-darwin-build). These are '
-      'licensed under the GNU GPL (v2 or later) and LGPL; AniLocal as a whole '
-      'is therefore distributed under the GNU GPL v3 or later. Corresponding '
-      'source for AniLocal: $kAniLocalProjectUrl',
+      'media_kit (github.com/media-kit/libmpv-darwin-build — the source of '
+      'the exact builds shipped, and where their corresponding source is '
+      'published). libmpv and FFmpeg are licensed under the GNU GPL version 2 '
+      'or later and the GNU LGPL version 2.1 or later; libass under the ISC '
+      'licence. Their licence texts follow. AniLocal as a whole is therefore '
+      'distributed under the GNU GPL v3 or later, and comes with ABSOLUTELY '
+      'NO WARRANTY. Corresponding source for AniLocal: $kAniLocalProjectUrl',
     );
+    // The texts themselves: GPLv3's text does not discharge a v2 or LGPL
+    // notice, so the media stack's own licences travel in the bundle too.
+    yield LicenseEntryWithLineBreaks(const [
+      'libmpv',
+      'FFmpeg',
+    ], await text('third_party/licenses/GPL-2.0.txt'));
+    yield LicenseEntryWithLineBreaks(const [
+      'libmpv',
+      'FFmpeg',
+    ], await text('third_party/licenses/LGPL-2.1.txt'));
   });
   AppLog.info(
     'AniLocal starting · schema v${CacheDatabase.currentSchemaVersion} · '

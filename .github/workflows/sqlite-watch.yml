@@ -1,0 +1,17 @@
+name: vendored SQLite is current
+
+# The build compiles SQLite from a vendored amalgamation (offline builds, no
+# third-party binary at build time), which means nothing else will tell us
+# when a new release lands. This does, weekly. A red run here means
+# "re-vendor", not "the app is broken".
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./tool/sqlite_version_check.sh

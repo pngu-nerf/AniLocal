@@ -4,10 +4,17 @@
 // future. If not, the values below would default to using the project name when this becomes a
 // 'flutter create' template.
 
-// The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = anilocal
+// The application's name — also the .app file name and CFBundleName, so it
+// matches the display name rather than reading as a lowercase package id.
+PRODUCT_NAME = AniLocal
 
-// The application's bundle identifier
+// The application's bundle identifier. DELIBERATELY the template value: the
+// cache lives under ~/Library/Application Support/<bundle id>/, so changing
+// this orphans every existing install's library, watch state and fix-matches
+// unless a migration moves the directory. The anilocal.com domain is not
+// ours, which argues for io.github.pngu-nerf.anilocal — decide, with that
+// migration, before the FIRST signed release; after it the id is fixed for
+// good (notarization, TCC grants and user data all key on it).
 PRODUCT_BUNDLE_IDENTIFIER = com.anilocal.anilocal
 
 // The copyright displayed in application information

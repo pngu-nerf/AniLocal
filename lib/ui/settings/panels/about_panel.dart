@@ -47,8 +47,11 @@ class _AboutPanelState extends State<AboutPanel> {
           SettingRow(
             label: 'Licences',
             subtitle:
-                'AniLocal is GPL-3.0-or-later. Bundled: libmpv/FFmpeg, '
-                'Archivo, and every package it builds on.',
+                'AniLocal is free software under the GNU GPL v3 or later, and '
+                'comes with ABSOLUTELY NO WARRANTY. You may redistribute it '
+                'under the terms of that licence; the source is at the '
+                'project repository. Bundled: libmpv/FFmpeg (GPL/LGPL), '
+                'libass, Archivo (OFL), and every package it builds on.',
             control: XpButton(
               label: 'View',
               onPressed: () => showLicensePage(

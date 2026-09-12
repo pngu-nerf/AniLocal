@@ -1,0 +1,21 @@
+# Line endings are LF in the repository whatever the checkout platform —
+# `dart format` emits LF and the gate rejects a tree that differs from it, so
+# a Windows checkout with autocrlf would otherwise fail the format check on
+# every file. Set now, ahead of the planned Windows port.
+* text=auto eol=lf
+
+# Binary, never diffed as text.
+*.png binary
+*.ttf binary
+*.otf binary
+*.icns binary
+*.mkv binary
+*.mp4 binary
+
+# Generated and vendored code: collapsed in diffs and review, and not
+# counted as the project's own language.
+lib/**/*.g.dart linguist-generated=true -diff
+third_party/sqlite3/sqlite3.c linguist-vendored=true -diff
+third_party/sqlite3/sqlite3.h linguist-vendored=true -diff
+third_party/sqlite3/sqlite3ext.h linguist-vendored=true -diff
+third_party/licenses/* linguist-vendored=true
