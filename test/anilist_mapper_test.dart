@@ -1,94 +1,70 @@
-import 'dart:convert';
-
 import 'package:anilocal/data/anilist/anilist_mapper.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// The mapper reads guarded, never casts. A cast on `dynamic` throws a
+/// TypeError — an Error — which escaped every `on Exception` on the scan path
+/// and aborted the run before the cache-preserving outage guard could act.
 void main() {
   group('seriesFromMediaJson', () {
-    test('maps titles, format, episodes, cover, and relations', () {
-      final media = jsonDecode(_sampleMediaJson) as Map<String, dynamic>;
-
-      final series = seriesFromMediaJson(media);
-
-      expect(series.seriesId, 154587);
-      expect(series.titles.romaji, 'Sousou no Frieren');
-      expect(series.titles.english, 'Frieren: Beyond Journey\'s End');
-      expect(series.titles.native, '葬送のフリーレン');
-      expect(series.format, 'TV');
-      expect(series.episodeCount, 28);
-      // Prefers the largest available cover image.
-      expect(series.coverImageRef, contains('extraLarge'));
-
-      expect(series.relations, hasLength(2));
-      expect(series.relations.first.relationType, 'ADAPTATION');
-      expect(series.relations.first.titles.romaji, 'Sousou no Frieren');
-      expect(series.relations.first.format, 'MANGA');
-      expect(series.relations[1].relationType, 'SIDE_STORY');
+    test('fields of the wrong shape are null, not fatal', () {
+      final s = seriesFromMediaJson({
+        'id': 7,
+        'idMal': '123', // a string where an int belongs
+        'title': 'not an object',
+        'format': 42,
+        'episodes': '12',
+        'coverImage': <String, Object?>{'extraLarge': 9},
+        'relations': <String, Object?>{'edges': 'nope'},
+      });
+      expect(s.seriesId, 7);
+      expect(s.externalIds.mal, isNull);
+      expect(s.titles.romaji, isNull);
+      expect(s.format, isNull);
+      expect(s.episodeCount, isNull);
+      expect(s.coverImageRef, isNull);
+      expect(s.relations, isEmpty);
     });
 
-    test('tolerates missing optional fields', () {
-      final media = <String, dynamic>{
+    test(
+      'a non-integer id is the one fatal case, and it is a FormatException',
+      () {
+        expect(
+          () => seriesFromMediaJson({'id': '7'}),
+          throwsA(isA<FormatException>()),
+          reason: 'an Exception the client maps, not an Error that escapes',
+        );
+        expect(() => seriesFromMediaJson({}), throwsA(isA<FormatException>()));
+      },
+    );
+
+    test('a relation edge without a node id is skipped', () {
+      final s = seriesFromMediaJson({
         'id': 1,
-        'title': {'romaji': 'Only Romaji', 'english': null, 'native': null},
-      };
-
-      final series = seriesFromMediaJson(media);
-
-      expect(series.seriesId, 1);
-      expect(series.titles.romaji, 'Only Romaji');
-      expect(series.format, isNull);
-      expect(series.episodeCount, isNull);
-      expect(series.coverImageRef, isNull);
-      expect(series.relations, isEmpty);
+        'relations': {
+          'edges': [
+            null,
+            <String, Object?>{'node': null},
+            {
+              'node': {'id': 'x'},
+            },
+            {
+              'relationType': 'SEQUEL',
+              'node': {'id': 2, 'format': 'TV'},
+            },
+          ],
+        },
+      });
+      expect(s.relations, hasLength(1));
+      expect(s.relations.single.anilistId, 2);
     });
   });
-}
 
-const String _sampleMediaJson = '''
-{
-  "id": 154587,
-  "format": "TV",
-  "episodes": 28,
-  "title": {
-    "romaji": "Sousou no Frieren",
-    "english": "Frieren: Beyond Journey's End",
-    "native": "葬送のフリーレン"
-  },
-  "coverImage": {
-    "extraLarge": "https://example.com/extraLarge.jpg",
-    "large": "https://example.com/large.jpg",
-    "medium": "https://example.com/medium.jpg",
-    "color": "#e4a15d"
-  },
-  "relations": {
-    "edges": [
-      {
-        "relationType": "ADAPTATION",
-        "node": {
-          "id": 127779,
-          "format": "MANGA",
-          "type": "MANGA",
-          "title": {
-            "romaji": "Sousou no Frieren",
-            "english": null,
-            "native": "葬送のフリーレン"
-          }
-        }
-      },
-      {
-        "relationType": "SIDE_STORY",
-        "node": {
-          "id": 169470,
-          "format": "TV_SHORT",
-          "type": "ANIME",
-          "title": {
-            "romaji": "Side Story",
-            "english": null,
-            "native": null
-          }
-        }
-      }
-    ]
-  }
+  test('seriesListFromMediaList skips entries that are not objects', () {
+    final list = seriesListFromMediaList([
+      null,
+      'junk',
+      {'id': 3},
+    ]);
+    expect(list.map((s) => s.seriesId), [3]);
+  });
 }
-''';

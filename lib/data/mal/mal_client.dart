@@ -206,10 +206,16 @@ class MalClient {
     try {
       decoded = jsonDecode(body);
     } on FormatException catch (e) {
-      throw MalException('Malformed MyAnimeList response: $e');
+      throw MalException(
+        'Malformed MyAnimeList response: $e',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     if (decoded is! Map<String, dynamic>) {
-      throw const MalException('Unexpected MyAnimeList response shape.');
+      throw const MalException(
+        'Unexpected MyAnimeList response shape.',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     return decoded;
   }

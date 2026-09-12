@@ -14,6 +14,9 @@ MetadataFailure classifyHttpFailure(
   required bool carriesProviderError,
 }) {
   if (status == 429) return MetadataFailure.rateLimited;
+  // A credential was demanded or refused. Classified HERE so MAL's client does
+  // not have to re-derive it (it adds only its body-specific cases).
+  if (status == 401) return MetadataFailure.unauthorized;
   // 5xx is server-side by definition, whoever rendered the page.
   if (status >= 500) return MetadataFailure.service;
   // A 4xx speaking the service's own error format is that service deliberately

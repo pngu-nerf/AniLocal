@@ -88,6 +88,35 @@ void main() {
       );
     });
 
+    test('a time of the wrong type drops that window, never throws', () async {
+      // The old `as num?` cast threw a TypeError on a string — an Error, so
+      // `_askSkipSources`'s `on SkipException` did not hold it and one bad
+      // payload killed the whole scan.
+      final client = AniSkipClient(
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'found': true,
+              'results': [
+                {
+                  'interval': {'startTime': 'ninety', 'endTime': 110.0},
+                  'skipType': 'op',
+                },
+                {
+                  'interval': {'startTime': 1320.0, 'endTime': 1410.0},
+                  'skipType': 'ed',
+                },
+              ],
+            }),
+            200,
+          ),
+        ),
+      );
+      final skips = await client.fetchSkips(1, 1);
+      expect(skips?.intro, isNull, reason: 'unreadable window dropped');
+      expect(skips?.outro?.start, const Duration(seconds: 1320));
+    });
+
     test('404 -> null (no data is normal, not an error)', () async {
       final client = AniSkipClient(
         httpClient: MockClient((_) async => http.Response('', 404)),

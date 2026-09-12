@@ -130,10 +130,13 @@ class LibrarySync {
       }
       try {
         for (final abs in await scanner.findVideoFiles(current)) {
-          final relative = abs.length > current.length
-              ? abs.substring(current.length + 1)
-              : abs;
-          stats[(folderPath, relative)] = await File(abs).stat();
+          final stat = await File(abs).stat();
+          // Listed a moment ago, gone now — a download finishing, a Finder
+          // move. `stat()` does not throw for that; it reports notFound with
+          // size -1, which would otherwise be cached as a real fingerprint.
+          if (stat.type == FileSystemEntityType.notFound) continue;
+          final key = rebaseToFolderRelative(abs, [current]);
+          stats[(folderPath, key.relativePath)] = stat;
         }
       } on FileSystemException {
         unreadableFolders.add(folderPath);
@@ -268,7 +271,11 @@ class LibrarySync {
         // show another provider already identified (matching on ANY id the
         // answer carries) and mints only when nothing matches — without this
         // the same show would fork under two ids and strand watch progress.
-        final seriesId = found == null
+        // A candidate carrying no ids at all cannot be given an identity
+        // (`ensureSeriesId` would throw and abort the scan); treat it as no
+        // match, exactly as fix-match refuses it. No shipped mapper produces
+        // one, so this is the guard, not a path.
+        final seriesId = found == null || found.externalIds.isEmpty
             ? null
             : await cache.ensureSeriesId(found.externalIds);
         final source = result.source;
@@ -364,15 +371,19 @@ class LibrarySync {
     // per distinct (entry, episode) — deduped across multi-source files, and
     // already incremental (fileUpserts are only the deltas). Failures/no-data
     // are skipped silently; partial AniSkip coverage is normal.
-    final idMalById = <int, int?>{
-      for (final e in (await cache.externalIdsBySeriesId()).entries)
-        e.key: e.value.mal,
-    };
+    // The cache's ids plus what this scan just learned (not yet written —
+    // applySync runs at the end), so a freshly identified show's MAL id
+    // reaches AniSkip on the same scan.
+    final externalIds = Map<int, ExternalIds>.of(
+      await cache.externalIdsBySeriesId(),
+    );
     for (final r in resolved.values) {
       final fresh = r.freshSeries;
       final seriesId = r.seriesId;
       if (fresh != null && seriesId != null) {
-        idMalById[seriesId] = fresh.externalIds.mal;
+        externalIds[seriesId] = fresh.externalIds.fillFrom(
+          externalIds[seriesId] ?? ExternalIds.empty,
+        );
       }
     }
     final skipKeys = <(int, int)>{
@@ -380,7 +391,7 @@ class LibrarySync {
         if (f.seriesId != null && f.episodeNumber != null)
           (f.seriesId!, f.episodeNumber!),
     };
-    final malIds = await _resolveMalIds(idMalById, skipKeys.map((k) => k.$1));
+    final malIds = await _resolveMalIds(externalIds, skipKeys.map((k) => k.$1));
     final askable = await _askableSkipSources();
     // A LOCAL skip source reads the episode's own file, so the lookup has to
     // carry it. Absolute path, rebuilt from the folder identity + relative
@@ -486,13 +497,12 @@ class LibrarySync {
     // MAL ids it already stored, so skips can still be backfilled offline
     // (before this, an unreachable source left the map empty and no skip was
     // ever fetched, even for shows whose idMal was already known).
-    final idMalById = <int, int?>{
-      for (final e in (await cache.externalIdsBySeriesId()).entries)
-        e.key: e.value.mal,
-    };
-    // Each provider is re-asked BY ITS OWN ids, which is why the side table
-    // exists: our series_id means nothing to Kitsu or MAL.
-    final externalIds = await cache.externalIdsBySeriesId();
+    // Read ONCE: every provider is re-asked BY ITS OWN ids (which is why the
+    // side table exists — our series_id means nothing to Kitsu or MAL), and
+    // the same map seeds the skip lookups' MAL ids below.
+    final externalIds = Map<int, ExternalIds>.of(
+      await cache.externalIdsBySeriesId(),
+    );
     // Previous cover per series, so a source switch actually replaces the art
     // instead of keeping the first source's picture forever.
     final cachedSeriesRows = {
@@ -507,7 +517,12 @@ class LibrarySync {
       // series_id <-> this provider's id, for the ids we actually hold.
       final providerIdBySeries = <int, int>{};
       for (final seriesId in ids) {
-        final providerId = externalIds[seriesId]?.forProvider(provider.token);
+        // By idNamespace, not token: Jikan's ids are MyAnimeList's and live
+        // under `mal`. Looked up by token, this map was empty for Jikan and
+        // MAL and neither source could ever refresh anything.
+        final providerId = externalIds[seriesId]?.forProvider(
+          provider.idNamespace,
+        );
         if (providerId != null) providerIdBySeries[seriesId] = providerId;
       }
       if (providerIdBySeries.isEmpty) continue;
@@ -522,7 +537,9 @@ class LibrarySync {
         for (final fresh in fetched) {
           // Map the provider's answer back onto OUR identity — never adopt the
           // provider's id as the key.
-          final providerId = fresh.externalIds.forProvider(provider.token);
+          final providerId = fresh.externalIds.forProvider(
+            provider.idNamespace,
+          );
           final seriesId = seriesByProviderId[providerId];
           // Answered about something we didn't ask for.
           if (seriesId == null) continue;
@@ -546,7 +563,9 @@ class LibrarySync {
               externalIds[seriesId] ?? ExternalIds.empty,
             ),
           );
-          idMalById[seriesId] = fresh.externalIds.mal ?? idMalById[seriesId];
+          externalIds[seriesId] = fresh.externalIds.fillFrom(
+            externalIds[seriesId] ?? ExternalIds.empty,
+          );
           seriesRefreshed++;
         }
         failure = null;
@@ -616,7 +635,10 @@ class LibrarySync {
     for (final a in await cache.allSkipAnswers()) {
       (answered[(a.seriesId, a.episode)] ??= <String>{}).add(a.source);
     }
-    final malIds = await _resolveMalIds(idMalById, identities.map((i) => i.$1));
+    final malIds = await _resolveMalIds(
+      externalIds,
+      identities.map((i) => i.$1),
+    );
     final askable = await _askableSkipSources();
     var skipsFetched = 0;
     for (final (seriesId, episode) in identities) {
@@ -758,9 +780,10 @@ class LibrarySync {
   /// doesn't know all leave the entry exactly as it was — never worse than
   /// before. Placeholder ids are negative and simply miss.
   Future<Map<int, int?>> _resolveMalIds(
-    Map<int, int?> known,
+    Map<int, ExternalIds> ids,
     Iterable<int> seriesIds,
   ) async {
+    final known = <int, int?>{for (final id in seriesIds) id: ids[id]?.mal};
     final store = crossMap;
     if (store == null) return known;
     final missing = {
@@ -772,7 +795,12 @@ class LibrarySync {
     if (map.isEmpty) return known;
     final resolved = Map<int, int?>.of(known);
     for (final id in missing) {
-      final mal = map.malFor(id);
+      // The map is keyed by ANILIST id. That equals our series_id only in the
+      // provider-seeded band; a minted show that later learned its AniList id
+      // keeps its minted key, so the lookup must go through the side table.
+      final anilistId = ids[id]?.anilist;
+      if (anilistId == null) continue;
+      final mal = map.malFor(anilistId);
       if (mal != null) resolved[id] = mal;
     }
     return resolved;

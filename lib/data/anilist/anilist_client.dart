@@ -64,12 +64,32 @@ class AniListClient {
           };
 
     final decoded = await _post(body);
-    final page =
-        (decoded['data'] as Map<String, dynamic>?)?['Page']
-            as Map<String, dynamic>?;
-    final media = page?['media'] as List<dynamic>?;
+    return _mapMedia(_mediaOf(decoded));
+  }
+
+  /// `data.Page.media`, or null when any level is missing or mis-shaped.
+  /// Guarded `is` checks, not `as` casts: a cast on `dynamic` throws a
+  /// TypeError that no `on AniListException` handler upstream catches.
+  static List<dynamic>? _mediaOf(Map<String, dynamic> decoded) {
+    final data = decoded['data'];
+    final page = data is Map<String, dynamic> ? data['Page'] : null;
+    final media = page is Map<String, dynamic> ? page['media'] : null;
+    return media is List<dynamic> ? media : null;
+  }
+
+  /// The mapper is strict about one thing — an entry must carry an integer
+  /// id — and says so with a FormatException; here that becomes the same
+  /// malformed-response failure a body that is not JSON produces.
+  static List<Series> _mapMedia(List<dynamic>? media) {
     if (media == null) return const [];
-    return seriesListFromMediaList(media);
+    try {
+      return seriesListFromMediaList(media);
+    } on FormatException catch (e) {
+      throw AniListException(
+        'Malformed AniList response: $e',
+        failure: MetadataFailure.malformedResponse,
+      );
+    }
   }
 
   /// Re-fetch known entries BY AniList id (the "refresh metadata" backfill),
@@ -84,11 +104,7 @@ class AniListClient {
         'query': mediaByIdsQuery,
         'variables': {'ids': chunk, 'perPage': chunk.length},
       });
-      final page =
-          (decoded['data'] as Map<String, dynamic>?)?['Page']
-              as Map<String, dynamic>?;
-      final media = page?['media'] as List<dynamic>?;
-      if (media != null) result.addAll(seriesListFromMediaList(media));
+      result.addAll(_mapMedia(_mediaOf(decoded)));
     }
     return result;
   }
@@ -148,10 +164,16 @@ class AniListClient {
     try {
       decoded = jsonDecode(responseBody);
     } on FormatException catch (e) {
-      throw AniListException('Malformed AniList response: $e');
+      throw AniListException(
+        'Malformed AniList response: $e',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     if (decoded is! Map<String, dynamic>) {
-      throw const AniListException('Unexpected AniList response shape.');
+      throw const AniListException(
+        'Unexpected AniList response shape.',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     if (decoded['errors'] != null) {
       throw AniListException('AniList GraphQL error: ${decoded['errors']}');

@@ -541,13 +541,11 @@ void main() {
         malId: 4224,
         filePath: '/lib/ep3.mkv',
         siblingPaths: ['/lib/ep1.mkv', '/lib/ep2.mkv'],
-        episodeLength: Duration(minutes: 24),
       );
 
       expect(lookup.malId, 4224);
       expect(lookup.filePath, endsWith('ep3.mkv'));
       expect(lookup.siblingPaths, hasLength(2));
-      expect(lookup.episodeLength?.inMinutes, 24);
     });
   });
 

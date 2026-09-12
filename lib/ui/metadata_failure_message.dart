@@ -17,6 +17,9 @@ String metadataFailureCause(MetadataFailure failure) => switch (failure) {
   MetadataFailure.service =>
     "The metadata service is down right now — nothing to fix on your end. "
         'Try again later.',
+  MetadataFailure.malformedResponse =>
+    "The metadata service sent something AniLocal couldn't read — usually a "
+        'temporary glitch on its side. Try again later.',
   MetadataFailure.rateLimited =>
     'The metadata service is rate-limiting requests — wait a minute, then '
         'try again.',

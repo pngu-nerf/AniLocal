@@ -230,10 +230,16 @@ class KitsuClient {
     try {
       decoded = jsonDecode(body);
     } on FormatException catch (e) {
-      throw KitsuException('Malformed Kitsu response: $e');
+      throw KitsuException(
+        'Malformed Kitsu response: $e',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     if (decoded is! Map<String, dynamic>) {
-      throw const KitsuException('Unexpected Kitsu response shape.');
+      throw const KitsuException(
+        'Unexpected Kitsu response shape.',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     if (decoded['errors'] != null) {
       throw KitsuException('Kitsu API error: ${decoded['errors']}');

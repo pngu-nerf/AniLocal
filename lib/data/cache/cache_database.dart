@@ -317,6 +317,11 @@ class ShowPrefs extends Table {
 /// migration. The UNIQUE (provider, external_id) index is load-bearing: it
 /// turns "the same show got minted twice under two ids" from a silent fork
 /// that strands watch progress into a loud constraint failure.
+///
+/// Rows here are NEVER pruned (see `_pruneOrphans`): this table is the
+/// identity memory that lets a show whose files left and came back resolve to
+/// the same `series_id` and reattach its watch state. It is bounded by the
+/// number of distinct shows ever seen, not by the current library.
 class SeriesExternalIds extends Table {
   IntColumn get seriesId => integer()();
 
@@ -805,11 +810,7 @@ class CacheDatabase extends _$CacheDatabase {
     return transaction(() async {
       await (delete(libraryFolders)..where((f) => f.path.equals(path))).go();
       await (delete(fileCache)..where((f) => f.folderPath.equals(path))).go();
-      await customStatement(
-        'DELETE FROM series_cache WHERE series_id NOT IN ('
-        'SELECT series_id FROM file_cache WHERE series_id IS NOT NULL '
-        'UNION SELECT series_id FROM match_overrides)',
-      );
+      await _pruneOrphans(includeOverrides: false);
     });
   }
 
@@ -1186,16 +1187,44 @@ class CacheDatabase extends _$CacheDatabase {
             ))
             .go();
       }
-      await customStatement(
-        'DELETE FROM series_cache WHERE series_id NOT IN ('
-        'SELECT series_id FROM file_cache WHERE series_id IS NOT NULL '
-        'UNION SELECT series_id FROM match_overrides)',
-      );
-      // Drop skip rows whose series is no longer cached.
-      await customStatement(
-        'DELETE FROM skip_source_answers WHERE series_id NOT IN ('
-        'SELECT series_id FROM series_cache)',
-      );
+      await _pruneOrphans(includeOverrides: true);
     });
+  }
+
+  /// Everything DERIVED from the files goes when the files go — one policy,
+  /// called from both paths that remove files (`applySync`, a folder removal)
+  /// so they cannot drift.
+  ///
+  /// Pruned: a series no file and no override references; its stored skip
+  /// answers (re-asked if it returns); and, from a scan only, a fix-match
+  /// override whose fingerprint matches no cached file — it is unreachable
+  /// once the file is gone from every library folder, and left behind it
+  /// pinned a phantom series forever. NOT pruned, on purpose:
+  /// `series_external_ids`, `watch_state`, `hidden_episodes` and
+  /// `show_preferences`. Those are the show's MEMORY, keyed by our surrogate
+  /// id; keeping the id map is what lets a show that leaves and comes back
+  /// resolve to the SAME id and reattach its watch progress — a Kitsu-only
+  /// show would otherwise be minted afresh and lose it.
+  ///
+  /// Overrides are kept when a folder is removed rather than scanned: removing
+  /// and re-adding a folder is a normal repair step, and the fingerprint-keyed
+  /// override is exactly what lets the re-added files keep their fix-match.
+  Future<void> _pruneOrphans({required bool includeOverrides}) async {
+    if (includeOverrides) {
+      await customStatement(
+        'DELETE FROM match_overrides WHERE NOT EXISTS ('
+        'SELECT 1 FROM file_cache f WHERE f.file_size = match_overrides.file_size '
+        'AND f.modified_at_ms = match_overrides.modified_at_ms)',
+      );
+    }
+    await customStatement(
+      'DELETE FROM series_cache WHERE series_id NOT IN ('
+      'SELECT series_id FROM file_cache WHERE series_id IS NOT NULL '
+      'UNION SELECT series_id FROM match_overrides)',
+    );
+    await customStatement(
+      'DELETE FROM skip_source_answers WHERE series_id NOT IN ('
+      'SELECT series_id FROM series_cache)',
+    );
   }
 }

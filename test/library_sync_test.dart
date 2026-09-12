@@ -160,6 +160,16 @@ void main() {
     final ep1 = await touch('Cowboy Bebop - 01.mkv');
     await sync.sync([dir.path]);
     expect((await repo.allSeries()).length, 1);
+    await db.upsertSkipAnswer(
+      const SkipSourceAnswerRow(
+        seriesId: 1,
+        episode: 1,
+        source: 'chapters',
+        introStartMs: 0,
+        introEndMs: 90000,
+        askedAtMs: 0,
+      ),
+    );
 
     await ep1.delete();
     final s = await sync.sync([dir.path]);
@@ -170,6 +180,35 @@ void main() {
       isEmpty,
     ); // last episode gone -> series pruned
     expect(await repo.episodesFor(1), isEmpty);
+    // ONE prune policy: what is derived from the files goes with them; what
+    // is the show's memory stays, so a show that comes back keeps its id.
+    expect(await db.allSkipAnswers(), isEmpty, reason: 'derived — pruned');
+    expect(
+      (await db.externalIdsBySeriesId())[1]?.anilist,
+      1,
+      reason: 'identity memory — kept',
+    );
+  });
+
+  test('a file that vanishes between listing and stat is not cached', () async {
+    // `File.stat()` on a vanished file does not throw; it reports notFound
+    // with size -1 and a 1970 date. Cached, that would be a bogus fingerprint
+    // that looks changed on every later scan.
+    await touch('Cowboy Bebop - 01.mkv');
+    final ghost = '${dir.path}/Cowboy Bebop - 02.mkv';
+    final ghostSync = LibrarySync(
+      scanner: _GhostScanner(const FileSystemFolderScanner(), extra: ghost),
+      parser: const HeuristicFilenameParser(),
+      matcher: sync.matcher,
+      cache: db,
+      art: sync.art,
+      skipProviders: const [],
+    );
+    final s = await ghostSync.sync([dir.path]);
+    expect(s.filesScanned, 1, reason: 'the ghost was listed but not counted');
+    expect((await db.allFileRows()).map((f) => f.relativePath), [
+      'Cowboy Bebop - 01.mkv',
+    ]);
   });
 
   test(
@@ -253,4 +292,19 @@ void main() {
       );
     },
   );
+}
+
+/// A scanner that lists one path that does not exist, standing in for a file
+/// deleted or moved in the instant between the directory walk and its stat.
+class _GhostScanner implements FolderScanner {
+  const _GhostScanner(this.inner, {required this.extra});
+
+  final FolderScanner inner;
+  final String extra;
+
+  @override
+  Future<List<String>> findVideoFiles(String folderPath) async => [
+    ...await inner.findVideoFiles(folderPath),
+    extra,
+  ];
 }

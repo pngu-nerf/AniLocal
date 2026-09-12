@@ -46,7 +46,6 @@ class SkipLookup {
     this.malId,
     this.filePath,
     this.siblingPaths = const [],
-    this.episodeLength,
   });
 
   /// AniLocal's own identity for the show (see `series_identity.dart`).
@@ -70,9 +69,6 @@ class SkipLookup {
   /// and re-deriving which paths count as siblings — anchored position, same
   /// series, resolved through source overrides — is the fiddly half.
   final List<String> siblingPaths;
-
-  /// Improves AniSkip's matching when known.
-  final Duration? episodeLength;
 }
 
 /// One source of "where is the OP/ED".

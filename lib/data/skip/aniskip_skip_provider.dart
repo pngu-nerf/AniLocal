@@ -45,11 +45,11 @@ class AniSkipSkipProvider implements SkipProvider {
     final malId = lookup.malId;
     if (malId == null) return null;
     try {
-      return await client.fetchSkips(
-        malId,
-        lookup.episode,
-        episodeLengthSeconds: lookup.episodeLength?.inSeconds ?? 0,
-      );
+      // Episode length is sent as 0 ("unknown"): the fill path has no
+      // duration without opening the container, which only the chapters
+      // source does. AniSkip uses the length to filter submissions made
+      // against a different release; without it, it returns them all.
+      return await client.fetchSkips(malId, lookup.episode);
     } on AniSkipException catch (e) {
       throw SkipException(e.message, failure: e.failure);
     }

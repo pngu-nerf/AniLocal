@@ -27,8 +27,15 @@ enum MetadataFailure {
   /// erroring. Nothing on the user's side will fix it.
   service,
 
-  /// AniList answered 429: we asked too fast. Resolves on its own.
+  /// The service answered 429: we asked too fast. Resolves on its own.
   rateLimited,
+
+  /// The service answered 200 with something we could not parse — HTML from
+  /// an interstitial, a truncated body, a field of the wrong type. Neither
+  /// end is DOWN, which is why this is not [service]: telling the user "the
+  /// service is down" when the truth is "we could not read what it sent"
+  /// points them at the wrong fix.
+  malformedResponse,
 
   /// The service rejected our credential — a client ID that is missing, wrong,
   /// or revoked. Distinct from every other kind because it is neither end

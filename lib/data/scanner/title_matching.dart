@@ -1,6 +1,6 @@
 import '../../domain/models/series.dart';
 
-/// Result of ranking AniList candidates against a parsed title.
+/// Result of ranking a source's candidates against a parsed title.
 /// `MatchResult.source` is the token of the provider that answered, so a scan can report
 /// where its results came from. Null when nothing answered.
 typedef MatchResult = ({Series? series, double score, String? source});
@@ -8,14 +8,18 @@ typedef MatchResult = ({Series? series, double score, String? source});
 /// Below this similarity, the best candidate is treated as no match.
 const double kMatchFloor = 0.25;
 
-/// Normalize a title for comparison: lowercase, strip punctuation, collapse
-/// whitespace. Keeps alphanumerics and spaces only.
+/// Normalize a title for comparison: lowercase, strip punctuation and
+/// symbols, collapse whitespace. Letters and digits of EVERY script survive.
+///
+/// The first version kept `[a-z0-9]` only, so every Japanese, Korean or
+/// Cyrillic title normalised to the empty string: all such files collapsed
+/// into one lookup, one series and one placeholder, and two identical native
+/// titles scored zero. Punctuation classes rather than an ASCII whitelist.
 String normalizeTitle(String input) {
   return input
       .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-      .trim()
-      .replaceAll(RegExp(r'\s+'), ' ');
+      .replaceAll(RegExp(r'[\p{P}\p{S}\s]+', unicode: true), ' ')
+      .trim();
 }
 
 /// Similarity of two titles in 0–1: the max of a character-level Levenshtein
@@ -24,8 +28,8 @@ String normalizeTitle(String input) {
 double titleSimilarity(String a, String b) {
   final na = normalizeTitle(a);
   final nb = normalizeTitle(b);
+  if (na == nb) return na.isEmpty ? 0 : 1;
   if (na.isEmpty || nb.isEmpty) return 0;
-  if (na == nb) return 1;
   final lev = _levenshteinRatio(na, nb);
   final dice = _tokenDice(na, nb);
   return lev > dice ? lev : dice;

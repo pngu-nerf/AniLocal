@@ -14,6 +14,41 @@ void main() {
       expect(normalizeTitle('Sousou no Frieren!'), 'sousou no frieren');
       expect(normalizeTitle('Re:ZERO  -Starting-'), 're zero starting');
     });
+
+    test('keeps letters of every script — a native title is not empty', () {
+      // The ASCII whitelist this replaced normalised every Japanese title to
+      // '', so all such files collapsed into one lookup and one series.
+      expect(normalizeTitle('葬送のフリーレン'), '葬送のフリーレン');
+      expect(normalizeTitle('Re：ゼロから始める異世界生活！'), 're ゼロから始める異世界生活');
+      expect(normalizeTitle('Атака титанов'), 'атака титанов');
+    });
+  });
+
+  group('non-Latin titles match like any other', () {
+    test('two identical native titles score 1, two different ones do not', () {
+      expect(titleSimilarity('葬送のフリーレン', '葬送のフリーレン'), 1.0);
+      expect(titleSimilarity('葬送のフリーレン', '進撃の巨人'), lessThan(0.5));
+    });
+
+    test(
+      'a native-titled file ranks the candidate whose native title matches',
+      () {
+        final candidates = [
+          Series(
+            seriesId: 1,
+            titles: const Titles(romaji: 'Shingeki no Kyojin', native: '進撃の巨人'),
+          ),
+          Series(
+            seriesId: 2,
+            titles: const Titles(
+              romaji: 'Sousou no Frieren',
+              native: '葬送のフリーレン',
+            ),
+          ),
+        ];
+        expect(rankCandidates('葬送のフリーレン', candidates).series?.seriesId, 2);
+      },
+    );
   });
 
   group('titleSimilarity', () {

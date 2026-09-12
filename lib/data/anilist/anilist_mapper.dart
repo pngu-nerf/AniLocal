@@ -9,66 +9,78 @@ import '../../domain/models/titles.dart';
 /// known here and nowhere else. Everything past this returns domain models, so
 /// no AniList type leaks into the rest of the app. Pure and network-free, so
 /// it's unit-testable from a captured response.
+///
+/// Every read is GUARDED, like the Kitsu, Jikan and MAL mappers. This one used
+/// unchecked casts, and a cast on `dynamic` throws a `TypeError` — an `Error`,
+/// not an `Exception` — which escaped every catch on the scan path and aborted
+/// the whole run before the cache-preserving outage guard could act. A field
+/// of the wrong shape is now null; only a missing or non-integer `id` is
+/// fatal, as a [FormatException] the client turns into a malformed-response
+/// failure.
 Series seriesFromMediaJson(Map<String, dynamic> media) {
+  final id = _int(media['id']);
+  if (id == null) {
+    throw const FormatException('AniList media entry without an integer id');
+  }
   return Series(
     // seriesId is provisional here: it is what AniList calls the show, and
     // `ensureSeriesId` decides the real local identity (which may already
     // exist under another provider's id, or may need minting).
-    seriesId: media['id'] as int,
+    seriesId: id,
     // Report EVERY id this response carries, not just AniList's own — that is
     // what lets ensureSeriesId recognise a show some other provider already
     // identified instead of minting a second identity for it.
-    externalIds: ExternalIds(
-      anilist: media['id'] as int,
-      mal: media['idMal'] as int?,
-    ),
-    titles: _titlesFrom(media['title'] as Map<String, dynamic>?),
-    format: media['format'] as String?,
-    episodeCount: media['episodes'] as int?,
-    coverImageRef: _coverImageFrom(
-      media['coverImage'] as Map<String, dynamic>?,
-    ),
-    relations: _relationsFrom(media['relations'] as Map<String, dynamic>?),
+    externalIds: ExternalIds(anilist: id, mal: _int(media['idMal'])),
+    titles: _titlesFrom(_map(media['title'])),
+    format: _string(media['format']),
+    episodeCount: _int(media['episodes']),
+    coverImageRef: _coverImageFrom(_map(media['coverImage'])),
+    relations: _relationsFrom(_map(media['relations'])),
   );
 }
 
-/// Maps a `Page.media` list of AniList entries to domain [Series].
-List<Series> seriesListFromMediaList(List<dynamic> media) {
-  return media
-      .map((m) => seriesFromMediaJson(m as Map<String, dynamic>))
-      .toList();
-}
+/// Maps a `Page.media` list of AniList entries to domain [Series]. Entries
+/// that are not objects (a `null` in the list) are skipped, not fatal.
+List<Series> seriesListFromMediaList(List<dynamic> media) => [
+  for (final m in media)
+    if (m is Map<String, dynamic>) seriesFromMediaJson(m),
+];
 
-Titles _titlesFrom(Map<String, dynamic>? title) {
-  return Titles(
-    romaji: title?['romaji'] as String?,
-    english: title?['english'] as String?,
-    native: title?['native'] as String?,
-  );
-}
+int? _int(Object? v) => v is int ? v : null;
+String? _string(Object? v) => v is String ? v : null;
+Map<String, dynamic>? _map(Object? v) => v is Map<String, dynamic> ? v : null;
+
+Titles _titlesFrom(Map<String, dynamic>? title) => Titles(
+  romaji: _string(title?['romaji']),
+  english: _string(title?['english']),
+  native: _string(title?['native']),
+);
 
 /// Prefer the largest available cover; AniList may omit some sizes.
 String? _coverImageFrom(Map<String, dynamic>? cover) {
   if (cover == null) return null;
-  return (cover['extraLarge'] ?? cover['large'] ?? cover['medium']) as String?;
+  return _string(cover['extraLarge']) ??
+      _string(cover['large']) ??
+      _string(cover['medium']);
 }
 
 List<RelatedSeries> _relationsFrom(Map<String, dynamic>? relations) {
-  final edges = relations?['edges'] as List<dynamic>?;
-  if (edges == null) return const [];
+  final edges = relations?['edges'];
+  if (edges is! List) return const [];
   final result = <RelatedSeries>[];
   for (final edge in edges) {
-    final map = edge as Map<String, dynamic>;
-    final node = map['node'] as Map<String, dynamic>?;
-    if (node == null) continue;
+    final map = _map(edge);
+    final node = _map(map?['node']);
+    final nodeId = _int(node?['id']);
+    if (node == null || nodeId == null) continue;
     result.add(
       RelatedSeries(
         // Genuinely an AniList id: this is AniList's own relation payload, not
         // our surrogate identity. Deliberately NOT renamed with the rest.
-        anilistId: node['id'] as int,
-        relationType: (map['relationType'] as String?) ?? 'UNKNOWN',
-        titles: _titlesFrom(node['title'] as Map<String, dynamic>?),
-        format: node['format'] as String?,
+        anilistId: nodeId,
+        relationType: _string(map?['relationType']) ?? 'UNKNOWN',
+        titles: _titlesFrom(_map(node['title'])),
+        format: _string(node['format']),
       ),
     );
   }

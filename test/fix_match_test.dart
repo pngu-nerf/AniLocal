@@ -13,6 +13,7 @@ import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/domain/models/external_ids.dart';
+import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/sync/fix_match_service.dart';
@@ -337,6 +338,58 @@ void main() {
           .single;
       expect(cached.coverImagePath, contains('$id'));
     });
+
+    test(
+      'an override whose file is gone from every folder is pruned by a scan, '
+      'and the series it pinned goes with it',
+      () async {
+        final f = await touch('Kitsu Gone - 01.mkv', 1401);
+        await sync.sync([dir.path]);
+        await fixMatch.assignFile(
+          filePath: f.path,
+          chosen: kitsuCandidate(7777),
+          anchoredEpisode: 1,
+        );
+        expect(await db.allOverrideRows(), hasLength(1));
+
+        await f.delete();
+        await sync.sync([dir.path]);
+
+        expect(
+          await db.allOverrideRows(),
+          isEmpty,
+          reason: 'unreachable: no cached file carries its fingerprint',
+        );
+        expect(
+          (await db.allSeriesRows()).where(
+            (r) => r.romaji == 'Kitsu Only Show',
+          ),
+          isEmpty,
+          reason: 'no longer pinned by the override, so pruned too',
+        );
+      },
+    );
+
+    test(
+      'removing a FOLDER keeps its overrides — re-adding is a repair step',
+      () async {
+        final f = await touch('Kitsu Kept - 01.mkv', 1402);
+        await sync.sync([dir.path]);
+        await fixMatch.assignFile(
+          filePath: f.path,
+          chosen: kitsuCandidate(8888),
+          anchoredEpisode: 1,
+        );
+        await repo.addFolder(dir.path);
+        await repo.removeFolder(LibraryFolder(path: dir.path));
+
+        expect(
+          await db.allOverrideRows(),
+          hasLength(1),
+          reason: 'the fingerprint-keyed override is what re-applies on re-add',
+        );
+      },
+    );
 
     test('a show that ALREADY has a local identity is not forked', () async {
       // Identified once via a Kitsu answer during a scan (minting M, watch

@@ -26,6 +26,41 @@ http.Response _okMedia() => http.Response(
 );
 
 void main() {
+  test(
+    'an entry with a non-integer id is a MALFORMED response, not a crash',
+    () async {
+      // Before the mapper was guarded this threw a TypeError out of the client,
+      // past every catch on the scan path.
+      final client = AniListClient(
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'data': {
+                'Page': {
+                  'media': [
+                    {'id': '123', 'title': <String, Object?>{}},
+                  ],
+                },
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          ),
+        ),
+      );
+      await expectLater(
+        client.searchSeriesCandidates('x'),
+        throwsA(
+          isA<AniListException>().having(
+            (e) => e.failure,
+            'failure',
+            MetadataFailure.malformedResponse,
+          ),
+        ),
+      );
+    },
+  );
+
   group('AniListClient request shape', () {
     test(
       'no filter: omits format_in entirely (AniList 500s on null)',
@@ -189,7 +224,9 @@ void main() {
         // and skipping the cache-preserving unreachable guard.
         final e = await failureOf(http.Response('<html>nope</html>', 200));
 
-        expect(e.failure, MetadataFailure.service);
+        // Neither end is DOWN — we could not read what it sent — which is why
+        // this is its own kind and not `service`.
+        expect(e.failure, MetadataFailure.malformedResponse);
         expect(e.message, contains('Malformed'));
       },
     );

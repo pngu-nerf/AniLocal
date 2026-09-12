@@ -182,10 +182,16 @@ class JikanClient {
     try {
       decoded = jsonDecode(body);
     } on FormatException catch (e) {
-      throw JikanException('Malformed Jikan response: $e');
+      throw JikanException(
+        'Malformed Jikan response: $e',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     if (decoded is! Map<String, dynamic>) {
-      throw const JikanException('Unexpected Jikan response shape.');
+      throw const JikanException(
+        'Unexpected Jikan response shape.',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     return decoded;
   }

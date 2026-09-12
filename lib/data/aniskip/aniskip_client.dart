@@ -91,9 +91,14 @@ class AniSkipClient {
     try {
       // BYTES as UTF-8, never `.body`: with no charset in the content-type,
       // package:http falls back to latin1 (the Kitsu mojibake trap).
-      decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      decoded = jsonDecode(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
     } on FormatException catch (e) {
-      throw AniSkipException('Malformed AniSkip response: $e');
+      throw AniSkipException(
+        'Malformed AniSkip response: $e',
+        failure: MetadataFailure.malformedResponse,
+      );
     }
     if (decoded is! Map<String, dynamic>) return null;
     if (decoded['found'] != true) return null;
@@ -106,10 +111,12 @@ class AniSkipClient {
       if (result is! Map<String, dynamic>) continue;
       final interval = result['interval'];
       if (interval is! Map<String, dynamic>) continue;
-      final range = SkipRange(
-        start: _toDuration(interval['startTime']),
-        end: _toDuration(interval['endTime']),
-      );
+      final start = _toDuration(interval['startTime']);
+      final end = _toDuration(interval['endTime']);
+      // A time of the wrong type (or an inverted window) drops THIS window;
+      // the old cast threw a TypeError that killed the whole scan.
+      if (start == null || end == null || end <= start) continue;
+      final range = SkipRange(start: start, end: end);
       switch (result['skipType']) {
         case 'op':
           intro = range;
@@ -121,11 +128,10 @@ class AniSkipClient {
     return EpisodeSkips(intro: intro, outro: outro);
   }
 
-  /// AniSkip times are seconds (floats); store as whole milliseconds.
-  Duration _toDuration(Object? seconds) {
-    final s = (seconds as num?)?.toDouble() ?? 0;
-    return Duration(milliseconds: (s * 1000).round());
-  }
+  /// AniSkip times are seconds (floats); store as whole milliseconds. Null
+  /// when the wire value is not a number.
+  Duration? _toDuration(Object? seconds) =>
+      seconds is num ? Duration(milliseconds: (seconds * 1000).round()) : null;
 
   void dispose() => _http.close();
 }
