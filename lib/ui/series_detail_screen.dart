@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../diagnostics/app_log.dart';
 import '../domain/missing_episodes.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/episode_list_row.dart';
@@ -15,24 +17,23 @@ import '../domain/repositories/settings_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
+import '../playback/playback_controller.dart';
 import 'fix_match_screen.dart';
+import 'library/library_search_bar.dart';
 import 'settings/settings_actions.dart';
 import 'settings/settings_window.dart';
-import 'library/library_search_bar.dart';
+import 'shell/header_scope.dart';
+import 'shell/header_spec.dart';
+import 'shell/instant_page_route.dart';
 import 'theater/theater_screen.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 import 'widgets/episode_row.dart';
 import 'widgets/episode_tile.dart';
+import 'widgets/multi_select_list.dart';
 import 'widgets/show_cover.dart';
 import 'widgets/xp_dialog.dart';
-import 'widgets/multi_select_list.dart';
-import '../playback/playback_controller.dart';
-import 'shell/header_scope.dart';
-import 'shell/header_spec.dart';
-import 'shell/instant_page_route.dart';
-import '../diagnostics/app_log.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -162,7 +163,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   @override
   void initState() {
     super.initState();
-    _reload();
+    unawaited(_reload());
   }
 
   @override
@@ -366,7 +367,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         ),
       ),
     );
-    _reload(); // reflect updated watched / resume position / up-next
+    unawaited(_reload()); // reflect updated watched / resume position / up-next
   }
 
   static String _fmt(Duration d) {
@@ -385,7 +386,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         ),
       ),
     );
-    if (done == true) _reload();
+    if (done == true) unawaited(_reload());
   }
 
   static String _name(String path) => path.split(Platform.pathSeparator).last;
@@ -453,7 +454,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         );
       },
     );
-    if (changed == true) _reload();
+    if (changed == true) unawaited(_reload());
   }
 
   Future<void> _splitFromHere(Episode from) async {
@@ -479,7 +480,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         ),
       ),
     );
-    if (done == true) _reload();
+    if (done == true) unawaited(_reload());
   }
 
   // --- Tiles ----------------------------------------------------------------
@@ -629,7 +630,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Xp.textDim),
             onSelected: (v) {
-              if (v == 'hide') _hide([number]);
+              if (v == 'hide') unawaited(_hide([number]));
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'hide', child: Text('Hide missing episode')),
@@ -707,7 +708,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Xp.textDim),
                   onSelected: (v) {
-                    if (v == 'hideAll') _hide(b.numbers);
+                    if (v == 'hideAll') unawaited(_hide(b.numbers));
                     if (v == 'select') {
                       setState(() => _expandedBundles.add(b.first));
                     }

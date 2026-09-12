@@ -21,11 +21,24 @@ class _HangingClient extends http.BaseClient {
 /// one chunk and goes silent forever: the stalled download that a plain
 /// `send().timeout()` would NOT catch.
 class _StallingBodyClient extends http.BaseClient {
+  final _open = <StreamController<List<int>>>[];
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final controller = StreamController<List<int>>();
+    _open.add(controller);
     controller.add([123]); // "{" — one chunk, then nothing, ever
     return http.StreamedResponse(controller.stream, 200, request: request);
+  }
+
+  /// The stall is the point, so the sinks stay open until the test closes
+  /// the client — which every test using this stub does via `addTearDown`.
+  @override
+  void close() {
+    for (final c in _open) {
+      unawaited(c.close());
+    }
+    super.close();
   }
 }
 
@@ -45,6 +58,7 @@ void main() {
       // The case the header-phase timeout alone misses, and the reason the
       // body stream is wrapped separately.
       final client = TimeoutClient(_StallingBodyClient(), timeout: _short);
+      addTearDown(client.close);
       expect(
         client.get(Uri.parse('https://example.test/')),
         throwsA(isA<http.ClientException>()),
@@ -75,11 +89,11 @@ void main() {
       }
       expect(caught, isNotNull, reason: 'must fail, not hang');
       final failure = switch (caught) {
-        AniListException e => e.failure,
-        KitsuException e => e.failure,
-        JikanException e => e.failure,
-        MalException e => e.failure,
-        AniSkipException e => e.failure,
+        final AniListException e => e.failure,
+        final KitsuException e => e.failure,
+        final JikanException e => e.failure,
+        final MalException e => e.failure,
+        final AniSkipException e => e.failure,
         _ => null,
       };
       expect(failure, MetadataFailure.connection, reason: '$caught');

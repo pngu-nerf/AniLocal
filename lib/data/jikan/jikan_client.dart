@@ -2,14 +2,13 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../request_throttle.dart';
-
 import '../../domain/models/external_ids.dart';
 import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/series_format.dart';
 import '../../domain/models/titles.dart';
 import '../http_failure.dart';
+import '../request_throttle.dart';
 import '../user_agent.dart';
 
 /// Thrown for any Jikan request that doesn't yield a usable result.

@@ -1,23 +1,23 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../domain/repositories/settings_repository.dart';
+import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 import '../widgets/xp_dialog.dart';
+import 'panels/about_panel.dart';
 import 'panels/homepage_panel.dart';
 import 'panels/library_panel.dart';
 import 'panels/playback_panel.dart';
 import 'panels/source_list_panel.dart';
-import '../theme/xp_tokens.dart';
-import 'setting_row.dart';
 import 'panels/sources_panel.dart';
+import 'setting_row.dart';
 import 'settings_actions.dart';
 import 'settings_model.dart';
 import 'settings_shell.dart';
-import 'panels/about_panel.dart';
 
 /// Open the shared app Settings window. Reachable from the homepage title bar
 /// and the detail-page title bar; both pass the ONE injected

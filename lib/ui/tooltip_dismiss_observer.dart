@@ -56,7 +56,7 @@ class TooltipDismissingRouteObserver extends NavigatorObserver {
 /// Dismisses any showing tooltip whenever the window's metrics change — the
 /// half of the tooltip guard that survives fullscreen becoming state.
 ///
-/// Mount ONCE, above the app (see `AniLocalApp`). [didChangeMetrics] fires on
+/// Mount ONCE, above the app (see `AniLocalApp`). `didChangeMetrics` fires on
 /// every window resize, which now includes fullscreen enter/exit (the OS window
 /// toggles with no route push to observe), plus ordinary user resizes and
 /// display changes — all of which move the overlay and can strand a mounted

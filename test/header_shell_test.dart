@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:anilocal/ui/shell/header_controller.dart';
 import 'package:anilocal/ui/shell/header_spec.dart';
 import 'package:anilocal/ui/theme/vfd_readout.dart';
@@ -209,9 +211,11 @@ void main() {
     );
     await _pumpPastGrace(tester);
 
-    showDialog<void>(
-      context: h.navigatorKey.currentContext!,
-      builder: (_) => const AlertDialog(content: Text('hi')),
+    unawaited(
+      showDialog<void>(
+        context: h.navigatorKey.currentContext!,
+        builder: (_) => const AlertDialog(content: Text('hi')),
+      ),
     );
     await _pumpPastGrace(tester);
 

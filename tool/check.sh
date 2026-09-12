@@ -1,7 +1,12 @@
-#!/usr/bin/env sh
-# Single source of truth for what CI verifies. Run locally at the end of every
-# slice; a future .github/workflows/ci.yml is just a thin wrapper around this.
-set -e
+#!/usr/bin/env bash
+# The ONE gate. CI (`.github/workflows/ci.yml`) runs exactly this script, so a
+# green run here means a green run there; run it at the end of every slice.
+#
+# `--output=none` keeps the format step a CHECK: it reports and exits non-zero
+# but never rewrites the tree, so the failure a reviewer sees is reproducible.
+set -euo pipefail
+cd "$(dirname "$0")/.."
 
+dart format --output=none --set-exit-if-changed .
 flutter analyze
-dart format --set-exit-if-changed .
+flutter test

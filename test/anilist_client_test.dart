@@ -60,7 +60,10 @@ void main() {
       );
 
       expect(body['query'], contains('format_in'));
-      expect(body['variables']['format'], ['TV', 'MOVIE']);
+      expect((body['variables'] as Map<String, dynamic>)['format'], [
+        'TV',
+        'MOVIE',
+      ]);
     });
 
     test('throws AniListException on non-200', () async {

@@ -1,14 +1,15 @@
 import 'dart:async';
 
-import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/models/next_result.dart';
 import 'package:anilocal/domain/models/picture_mode.dart';
+import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/show_preferences.dart';
+import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/domain/repositories/fix_match_repository.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
@@ -19,14 +20,13 @@ import 'package:anilocal/domain/repositories/watch_order_repository.dart';
 import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/playback/playback_controller.dart';
 import 'package:anilocal/ui/series_detail_screen.dart';
+import 'package:anilocal/ui/settings/settings_actions.dart';
+import 'package:anilocal/ui/settings/sources_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_settings.dart';
 import 'support/shell_harness.dart';
-import 'package:anilocal/ui/settings/sources_actions.dart';
-import 'package:anilocal/domain/models/source_descriptor.dart';
-import 'package:anilocal/ui/settings/settings_actions.dart';
 
 /// The detail page's FIRST FRAME.
 ///

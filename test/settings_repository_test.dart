@@ -1,8 +1,8 @@
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
 import 'package:anilocal/data/cache/drift_settings_repository.dart';
-import 'package:anilocal/domain/repositories/settings_repository.dart';
 import 'package:anilocal/domain/models/skip_mode.dart';
+import 'package:anilocal/domain/repositories/settings_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -2,20 +2,21 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
-import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
-import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
+import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/domain/models/metadata_failure.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'support/graphql_request.dart';
 
 /// `refreshMetadata` is the "backfill without a wipe" path. These tests pin
 /// two things: that an unreachable AniList is REPORTED rather than swallowed
@@ -50,7 +51,7 @@ void main() {
     'format': 'TV',
     'episodes': 26,
     'coverImage': {'extraLarge': 'http://a/$id.jpg'},
-    'relations': {'edges': []},
+    'relations': {'edges': <Object?>[]},
   };
 
   /// AniList's verbatim outage response: a 403 carrying a GraphQL envelope.
@@ -81,7 +82,7 @@ void main() {
     final mock = MockClient((req) async {
       if (req.method == 'POST') {
         if (anilistDown) return apiDisabled();
-        final vars = jsonDecode(req.body)['variables'] as Map<String, dynamic>;
+        final vars = graphqlVariables(req);
         // Refresh fetches BY id; the scan searches by title.
         if (vars.containsKey('ids')) {
           return page([refreshPayload ?? full(1, 'Cowboy Bebop')]);
@@ -207,7 +208,7 @@ void main() {
       'format': null,
       'episodes': null,
       'coverImage': {'extraLarge': null},
-      'relations': {'edges': []},
+      'relations': {'edges': <Object?>[]},
     };
 
     final result = await sync.refreshMetadata();

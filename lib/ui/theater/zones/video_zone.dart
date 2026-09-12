@@ -8,11 +8,11 @@ import '../../../domain/models/episode.dart';
 import '../../../domain/models/next_result.dart';
 import '../../../domain/models/skip_mode.dart';
 import '../../../domain/models/skip_range.dart';
+import '../../../domain/repositories/settings_repository.dart';
 import '../../../domain/repositories/watch_order_repository.dart';
 import '../../../domain/repositories/watch_state_repository.dart';
 import '../../../playback/media_remote.dart';
 import '../../../playback/playback_controller.dart';
-import '../../../domain/repositories/settings_repository.dart';
 import '../../theme/xp_tokens.dart';
 import '../controls/player_control_bar.dart';
 import '../controls/player_controls_state.dart';
@@ -175,8 +175,13 @@ class _VideoZoneState extends State<VideoZone> {
       onTogglePlayPause: _playback.player.playOrPause,
       onNext: _goToNext,
     );
-    _playback.open(_shown, startAt: PlaybackController.resumeStartFor(_shown));
-    _loadEpisodeContext(_shown);
+    unawaited(
+      _playback.open(
+        _shown,
+        startAt: PlaybackController.resumeStartFor(_shown),
+      ),
+    );
+    unawaited(_loadEpisodeContext(_shown));
     _durSub = _playback.durationStream.listen((d) {
       _duration = d;
       // Duration just became known — an episode SHORTER than the threshold is
@@ -186,7 +191,7 @@ class _VideoZoneState extends State<VideoZone> {
     });
     _posSub = _playback.positionStream.listen(_onPosition);
     _completedSub = _playback.completedStream.listen((done) {
-      if (done) _onCompleted();
+      if (done) unawaited(_onCompleted());
     });
     // Reflect play/pause to the OS immediately, and SAVE on the transition so a
     // pause commits the resume position at once (not only on the timer tick).
@@ -212,11 +217,13 @@ class _VideoZoneState extends State<VideoZone> {
   /// Publish the current episode + engine state to the OS now-playing center.
   /// The title reuses the same fallback the info zone shows.
   void _pushNowPlaying() {
-    _remote.updateNowPlaying(
-      title: _shown.title ?? 'Episode ${_shown.number}',
-      duration: _duration,
-      position: _position,
-      playing: _playback.player.state.playing,
+    unawaited(
+      _remote.updateNowPlaying(
+        title: _shown.title ?? 'Episode ${_shown.number}',
+        duration: _duration,
+        position: _position,
+        playing: _playback.player.state.playing,
+      ),
     );
   }
 
@@ -234,9 +241,11 @@ class _VideoZoneState extends State<VideoZone> {
   /// one in place and reset per-episode state.
   void _switchTo(Episode episode) {
     _persist();
-    _playback.open(
-      episode,
-      startAt: PlaybackController.resumeStartFor(episode),
+    unawaited(
+      _playback.open(
+        episode,
+        startAt: PlaybackController.resumeStartFor(episode),
+      ),
     );
     _shown = episode;
     _markedWatched = false;
@@ -244,7 +253,7 @@ class _VideoZoneState extends State<VideoZone> {
     _duration = Duration.zero;
     _lastPos = Duration.zero;
     _preRollShowing = false;
-    _loadEpisodeContext(episode);
+    unawaited(_loadEpisodeContext(episode));
     _pushNowPlaying(); // new title to the OS now-playing center
   }
 
@@ -282,7 +291,7 @@ class _VideoZoneState extends State<VideoZone> {
 
   void _markWatched() {
     _markedWatched = true;
-    widget.watchState.setWatched(_shown, watched: true);
+    unawaited(widget.watchState.setWatched(_shown, watched: true));
   }
 
   /// "Episode shorter than the threshold" → the whole episode is inside the
@@ -370,7 +379,7 @@ class _VideoZoneState extends State<VideoZone> {
 
     if (autoIntro && inIntro && !_introSkipped) {
       _introSkipped = true;
-      _playback.seekTo(intro.end);
+      unawaited(_playback.seekTo(intro.end));
       return;
     }
     if (autoOutro && inOutro && !_outroSkipped) {
@@ -394,7 +403,7 @@ class _VideoZoneState extends State<VideoZone> {
 
   void _skipIntro() {
     final intro = _shown.introSkip;
-    if (intro != null) _playback.seekTo(intro.end);
+    if (intro != null) unawaited(_playback.seekTo(intro.end));
     _showSkipIntro = false;
     _pushControls();
   }
@@ -412,16 +421,18 @@ class _VideoZoneState extends State<VideoZone> {
     final target = (_duration > Duration.zero && outro.end > _duration)
         ? _duration
         : outro.end;
-    _playback.seekTo(target);
+    unawaited(_playback.seekTo(target));
   }
 
   void _persist() {
     if (_markedWatched) return;
     if (_duration.inMilliseconds <= 0 || _position.inMilliseconds <= 0) return;
-    widget.watchState.saveProgress(
-      _shown,
-      position: _position,
-      duration: _duration,
+    unawaited(
+      widget.watchState.saveProgress(
+        _shown,
+        position: _position,
+        duration: _duration,
+      ),
     );
   }
 
@@ -473,10 +484,10 @@ class _VideoZoneState extends State<VideoZone> {
   @override
   void dispose() {
     _saveTimer?.cancel();
-    _posSub?.cancel();
-    _durSub?.cancel();
-    _completedSub?.cancel();
-    _playingSub?.cancel();
+    unawaited(_posSub?.cancel());
+    unawaited(_durSub?.cancel());
+    unawaited(_completedSub?.cancel());
+    unawaited(_playingSub?.cancel());
     _lifecycle.dispose();
     // Graceful departure (route pop / page-change / widget teardown): commit the
     // exact final position now. Complements the periodic save (the safety net).
@@ -488,7 +499,7 @@ class _VideoZoneState extends State<VideoZone> {
     // survives for the next visit instead of being destroyed and rebuilt, which
     // is what removes the per-visit native teardown race. The composition root
     // owns the one dispose(), at app shutdown.
-    _playback.stop();
+    unawaited(_playback.stop());
     super.dispose();
   }
 

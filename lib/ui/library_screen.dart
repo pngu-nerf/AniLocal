@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:anilocal/domain/models/titles.dart' show Titles;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../diagnostics/app_log.dart';
+import '../domain/models/cache_errors.dart';
 import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/picture_mode.dart';
@@ -16,27 +21,24 @@ import '../domain/repositories/show_preferences_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
+import '../playback/playback_controller.dart';
 import 'access_recovery.dart';
-import 'metadata_failure_message.dart';
 import 'library/continue_watching_panel.dart';
 import 'library/library_layout.dart';
 import 'library/library_layout_config.dart';
 import 'library/library_search_bar.dart';
+import 'metadata_failure_message.dart';
 import 'series_detail_screen.dart';
 import 'settings/settings_actions.dart';
 import 'settings/settings_window.dart';
+import 'shell/header_scope.dart';
+import 'shell/header_spec.dart';
+import 'shell/instant_page_route.dart';
 import 'theater/theater_screen.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'unmatched_screen.dart';
 import 'widgets/show_cover.dart';
-import '../playback/playback_controller.dart';
-import 'shell/header_scope.dart';
-import 'shell/header_spec.dart';
-import 'shell/instant_page_route.dart';
-import 'package:flutter/services.dart';
-import '../diagnostics/app_log.dart';
-import '../domain/models/cache_errors.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -106,7 +108,7 @@ class LibraryScreen extends StatefulWidget {
   /// detail/theater screens + the settings dialog.
   final SettingsRepository settings;
 
-  /// Fill path. [onDiscovered] fires mid-scan, after newly-seen files are
+  /// Fill path. The `onDiscovered` callback fires mid-scan, after newly-seen files are
   /// written as pending placeholders but before identification — the screen
   /// wires it to a reload so the grid paints placeholders immediately.
   final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
@@ -118,7 +120,7 @@ class LibraryScreen extends StatefulWidget {
   final SettingsActions settingsActions;
 
   /// Shared denied-state (category labels) — drives the banner; the add-dialog
-  /// reads the same source via [onAddFolder]'s result.
+  /// reads the same source via `SourcesActions.onAddFolder`'s result.
   final ValueListenable<List<String>> accessIssues;
 
   /// Offline drive/mount labels (unplugged drive, offline NAS) — drives the
@@ -187,17 +189,42 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   void initState() {
     super.initState();
     _reload();
-    _loadHomepageToggles();
-    widget.settings.loadContinueCollapsed().then((c) {
-      if (mounted) setState(() => _continueCollapsed = c);
-    });
-    widget.settings.loadPanelWidth().then((f) {
+    unawaited(_loadHomepageToggles());
+    _background(
+      'continue-collapsed setting',
+      widget.settings.loadContinueCollapsed(),
+      (c) => setState(() => _continueCollapsed = c),
+    );
+    _background('panel width setting', widget.settings.loadPanelWidth(), (f) {
       final clamped = f.clamp(
         LibraryLayoutConfig.panelWidthMin,
         LibraryLayoutConfig.panelWidthMax,
       );
-      if (mounted) setState(() => _panelWidth = clamped);
+      setState(() => _panelWidth = clamped);
     });
+  }
+
+  /// Every secondary read this screen fires goes through here: the value is
+  /// applied on arrival if the screen is still mounted, and a failure is
+  /// LOGGED and leaves the field as it was. Only the main `allSeries` read
+  /// owns the error panel, because that is the one whose absence is a blank
+  /// screen; a sibling failing (continue-watching, up-next, a setting) must
+  /// not be an uncaught async error — before this, the eternal-spinner fix
+  /// covered one of the six reads and the other five rejected unhandled.
+  void _background<T>(
+    String what,
+    Future<T> future,
+    void Function(T value) apply,
+  ) {
+    unawaited(
+      future.then(
+        (v) {
+          if (mounted) apply(v);
+        },
+        onError: (Object e, StackTrace stack) =>
+            AppLog.error('Library read failed: $what', error: e, stack: stack),
+      ),
+    );
   }
 
   @override
@@ -209,7 +236,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   void _toggleContinueCollapsed() {
     setState(() => _continueCollapsed = !_continueCollapsed);
-    widget.settings.setContinueCollapsed(_continueCollapsed);
+    unawaited(widget.settings.setContinueCollapsed(_continueCollapsed));
   }
 
   Future<void> _dismissFromContinue(ContinueWatching entry) async {
@@ -220,38 +247,46 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   void _reload() {
     // Assign ON ARRIVAL, exactly like the three fields below — nothing is
     // cleared, so the current library stays on screen while the new one loads.
-    widget.repository.allSeries().then(
-      (s) {
-        if (!mounted) return;
-        setState(() {
-          _series = s;
-          _loadError = null;
-        });
-        _loadSeriesStats(s);
-      },
-      // Without this, every "cannot open the database" failure — corrupt
-      // file, read-only folder, a cache from a newer build, a migration that
-      // threw — left `_series` null forever: an eternal spinner, no message,
-      // nothing written anywhere. Now it is an error panel with the cause and
-      // a way to copy the log.
-      onError: (Object e, StackTrace stack) {
-        AppLog.error('Library load failed', error: e, stack: stack);
-        if (mounted) setState(() => _loadError = e);
-      },
+    unawaited(
+      widget.repository.allSeries().then(
+        (s) {
+          if (!mounted) return;
+          setState(() {
+            _series = s;
+            _loadError = null;
+          });
+          unawaited(_loadSeriesStats(s));
+        },
+        // Without this, every "cannot open the database" failure — corrupt
+        // file, read-only folder, a cache from a newer build, a migration that
+        // threw — left `_series` null forever: an eternal spinner, no message,
+        // nothing written anywhere. Now it is an error panel with the cause and
+        // a way to copy the log.
+        onError: (Object e, StackTrace stack) {
+          AppLog.error('Library load failed', error: e, stack: stack);
+          if (mounted) setState(() => _loadError = e);
+        },
+      ),
     );
     // Continue-watching: resolved off the cache into state so the panel's
     // presence (and thus the layout) is known without a FutureBuilder.
-    widget.watchState.continueWatching().then((e) {
-      if (mounted) setState(() => _continueEntries = e);
-    });
+    _background(
+      'continue watching',
+      widget.watchState.continueWatching(),
+      (e) => setState(() => _continueEntries = e),
+    );
     // "Up Next" per series — resolved off the cache; updates the grid when ready.
-    widget.watchOrder.upNextBySeries().then((m) {
-      if (mounted) setState(() => _upNext = m);
-    });
+    _background(
+      'up next',
+      widget.watchOrder.upNextBySeries(),
+      (m) => setState(() => _upNext = m),
+    );
     // Confirmed-unmatched count — gates the top-bar Unmatched button.
-    widget.repository.unmatchedFiles().then((u) {
-      if (mounted) setState(() => _unmatchedCount = u.length);
-    });
+    _background(
+      'unmatched count',
+      widget.repository.unmatchedFiles(),
+      (u) => setState(() => _unmatchedCount = u.length),
+    );
   }
 
   /// Per-series stats derived from one `episodesFor` read each: the library

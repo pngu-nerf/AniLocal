@@ -1,40 +1,81 @@
+import 'dart:async';
+
 import 'package:anilocal/data/request_throttle.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// A stopwatch the test advances by hand. `RequestThrottle` reads only
+/// `isRunning`, `start()` and `elapsed`, so this is the whole surface.
+class _ManualStopwatch extends Stopwatch {
+  Duration _now = Duration.zero;
+  bool _running = false;
+
+  void advance(Duration by) => _now += by;
+
+  @override
+  Duration get elapsed => _now;
+  @override
+  bool get isRunning => _running;
+  @override
+  void start() => _running = true;
+}
+
 void main() {
-  test('spaces two calls by at least the interval', () async {
-    final throttle = RequestThrottle(const Duration(milliseconds: 40));
-    final sw = Stopwatch()..start();
-    await throttle.wait();
-    await throttle.wait();
-    expect(sw.elapsed, greaterThanOrEqualTo(const Duration(milliseconds: 40)));
+  const interval = Duration(seconds: 1);
+
+  test('the second call waits out the remainder of the interval', () {
+    fakeAsync((async) {
+      final clock = _ManualStopwatch();
+      final throttle = RequestThrottle(interval, stopwatch: clock);
+      var done = 0;
+      unawaited(throttle.wait().then((_) => done++));
+      async.flushMicrotasks();
+      expect(done, 1, reason: 'the first call never waits');
+
+      clock.advance(const Duration(milliseconds: 400));
+      unawaited(throttle.wait().then((_) => done++));
+      async.elapse(const Duration(milliseconds: 599));
+      expect(done, 1, reason: 'still inside the interval');
+      async.elapse(const Duration(milliseconds: 1));
+      expect(done, 2, reason: 'exactly the remainder, no longer');
+    });
   });
 
-  test('a call after a long pause does not wait', () async {
-    final throttle = RequestThrottle(const Duration(milliseconds: 20));
-    await throttle.wait();
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    final sw = Stopwatch()..start();
-    await throttle.wait();
-    expect(sw.elapsed, lessThan(const Duration(milliseconds: 15)));
+  test('time is read from the STOPWATCH, so a long gap means no wait', () {
+    // The discriminating case. FakeAsync does not fake `DateTime.now()`, so an
+    // implementation on the wall clock would see no time pass here and sleep
+    // for the full interval; the injected stopwatch says an hour has passed.
+    // This is the test that fails if anyone puts `DateTime.now()` back.
+    fakeAsync((async) {
+      final clock = _ManualStopwatch();
+      final throttle = RequestThrottle(interval, stopwatch: clock);
+      unawaited(throttle.wait());
+      async.flushMicrotasks();
+
+      clock.advance(const Duration(hours: 1));
+      var done = false;
+      unawaited(throttle.wait().then((_) => done = true));
+      async.flushMicrotasks();
+      expect(done, isTrue, reason: 'no timer was ever scheduled');
+    });
   });
 
-  test('is measured on a monotonic clock, so it cannot sleep for an hour', () {
-    // The whole reason this exists. The old per-client copies used
-    // DateTime.now(); a backward wall-clock jump made the elapsed time negative
-    // and the wait `minInterval + jump`. A Stopwatch has no notion of wall time
-    // at all — there is nothing here that COULD go negative. Pinned by type,
-    // since it is the design, not a runtime branch, that provides the safety.
-    final injected = Stopwatch();
-    final throttle = RequestThrottle(
-      const Duration(seconds: 1),
-      stopwatch: injected,
-    );
-    expect(throttle, isA<RequestThrottle>());
-    expect(
-      injected.elapsed,
-      Duration.zero,
-      reason: 'starts on first wait, not before',
-    );
+  test('the wait is bounded by the interval whatever the clock says', () {
+    // A monotonic stopwatch cannot go backwards — that is the property that
+    // replaced `DateTime.now()`, whose backward jump produced a wait of
+    // `interval + jump`. The bound is therefore structural; this pins the
+    // arithmetic at the edge: zero elapsed → wait exactly one interval.
+    fakeAsync((async) {
+      final clock = _ManualStopwatch();
+      final throttle = RequestThrottle(interval, stopwatch: clock);
+      unawaited(throttle.wait());
+      async.flushMicrotasks();
+      var done = false;
+      unawaited(throttle.wait().then((_) => done = true));
+      async.elapse(interval - const Duration(microseconds: 1));
+      expect(done, isFalse);
+      async.elapse(const Duration(microseconds: 1));
+      expect(done, isTrue);
+    });
   });
 }

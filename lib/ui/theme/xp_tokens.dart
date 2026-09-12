@@ -39,7 +39,7 @@ abstract final class Xp {
   static const Color surfaceAlt = Color(0xFF20242A);
 
   /// Chassis button faces. NO gradient — [controlGradient] returns a flat fill;
-  /// [hover] lifts it a touch (the metal "warms" under the cursor).
+  /// The hover variant lifts it a touch (the metal "warms" under the cursor).
   static const Color controlTop = Color(0xFF23272D);
   static const Color controlBot = Color(0xFF23272D);
   static const Color controlTopHover = Color(0xFF2C313A);

@@ -204,8 +204,11 @@ at the code site with the exact crash/symptom):
 ## Build / run / verify
 
 - Run: `flutter run -d macos`
-- Check (what CI-equivalent runs): `tool/check.sh` = `flutter analyze` +
-  `dart format --set-exit-if-changed`; add `flutter test` when touching a seam.
+- Check: `tool/check.sh` = `dart format --output=none --set-exit-if-changed` +
+  `flutter analyze` + `flutter test`. CI (`.github/workflows/ci.yml`) runs exactly
+  this script, so green here is green there. The lint set (`analysis_options.yaml`)
+  is strict-mode plus the rules for the failure modes this codebase has had —
+  dropped futures, uncancelled subscriptions, `dynamic` reaching a cast.
 - **Live-API tests: `flutter test test_live/`** — four harnesses (Jikan, Kitsu, the opening-span measurement,
   and the chapter parsers against the whole real library) that hit real services
   and real files. They sit OUTSIDE `test/` deliberately: `flutter test` walks

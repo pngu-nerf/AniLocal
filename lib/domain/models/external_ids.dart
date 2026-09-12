@@ -1,3 +1,4 @@
+import 'package:anilocal/domain/models/series.dart' show Series;
 import 'package:equatable/equatable.dart';
 
 /// Provider tokens. These are the SAME strings stored in

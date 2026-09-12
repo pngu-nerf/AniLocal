@@ -8,7 +8,7 @@
 /// `minInterval + jump` — an hour-long sleep in the middle of a scan, with no
 /// cancel. A stopwatch cannot run backwards.
 ///
-/// [stopwatch] is injectable so tests can drive it without sleeping.
+/// The stopwatch is injectable so tests can drive it without sleeping.
 class RequestThrottle {
   RequestThrottle(this.minInterval, {Stopwatch? stopwatch})
     : _clock = stopwatch ?? Stopwatch();

@@ -83,7 +83,7 @@ class LibraryFolders extends Table {
 
   /// User-controllable rank (lower = higher priority). Drives multi-source
   /// priority: top = preferred default playback source. Set by drag-to-reorder
-  /// in the folders screen (see [reorderFolders]); stable across relaunch.
+  /// in the folders screen (see `reorderFolders` on the repository); stable across relaunch.
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
   /// Stable volume identity (a volume UUID) for a folder on a removable/network
@@ -789,7 +789,7 @@ class CacheDatabase extends _$CacheDatabase {
   /// Remove a folder and the files under it, then prune orphaned series — all
   /// atomically (so the cache stays consistent immediately, without a rescan).
   /// Files are keyed by their owning folder, so removal is an exact match on
-  /// [folderPath] (no path-prefix scan).
+  /// `folderPath` (no path-prefix scan).
   Future<void> removeFolderAndFiles(String path) {
     return transaction(() async {
       await (delete(libraryFolders)..where((f) => f.path.equals(path))).go();

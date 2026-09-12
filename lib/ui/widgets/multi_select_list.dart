@@ -24,7 +24,7 @@ class MultiSelectList extends StatefulWidget {
 
   final int itemCount;
 
-  /// Builds the label widget for row [index].
+  /// Builds the label widget for the row at a given index.
   final Widget Function(BuildContext context, int index) labelBuilder;
 
   /// Fires whenever the selected index set changes.

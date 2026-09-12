@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import '../data/metadata/metadata_provider.dart';
-import '../domain/models/source_preference.dart';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
+import '../data/metadata/metadata_provider.dart';
 import '../domain/models/series.dart';
+import '../domain/models/source_preference.dart';
 import '../domain/repositories/fix_match_repository.dart';
 
 /// Applies user match corrections. This is the ONLY writer of `match_overrides`

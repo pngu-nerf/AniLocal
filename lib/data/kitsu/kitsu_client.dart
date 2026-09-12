@@ -110,7 +110,9 @@ class KitsuClient {
     if (attrs is! Map<String, dynamic>) return null;
 
     final titles = attrs['titles'];
-    final byLang = titles is Map<String, dynamic> ? titles : const {};
+    final byLang = titles is Map<String, dynamic>
+        ? titles
+        : const <String, dynamic>{};
     return Series(
       // Provisional: ensureSeriesId decides the real local identity.
       seriesId: kitsuId,

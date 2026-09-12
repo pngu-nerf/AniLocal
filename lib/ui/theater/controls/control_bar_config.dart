@@ -70,7 +70,7 @@ class ControlBarConfig {
   /// location. Only one is ever relevant at a time (skip inside its window;
   /// up-next in the last ~5s, with the outro button suppressed during the
   /// pre-roll), so they don't collide. Right slot is left-to-right `volume,
-  /// subtitles, settings, fullscreen` (fullscreen pinned rightmost); [episode]
+  /// subtitles, settings, fullscreen` (fullscreen pinned rightmost); `episode`
   /// holds the center — it inherits the flex the empty spacer had, so the EP
   /// readout centres on the BAR, not on the gap between the button groups.
   static const ControlBarConfig windowedDefault = ControlBarConfig(

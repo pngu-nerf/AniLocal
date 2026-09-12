@@ -11,14 +11,14 @@ import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
-import 'package:anilocal/sync/library_sync.dart';
-import 'package:drift/native.dart';
 import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/domain/models/metadata_failure.dart';
 import 'package:anilocal/domain/models/skip_range.dart';
-import 'package:anilocal/domain/skip_corroboration.dart';
 import 'package:anilocal/domain/models/source_preference.dart';
+import 'package:anilocal/domain/skip_corroboration.dart';
+import 'package:anilocal/sync/library_sync.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -106,7 +106,7 @@ http.Response _anilistPage() => http.Response(
             'title': {'romaji': 'Cowboy Bebop'},
             'format': 'TV',
             'episodes': 26,
-            'relations': {'edges': []},
+            'relations': {'edges': <Object?>[]},
           },
         ],
       },

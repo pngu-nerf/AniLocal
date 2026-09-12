@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:anilocal/ui/widgets/xp_dialog.dart' show XpDialog;
 import 'package:flutter/material.dart';
 
 import '../window_chrome.dart';

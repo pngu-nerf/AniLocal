@@ -1,7 +1,7 @@
 import 'package:anilocal/data/metadata/metadata_provider.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
-import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/series.dart';
+import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/source_preference.dart';
 import 'package:anilocal/ui/settings/panels/source_list_panel.dart';
 import 'package:anilocal/ui/theme/xp_theme.dart';

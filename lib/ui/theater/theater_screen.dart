@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'package:anilocal/ui/theater/controls/player_controls_state.dart'
+    show PlayerControlsActions;
+import 'package:anilocal/ui/widgets/header_actions.dart' show HeaderActionsBar;
 import 'package:flutter/material.dart';
 
 import '../../domain/models/episode.dart';
@@ -6,21 +10,21 @@ import '../../domain/repositories/library_repository.dart';
 import '../../domain/repositories/settings_repository.dart';
 import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
+import '../../playback/playback_controller.dart';
+import '../shell/header_scope.dart';
+import '../shell/header_spec.dart';
 import '../window_chrome.dart';
 import 'theater_layout.dart';
 import 'theater_layout_config.dart';
 import 'zones/episode_list_zone.dart';
 import 'zones/series_info_zone.dart';
 import 'zones/video_zone.dart';
-import '../../playback/playback_controller.dart';
-import '../shell/header_scope.dart';
-import '../shell/header_spec.dart';
 
 /// The theater watch screen: video, episode list, and series info as three
 /// self-contained zones arranged by [TheaterLayout] from a [TheaterLayoutConfig].
 ///
 /// This screen only ASSEMBLES — it builds each zone with its data and hands the
-/// set to the layout. It owns one piece of shared state, [_current] (the
+/// set to the layout. It owns one piece of shared state, `_current` (the
 /// episode in the video frame): the list selects into it (swap in place, no
 /// navigation) and the video reports auto-advance back into it. It holds no
 /// geometry; repositioning is entirely a [TheaterLayoutConfig] concern.
@@ -113,15 +117,15 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     // The player is the ONLY place fullscreen has an exit (⛶ / Escape), so it
     // is the only place the window is allowed to enter it. Scoped to exactly
     // this screen's lifetime; the runner force-exits when it goes away.
-    WindowChrome.setFullscreenAllowed(true);
-    _loadRailFraction();
-    _loadEpisodes();
+    unawaited(WindowChrome.setFullscreenAllowed(true));
+    unawaited(_loadRailFraction());
+    unawaited(_loadEpisodes());
   }
 
   @override
   void dispose() {
     WindowChrome.fullscreen.removeListener(_onWindowFullscreenChanged);
-    WindowChrome.setFullscreenAllowed(false);
+    unawaited(WindowChrome.setFullscreenAllowed(false));
     super.dispose();
   }
 
@@ -174,7 +178,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     // frame and the two changes read as one motion. The reply arrives on
     // WindowChrome.fullscreen -> _onWindowFullscreenChanged.
     Tooltip.dismissAllToolTips();
-    WindowChrome.setFullscreen(!_fullscreen);
+    unawaited(WindowChrome.setFullscreen(!_fullscreen));
   }
 
   /// The host-driven swap (a list tap): point the video at [episode]. The
@@ -188,7 +192,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   /// the just-finished episode picks up its watched mark.
   void _onAdvanced(Episode episode) {
     setState(() => _current = episode);
-    _loadEpisodes();
+    unawaited(_loadEpisodes());
   }
 
   /// Settings opens over the player, and Sources is a category inside it:
@@ -200,7 +204,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   /// scan and no network.)
   Future<void> _openSettings() async {
     await widget.onSettings();
-    if (mounted) _loadEpisodes();
+    if (mounted) unawaited(_loadEpisodes());
   }
 
   @override

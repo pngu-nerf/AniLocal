@@ -21,6 +21,7 @@
 /// focus rules are untouched by the restyle.
 library;
 
+import 'package:anilocal/ui/theme/xp_widgets.dart' show XpButton;
 import 'package:flutter/material.dart';
 
 import '../../theme/header_readout.dart';

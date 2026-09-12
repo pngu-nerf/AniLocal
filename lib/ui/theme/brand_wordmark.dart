@@ -1,3 +1,5 @@
+import 'package:anilocal/ui/theme/vfd_readout.dart' show VfdReadout;
+import 'package:anilocal/ui/theme/xp_widgets.dart' show ChromeLabel;
 import 'package:flutter/material.dart';
 
 import 'xp_tokens.dart';

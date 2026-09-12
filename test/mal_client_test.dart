@@ -224,7 +224,7 @@ void main() {
     }
 
     test('no key configured: never even asks', () async {
-      var called = false;
+      final called = false;
       final e = await failureOf(_searchPage(), key: null);
 
       expect(e.failure, MetadataFailure.unauthorized);

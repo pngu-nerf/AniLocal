@@ -2,15 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
-import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
-import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
+import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/domain/models/skip_range.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
@@ -54,7 +54,7 @@ http.Response _anilistPage() => http.Response(
             'format': 'TV',
             'episodes': 26,
             'coverImage': {'extraLarge': 'http://a/1.jpg'},
-            'relations': {'edges': []},
+            'relations': {'edges': <Object?>[]},
           },
         ],
       },
@@ -98,8 +98,10 @@ void main() {
     test('found:false -> null', () async {
       final client = AniSkipClient(
         httpClient: MockClient(
-          (_) async =>
-              http.Response(jsonEncode({'found': false, 'results': []}), 200),
+          (_) async => http.Response(
+            jsonEncode({'found': false, 'results': <Object?>[]}),
+            200,
+          ),
         ),
       );
       expect(await client.fetchSkips(999, 1), isNull);

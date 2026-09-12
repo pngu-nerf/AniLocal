@@ -158,7 +158,7 @@ class _MarqueeState extends State<_Marquee>
     );
     // Continuous loop. To switch to scroll-once-then-settle, replace `.repeat()`
     // with `.forward()` (it ends with the title back at the start).
-    _controller.repeat();
+    unawaited(_controller.repeat());
   }
 
   @override

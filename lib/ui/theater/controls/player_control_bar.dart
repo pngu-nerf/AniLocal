@@ -269,15 +269,15 @@ class _PlayerControlsState extends State<PlayerControls> {
     // here as well would be dead code that looks load-bearing.
     final p = widget.player;
     if (key == LogicalKeyboardKey.space) {
-      p.playOrPause();
+      unawaited(p.playOrPause());
     } else if (key == LogicalKeyboardKey.arrowRight) {
       _seekRelative(const Duration(seconds: 10));
     } else if (key == LogicalKeyboardKey.arrowLeft) {
       _seekRelative(const Duration(seconds: -10));
     } else if (key == LogicalKeyboardKey.arrowUp) {
-      p.setVolume((p.state.volume + 5).clamp(0.0, 100.0));
+      unawaited(p.setVolume((p.state.volume + 5).clamp(0.0, 100.0)));
     } else if (key == LogicalKeyboardKey.arrowDown) {
-      p.setVolume((p.state.volume - 5).clamp(0.0, 100.0));
+      unawaited(p.setVolume((p.state.volume - 5).clamp(0.0, 100.0)));
     } else {
       return KeyEventResult.ignored;
     }
@@ -298,13 +298,13 @@ class _PlayerControlsState extends State<PlayerControls> {
     final clamped = target < Duration.zero
         ? Duration.zero
         : (dur > Duration.zero && target > dur ? dur : target);
-    p.seek(clamped); // the same seek the seek bar + skip buttons use
+    unawaited(p.seek(clamped)); // the same seek the seek bar + skip buttons use
   }
 
   /// Click on the video area (not on a control) → toggle playback. Also wakes
   /// the controls via the shared [_show] (reveal bar + cursor, reset idle).
   void _togglePlay() {
-    widget.player.playOrPause();
+    unawaited(widget.player.playOrPause());
     _show();
   }
 

@@ -1,9 +1,9 @@
-import 'package:anilocal/ui/widgets/xp_dialog.dart';
 import 'package:anilocal/ui/shell/header_spec.dart';
-
-import 'support/shell_harness.dart';
+import 'package:anilocal/ui/widgets/xp_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/shell_harness.dart';
 
 /// Regression guard for the "ListTile background color or ink splashes may be
 /// invisible" framework warning: the instrument shells (`AppShell`'s chassis,

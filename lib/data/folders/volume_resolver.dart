@@ -1,5 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:anilocal/data/cache/cache_database.dart' show LibraryFolders;
+
+import 'package:anilocal/data/folders/folder_access.dart' show FolderAccess;
+
+import 'package:anilocal/data/scanner/folder_scanner.dart' show FolderScanner;
+
 import '../../diagnostics/app_log.dart';
 
 /// A volume's stable identity ([volumeId]) and where it is mounted RIGHT NOW

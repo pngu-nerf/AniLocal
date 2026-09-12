@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -91,7 +92,7 @@ class _AppShellState extends State<AppShell> {
     // Dismiss first, then resize — a tooltip mounted across an overlay-size
     // change is the `size == theater.size` crash (see TooltipDismissOnResize).
     Tooltip.dismissAllToolTips();
-    WindowChrome.setFullscreen(false);
+    unawaited(WindowChrome.setFullscreen(false));
     return true;
   }
 

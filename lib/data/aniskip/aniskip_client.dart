@@ -1,9 +1,10 @@
 import 'dart:convert';
 
+import 'package:anilocal/data/anilist/anilist_client.dart' show AniListClient;
 import 'package:http/http.dart' as http;
 
-import '../../domain/models/skip_range.dart';
 import '../../domain/models/metadata_failure.dart';
+import '../../domain/models/skip_range.dart';
 import '../http_failure.dart';
 import '../user_agent.dart';
 

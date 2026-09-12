@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../domain/models/source_descriptor.dart';
 import '../domain/models/refresh_summary.dart';
+import '../domain/models/source_descriptor.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
@@ -12,15 +13,15 @@ import '../domain/repositories/show_preferences_repository.dart';
 import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
+import '../playback/playback_controller.dart';
 import 'library_screen.dart';
+import 'settings/settings_actions.dart';
+import 'settings/sources_actions.dart';
 import 'shell/app_shell.dart';
 import 'shell/header_controller.dart';
 import 'shell/header_scope.dart';
 import 'theme/xp_theme.dart';
 import 'tooltip_dismiss_observer.dart';
-import '../playback/playback_controller.dart';
-import 'settings/settings_actions.dart';
-import 'settings/sources_actions.dart';
 
 /// Dismisses tooltips on every root-navigator transition — the single guard that
 /// keeps a mounted tooltip from crashing during media_kit's fullscreen
@@ -86,7 +87,7 @@ class AniLocalApp extends StatelessWidget {
   /// player instead of destroying it — see [PlaybackController].
   final PlaybackController playback;
 
-  /// Fill path. [onDiscovered] fires mid-scan once newly-seen files have been
+  /// Fill path. The `onDiscovered` callback fires mid-scan once newly-seen files have been
   /// written as pending placeholders (before identification), so the UI can
   /// reload and paint them immediately.
   final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
@@ -234,7 +235,7 @@ class _PlaybackEngineOwnerState extends State<_PlaybackEngineOwner> {
   void dispose() {
     // The ONLY PlaybackController.dispose() call in the app. A route pop must
     // never reach this — it calls stop() instead (see VideoZone.dispose).
-    widget.playback.dispose();
+    unawaited(widget.playback.dispose());
     super.dispose();
   }
 

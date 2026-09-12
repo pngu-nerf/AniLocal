@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../diagnostics/app_log.dart';
 import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
-import 'theme/xp_tokens.dart';
-import 'theme/xp_widgets.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
-import '../diagnostics/app_log.dart';
+import 'theme/xp_tokens.dart';
+import 'theme/xp_widgets.dart';
 
 /// Minimal manual fix-match: search the metadata sources → pick from ranked candidates →
 /// assign. For a split (multiple files), an optional toggle chooses continuous

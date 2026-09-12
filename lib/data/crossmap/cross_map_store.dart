@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:anilocal/data/cache/art_cache.dart' show ArtCache;
 import 'package:http/http.dart' as http;
 
+import '../../diagnostics/app_log.dart';
 import '../user_agent.dart';
 import 'cross_map.dart';
-import '../../diagnostics/app_log.dart';
 
 /// Fetches, derives and caches the cross-database id map.
 ///

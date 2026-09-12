@@ -1,3 +1,4 @@
+import 'package:anilocal/ui/resize_divider.dart' show ResizeDivider;
 import 'package:flutter/foundation.dart';
 
 /// The zones of the landing/library page. Identity only — a zone never knows

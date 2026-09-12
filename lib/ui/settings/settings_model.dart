@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../domain/models/skip_mode.dart';
@@ -88,49 +89,49 @@ class SettingsModel extends ChangeNotifier {
 
   void setAutoPlayNext(bool v) {
     autoPlayNext = v;
-    repository.setAutoPlayNext(v);
+    unawaited(repository.setAutoPlayNext(v));
     notifyListeners();
   }
 
   void setSkipMode(SkipMode v) {
     skipMode = v;
-    repository.setSkipMode(v);
+    unawaited(repository.setSkipMode(v));
     notifyListeners();
   }
 
   void setMissingEnabled(bool v) {
     missingEnabled = v;
-    repository.setMissingEnabled(v);
+    unawaited(repository.setMissingEnabled(v));
     notifyListeners();
   }
 
   void setMinSkipLength(int seconds) {
     minSkipLength = Duration(seconds: seconds.clamp(0, 600));
-    repository.setMinSkipLength(minSkipLength);
+    unawaited(repository.setMinSkipLength(minSkipLength));
     notifyListeners();
   }
 
   void setCorroborateSkips(bool v) {
     corroborateSkips = v;
-    repository.setCorroborateSkips(v);
+    unawaited(repository.setCorroborateSkips(v));
     notifyListeners();
   }
 
   void setHideNextEpisode(bool v) {
     hideNextEpisode = v;
-    repository.setHideNextEpisode(v);
+    unawaited(repository.setHideNextEpisode(v));
     notifyListeners();
   }
 
   void setShowContinueWatching(bool v) {
     showContinueWatching = v;
-    repository.setShowContinueWatching(v);
+    unawaited(repository.setShowContinueWatching(v));
     notifyListeners();
   }
 
   void setShowSearchBar(bool v) {
     showSearchBar = v;
-    repository.setShowSearchBar(v);
+    unawaited(repository.setShowSearchBar(v));
     notifyListeners();
   }
 
@@ -145,7 +146,7 @@ class SettingsModel extends ChangeNotifier {
     thresholdValid = parsed != null;
     if (parsed != null) {
       watchedThreshold = parsed;
-      repository.setWatchedThreshold(parsed);
+      unawaited(repository.setWatchedThreshold(parsed));
     }
     notifyListeners();
   }

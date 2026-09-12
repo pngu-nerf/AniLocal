@@ -6,6 +6,7 @@ import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
   jsonEncode({
@@ -30,8 +31,7 @@ void main() {
         AniListMetadataProvider(
           AniListClient(
             httpClient: MockClient((req) async {
-              final search =
-                  (jsonDecode(req.body)['variables']['search']) as String;
+              final search = (graphqlVariables(req)['search']) as String;
               searches.add(search);
               if (search == 'Cowboy Bebop') {
                 return _page([_m(1, 'Cowboy Bebop')]);

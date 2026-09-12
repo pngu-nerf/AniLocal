@@ -54,8 +54,11 @@ void main() {
       );
 
       expect(body['query'], contains('format_in'));
-      expect(body['variables']['format'], ['TV', 'MOVIE']);
-      expect(body['variables']['perPage'], 5);
+      expect((body['variables'] as Map<String, dynamic>)['format'], [
+        'TV',
+        'MOVIE',
+      ]);
+      expect((body['variables'] as Map<String, dynamic>)['perPage'], 5);
     });
 
     test('empty Page returns empty list, not an error', () async {

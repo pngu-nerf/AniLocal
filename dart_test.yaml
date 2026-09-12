@@ -1,0 +1,4 @@
+# Test runner defaults. `flutter test` honours timeout/on_os here (it rejects
+# only the `-P` preset flag, which is why test_live/ is a separate directory
+# rather than a tag — see docs/ARCHITECTURE.md).
+timeout: 60s

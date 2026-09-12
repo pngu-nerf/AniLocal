@@ -37,7 +37,7 @@ Each stage ends *runnable*. Don't start a stage until the previous "Done when" i
 - Flutter project, **macOS desktop target first** (structure stays cross-platform).
 - Folders: `lib/ui`, `lib/domain` (models + repository *interfaces*), `lib/data/cache`, `lib/data/anilist`, `lib/data/scanner` (scan + identify), `lib/sync` (pipeline orchestration), `lib/playback`.
 - Domain models (minimal projection): `Series` (anilistId, titles {romaji, english, native}, format, art ref), `Episode` (number, title, fileRef, watched, resumePosition), `LibraryFolder` (path). *(Since v14: `Series` is keyed by `seriesId`, our own surrogate, and carries `ExternalIds{anilist, mal, kitsu, anidb}` with `anilistId` nullable alongside it.)*
-- Repository interfaces (no implementations yet). `CLAUDE.md`. Light CI: `flutter analyze` + `dart format --set-exit-if-changed`.
+- Repository interfaces (no implementations yet). `CLAUDE.md`. `tool/check.sh` (format + analyze; tests and GitHub Actions CI were added in the round-two hardening).
 
 **Done when:** empty app launches on macOS; folder/interface skeleton compiles. **Not yet:** any data or feature.
 

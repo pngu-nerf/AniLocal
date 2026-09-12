@@ -2,20 +2,21 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
-import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
-import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
+import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
   jsonEncode({
@@ -57,7 +58,7 @@ void main() {
     final mock = MockClient((req) async {
       if (req.method == 'POST') {
         anilistCalls++;
-        final search = (jsonDecode(req.body)['variables']['search']) as String;
+        final search = (graphqlVariables(req)['search']) as String;
         if (search.toLowerCase().contains('cowboy')) {
           return _page([_m(1, 'Cowboy Bebop', 'https://art.test/1.jpg')]);
         }

@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import '../../domain/chapter_skips.dart';
 import '../../diagnostics/app_log.dart';
+import '../../domain/chapter_skips.dart';
 
 /// What a container told us about its chapters.
 class FileChapters {

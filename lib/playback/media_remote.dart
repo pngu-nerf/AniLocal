@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -63,6 +64,6 @@ class MediaRemote {
   void dispose() {
     if (!Platform.isMacOS) return;
     _channel.setMethodCallHandler(null);
-    _channel.invokeMethod<void>('clear');
+    unawaited(_channel.invokeMethod<void>('clear'));
   }
 }

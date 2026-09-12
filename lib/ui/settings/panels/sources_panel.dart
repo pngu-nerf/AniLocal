@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/library_folder.dart';
@@ -11,7 +12,7 @@ import '../sources_actions.dart';
 ///
 /// This is the old standalone `FoldersScreen` rehoused in the settings window —
 /// same repository calls, same drag-to-reorder, same add/remove. Nothing about
-/// how order becomes play-priority moved or changed: [_onReorder] still calls
+/// how order becomes play-priority moved or changed: `_onReorder` still calls
 /// `reorderFolders`, which rewrites `library_folders.sortOrder`, and
 /// `_logicalEpisodes` re-reads that on the next query. The page's header "Add"
 /// action is the one thing that had to move — a dialog has no app header, so it
@@ -33,7 +34,7 @@ class _SourcesPanelState extends State<SourcesPanel> {
   @override
   void initState() {
     super.initState();
-    _reload();
+    unawaited(_reload());
   }
 
   Future<void> _reload() async {

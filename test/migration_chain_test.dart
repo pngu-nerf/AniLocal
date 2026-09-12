@@ -1,10 +1,11 @@
 import 'dart:io';
 
 import 'package:anilocal/data/cache/cache_database.dart';
+import 'package:anilocal/domain/models/cache_errors.dart';
 import 'package:anilocal/domain/skip_corroboration.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:anilocal/domain/models/cache_errors.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 /// The complete v13 schema — every table still keyed by `anilist_id`, plus
 /// show_preferences. Copied forward from `migration_v13_test.dart`'s `_v12Ddl`
@@ -487,7 +488,7 @@ void main() {
     /// v19 backfill's `INSERT … FROM skip_segments` throws mid-step — after
     /// createTable(skip_source_answers) has already run. Built from the v13
     /// DDL by hand, the same way the v16 leapfrog builds its start.
-    void seedBrokenV18(dynamic raw) {
+    void seedBrokenV18(sqlite3.Database raw) {
       raw.execute(_v13Ddl);
       for (final t in const [
         'series_cache',

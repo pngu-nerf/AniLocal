@@ -7,6 +7,7 @@ import 'package:anilocal/ui/theater/controls/seek_bar.dart';
 import 'package:anilocal/ui/theater/controls/segmented_meter.dart';
 import 'package:anilocal/ui/theater/controls/vfd_control.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
+import 'package:anilocal/ui/theme/vfd_readout.dart' show VfdReadout;
 import 'package:anilocal/ui/theme/xp_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

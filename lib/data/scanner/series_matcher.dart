@@ -1,3 +1,5 @@
+import 'package:anilocal/domain/models/series.dart' show Series;
+
 import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/source_preference.dart';
 import '../metadata/metadata_provider.dart';

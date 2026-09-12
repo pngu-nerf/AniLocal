@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/metadata_failure.dart';
+import '../../domain/models/series.dart';
 import '../http_failure.dart';
 import '../user_agent.dart';
-import '../../domain/models/series.dart';
 import 'anilist_mapper.dart';
 import 'anilist_queries.dart';
 

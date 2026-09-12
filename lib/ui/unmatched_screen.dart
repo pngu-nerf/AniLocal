@@ -1,14 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../diagnostics/app_log.dart';
 import '../domain/models/identified_episode.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import 'fix_match_screen.dart';
-import 'theme/xp_tokens.dart';
-import 'theme/xp_widgets.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'shell/instant_page_route.dart';
+import 'theme/xp_tokens.dart';
+import 'theme/xp_widgets.dart';
 
 /// Lists files that matched no AniList entry (kept on record across rescans).
 /// Tapping one opens fix-match to assign it (the OPM Specials case).
@@ -33,6 +36,7 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
   /// isn't torn down to a spinner and back. See CLAUDE.md, "never clear known
   /// content to show a loading state".
   List<IdentifiedEpisode>? _files;
+  Object? _loadError;
 
   @override
   void initState() {
@@ -41,9 +45,19 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
   }
 
   void _reload() {
-    widget.repository.unmatchedFiles().then((f) {
-      if (mounted) setState(() => _files = f);
-    });
+    unawaited(
+      widget.repository.unmatchedFiles().then(
+        (f) {
+          if (mounted) setState(() => _files = f);
+        },
+        // Information fails NEUTRAL: an error line, not a spinner that never
+        // ends and not an empty list claiming there is nothing to fix.
+        onError: (Object e, StackTrace stack) {
+          AppLog.error('Unmatched list failed', error: e, stack: stack);
+          if (mounted) setState(() => _loadError = e);
+        },
+      ),
+    );
   }
 
   Future<void> _fix(IdentifiedEpisode f) async {
@@ -67,6 +81,16 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
         final files = _files;
         // Spinner ONLY before the first load has ever arrived.
         if (files == null) {
+          final error = _loadError;
+          if (error != null) {
+            return Center(
+              child: Text(
+                'Couldn\'t read the unmatched list — details are in '
+                'Settings › About.',
+                style: TextStyle(color: Xp.textDim),
+              ),
+            );
+          }
           return const Center(child: CircularProgressIndicator());
         }
         if (files.isEmpty) {

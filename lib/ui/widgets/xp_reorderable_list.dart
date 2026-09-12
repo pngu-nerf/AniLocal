@@ -54,7 +54,7 @@ class XpReorderableList<T> extends StatelessWidget {
   final bool Function(T item)? dimmed;
 
   /// Receives ALREADY-ADJUSTED indices: `onReorderItem` accounts for the item
-  /// being lifted out at [oldIndex], so callers must not subtract one again.
+  /// being lifted out at `oldIndex`, so callers must not subtract one again.
   final void Function(int oldIndex, int newIndex) onReorder;
 
   @override

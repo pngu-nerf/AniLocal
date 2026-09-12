@@ -1,3 +1,5 @@
+import 'package:anilocal/data/crossmap/cross_map_store.dart' show CrossMapStore;
+
 /// A cross-database id map: one show's id on AniList → its id elsewhere.
 ///
 /// Exists because ids are the ONE thing every anime database agrees to

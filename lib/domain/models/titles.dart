@@ -1,3 +1,4 @@
+import 'package:anilocal/domain/models/series.dart' show Series;
 import 'package:equatable/equatable.dart';
 
 /// The set of titles AniList exposes for a [Series].

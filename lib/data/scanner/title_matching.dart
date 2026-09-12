@@ -1,7 +1,7 @@
 import '../../domain/models/series.dart';
 
 /// Result of ranking AniList candidates against a parsed title.
-/// [source] is the token of the provider that answered, so a scan can report
+/// `MatchResult.source` is the token of the provider that answered, so a scan can report
 /// where its results came from. Null when nothing answered.
 typedef MatchResult = ({Series? series, double score, String? source});
 

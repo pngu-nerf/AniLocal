@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/source_descriptor.dart';
@@ -5,8 +6,8 @@ import '../../../domain/models/source_preference.dart';
 import '../../../domain/repositories/settings_repository.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
-import 'client_id_dialog.dart';
 import '../../widgets/xp_reorderable_list.dart';
+import 'client_id_dialog.dart';
 
 /// An ordered, individually-switchable list of sources.
 ///
@@ -69,7 +70,7 @@ class _SourceListPanelState extends State<SourceListPanel> {
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _load() async {

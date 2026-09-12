@@ -16,6 +16,8 @@
 /// ```
 library;
 
+import 'package:anilocal/data/cache/cache_database.dart' show CacheDatabase;
+
 /// Where minted ids start. Above any conceivable AniList id (they are ~6
 /// digits) and far below 2^63, so both bands have enormous headroom. SQLite
 /// INTEGER and Dart `int` are 64-bit signed, so the size costs nothing.

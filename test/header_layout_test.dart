@@ -1,14 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
+import 'package:anilocal/ui/shell/header_spec.dart';
 import 'package:anilocal/ui/theme/brand_wordmark.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
 import 'package:anilocal/ui/theme/vfd_readout.dart';
 import 'package:anilocal/ui/theme/xp_tokens.dart';
 import 'package:anilocal/ui/theme/xp_widgets.dart';
-import 'package:anilocal/ui/shell/header_spec.dart';
 import 'package:anilocal/ui/widgets/header_actions.dart';
 import 'package:anilocal/ui/window_chrome.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'support/shell_harness.dart';
 

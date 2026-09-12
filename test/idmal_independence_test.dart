@@ -2,20 +2,21 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/anilist/anilist_client.dart';
-import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
-import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/crossmap/cross_map_store.dart';
+import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
+import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'support/graphql_request.dart';
 
 /// AniSkip is keyed by MAL id, and that id used to come ONLY from AniList's
 /// `idMal`. So a show AniList returned without one — or a show identified while
@@ -49,7 +50,7 @@ void main() {
               'format': 'TV',
               'episodes': 12,
               'coverImage': {'extraLarge': 'http://a/$id.jpg'},
-              'relations': {'edges': []},
+              'relations': {'edges': <Object?>[]},
             },
           ],
         },
@@ -90,15 +91,14 @@ void main() {
   LibrarySync buildSync({required bool withCrossMap}) {
     final anilist = MockClient((req) async {
       if (req.method == 'POST') {
-        final q = (jsonDecode(req.body)['variables']['search'] as String)
-            .toLowerCase();
+        final q = (graphqlVariables(req)['search'] as String).toLowerCase();
         if (q.contains('sakamoto')) {
           return page(500, 'Sakamoto Days', seriesIdMal['sakamoto']);
         }
         return http.Response(
           jsonEncode({
             'data': {
-              'Page': {'media': []},
+              'Page': {'media': <Object?>[]},
             },
           }),
           200,

@@ -41,7 +41,7 @@ http.Response _searchPage() => http.Response.bytes(
           'title_japanese': 'カウボーイビバップ 天国の扉',
           'type': 'Movie',
           'episodes': 1,
-          'images': {'jpg': {}},
+          'images': {'jpg': <String, Object?>{}},
         },
       ],
     }),

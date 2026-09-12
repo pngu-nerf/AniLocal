@@ -204,7 +204,7 @@ void main() {
     test('an empty result is a no-match, not an error', () async {
       final client = KitsuClient(
         httpClient: MockClient(
-          (_) async => http.Response(jsonEncode({'data': []}), 200),
+          (_) async => http.Response(jsonEncode({'data': <Object?>[]}), 200),
         ),
       );
 

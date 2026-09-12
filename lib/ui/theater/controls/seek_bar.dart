@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -62,8 +63,10 @@ class _SeekBarState extends State<SeekBar> {
   void _seekToFraction(double f) {
     final total = _duration.inMilliseconds;
     if (total <= 0) return;
-    widget.player.seek(
-      Duration(milliseconds: (f.clamp(0.0, 1.0) * total).round()),
+    unawaited(
+      widget.player.seek(
+        Duration(milliseconds: (f.clamp(0.0, 1.0) * total).round()),
+      ),
     );
   }
 

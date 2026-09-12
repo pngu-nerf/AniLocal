@@ -17,7 +17,7 @@ const Key kContinuePanelDividerKey = Key('continue-panel-divider');
 ///
 /// Arrangement: the search field pinned full-width at the top (below the app's
 /// top bar), and below it a row of the collapsible continue-watching panel
-/// ([LibraryLayoutConfig.panelWidth] in points, or [collapsedPanelWidth]
+/// ([LibraryLayoutConfig.panelWidth] in points, or [LibraryLayoutConfig.collapsedPanelWidth]
 /// when collapsed, on [LibraryLayoutConfig.panelSide]) beside the grid filling
 /// the remaining space. When expanded, a draggable [ResizeDivider] — the very
 /// one the theater rail uses — sits on the boundary. Landing-page analogue of

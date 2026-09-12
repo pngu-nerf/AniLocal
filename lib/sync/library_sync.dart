@@ -4,22 +4,22 @@ import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
 import '../data/cache/series_identity.dart';
 import '../data/crossmap/cross_map_store.dart';
-import '../data/metadata/metadata_provider.dart';
-import '../data/skip/skip_provider.dart';
 import '../data/folders/volume_resolver.dart';
+import '../data/metadata/metadata_provider.dart';
 import '../data/scanner/filename_parser.dart';
 import '../data/scanner/folder_scanner.dart';
 import '../data/scanner/series_matcher.dart';
 import '../data/scanner/title_matching.dart';
+import '../data/skip/skip_provider.dart';
+import '../diagnostics/app_log.dart';
 import '../domain/models/external_ids.dart';
 import '../domain/models/metadata_failure.dart';
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/series.dart';
-import '../domain/models/source_preference.dart';
 import '../domain/models/skip_range.dart';
+import '../domain/models/source_preference.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/models/titles.dart';
-import '../diagnostics/app_log.dart';
 
 /// The fill path: scan a folder, identify only the deltas, and write the cache.
 /// Runs on scan/refresh only — never on a UI read.
@@ -29,7 +29,7 @@ import '../diagnostics/app_log.dart';
 /// - Never refetch unchanged: a delta whose title already maps to a cached
 ///   series reuses it (no metadata lookup).
 /// - Immediate population: a newly-seen, titled file is written as a PENDING
-///   placeholder up front (phase 1, no network) and surfaced via [onDiscovered]
+///   placeholder up front (phase 1, no network) and surfaced via `sync`'s `onDiscovered`
 ///   BEFORE identification runs — so the library shows it (named, blank art)
 ///   instantly, even offline. Identification (phase 2) then upgrades the row
 ///   in place: a match sets its seriesId; a genuine no-match flips it to

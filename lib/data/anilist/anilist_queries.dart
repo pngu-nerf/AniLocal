@@ -3,6 +3,8 @@
 /// Kept as plain strings (no `graphql_flutter`): AniList reads are simple POSTs.
 library;
 
+import 'package:media_kit/media_kit.dart' show Media;
+
 /// The `Media` fields the UI projects, plus `relations` (fetched now, surfaced
 /// as watch-order later). Shared by the filtered/unfiltered search queries.
 const String _mediaFields = r'''

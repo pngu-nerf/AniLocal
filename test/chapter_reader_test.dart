@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:anilocal/data/chapters/chapter_reader.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:anilocal/data/skip/chapters_skip_provider.dart';
 import 'package:anilocal/data/skip/skip_provider.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 /// The MP4 half of the container parsing, built from bytes rather than a real
 /// file so it runs everywhere.

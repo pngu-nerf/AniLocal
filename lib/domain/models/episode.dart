@@ -1,8 +1,9 @@
+import 'package:anilocal/domain/models/series.dart' show Series;
 import 'package:equatable/equatable.dart';
 
+import '../skip_corroboration.dart';
 import 'episode_source.dart';
 import 'skip_range.dart';
-import '../skip_corroboration.dart';
 
 /// One playable episode mapped to a [Series].
 ///

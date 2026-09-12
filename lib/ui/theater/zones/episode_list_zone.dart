@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/episode.dart';
@@ -60,10 +61,12 @@ class _EpisodeListZoneState extends State<EpisodeListZone> {
       0.0,
       _scroll.position.maxScrollExtent,
     );
-    _scroll.animateTo(
-      target,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
+    unawaited(
+      _scroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      ),
     );
   }
 

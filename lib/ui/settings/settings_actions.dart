@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/models/source_descriptor.dart';
+import '../../diagnostics/app_log.dart';
 import '../../domain/models/refresh_summary.dart';
+import '../../domain/models/source_descriptor.dart';
 import '../metadata_failure_message.dart';
 import 'sources_actions.dart';
-import '../../diagnostics/app_log.dart';
 
 /// The app-wide half of what the Settings window needs, built ONCE at the
 /// composition root and handed down as a single object. Which sources this
