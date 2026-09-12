@@ -1367,7 +1367,7 @@ class LibraryFolderRow extends DataClass
 
   /// User-controllable rank (lower = higher priority). Drives multi-source
   /// priority: top = preferred default playback source. Set by drag-to-reorder
-  /// in the folders screen (see [reorderFolders]); stable across relaunch.
+  /// in the folders screen (see `reorderFolders` on the repository); stable across relaunch.
   final int sortOrder;
 
   /// Stable volume identity (a volume UUID) for a folder on a removable/network
@@ -4448,6 +4448,14 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
   late final $ShowPrefsTable showPrefs = $ShowPrefsTable(this);
   late final $SeriesExternalIdsTable seriesExternalIds =
       $SeriesExternalIdsTable(this);
+  late final Index fileCacheFingerprint = Index(
+    'file_cache_fingerprint',
+    'CREATE INDEX file_cache_fingerprint ON file_cache (file_size, modified_at_ms)',
+  );
+  late final Index fileCacheSeries = Index(
+    'file_cache_series',
+    'CREATE INDEX file_cache_series ON file_cache (series_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4464,6 +4472,8 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     appSettings,
     showPrefs,
     seriesExternalIds,
+    fileCacheFingerprint,
+    fileCacheSeries,
   ];
 }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:anilocal/data/cache/cache_database.dart' show LibraryFolders;
 
@@ -48,6 +49,13 @@ class DiskutilVolumeResolver implements VolumeResolver {
   static const _diskutil = '/usr/sbin/diskutil';
   final Map<String, String?> _mountByVolumeId = {};
 
+  /// When each NEGATIVE answer ("not mounted") was recorded. A positive answer
+  /// is kept for the instance's life — a mount point does not change while
+  /// mounted — but a drive that is plugged back in during the session must be
+  /// found again, so "not mounted" expires after [negativeTtl].
+  final Map<String, DateTime> _negativeAt = {};
+  static const Duration negativeTtl = Duration(seconds: 30);
+
   @override
   Future<VolumeInfo?> infoForPath(String path) async {
     // diskutil resolves a MOUNT ROOT, not an arbitrary subpath (a subdir of a
@@ -58,8 +66,8 @@ class DiskutilVolumeResolver implements VolumeResolver {
     if (root == null) return null;
     final plist = await _diskutilPlist(root);
     if (plist == null) return null;
-    final uuid = _plistString(plist, 'VolumeUUID');
-    final mount = _plistString(plist, 'MountPoint');
+    final uuid = diskutilPlistString(plist, 'VolumeUUID');
+    final mount = diskutilPlistString(plist, 'MountPoint');
     if (uuid == null || mount == null || mount.isEmpty) return null;
     _mountByVolumeId[uuid] = mount;
     return VolumeInfo(volumeId: uuid, mountPoint: mount);
@@ -78,14 +86,28 @@ class DiskutilVolumeResolver implements VolumeResolver {
   @override
   Future<String?> mountPointForVolumeId(String volumeId) async {
     if (_mountByVolumeId.containsKey(volumeId)) {
-      return _mountByVolumeId[volumeId];
+      final cached = _mountByVolumeId[volumeId];
+      final since = _negativeAt[volumeId];
+      final expired =
+          cached == null &&
+          since != null &&
+          DateTime.now().difference(since) >= negativeTtl;
+      if (!expired) return cached;
     }
     final plist = await _diskutilPlist(volumeId);
-    final mount = plist == null ? null : _plistString(plist, 'MountPoint');
+    final mount = plist == null
+        ? null
+        : diskutilPlistString(plist, 'MountPoint');
     // An unmounted-but-known volume reports an empty MountPoint -> treat as not
-    // mounted. Cache the result (incl. null) to avoid re-shelling each read.
+    // mounted. Cached (incl. null) to avoid re-shelling each read; a null
+    // expires, see [negativeTtl].
     final resolved = (mount == null || mount.isEmpty) ? null : mount;
     _mountByVolumeId[volumeId] = resolved;
+    if (resolved == null) {
+      _negativeAt[volumeId] = DateTime.now();
+    } else {
+      _negativeAt.remove(volumeId);
+    }
     return resolved;
   }
 
@@ -96,34 +118,58 @@ class DiskutilVolumeResolver implements VolumeResolver {
   static const Duration _diskutilTimeout = Duration(seconds: 10);
 
   Future<String?> _diskutilPlist(String arg) async {
+    Process? process;
     try {
-      final result = await Process.run(_diskutil, [
-        'info',
-        '-plist',
-        arg,
-      ]).timeout(_diskutilTimeout);
-      if (result.exitCode != 0) return null;
-      return result.stdout as String;
+      // `Process.start`, not `run`: `run(...).timeout()` abandoned the child on
+      // expiry, and every later library load against the same wedged volume
+      // spawned another one. Killed on timeout, the process is gone too.
+      process = await Process.start(_diskutil, ['info', '-plist', arg]);
+      final stdout = process.stdout.transform(utf8.decoder).join();
+      final exit = await process.exitCode.timeout(_diskutilTimeout);
+      if (exit != 0) return null;
+      return await stdout;
     } on ProcessException catch (e) {
       // not macOS / diskutil missing -> caller falls back to null
       AppLog.warn('diskutil unavailable for $arg', error: e);
       return null;
     } on TimeoutException {
       // volume wedged -> treated as missing, never a hang
+      process?.kill();
       AppLog.warn('diskutil timed out for $arg after $_diskutilTimeout');
       return null;
     }
   }
-
-  /// Pull a flat `<key>NAME</key><string>VALUE</string>` value from a diskutil
-  /// plist. Apple's plist shape is stable; a targeted match avoids an XML dep.
-  String? _plistString(String plist, String key) {
-    final match = RegExp(
-      '<key>$key</key>\\s*<string>([^<]*)</string>',
-    ).firstMatch(plist);
-    return match?.group(1);
-  }
 }
+
+/// Pull a flat `<key>NAME</key><string>VALUE</string>` value from a diskutil
+/// plist. Apple's plist shape is stable; a targeted match avoids an XML dep.
+///
+/// The value is XML-UNESCAPED: a volume named `Movies & TV` is written as
+/// `Movies &amp; TV`, and returning that verbatim produced a mount point that
+/// does not exist, so the folder resolved to "missing" after every remount.
+/// Top-level and public so the parsing is testable without `diskutil`.
+String? diskutilPlistString(String plist, String key) {
+  final match = RegExp(
+    '<key>${RegExp.escape(key)}</key>\\s*<string>([^<]*)</string>',
+  ).firstMatch(plist);
+  final raw = match?.group(1);
+  return raw == null ? null : xmlUnescape(raw);
+}
+
+/// The five predefined XML entities plus numeric references — everything a
+/// plist writer emits for text content.
+String xmlUnescape(String text) => text
+    .replaceAllMapped(RegExp(r'&#x([0-9A-Fa-f]+);'), (m) {
+      return String.fromCharCode(int.parse(m.group(1)!, radix: 16));
+    })
+    .replaceAllMapped(RegExp(r'&#(\d+);'), (m) {
+      return String.fromCharCode(int.parse(m.group(1)!));
+    })
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
 
 /// Resolve a stored library folder to its CURRENT absolute path, transparently
 /// following a volume that remounted under a different `/Volumes` name.
@@ -140,7 +186,16 @@ Future<String?> resolveFolderPath({
   required String? volumeSubpath,
   required VolumeResolver resolver,
 }) async {
-  if (Directory(storedPath).existsSync()) return storedPath;
+  // ASYNC, and bounded. This runs on the read path (every library load
+  // resolves each folder) and `existsSync` on a wedged SMB/NFS mount blocked
+  // the UI isolate for as long as the kernel took to give up — the very
+  // freeze the diskutil timeout below was added to prevent, one line earlier.
+  // A probe that does not answer in time reads as "missing", which is the
+  // recoverable state the reconnect banner already handles.
+  final present = await Directory(
+    storedPath,
+  ).exists().timeout(const Duration(seconds: 5), onTimeout: () => false);
+  if (present) return storedPath;
   if (volumeId == null) return null; // internal path gone, or never bound
   final mount = await resolver.mountPointForVolumeId(volumeId);
   if (mount == null) return null; // volume not mounted

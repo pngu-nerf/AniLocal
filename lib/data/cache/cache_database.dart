@@ -39,6 +39,11 @@ class SeriesCache extends Table {
 /// re-identify, no AniList refetch). [fileSize] + [modifiedAtMs] remain the
 /// "unchanged" key for incremental rescans. A null [seriesId] is a
 /// known-unmatched file — it persists across rescans (Stage 5 fixes it).
+/// Indexed for the two ways rows are looked up other than by key: fix-match
+/// finds a file by its content fingerprint, and the prune asks "which series
+/// still have files". Neither had an index; both were full scans.
+@TableIndex(name: 'file_cache_fingerprint', columns: {#fileSize, #modifiedAtMs})
+@TableIndex(name: 'file_cache_series', columns: {#seriesId})
 @DataClassName('CachedFileRow')
 class FileCache extends Table {
   TextColumn get folderPath => text()();
@@ -189,11 +194,6 @@ class SourceOverrides extends Table {
   @override
   String get tableName => 'source_overrides';
 }
-
-/// Cached OP/ED skip windows (the auto-skip feature). Fetched from AniSkip at
-/// scan time and read OFFLINE during playback — the player never hits the
-/// network. Keyed by EPISODE IDENTITY ([seriesId] + the anchored [episode]
-/// position), consistent with watch_state / source_overrides. A row exists only
 
 /// WHAT EACH SKIP SOURCE SAID about one episode — the raw answers, not a
 /// verdict. One row per (episode, source); a row EXISTS iff that source has
@@ -365,7 +365,7 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// The schema this build writes, readable without an instance (the startup
   /// log line and the diagnostics report want it before the database opens).
-  static const int currentSchemaVersion = 19;
+  static const int currentSchemaVersion = 20;
 
   @override
   int get schemaVersion => currentSchemaVersion;
@@ -385,12 +385,10 @@ class CacheDatabase extends _$CacheDatabase {
   // show_preferences — per-show prefs (cover display mode + hide-next-episode),
   // a brand-new table so existing populated caches are untouched; v14 surrogate
   // series identity; v15 series_cache.id_mal dropped; v16 skip_segments.source;
-  // v17 per-window skip confidence; v19 skip_source_answers replaces
-  // skip_segments entirely (raw per-source answers, verdicts derived on read);
-  // v18 skip_segments.resolved_key — the
-  // resolution inputs a skip row came from, so a source reorder or a
-  // cross-checking toggle re-resolves the affected rows once instead of never
-  // (an additive column defaulting to '' = "unknown inputs, re-resolve once").
+  // v17 per-window skip confidence; v18 skip_segments.resolved_key — the
+  // resolution inputs a skip row came from (superseded a commit later); v19
+  // skip_source_answers replaces skip_segments entirely (raw per-source
+  // answers, verdicts derived on read); v20 two indexes on file_cache.
   //
   // v8 RECLAIMED: it was briefly scratch on an unshipped branch (series_relations,
   // the "Up Next" overshoot) then reverted — it never reached main and no DB sits
@@ -618,18 +616,16 @@ class CacheDatabase extends _$CacheDatabase {
           );
           await customStatement('DROP TABLE skip_segments');
         }
+        if (from < 20) {
+          // v20: the two indexes file_cache lookups always wanted. Pure
+          // performance; no row changes.
+          await m.createIndex(fileCacheFingerprint);
+          await m.createIndex(fileCacheSeries);
+        }
       });
     },
   );
 
-  /// v9: move file_cache identity from an absolute `path` to (folder_path,
-  /// relative_path). Rebase every existing row IN PLACE by stripping its owning
-  /// library folder's prefix — PURE STRING work (folder paths == file prefixes
-  /// at migration time, before anything has remounted), so identity is
-  /// PRESERVED and the first post-migration rescan sees every file unchanged (no
-  /// re-identify, no AniList refetch). Watch-state / overrides aren't touched
-  /// (they're fingerprint/identity keyed). Volume UUIDs are NOT resolved here
-  /// (that needs diskutil + a mounted volume) — they backfill on the next scan.
   /// v13 -> v14: `anilist_id` becomes `series_id` everywhere, and external ids
   /// move into their own table.
   ///
@@ -715,6 +711,14 @@ class CacheDatabase extends _$CacheDatabase {
     // provider-abstraction slice, not this identity-only one. Drop it there.
   }
 
+  /// v9: move file_cache identity from an absolute `path` to (folder_path,
+  /// relative_path). Rebase every existing row IN PLACE by stripping its owning
+  /// library folder's prefix — PURE STRING work (folder paths == file prefixes
+  /// at migration time, before anything has remounted), so identity is
+  /// PRESERVED and the first post-migration rescan sees every file unchanged (no
+  /// re-identify, no AniList refetch). Watch-state / overrides aren't touched
+  /// (they're fingerprint/identity keyed). Volume UUIDs are NOT resolved here
+  /// (that needs diskutil + a mounted volume) — they backfill on the next scan.
   Future<void> _migrateFileCacheToRelativeV9(Migrator m) async {
     final folderRows = await customSelect(
       'SELECT path FROM library_folders',
@@ -757,12 +761,6 @@ class CacheDatabase extends _$CacheDatabase {
 
   Future<List<CachedSeriesRow>> allSeriesRows() => select(seriesCache).get();
 
-  Future<List<CachedFileRow>> filesForSeries(int seriesId) =>
-      (select(fileCache)..where((f) => f.seriesId.equals(seriesId))).get();
-
-  Future<List<CachedFileRow>> unmatchedFileRows() =>
-      (select(fileCache)..where((f) => f.seriesId.isNull())).get();
-
   // --- Library folders (Stage 5) ---
 
   Future<List<LibraryFolderRow>> allFolderRows() => (select(
@@ -770,19 +768,20 @@ class CacheDatabase extends _$CacheDatabase {
   )..orderBy([(f) => OrderingTerm(expression: f.sortOrder)])).get();
 
   /// Append a folder to the end of the priority order (highest sortOrder + 1).
-  Future<void> insertFolder(String path) async {
-    final existing = await allFolderRows();
-    final nextOrder = existing.isEmpty
-        ? 0
-        : existing.map((r) => r.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
+  Future<void> insertFolder(String path) => transaction(() async {
+    // MAX in SQL, inside the transaction, so two adds cannot both read the
+    // same "next" order; the old read-modify-write materialised every row.
+    final next = await customSelect(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM library_folders',
+    ).getSingle();
     await into(libraryFolders).insertOnConflictUpdate(
       LibraryFolderRow(
         path: path,
         addedAtMs: DateTime.now().millisecondsSinceEpoch,
-        sortOrder: nextOrder,
+        sortOrder: next.read<int>('next'),
       ),
     );
-  }
+  });
 
   /// Persist a new priority order: sortOrder = position in [pathsInOrder]
   /// (index 0 = highest priority). Re-bases all ranks to 0..n-1 atomically, so
@@ -798,9 +797,6 @@ class CacheDatabase extends _$CacheDatabase {
       }
     });
   }
-
-  Future<void> deleteFolder(String path) =>
-      (delete(libraryFolders)..where((f) => f.path.equals(path))).go();
 
   /// Remove a folder and the files under it, then prune orphaned series — all
   /// atomically (so the cache stays consistent immediately, without a rescan).
@@ -851,10 +847,16 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// Cache a series without pruning (used by fix-match before its override
   /// row exists — applySync's prune would otherwise drop the new series).
-  Future<void> upsertSeries(CachedSeriesRow row) async {
+  /// One transaction: a seeded series row and its AniList id row are one
+  /// fact, and `applySync` already wrote them together — this path did not.
+  Future<void> upsertSeries(CachedSeriesRow row) => transaction(() async {
     await into(seriesCache).insertOnConflictUpdate(row);
     await _recordProviderIds(row);
-  }
+  });
+
+  Future<CachedSeriesRow?> seriesRow(int seriesId) => (select(
+    seriesCache,
+  )..where((r) => r.seriesId.equals(seriesId))).getSingleOrNull();
 
   /// Record the one provider id the id band itself implies.
   ///
@@ -963,7 +965,29 @@ class CacheDatabase extends _$CacheDatabase {
     final row = await (select(
       appSettings,
     )..where((s) => s.key.equals(_nextMintedIdKey))).getSingleOrNull();
-    final next = int.tryParse(row?.value ?? '') ?? kMintedSeriesIdBase;
+    // The counter lives in the same hand-editable settings table as the
+    // user's preferences. If it is missing or corrupt, restarting at the base
+    // would RE-ISSUE ids already assigned — a silent merge of two shows, the
+    // exact failure this whole method exists to prevent. So the floor is
+    // whatever minted id is already in use, from the identity table (which is
+    // never pruned) and the series cache.
+    final counter = int.tryParse(row?.value ?? '');
+    final int next;
+    if (counter != null) {
+      next = counter;
+    } else {
+      final used = await customSelect(
+        'SELECT MAX(id) AS m FROM ('
+        'SELECT MAX(series_id) AS id FROM series_external_ids WHERE series_id >= ? '
+        'UNION ALL SELECT MAX(series_id) FROM series_cache WHERE series_id >= ?)',
+        variables: [
+          Variable.withInt(kMintedSeriesIdBase),
+          Variable.withInt(kMintedSeriesIdBase),
+        ],
+      ).getSingle();
+      final max = used.readNullable<int>('m');
+      next = max == null ? kMintedSeriesIdBase : max + 1;
+    }
     await into(appSettings).insertOnConflictUpdate(
       AppSettingRow(key: _nextMintedIdKey, value: '${next + 1}'),
     );
@@ -1019,6 +1043,67 @@ class CacheDatabase extends _$CacheDatabase {
             ]))
           .get();
 
+  /// Progress-only write. INSERT … ON CONFLICT DO UPDATE in ONE statement, so
+  /// the player's once-a-second save cannot interleave with a "mark watched"
+  /// and lose one of them — the old read-then-upsert pair could. The watched
+  /// and manual flags are preserved by never being in the SET list.
+  Future<void> saveProgressRow({
+    required int seriesId,
+    required int episode,
+    required int resumePositionMs,
+    required int durationMs,
+    required int updatedAtMs,
+  }) => customStatement(
+    'INSERT INTO watch_state (series_id, episode, resume_position_ms, '
+    'duration_ms, watched, watched_manual, updated_at_ms) '
+    'VALUES (?, ?, ?, ?, 0, 0, ?) '
+    'ON CONFLICT(series_id, episode) DO UPDATE SET '
+    'resume_position_ms = excluded.resume_position_ms, '
+    'duration_ms = excluded.duration_ms, '
+    'updated_at_ms = excluded.updated_at_ms',
+    [seriesId, episode, resumePositionMs, durationMs, updatedAtMs],
+  );
+
+  /// The AUTO/threshold watched write: a no-op on a row the user set by hand
+  /// (the WHERE), marking watched clears resume so the episode leaves
+  /// "Continue watching", and an existing duration is kept.
+  Future<void> setWatchedAutoRow({
+    required int seriesId,
+    required int episode,
+    required bool watched,
+    required int durationMs,
+    required int updatedAtMs,
+  }) => customStatement(
+    'INSERT INTO watch_state (series_id, episode, resume_position_ms, '
+    'duration_ms, watched, watched_manual, updated_at_ms) '
+    'VALUES (?, ?, 0, ?, ?, 0, ?) '
+    'ON CONFLICT(series_id, episode) DO UPDATE SET '
+    'watched = excluded.watched, '
+    'resume_position_ms = CASE WHEN excluded.watched THEN 0 '
+    'ELSE watch_state.resume_position_ms END, '
+    'updated_at_ms = excluded.updated_at_ms '
+    'WHERE watch_state.watched_manual = 0',
+    [seriesId, episode, durationMs, watched ? 1 : 0, updatedAtMs],
+  );
+
+  /// The sticky MANUAL write: sets watched and marks it manual; resume and
+  /// duration are untouched.
+  Future<void> setWatchedManualRow({
+    required int seriesId,
+    required int episode,
+    required bool watched,
+    required int durationMs,
+    required int updatedAtMs,
+  }) => customStatement(
+    'INSERT INTO watch_state (series_id, episode, resume_position_ms, '
+    'duration_ms, watched, watched_manual, updated_at_ms) '
+    'VALUES (?, ?, 0, ?, ?, 1, ?) '
+    'ON CONFLICT(series_id, episode) DO UPDATE SET '
+    'watched = excluded.watched, watched_manual = 1, '
+    'updated_at_ms = excluded.updated_at_ms',
+    [seriesId, episode, durationMs, watched ? 1 : 0, updatedAtMs],
+  );
+
   Future<WatchStateRow?> watchStateFor(int seriesId, int episode) =>
       (select(watchStates)..where(
             (w) => w.seriesId.equals(seriesId) & w.episode.equals(episode),
@@ -1052,7 +1137,8 @@ class CacheDatabase extends _$CacheDatabase {
           ))
           .go();
 
-  // --- Skip segments (auto-skip). Filled at scan time from AniSkip; read
+  // --- Skip answers (auto-skip). One row per (episode, source) — what each
+  //     source SAID, filled at scan/refresh time; read
   //     offline during playback. ---
 
   Future<List<SkipSourceAnswerRow>> allSkipAnswers() =>
@@ -1132,6 +1218,42 @@ class CacheDatabase extends _$CacheDatabase {
   Future<ShowPreferenceRow?> showPrefFor(int seriesId) => (select(
     showPrefs,
   )..where((p) => p.seriesId.equals(seriesId))).getSingleOrNull();
+
+  /// One field of a show's preferences, leaving the other as it is — a single
+  /// statement, so two menu actions racing cannot lose each other's field.
+  Future<void> setShowPictureMode(
+    int seriesId,
+    String pictureMode,
+  ) => customStatement(
+    'INSERT INTO show_preferences (series_id, picture_mode, '
+    'next_episode_hidden) VALUES (?, ?, 0) '
+    'ON CONFLICT(series_id) DO UPDATE SET picture_mode = excluded.picture_mode',
+    [seriesId, pictureMode],
+  );
+
+  Future<void> setShowNextEpisodeHidden(int seriesId, {required bool hidden}) =>
+      customStatement(
+        "INSERT INTO show_preferences (series_id, picture_mode, "
+        "next_episode_hidden) VALUES (?, 'normal', ?) "
+        'ON CONFLICT(series_id) DO UPDATE SET '
+        'next_episode_hidden = excluded.next_episode_hidden',
+        [seriesId, hidden ? 1 : 0],
+      );
+
+  /// The global "Hide Next Episode" switch: every cached show's flag, ONE
+  /// statement (was one upsert per show, un-transactioned), each show's
+  /// picture mode preserved.
+  Future<void> setAllNextEpisodeHidden({required bool hidden}) =>
+      customStatement(
+        'INSERT INTO show_preferences (series_id, picture_mode, '
+        'next_episode_hidden) '
+        // `WHERE true` disambiguates INSERT…SELECT from the upsert clause —
+        // SQLite's documented parsing quirk, not a filter.
+        "SELECT series_id, 'normal', ? FROM series_cache WHERE true "
+        'ON CONFLICT(series_id) DO UPDATE SET '
+        'next_episode_hidden = excluded.next_episode_hidden',
+        [hidden ? 1 : 0],
+      );
 
   Future<void> upsertShowPref(ShowPreferenceRow row) =>
       into(showPrefs).insertOnConflictUpdate(row);

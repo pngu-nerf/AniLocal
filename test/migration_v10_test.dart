@@ -1,5 +1,7 @@
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -89,7 +91,10 @@ void main() {
     () async {
       final db = openMigratedV9();
       addTearDown(db.close);
-      final repo = DriftLibraryRepository(db);
+      final repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+      );
 
       // The matched series still shows in the grid (not as a placeholder).
       final series = await repo.allSeries();

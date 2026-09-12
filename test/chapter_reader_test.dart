@@ -415,7 +415,7 @@ void main() {
         // with the library offline erased chapter skips for the whole drive.
         const provider = ChaptersSkipProvider();
         expect(
-          provider.canAnswer(
+          await provider.canAnswer(
             const SkipLookup(
               seriesId: 1,
               episode: 1,
@@ -425,7 +425,7 @@ void main() {
           isFalse,
         );
         expect(
-          provider.canAnswer(const SkipLookup(seriesId: 1, episode: 1)),
+          await provider.canAnswer(const SkipLookup(seriesId: 1, episode: 1)),
           isFalse,
           reason: 'no path at all is also not an attempt',
         );
@@ -437,7 +437,7 @@ void main() {
       addTearDown(() => dir.delete(recursive: true));
       final f = File('${dir.path}/ep.mkv')..writeAsStringSync('x');
       expect(
-        const ChaptersSkipProvider().canAnswer(
+        await const ChaptersSkipProvider().canAnswer(
           SkipLookup(seriesId: 1, episode: 1, filePath: f.path),
         ),
         isTrue,

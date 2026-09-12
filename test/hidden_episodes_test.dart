@@ -1,5 +1,7 @@
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -46,7 +48,10 @@ void main() {
 
     setUp(() {
       db = CacheDatabase(NativeDatabase.memory());
-      repo = DriftLibraryRepository(db);
+      repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+      );
     });
     tearDown(() => db.close());
 
@@ -130,7 +135,10 @@ void main() {
     test('adds an empty hidden_episodes table; existing data intact', () async {
       final db = openMigratedV10();
       addTearDown(db.close);
-      final repo = DriftLibraryRepository(db);
+      final repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+      );
 
       // New table exists and is empty on an existing populated cache.
       expect(await db.allHiddenRows(), isEmpty);

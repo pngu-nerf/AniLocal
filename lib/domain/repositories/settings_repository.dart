@@ -9,6 +9,22 @@ const watchedThresholdDefault = Duration(seconds: 90);
 /// The largest watched-threshold the min:sec input accepts (9:59).
 const watchedThresholdMax = Duration(minutes: 9, seconds: 59);
 
+/// The most a user may set the minimum-skip floor to. Ten minutes is already
+/// longer than any theme; the cap exists so a hand-edited store cannot hide
+/// every skip in the library.
+const minSkipLengthMax = Duration(seconds: 600);
+
+/// Bounds for the two persisted layout sizes. Defined HERE, next to the
+/// settings they bound, because the repository clamps on load (a hand-edited
+/// store must always yield a usable value) and the screens clamp on drag —
+/// and two homes for one bound is how they drift.
+const double panelWidthDefault = 300;
+const double panelWidthMin = 220;
+const double panelWidthMax = 480;
+const double railFractionDefault = 0.30;
+const double railFractionMin = 0.18;
+const double railFractionMax = 0.45;
+
 /// THE single source for app-wide preferences — one injected object that owns
 /// every setting's load + persist, instead of threading ~20 individual
 /// `load*/set*` functions through the widget tree (CLAUDE.md: "cross-cutting

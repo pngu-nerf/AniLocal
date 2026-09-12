@@ -81,7 +81,11 @@ class Series extends Equatable {
   /// *display* title — a search-query seed deliberately differs (romaji-first,
   /// empty fallback) and is not this.
   String get displayTitle =>
-      titles.english ?? titles.romaji ?? titles.native ?? '#$seriesId';
+      // Never the id: `seriesId` is an opaque surrogate since v14, and printing
+      // a minted `#1099511627776` would be exactly the lie the class doc
+      // forbids. Every real entry carries at least one title, so this
+      // fallback is a defensive label, not a path.
+      titles.english ?? titles.romaji ?? titles.native ?? 'Untitled show';
 
   @override
   List<Object?> get props => [

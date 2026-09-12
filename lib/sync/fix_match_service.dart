@@ -82,14 +82,16 @@ class FixMatchService implements FixMatchRepository {
     int continuousOffset = 0,
     bool displayContinuous = false,
   }) async {
+    // Every failure here is a user-facing condition, so every one is a
+    // FixMatchException — not a StateError, which reads as a programming bug.
     final stat = await _statOrNull(filePath);
     if (stat == null) {
-      throw StateError('File not found (scan first): $filePath');
+      throw FixMatchException('File not found (scan first): $filePath');
     }
     final modifiedAtMs = stat.modified.millisecondsSinceEpoch;
     final file = await cache.fileByFingerprint(stat.size, modifiedAtMs);
     if (file == null) {
-      throw StateError('File not in cache (scan first): $filePath');
+      throw FixMatchException('File not in cache (scan first): $filePath');
     }
     final seriesId = await _cacheSeries(chosen);
     await cache.upsertOverride(
@@ -119,21 +121,41 @@ class FixMatchService implements FixMatchRepository {
     int continuousOffset = 0,
     bool displayContinuous = false,
   }) async {
-    final seriesId = await _cacheSeries(chosen);
-    for (var i = 0; i < filePaths.length; i++) {
-      final stat = await _statOrNull(filePaths[i]);
-      if (stat == null) continue;
-      await cache.upsertOverride(
-        MatchOverrideRow(
-          fileSize: stat.size,
-          modifiedAtMs: stat.modified.millisecondsSinceEpoch,
-          seriesId: seriesId,
-          anchoredEpisode: anchorStart + i,
-          continuousOffset: continuousOffset,
-          displayContinuous: displayContinuous,
-        ),
+    // Stat everything FIRST and refuse loudly if any file is gone: the old
+    // loop silently `continue`d past a missing file and told the user "done"
+    // for a partial, mis-numbered split.
+    final stats = <FileStat>[];
+    final missing = <String>[];
+    for (final path in filePaths) {
+      final stat = await _statOrNull(path);
+      if (stat == null) {
+        missing.add(path);
+      } else {
+        stats.add(stat);
+      }
+    }
+    if (missing.isNotEmpty) {
+      throw FixMatchException(
+        '${missing.length} of ${filePaths.length} files could not be read — '
+        'nothing was assigned. First: ${missing.first}',
       );
     }
+    final seriesId = await _cacheSeries(chosen);
+    // All or nothing: a split is one decision, written in one transaction.
+    await cache.transaction(() async {
+      for (var i = 0; i < stats.length; i++) {
+        await cache.upsertOverride(
+          MatchOverrideRow(
+            fileSize: stats[i].size,
+            modifiedAtMs: stats[i].modified.millisecondsSinceEpoch,
+            seriesId: seriesId,
+            anchoredEpisode: anchorStart + i,
+            continuousOffset: continuousOffset,
+            displayContinuous: displayContinuous,
+          ),
+        );
+      }
+    });
   }
 
   /// Remove a file's override, reverting it to whatever the auto-matcher says.
@@ -174,7 +196,15 @@ class FixMatchService implements FixMatchRepository {
     // (matching on ANY id the answer carries) and mints only when nothing
     // matches — and never re-points an id that belongs to a different series.
     final seriesId = await cache.ensureSeriesId(s.externalIds);
-    final artPath = await art.ensureCover(seriesId, s.coverImageRef);
+    // The previous cover travels along so a candidate from a DIFFERENT source
+    // replaces the picture instead of keeping the first source's forever.
+    final prior = await cache.seriesRow(seriesId);
+    final artPath = await art.ensureCover(
+      seriesId,
+      s.coverImageRef,
+      cachedUrl: prior?.coverImageUrl,
+      cachedPath: prior?.coverImagePath,
+    );
     await cache.upsertSeries(
       CachedSeriesRow(
         seriesId: seriesId,

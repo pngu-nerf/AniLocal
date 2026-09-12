@@ -7,11 +7,13 @@ import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
 import 'package:anilocal/data/cache/series_identity.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/domain/models/external_ids.dart';
 import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/models/series.dart';
@@ -22,6 +24,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
 import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
@@ -98,7 +101,10 @@ void main() {
       art: ArtCache(httpClient: mock, directory: () async => artDir),
       cache: db,
     );
-    repo = DriftLibraryRepository(db);
+    repo = DriftLibraryRepository(
+      db,
+      skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+    );
   });
 
   tearDown(() async {

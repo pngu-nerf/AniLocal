@@ -1,5 +1,7 @@
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,7 +43,10 @@ void main() {
 
   setUp(() {
     db = CacheDatabase(NativeDatabase.memory());
-    repo = DriftLibraryRepository(db);
+    repo = DriftLibraryRepository(
+      db,
+      skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+    );
   });
   tearDown(() => db.close());
 

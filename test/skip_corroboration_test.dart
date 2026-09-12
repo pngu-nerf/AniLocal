@@ -20,7 +20,63 @@ ReconciledSkips reconcileSkips(List<SourceAnswer> answers) =>
       corroborate: true,
     );
 
+void _disabledVersusUnknown() {
+  SkipRange r(int a, int b) => SkipRange(
+    start: Duration(seconds: a),
+    end: Duration(seconds: b),
+  );
+
+  test('a DISABLED source is ignored outright — never a last resort', () {
+    final result = resolveEpisodeSkips(
+      [SourceAnswer(source: 'chapters', intro: r(0, 90))],
+      sourceOrder: const [],
+      disabledSources: const {'chapters'},
+      corroborate: false,
+    );
+    expect(result.isEmpty, isTrue);
+  });
+
+  test('an UNKNOWN source is a last resort, each window on its own', () {
+    // Two unknown sources, one holding only the intro and the other only the
+    // outro, in the reverse of token order: both windows must survive and the
+    // outcome must not depend on the order the rows arrived in.
+    final result = resolveEpisodeSkips(
+      [
+        SourceAnswer(source: 'zeta', outro: r(1300, 1390)),
+        SourceAnswer(source: 'legacy', intro: r(0, 90)),
+      ],
+      sourceOrder: const ['chapters'],
+      disabledSources: const {'chapters'},
+      corroborate: false,
+    );
+    expect(result.intro?.range, r(0, 90));
+    expect(result.outro?.range, r(1300, 1390));
+    expect(result.intro?.confidence, SkipConfidence.single);
+  });
+
+  test('two unknown sources with the same window: the lower token wins', () {
+    for (final answers in [
+      [
+        SourceAnswer(source: 'b', intro: r(0, 90)),
+        SourceAnswer(source: 'a', intro: r(5, 95)),
+      ],
+      [
+        SourceAnswer(source: 'a', intro: r(5, 95)),
+        SourceAnswer(source: 'b', intro: r(0, 90)),
+      ],
+    ]) {
+      final result = resolveEpisodeSkips(
+        answers,
+        sourceOrder: const [],
+        corroborate: false,
+      );
+      expect(result.intro?.source, 'a', reason: 'row order must not matter');
+    }
+  });
+}
+
 void main() {
+  _disabledVersusUnknown();
   group('silence is not disagreement', () {
     test('a source with NO window for this episode does not count against it', () {
       // The rule that matters most. Partial coverage is the norm for skip data,

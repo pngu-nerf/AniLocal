@@ -1,7 +1,6 @@
 import '../../domain/models/skip_mode.dart';
 import '../../domain/models/source_preference.dart';
 import '../../domain/repositories/settings_repository.dart';
-import '../../domain/repositories/show_preferences_repository.dart';
 import 'cache_database.dart';
 
 /// The one [SettingsRepository] impl, backed by the app_settings key/value store.
@@ -9,12 +8,9 @@ import 'cache_database.dart';
 /// object so screens read/write settings through it instead of threading
 /// individual functions.
 class DriftSettingsRepository implements SettingsRepository {
-  DriftSettingsRepository(this._db, {required this.showPreferences});
+  DriftSettingsRepository(this._db);
 
   final CacheDatabase _db;
-
-  /// Needed only by [setHideNextEpisode]'s master apply-to-all over per-show.
-  final ShowPreferencesRepository showPreferences;
 
   static const _continueCollapsedKey = 'continue_watching_collapsed';
   static const _autoPlayNextKey = 'autoplay_next';
@@ -40,25 +36,36 @@ class DriftSettingsRepository implements SettingsRepository {
   /// and can drag from there. Nothing interprets the stale row; it is inert.
   static const _panelWidthKey = 'continue_panel_width';
 
-  // Default rail width matches TheaterLayoutConfig.theaterDefault; default panel
-  // width matches LibraryLayoutConfig. Each screen clamps to its own drag bounds.
-  static const _railFractionDefault = 0.30;
-  static const _panelWidthDefault = 300.0;
+  /// Booleans are stored as `true`/`false`. One early key (`corroborate_skips`)
+  /// was written as `1`/`0`, so reads accept both; writes are one form.
+  Future<bool> _loadBool(String key, {required bool fallback}) async {
+    switch (await _db.getSetting(key)) {
+      case 'true' || '1':
+        return true;
+      case 'false' || '0':
+        return false;
+      default:
+        return fallback;
+    }
+  }
+
+  Future<void> _saveBool(String key, bool value) =>
+      _db.setSetting(key, '$value');
 
   @override
-  Future<bool> loadContinueCollapsed() async =>
-      await _db.getSetting(_continueCollapsedKey) == 'true';
+  Future<bool> loadContinueCollapsed() =>
+      _loadBool(_continueCollapsedKey, fallback: false);
   @override
   Future<void> setContinueCollapsed(bool collapsed) =>
-      _db.setSetting(_continueCollapsedKey, '$collapsed');
+      _saveBool(_continueCollapsedKey, collapsed);
 
-  // Defaults ON: only an explicit 'false' disables.
+  // Defaults ON.
   @override
-  Future<bool> loadAutoPlayNext() async =>
-      await _db.getSetting(_autoPlayNextKey) != 'false';
+  Future<bool> loadAutoPlayNext() =>
+      _loadBool(_autoPlayNextKey, fallback: true);
   @override
   Future<void> setAutoPlayNext(bool enabled) =>
-      _db.setSetting(_autoPlayNextKey, '$enabled');
+      _saveBool(_autoPlayNextKey, enabled);
 
   // Defaults to "button" (SkipMode.fromToken maps null -> button).
   // Encoded as `token:1,token:0` — a token list like skip_mode, so no schema
@@ -78,14 +85,18 @@ class DriftSettingsRepository implements SettingsRepository {
     final raw = await _db.getSetting(key);
     if (raw == null || raw.isEmpty) return const [];
     final out = <SourcePreference>[];
+    final seen = <String>{};
     for (final part in raw.split(',')) {
       final bits = part.split(':');
       final token = bits.first.trim();
-      if (token.isEmpty) continue;
+      // A duplicate token (a hand edit, or a bug upstream) keeps its FIRST
+      // position; the settings list must never show one source twice.
+      if (token.isEmpty || !seen.add(token)) continue;
       out.add(
         SourcePreference(
           token: token,
-          enabled: bits.length < 2 || bits[1] != '0',
+          // Anything that is not an explicit '0' is enabled: the default.
+          enabled: bits.length < 2 || bits[1].trim() != '0',
         ),
       );
     }
@@ -103,20 +114,22 @@ class DriftSettingsRepository implements SettingsRepository {
     final raw = int.tryParse(await _db.getSetting(_minSkipLengthKey) ?? '');
     // Clamped: a hand-edited store must not be able to hide every skip, and a
     // negative floor is meaningless.
-    return Duration(seconds: (raw ?? 0).clamp(0, 600));
+    return Duration(seconds: (raw ?? 0).clamp(0, minSkipLengthMax.inSeconds));
   }
 
   @override
-  Future<void> setMinSkipLength(Duration value) =>
-      _db.setSetting(_minSkipLengthKey, '${value.inSeconds.clamp(0, 600)}');
+  Future<void> setMinSkipLength(Duration value) => _db.setSetting(
+    _minSkipLengthKey,
+    '${value.inSeconds.clamp(0, minSkipLengthMax.inSeconds)}',
+  );
 
   @override
-  Future<bool> loadCorroborateSkips() async =>
-      await _db.getSetting(_corroborateSkipsKey) == '1';
+  Future<bool> loadCorroborateSkips() =>
+      _loadBool(_corroborateSkipsKey, fallback: false);
 
   @override
   Future<void> setCorroborateSkips(bool enabled) =>
-      _db.setSetting(_corroborateSkipsKey, enabled ? '1' : '0');
+      _saveBool(_corroborateSkipsKey, enabled);
 
   @override
   Future<List<SourcePreference>> loadSkipSourceOrder() =>
@@ -160,53 +173,61 @@ class DriftSettingsRepository implements SettingsRepository {
   Future<void> setWatchedThreshold(Duration value) =>
       _db.setSetting(_watchedThresholdKey, '${value.inMilliseconds}');
 
-  // Defaults ON: only an explicit 'false' disables.
+  // Defaults ON.
   @override
-  Future<bool> loadMissingEnabled() async =>
-      await _db.getSetting(_missingEpisodesKey) != 'false';
+  Future<bool> loadMissingEnabled() =>
+      _loadBool(_missingEpisodesKey, fallback: true);
   @override
   Future<void> setMissingEnabled(bool enabled) =>
-      _db.setSetting(_missingEpisodesKey, '$enabled');
+      _saveBool(_missingEpisodesKey, enabled);
 
   @override
-  Future<bool> loadHideNextEpisode() async =>
-      await _db.getSetting(_hideNextEpisodeKey) == 'true';
+  Future<bool> loadHideNextEpisode() =>
+      _loadBool(_hideNextEpisodeKey, fallback: false);
 
-  // Master apply-to-all: persist the flag AND overwrite every per-show value.
+  // Master apply-to-all: the flag AND every per-show value, in ONE transaction
+  // — a crash between the two used to leave the switch saying "hidden" while
+  // an arbitrary prefix of shows agreed. Done here, directly on the database,
+  // which is what removed the construction cycle this repository used to have
+  // with the library repository (it delegated this one call to it).
   @override
-  Future<void> setHideNextEpisode(bool hidden) async {
-    await _db.setSetting(_hideNextEpisodeKey, '$hidden');
-    await showPreferences.setAllNextEpisodeHidden(hidden: hidden);
-  }
+  Future<void> setHideNextEpisode(bool hidden) => _db.transaction(() async {
+    await _saveBool(_hideNextEpisodeKey, hidden);
+    await _db.setAllNextEpisodeHidden(hidden: hidden);
+  });
 
-  // Sidebar + search bar default VISIBLE: only an explicit 'false' hides them.
+  // Sidebar + search bar default VISIBLE.
   @override
-  Future<bool> loadShowContinueWatching() async =>
-      await _db.getSetting(_showContinueWatchingKey) != 'false';
+  Future<bool> loadShowContinueWatching() =>
+      _loadBool(_showContinueWatchingKey, fallback: true);
   @override
   Future<void> setShowContinueWatching(bool show) =>
-      _db.setSetting(_showContinueWatchingKey, '$show');
+      _saveBool(_showContinueWatchingKey, show);
 
   @override
-  Future<bool> loadShowSearchBar() async =>
-      await _db.getSetting(_showSearchBarKey) != 'false';
+  Future<bool> loadShowSearchBar() =>
+      _loadBool(_showSearchBarKey, fallback: true);
   @override
   Future<void> setShowSearchBar(bool show) =>
-      _db.setSetting(_showSearchBarKey, '$show');
+      _saveBool(_showSearchBarKey, show);
 
-  // Fractions: unset/unparseable -> the default.
+  // Sizes: unset/unparseable -> the default; CLAMPED here like every other
+  // setting, so a hand-edited store yields a usable value for any reader, not
+  // only the screen that happens to clamp on its own.
   @override
   Future<double> loadRailFraction() async =>
-      double.tryParse(await _db.getSetting(_railFractionKey) ?? '') ??
-      _railFractionDefault;
+      (double.tryParse(await _db.getSetting(_railFractionKey) ?? '') ??
+              railFractionDefault)
+          .clamp(railFractionMin, railFractionMax);
   @override
   Future<void> setRailFraction(double fraction) =>
       _db.setSetting(_railFractionKey, '$fraction');
 
   @override
   Future<double> loadPanelWidth() async =>
-      double.tryParse(await _db.getSetting(_panelWidthKey) ?? '') ??
-      _panelWidthDefault;
+      (double.tryParse(await _db.getSetting(_panelWidthKey) ?? '') ??
+              panelWidthDefault)
+          .clamp(panelWidthMin, panelWidthMax);
   @override
   Future<void> setPanelWidth(double width) =>
       _db.setSetting(_panelWidthKey, '$width');

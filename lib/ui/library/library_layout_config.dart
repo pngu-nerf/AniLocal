@@ -1,5 +1,8 @@
 import 'package:anilocal/ui/resize_divider.dart' show ResizeDivider;
 import 'package:flutter/foundation.dart';
+import '../../domain/repositories/settings_repository.dart'
+    as settings
+    show panelWidthDefault, panelWidthMin, panelWidthMax;
 
 /// The zones of the landing/library page. Identity only — a zone never knows
 /// where it sits or how wide it is; that lives entirely in [LibraryLayoutConfig]
@@ -43,7 +46,7 @@ class LibraryLayoutConfig {
   const LibraryLayoutConfig({
     this.panelSide = LibrarySide.left,
     this.panelCollapsed = false,
-    this.panelWidth = 300,
+    this.panelWidth = settings.panelWidthDefault,
     this.collapsedPanelWidth = 44,
     this.visibleZones = const {
       LibraryZone.search,
@@ -79,8 +82,10 @@ class LibraryLayoutConfig {
   /// ~380pt of grid at the tightest window the user can make — no proportional
   /// cap or collapse-below-threshold rule needed, because the window minimum is
   /// already the safety net.
-  static const double panelWidthMin = 220;
-  static const double panelWidthMax = 480;
+  // The bounds live with the setting they bound (domain); mirrored here by
+  // NAME only so existing call sites read.
+  static const double panelWidthMin = settings.panelWidthMin;
+  static const double panelWidthMax = settings.panelWidthMax;
 
   /// Panel width (logical px) when collapsed (just the expand affordance).
   final double collapsedPanelWidth;

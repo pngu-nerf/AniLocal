@@ -196,14 +196,23 @@ const String kLegacySource = 'legacy';
 /// knew only the intro silently lost an outro a lower source could have
 /// supplied.
 ///
-/// An answer from a source not in [sourceOrder] — [kLegacySource], or one the
-/// user has switched off — is a LAST RESORT: used only when nothing known has
-/// anything, and never allowed to vote on agreement, because a window of
-/// unknown provenance must not be able to corroborate one.
+/// Two kinds of answer are outside [sourceOrder], and they are NOT the same:
+///
+/// * A source in [disabledSources] is one this build ships and the user has
+///   switched OFF. Its answers are IGNORED — "off" means off, the moment the
+///   switch flips, with no refresh. (These two cases used to collapse, so a
+///   disabled source's windows kept being used as a last resort.)
+/// * Anything else — [kLegacySource], or a source this build no longer ships
+///   — is unknown provenance: a LAST RESORT, used only when nothing known has
+///   anything, and never allowed to vote on agreement, because a window we
+///   cannot attribute must not be able to corroborate one. Each window is
+///   still taken independently, and the candidates are tried in a fixed
+///   order (by token) so the result does not depend on row order.
 ReconciledSkips resolveEpisodeSkips(
   List<SourceAnswer> answers, {
   required List<String> sourceOrder,
   required bool corroborate,
+  Set<String> disabledSources = const {},
 }) {
   final byToken = {for (final a in answers) a.source: a};
   final known = [
@@ -229,19 +238,29 @@ ReconciledSkips resolveEpisodeSkips(
     return ReconciledSkips(intro: intro, outro: outro);
   }
 
-  for (final answer in answers) {
-    if (sourceOrder.contains(answer.source) || answer.isEmpty) continue;
-    ResolvedWindow? lone(SkipRange? r) => r == null
-        ? null
-        : ResolvedWindow(
-            range: r,
-            source: answer.source,
-            confidence: SkipConfidence.single,
-          );
-    return ReconciledSkips(
-      intro: lone(answer.intro),
-      outro: lone(answer.outro),
-    );
+  final unknown = [
+    for (final a in answers)
+      if (!sourceOrder.contains(a.source) &&
+          !disabledSources.contains(a.source) &&
+          !a.isEmpty)
+        a,
+  ]..sort((a, b) => a.source.compareTo(b.source));
+  ResolvedWindow? lone(SkipRange? Function(SourceAnswer) window) {
+    for (final a in unknown) {
+      final r = window(a);
+      if (r != null) {
+        return ResolvedWindow(
+          range: r,
+          source: a.source,
+          confidence: SkipConfidence.single,
+        );
+      }
+    }
+    return null;
   }
-  return const ReconciledSkips();
+
+  return ReconciledSkips(
+    intro: lone((a) => a.intro),
+    outro: lone((a) => a.outro),
+  );
 }

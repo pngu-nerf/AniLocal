@@ -688,6 +688,19 @@ void main() {
                 .map((r) => r.read<String>('name'))
                 .toList();
         final out = <String, Set<String>>{};
+        // Indexes, triggers and views too: an index one install has and the
+        // other lacks is a fork as much as a column is (v20 added two).
+        final others = await db
+            .customSelect(
+              "SELECT type, name, sql FROM sqlite_master WHERE type != 'table' "
+              "AND name NOT LIKE 'sqlite_%' ORDER BY name",
+            )
+            .get();
+        out['<non-table objects>'] = {
+          for (final o in others)
+            '${o.read<String>('type')}|${o.read<String>('name')}|'
+                '${(o.readNullable<String>('sql') ?? '').replaceAll(RegExp(r'\s+'), ' ')}',
+        };
         for (final t in tables) {
           final cols = await db
               .customSelect(
@@ -716,6 +729,11 @@ void main() {
         b.keys.toSet(),
         a.keys.toSet(),
         reason: 'same set of tables — no orphan left behind by the chain',
+      );
+      expect(
+        b['<non-table objects>'],
+        a['<non-table objects>'],
+        reason: 'same indexes, with the same definitions',
       );
       for (final t in a.keys) {
         expect(

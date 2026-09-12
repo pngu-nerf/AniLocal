@@ -66,7 +66,7 @@ program and what is parked: **`docs/multi-source-plan.md`**.
 | **App wiring / who-implements-what** | `lib/main.dart` — the composition root. Read it; it's short and heavily commented. |
 | **Domain models** (Series, Episode, Titles, SkipRange, ShowPreferences, …) | `lib/domain/models/` |
 | **Repository interfaces** (the UI's whole API surface) | `lib/domain/repositories/` (8: library, watch-state, source-selection, watch-order, missing-episodes, show-preferences, settings, fix-match) |
-| **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v19**; 11 tables; migration comments narrate v2→v19) |
+| **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v20**; 11 tables + 2 indexes; migration comments narrate v2→v20) |
 | **Cache → domain mapping + all reads/writes** | `lib/data/cache/drift_library_repository.dart` (one class implements six of the interfaces — see below) |
 | **Settings** (auto-play, skip mode, watched threshold, layout fractions, the two source orders, the minimum skip length, cross-checking, …) | `lib/domain/repositories/settings_repository.dart` + `lib/data/cache/drift_settings_repository.dart` — ONE injected object |
 | **Watched / resume state** | `WatchStateRepository` (impl in `drift_library_repository.dart`); the single write path lives in the player's `video_zone.dart` |

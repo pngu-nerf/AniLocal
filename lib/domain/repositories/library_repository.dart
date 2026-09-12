@@ -23,6 +23,12 @@ abstract interface class LibraryRepository {
   /// Episodes (matched files) for a series, ordered by episode number.
   Future<List<Episode>> episodesFor(int seriesId);
 
+  /// Every series' episodes in ONE read, keyed by series id (placeholders
+  /// included, under their synthetic ids). The library grid needs a stat per
+  /// card; calling [episodesFor] once per card rebuilt the whole library N
+  /// times over.
+  Future<Map<int, List<Episode>>> episodesBySeries();
+
   /// Files that scanned but matched no entry in any source — kept on record so they
   /// don't vanish on rescan (Stage 5 fix-match will resolve them).
   Future<List<IdentifiedEpisode>> unmatchedFiles();

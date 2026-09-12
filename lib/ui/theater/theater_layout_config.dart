@@ -1,4 +1,7 @@
 import 'package:flutter/foundation.dart';
+import '../../domain/repositories/settings_repository.dart'
+    as settings
+    show railFractionDefault, railFractionMin, railFractionMax;
 
 /// The three zones of the theater watch screen. Identity only — a zone never
 /// knows where it sits or how big it is; that lives entirely in
@@ -27,7 +30,7 @@ enum TheaterSide { left, right }
 class TheaterLayoutConfig {
   const TheaterLayoutConfig({
     this.railSide = TheaterSide.right,
-    this.railFraction = 0.30,
+    this.railFraction = settings.railFractionDefault,
     this.visibleZones = const {
       TheaterZone.video,
       TheaterZone.seriesInfo,
@@ -44,8 +47,8 @@ class TheaterLayoutConfig {
   /// Drag bounds for the rail. The draggable divider clamps [railFraction] to
   /// this range so the rail can neither shrink to nothing nor grow wide enough
   /// to crowd out the video. Persisted values are clamped here on load too.
-  static const double railFractionMin = 0.18;
-  static const double railFractionMax = 0.45;
+  static const double railFractionMin = settings.railFractionMin;
+  static const double railFractionMax = settings.railFractionMax;
 
   /// The zones currently displayed. Hiding one is a config change.
   final Set<TheaterZone> visibleZones;

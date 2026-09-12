@@ -6,17 +6,20 @@ import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
 import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
@@ -80,7 +83,10 @@ void main() {
         ),
       ],
     );
-    repo = DriftLibraryRepository(db);
+    repo = DriftLibraryRepository(
+      db,
+      skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+    );
   });
 
   tearDown(() async {
@@ -195,6 +201,41 @@ void main() {
     await repo.setWatched(await episode(1, 3), watched: false);
     expect((await episode(1, 3)).watched, isTrue);
   });
+
+  test(
+    'CONCURRENT progress saves and a manual mark cannot lose each other',
+    () async {
+      // The player saves progress on a timer while the user can hit "mark
+      // watched". Each write is one statement now; the old read-then-upsert
+      // pair let the later writer overwrite the earlier one's field with a
+      // stale value.
+      await touch('Cowboy Bebop - 03.mkv', 800);
+      await sync.sync([dir.path]);
+      final ep = await episode(1, 3);
+      await Future.wait([
+        repo.saveProgress(
+          ep,
+          position: const Duration(seconds: 10),
+          duration: const Duration(minutes: 24),
+        ),
+        repo.setWatchedManual(ep, watched: true),
+        repo.saveProgress(
+          ep,
+          position: const Duration(seconds: 20),
+          duration: const Duration(minutes: 24),
+        ),
+      ]);
+      final after = await episode(1, 3);
+      expect(after.watched, isTrue, reason: 'the manual mark survived');
+      expect(after.resumePosition, const Duration(seconds: 20));
+      await repo.setWatched(after, watched: false);
+      expect(
+        (await episode(1, 3)).watched,
+        isTrue,
+        reason: 'the auto path is a no-op on a manual row',
+      );
+    },
+  );
 
   test('saveProgress does NOT clobber a manual watched override', () async {
     await touch('Cowboy Bebop - 03.mkv', 800);

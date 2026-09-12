@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../diagnostics/app_log.dart';
 import '../diagnostics/diagnostics.dart';
+import '../domain/missing_episodes.dart';
 import '../domain/models/cache_errors.dart';
 import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
@@ -171,7 +172,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   // completeness denominator (episodeCount minus any hidden in-range positions
   // when the missing-episodes feature is on, else episodeCount; null if unknown).
   // Loaded async alongside the source folders (same episodesFor read).
-  Map<int, ({int inRange, int outOfRange, int? total})> _downloadCounts = {};
+  Map<int, DownloadTally> _downloadCounts = {};
   bool _scanning = false;
   bool _continueCollapsed = false;
   // Global homepage visibility toggles (persisted). Default visible; re-read
@@ -294,60 +295,43 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   /// folders each show's sources occupy (for greying), and the downloaded-
   /// episode tally (in-range vs out-of-range) for the card's "⬇N of M +X" line.
   /// Reads existing cached domain state only — pure display, no schema change.
+  /// Monotonic run counter for [_loadSeriesStats]. `_reload` is called from
+  /// eight places, so runs overlap routinely; without this the OLDER run
+  /// finishing last won the `setState` and the grid showed stale greying and
+  /// tallies.
+  int _statsGeneration = 0;
+
   Future<void> _loadSeriesStats(List<Series> series) async {
-    // Hidden episodes are excluded from the completeness count when the feature
-    // is on (consistent with the show page); off → no exclusion. One read for
-    // the whole grid (a series absent from the map has nothing hidden).
+    final generation = ++_statsGeneration;
     final missingEnabled = await widget.settings.loadMissingEnabled();
     final allHidden = missingEnabled
         ? await widget.missing.allHiddenEpisodes()
         : const <int, Set<int>>{};
+    // ONE read for every series, not one per card: `episodesFor` rebuilds the
+    // whole library from five tables each time it is called.
+    final episodesBySeries = await widget.repository.episodesBySeries();
+    if (!mounted || generation != _statsGeneration) return;
     final folders = <int, Set<String>>{};
-    final counts = <int, ({int inRange, int outOfRange, int? total})>{};
+    final counts = <int, DownloadTally>{};
     for (final s in series) {
-      final eps = await widget.repository.episodesFor(s.seriesId);
+      final eps = episodesBySeries[s.seriesId] ?? const <Episode>[];
       folders[s.seriesId] = {
         for (final e in eps)
           for (final src in e.sources) src.folderPath,
       };
-      // In-range = anchored position within 1..episodeCount; out-of-range =
-      // everything else (position > count, or unanchored/0). One logical
-      // episode per entry (episodesFor is de-duplicated), so the two partition
-      // the download count. When the AniList total is unknown we can't judge
-      // range, so treat all as in-range (the card then shows just "⬇N").
-      // Hidden positions drop out of the count AND reduce the denominator, so
-      // hiding the only missing episode reads "11 of 11" (same rule the show
-      // page uses via computeDownloadTally).
-      final hidden = allHidden[s.seriesId] ?? const <int>{};
-      final m = s.episodeCount;
-      var inRange = 0;
-      var outOfRange = 0;
-      var hiddenInRange = 0;
-      for (final e in eps) {
-        if (hidden.contains(e.anchoredNumber)) continue;
-        if (m == null || (e.anchoredNumber >= 1 && e.anchoredNumber <= m)) {
-          inRange++;
-        } else {
-          outOfRange++;
-        }
-      }
-      if (m != null) {
-        for (final h in hidden) {
-          if (h >= 1 && h <= m) hiddenInRange++;
-        }
-      }
-      counts[s.seriesId] = (
-        inRange: inRange,
-        outOfRange: outOfRange,
-        total: m == null ? null : m - hiddenInRange,
+      // The SAME rule the show page uses, through the same function — the
+      // inline copy this replaced had already drifted from it in shape.
+      final slots = computeEpisodeSlots(
+        present: eps,
+        hidden: allHidden[s.seriesId] ?? const <int>{},
+        episodeCount: s.episodeCount,
       );
+      counts[s.seriesId] = computeDownloadTally(slots, s.episodeCount);
     }
-    if (mounted) {
-      setState(() {
-        _sourceFoldersBySeries = folders;
-        _downloadCounts = counts;
-      });
-    }
+    setState(() {
+      _sourceFoldersBySeries = folders;
+      _downloadCounts = counts;
+    });
   }
 
   Future<void> _play(Episode episode, Series series) async {
@@ -935,7 +919,7 @@ class _SeriesCard extends StatefulWidget {
   /// out-of-range counts, and the completeness denominator (M minus hidden
   /// in-range positions). Null while the async stats load (the line then shows
   /// just the show-type until it arrives — no wrong numbers flashed).
-  final ({int inRange, int outOfRange, int? total})? downloaded;
+  final DownloadTally? downloaded;
 
   /// True when every source folder of this show is currently missing (offline
   /// drive/NAS): dimmed + marked, and a tap shows a reconnect hint rather than

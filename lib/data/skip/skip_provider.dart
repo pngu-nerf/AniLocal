@@ -8,6 +8,12 @@ import '../source_exception.dart';
 const String kAniSkipSource = 'aniskip';
 const String kChaptersSource = 'chapters';
 
+/// The built-in skip-source order, ONE home for it: the composition root
+/// asserts its provider list matches, and tests that are not about ordering
+/// use it as their view. Chapters lead AniSkip — see `main.dart` for the
+/// measurement behind that.
+const List<String> kBuiltInSkipOrder = [kChaptersSource, kAniSkipSource];
+
 /// PARKED, and kept deliberately — see `docs/multi-source-plan.md`.
 ///
 /// Neither has an implementing class. Anime Skip is account-gated (an
@@ -89,7 +95,7 @@ abstract interface class SkipProvider {
   /// that proves it — the id often arrives later from the cross-map, and
   /// recording "nothing" before it does would silently cost that episode its
   /// skips forever, which is the exact dependency the cross-map removed.
-  bool canAnswer(SkipLookup lookup) => true;
+  Future<bool> canAnswer(SkipLookup lookup) async => true;
 
   /// True when the answer is a function of the episode's FILE (chapters read
   /// from the container), false when it comes from a service keyed by ids.

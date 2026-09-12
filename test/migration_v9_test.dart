@@ -5,11 +5,13 @@ import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -179,7 +181,10 @@ void main() {
       expect(summary.removed, 0);
 
       // And the library reads back, resolved to the real file.
-      final repo = DriftLibraryRepository(db);
+      final repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+      );
       final eps = await repo.episodesFor(1);
       expect(eps, hasLength(1));
       expect(File(eps.single.fileRef).existsSync(), isTrue);

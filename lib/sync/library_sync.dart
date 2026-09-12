@@ -248,7 +248,10 @@ class LibrarySync {
             );
           }
         }
-        final seriesUpserts = await _seriesRowsFor(resolved.values);
+        final seriesUpserts = await _seriesRowsFor(
+          resolved.values,
+          cachedSeries,
+        );
         // Every file of every title in the batch — the errored ones are
         // skipped and counted inside, the resolved ones written.
         final fileUpserts = _fileRowsFor(
@@ -331,6 +334,13 @@ class LibrarySync {
           fileUpserts: untitledRows,
           removedKeys: removedKeys,
         );
+      }
+      if (!apiUnreachable) {
+        // The prune above dropped series nobody references; their covers go
+        // too. Only a run that saw every source answer gets to delete art —
+        // an outage must never look like a library shrinking.
+        final live = {for (final r in await cache.allSeriesRows()) r.seriesId};
+        await art.deleteExcept(live);
       }
     }
 
@@ -578,13 +588,22 @@ class LibrarySync {
   /// as soon as a show is identified by a source other than AniList.
   Future<List<CachedSeriesRow>> _seriesRowsFor(
     Iterable<_Resolved> resolved,
+    Map<int, CachedSeriesRow> cachedSeries,
   ) async {
     final rows = <CachedSeriesRow>[];
     for (final r in resolved) {
       final fresh = r.freshSeries;
       final seriesId = r.seriesId;
       if (fresh == null || seriesId == null) continue;
-      final artPath = await art.ensureCover(seriesId, fresh.coverImageRef);
+      // The previous cover travels along on EVERY path (this one used not to),
+      // so a show re-identified by a different source replaces its picture.
+      final prior = cachedSeries[seriesId];
+      final artPath = await art.ensureCover(
+        seriesId,
+        fresh.coverImageRef,
+        cachedUrl: prior?.coverImageUrl,
+        cachedPath: prior?.coverImagePath,
+      );
       rows.add(_seriesRow(fresh, artPath, seriesId));
     }
     return rows;
@@ -1010,7 +1029,7 @@ class LibrarySync {
       // "Could not try" writes nothing, so it is retried once the lookup
       // carries what this source needs — an AniSkip id the cross-map supplies
       // later, say. Only a real answer, including "I have nothing", is stored.
-      if (!provider.canAnswer(lookup)) continue;
+      if (!await provider.canAnswer(lookup)) continue;
       final EpisodeSkips? found;
       try {
         found = await provider.fetchSkips(lookup);

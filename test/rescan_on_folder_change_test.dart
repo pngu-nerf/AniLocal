@@ -56,6 +56,12 @@ class _MutableRepo
   @override
   Future<List<Episode>> episodesFor(int seriesId) async => const [];
   @override
+  Future<Map<int, List<Episode>>> episodesBySeries() async => {
+    for (final s in await allSeries())
+      s.seriesId: await episodesFor(s.seriesId),
+  };
+
+  @override
   Future<List<IdentifiedEpisode>> unmatchedFiles() async => const [];
   @override
   Future<void> addFolder(String path) async => folders = [...folders, path];

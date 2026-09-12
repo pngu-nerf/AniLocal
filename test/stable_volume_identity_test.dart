@@ -6,17 +6,20 @@ import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/folders/volume_resolver.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
 import 'support/graphql_request.dart';
 
 /// Fake [VolumeResolver]: configured by `infoByPath` (longest-prefix match →
@@ -85,6 +88,30 @@ void main() {
         folderPath: '/elsewhere',
         relativePath: 'x.mkv',
       ));
+    });
+
+    test('the plist reader unescapes XML and escapes its key', () {
+      // A volume named `Movies & TV` is written as `Movies &amp; TV`; taken
+      // verbatim, the mount point did not exist and the folder resolved to
+      // "missing" after every remount.
+      const plist =
+          '<dict><key>MountPoint</key>'
+          '<string>/Volumes/Movies &amp; TV &#x2014; 4K</string>'
+          '<key>VolumeUUID</key><string>ABC-123</string></dict>';
+      expect(
+        diskutilPlistString(plist, 'MountPoint'),
+        '/Volumes/Movies & TV — 4K',
+      );
+      expect(diskutilPlistString(plist, 'VolumeUUID'), 'ABC-123');
+      expect(
+        diskutilPlistString(plist, 'Mount.Point'),
+        isNull,
+        reason: 'the key is a literal, not a pattern',
+      );
+      expect(
+        xmlUnescape('&lt;a&gt; &quot;b&quot; &apos;c&apos; &#65;'),
+        '<a> "b" \'c\' A',
+      );
     });
 
     test('volumeSubpathOf strips the mount prefix', () {
@@ -160,7 +187,11 @@ void main() {
       dir = await Directory.systemTemp.createTemp('anilocal_vol_');
       db = CacheDatabase(NativeDatabase.memory());
       fake = _FakeVolumeResolver();
-      repo = DriftLibraryRepository(db, resolver: fake);
+      repo = DriftLibraryRepository(
+        db,
+        resolver: fake,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+      );
       final artDir = await Directory('${dir.path}/.art').create();
       final mock = MockClient((req) async {
         if (req.method == 'POST') {

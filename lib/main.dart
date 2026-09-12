@@ -15,6 +15,7 @@ import 'data/cache/cache_connection.dart';
 import 'data/cache/cache_database.dart';
 import 'data/cache/drift_library_repository.dart';
 import 'data/cache/drift_settings_repository.dart';
+import 'data/cache/skip_view_source.dart';
 import 'data/crossmap/cross_map_store.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
@@ -167,7 +168,6 @@ Future<void> main() async {
   // file identity stays stable. Sharing the instance also shares its mount
   // memoization. Internal-disk folders never touch it (their path is stable).
   final VolumeResolver volumeResolver = DiskutilVolumeResolver();
-  final repository = DriftLibraryRepository(database, resolver: volumeResolver);
   // ONE cross-map instance: shared by the AniSkip id backfill and by Jikan's
   // MAL -> AniList enrichment, so the 5.8MB source is fetched and parsed once.
   // ONE HTTP client for the whole app, and it is the one that times out.
@@ -190,16 +190,64 @@ Future<void> main() async {
   );
   // ALL settings live behind one injected object (was ~20 threaded functions).
   // Adding a setting now touches SettingsRepository + its impl + the reader.
-  // Built BEFORE the fill path because the matcher reads the user's metadata
-  // source order from it.
-  final settings = DriftSettingsRepository(
-    database,
-    showPreferences: repository,
+  // Built BEFORE the read path and the fill path: both read from it.
+  final settings = DriftSettingsRepository(database);
+  // Built-in skip order: the FILE'S OWN chapters first, then AniSkip.
+  //
+  // Chapters lead because of where their data comes from: a chapter mark was
+  // authored against the exact encode sitting on disk, while AniSkip is
+  // crowd-sourced timings submitted against whatever release the submitter had.
+  // When those differ, the local one is right by construction.
+  //
+  // Measured, not assumed. On the reference library, cross-checking flagged
+  // Cyberpunk: Edgerunners as disagreeing on all 9 episodes; AniSkip put the
+  // opening at 76.2s and the opening actually starts at 71s. Its window is
+  // exactly 90s, so the 5.2s late start pushes the END 5.2s past the opening
+  // and INTO the episode — the one skip error a viewer cannot undo. Sakamoto
+  // desu ga? showed the same total disagreement, and six more shows disagreed
+  // on 13-36% of episodes.
+  //
+  // This costs nothing in coverage: only ~37% of files carry chapters, and a
+  // source with no data falls through silently, so AniSkip still answers
+  // everything else. It complements AniSkip rather than replacing it — the
+  // order just decides who wins where BOTH have an answer.
+  //
+  // The residual risk runs the other way: a chapters window is INFERRED from a
+  // duration band, so a non-theme span of about 90s could in principle be
+  // picked, where AniSkip's answer is human-curated. `inferSkipsFromChapters`
+  // declines rather than guesses, and cross-checking is the backstop — a bogus
+  // chapters window disagrees with AniSkip and is then never auto-skipped.
+  final skipProviders = <SkipProvider>[
+    const ChaptersSkipProvider(),
+    AniSkipSkipProvider(AniSkipClient(httpClient: httpClient)),
+  ];
+  assert(
+    skipProviders.map((p) => p.token).join(',') == kBuiltInSkipOrder.join(','),
+    'the shipped skip providers must be in the ONE built-in order',
   );
-  // Wired back after settings exists: DriftSettingsRepository is built FROM the
-  // library repository (it delegates show-preferences to it), so the minimum-
-  // skip floor cannot be a constructor argument on either.
-  repository.loadMinSkipLength = settings.loadMinSkipLength;
+  // The READ path resolves skips now, so it needs the same ordered, enabled
+  // source list the fill path uses — as TOKENS, because the repository must
+  // never see a provider (seam #1). Wired here because only the composition
+  // root knows which sources this build ships, and read fresh on every query
+  // so a reorder, a toggle, or switching cross-checking on takes effect
+  // immediately with no refresh and no rescan.
+  final repository = DriftLibraryRepository(
+    database,
+    resolver: volumeResolver,
+    skipView: SkipViewSource(
+      minLength: settings.loadMinSkipLength,
+      activeSources: () async => [
+        for (final p in applySourceOrder(
+          skipProviders,
+          (p) => p.token,
+          await settings.loadSkipSourceOrder(),
+        ))
+          p.token,
+      ],
+      knownSources: () async => [for (final p in skipProviders) p.token],
+      corroborate: settings.loadCorroborateSkips,
+    ),
+  );
   // The diagnostics report is built HERE because only the composition root can
   // see the database, the repositories and the settings together; the About
   // panel just asks for the string.
@@ -252,50 +300,6 @@ Future<void> main() async {
         loadClientId: malClientId,
       ),
   ];
-  // Built-in skip order: the FILE'S OWN chapters first, then AniSkip.
-  //
-  // Chapters lead because of where their data comes from: a chapter mark was
-  // authored against the exact encode sitting on disk, while AniSkip is
-  // crowd-sourced timings submitted against whatever release the submitter had.
-  // When those differ, the local one is right by construction.
-  //
-  // Measured, not assumed. On the reference library, cross-checking flagged
-  // Cyberpunk: Edgerunners as disagreeing on all 9 episodes; AniSkip put the
-  // opening at 76.2s and the opening actually starts at 71s. Its window is
-  // exactly 90s, so the 5.2s late start pushes the END 5.2s past the opening
-  // and INTO the episode — the one skip error a viewer cannot undo. Sakamoto
-  // desu ga? showed the same total disagreement, and six more shows disagreed
-  // on 13-36% of episodes.
-  //
-  // This costs nothing in coverage: only ~37% of files carry chapters, and a
-  // source with no data falls through silently, so AniSkip still answers
-  // everything else. It complements AniSkip rather than replacing it — the
-  // order just decides who wins where BOTH have an answer.
-  //
-  // The residual risk runs the other way: a chapters window is INFERRED from a
-  // duration band, so a non-theme span of about 90s could in principle be
-  // picked, where AniSkip's answer is human-curated. `inferSkipsFromChapters`
-  // declines rather than guesses, and cross-checking is the backstop — a bogus
-  // chapters window disagrees with AniSkip and is then never auto-skipped.
-  final skipProviders = <SkipProvider>[
-    const ChaptersSkipProvider(),
-    AniSkipSkipProvider(AniSkipClient(httpClient: httpClient)),
-  ];
-  // The READ path resolves skips now, so it needs the same ordered, enabled
-  // source list the fill path uses — as TOKENS, because the repository must
-  // never see a provider (seam #1). Wired here because only the composition
-  // root knows which sources this build ships, and read fresh on every query
-  // so a reorder, a toggle, or switching cross-checking on takes effect
-  // immediately with no refresh and no rescan.
-  repository.loadActiveSkipSources = () async => [
-    for (final p in applySourceOrder(
-      skipProviders,
-      (p) => p.token,
-      await settings.loadSkipSourceOrder(),
-    ))
-      p.token,
-  ];
-  repository.loadCorroborateSkips = settings.loadCorroborateSkips;
   final sync = LibrarySync(
     scanner: const FileSystemFolderScanner(),
     parser: const HeuristicFilenameParser(),

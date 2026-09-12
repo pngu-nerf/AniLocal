@@ -106,7 +106,9 @@ class SettingsModel extends ChangeNotifier {
   }
 
   void setMinSkipLength(int seconds) {
-    minSkipLength = Duration(seconds: seconds.clamp(0, 600));
+    minSkipLength = Duration(
+      seconds: seconds.clamp(0, minSkipLengthMax.inSeconds),
+    );
     unawaited(repository.setMinSkipLength(minSkipLength));
     notifyListeners();
   }

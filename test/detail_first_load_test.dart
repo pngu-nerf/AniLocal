@@ -80,6 +80,9 @@ class _Repo
   }
 
   @override
+  Future<Map<int, List<Episode>>> episodesBySeries() async => {};
+
+  @override
   Future<Map<int, Episode>> upNextBySeries() async {
     calls.add('upNextBySeries');
     return {7: _episodes()[2]};

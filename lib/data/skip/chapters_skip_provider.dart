@@ -48,7 +48,7 @@ class ChaptersSkipProvider implements SkipProvider {
   /// scan path has the path and the refresh path gained it later, so recording
   /// an answer from a lookup without one would freeze the wrong result.
   @override
-  bool canAnswer(SkipLookup lookup) {
+  Future<bool> canAnswer(SkipLookup lookup) async {
     final path = lookup.filePath;
     if (path == null || path.isEmpty) return false;
     // The file must be THERE. A drive that is unplugged or remounted elsewhere
@@ -57,8 +57,9 @@ class ChaptersSkipProvider implements SkipProvider {
     // permanent answer and never ask again. One refresh with the library
     // offline used to erase chapter skips for every episode on that drive,
     // silently. Existence is checked here, where "could not try" is the
-    // meaning that stops the row being written.
-    return File(path).existsSync();
+    // meaning that stops the row being written. Async: a synchronous stat per
+    // episode on a sleeping NAS blocked the isolate for the whole refresh.
+    return File(path).exists();
   }
 
   @override

@@ -1,5 +1,7 @@
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -7,7 +9,10 @@ void main() {
   test('library folders keep a controllable order, not alphabetical', () async {
     final db = CacheDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    final repo = DriftLibraryRepository(db);
+    final repo = DriftLibraryRepository(
+      db,
+      skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+    );
 
     // Added out of alphabetical order on purpose.
     await repo.addFolder('/Volumes/Zebra');

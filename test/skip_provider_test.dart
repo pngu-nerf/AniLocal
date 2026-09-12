@@ -6,6 +6,7 @@ import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/folders/volume_resolver.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
@@ -56,7 +57,7 @@ class _FakeSkip implements SkipProvider {
   @override
   String? get setupInstructions => null;
   @override
-  bool canAnswer(SkipLookup lookup) => answerable;
+  Future<bool> canAnswer(SkipLookup lookup) async => answerable;
   @override
   Future<bool> isConfigured() async => configured;
 
@@ -500,9 +501,15 @@ void main() {
       expect((await db.allSkipAnswers()).single.introEndMs, 8000);
 
       var floor = Duration.zero;
-      final repo = DriftLibraryRepository(db);
-      repo.loadMinSkipLength = () async => floor;
-      repo.loadActiveSkipSources = () async => const ['chapters'];
+      final repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource(
+          minLength: () async => floor,
+          activeSources: () async => const ['chapters'],
+          knownSources: () async => kBuiltInSkipOrder,
+          corroborate: () async => false,
+        ),
+      );
 
       final seriesId = (await db.allSkipAnswers()).single.seriesId;
       expect(
@@ -610,8 +617,15 @@ void main() {
     test('REORDERING sources changes the times with no refresh', () async {
       final seriesId = await seed();
       var order = const ['chapters', 'aniskip'];
-      final repo = DriftLibraryRepository(db);
-      repo.loadActiveSkipSources = () async => order;
+      final repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource(
+          minLength: () async => Duration.zero,
+          activeSources: () async => order,
+          knownSources: () async => kBuiltInSkipOrder,
+          corroborate: () async => false,
+        ),
+      );
 
       expect(
         (await repo.episodesFor(seriesId)).single.introSkip?.end,
@@ -632,9 +646,15 @@ void main() {
       () async {
         final seriesId = await seed();
         var corroborate = false;
-        final repo = DriftLibraryRepository(db);
-        repo.loadActiveSkipSources = () async => const ['chapters', 'aniskip'];
-        repo.loadCorroborateSkips = () async => corroborate;
+        final repo = DriftLibraryRepository(
+          db,
+          skipView: SkipViewSource(
+            minLength: () async => Duration.zero,
+            activeSources: () async => const ['chapters', 'aniskip'],
+            knownSources: () async => kBuiltInSkipOrder,
+            corroborate: () async => corroborate,
+          ),
+        );
 
         expect(
           (await repo.episodesFor(seriesId)).single.introConfidence,
@@ -652,10 +672,22 @@ void main() {
     );
 
     test('switching a source OFF stops using it, immediately', () async {
+      // `seed()` gives chapters an intro at 0s and aniskip one at 600s. With
+      // chapters switched OFF, aniskip's window must be what shows — and with
+      // BOTH off, nothing shows: a disabled source is not a last resort. That
+      // second half is the property the old test could not fail for, because
+      // aniskip always had an answer to fall back on.
       final seriesId = await seed();
       var order = const ['chapters', 'aniskip'];
-      final repo = DriftLibraryRepository(db);
-      repo.loadActiveSkipSources = () async => order;
+      final repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource(
+          minLength: () async => Duration.zero,
+          activeSources: () async => order,
+          knownSources: () async => kBuiltInSkipOrder,
+          corroborate: () async => false,
+        ),
+      );
 
       expect((await repo.episodesFor(seriesId)).single.introSkip, isNotNull);
 
@@ -665,6 +697,13 @@ void main() {
         const Duration(seconds: 600),
         reason: 'its stored answer is ignored while it is off',
       );
+
+      order = const []; // both unchecked
+      expect(
+        (await repo.episodesFor(seriesId)).single.introSkip,
+        isNull,
+        reason: 'OFF means off — not "use it when nothing else answers"',
+      );
     });
 
     test('each window takes the best source that HAS it', () async {
@@ -672,8 +711,15 @@ void main() {
       // episode whose top source knew only the intro lost an outro a lower
       // source could have supplied. Resolving per window fixes that.
       final seriesId = await seed();
-      final repo = DriftLibraryRepository(db);
-      repo.loadActiveSkipSources = () async => const ['chapters', 'aniskip'];
+      final repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource(
+          minLength: () async => Duration.zero,
+          activeSources: () async => const ['chapters', 'aniskip'],
+          knownSources: () async => kBuiltInSkipOrder,
+          corroborate: () async => false,
+        ),
+      );
 
       final ep = (await repo.episodesFor(seriesId)).single;
       expect(
@@ -701,11 +747,19 @@ void main() {
           askedAtMs: 0,
         ),
       );
-      final repo = DriftLibraryRepository(db);
-      repo.loadCorroborateSkips = () async => true;
+      var order = const <String>[];
+      final repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource(
+          minLength: () async => Duration.zero,
+          activeSources: () async => order,
+          knownSources: () async => kBuiltInSkipOrder,
+          corroborate: () async => true,
+        ),
+      );
 
       // With NO known source enabled, the legacy window still shows.
-      repo.loadActiveSkipSources = () async => const [];
+      order = const [];
       var ep = (await repo.episodesFor(seriesId)).single;
       expect(ep.introSkip?.end, const Duration(seconds: 90));
       expect(
@@ -716,7 +770,7 @@ void main() {
 
       // With a known source enabled, the legacy answer steps aside entirely —
       // including as a corroborating voice for the chapters window it matches.
-      repo.loadActiveSkipSources = () async => const ['chapters'];
+      order = const ['chapters'];
       ep = (await repo.episodesFor(seriesId)).single;
       expect(ep.introSkip?.end, const Duration(seconds: 90));
       expect(ep.introConfidence, SkipConfidence.single);

@@ -6,17 +6,20 @@ import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
 import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
@@ -85,7 +88,10 @@ void main() {
         ),
       ],
     );
-    repo = DriftLibraryRepository(db);
+    repo = DriftLibraryRepository(
+      db,
+      skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+    );
     // Priority order is established by insert order (Stage 5 sortOrder).
     await db.insertFolder(folderA.path);
     await db.insertFolder(folderB.path);
@@ -111,6 +117,23 @@ void main() {
       );
       expect(episodes.single.hasMultipleSources, isTrue);
       expect(episodes.single.sources.length, 2);
+    },
+  );
+
+  test(
+    'the ONE-read episodesBySeries agrees with N per-series reads',
+    () async {
+      // The grid used to call `episodesFor` once per card, and each call
+      // rebuilt the whole library from five tables. The batch read must return
+      // exactly what those calls would have — same episodes, same sources, same
+      // resolution — for every series.
+      await sync.sync([folderA.path, folderB.path]);
+      final all = await repo.episodesBySeries();
+      final series = await repo.allSeries();
+      expect(all.keys.toSet(), {for (final s in series) s.seriesId});
+      for (final s in series) {
+        expect(all[s.seriesId], await repo.episodesFor(s.seriesId));
+      }
     },
   );
 

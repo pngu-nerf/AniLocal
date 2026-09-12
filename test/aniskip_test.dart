@@ -6,11 +6,13 @@ import 'package:anilocal/data/aniskip/aniskip_client.dart';
 import 'package:anilocal/data/cache/art_cache.dart';
 import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
+import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
 import 'package:anilocal/data/skip/aniskip_skip_provider.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/domain/models/skip_range.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:drift/native.dart';
@@ -162,7 +164,10 @@ void main() {
     setUp(() async {
       dir = await Directory.systemTemp.createTemp('anilocal_aniskip_');
       db = CacheDatabase(NativeDatabase.memory());
-      repo = DriftLibraryRepository(db);
+      repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+      );
     });
 
     tearDown(() async {

@@ -18,9 +18,11 @@ import '../../domain/repositories/watch_order_repository.dart';
 import '../../domain/repositories/watch_state_repository.dart';
 import '../../domain/skip_corroboration.dart';
 import '../folders/volume_resolver.dart';
+import '../paths.dart';
 import '../scanner/title_matching.dart' show normalizeTitle;
 import 'cache_database.dart';
 import 'series_identity.dart';
+import 'skip_view_source.dart';
 
 /// Sort rank for a file not under any known library folder (orphan from a
 /// removed folder) — below every real folder, so it's the last-resort source.
@@ -83,10 +85,17 @@ class DriftLibraryRepository
         WatchOrderRepository,
         MissingEpisodesRepository,
         ShowPreferencesRepository {
-  DriftLibraryRepository(this._db, {VolumeResolver? resolver})
-    : _resolver = resolver ?? DiskutilVolumeResolver();
+  DriftLibraryRepository(
+    this._db, {
+    required this.skipView,
+    VolumeResolver? resolver,
+  }) : _resolver = resolver ?? DiskutilVolumeResolver();
 
   final CacheDatabase _db;
+
+  /// The live settings the read path turns stored skip answers with. REQUIRED:
+  /// see [SkipViewSource] for why it is no longer three mutable fields.
+  final SkipViewSource skipView;
 
   /// Resolves a file's CURRENT absolute path by following its owning folder's
   /// volume across remounts (defaults to the macOS diskutil resolver; injectable
@@ -163,8 +172,10 @@ class DriftLibraryRepository
   /// highest-priority source. This is where multi-source de-duplication and
   /// source resolution live — entirely in the data layer (the UI sees one
   /// Episode per identity).
-  Future<Map<(int, int), _Logical>> _logicalEpisodes() async {
-    final effective = await _effectiveMatches();
+  Future<Map<(int, int), _Logical>> _logicalEpisodes([
+    List<_Effective>? effective,
+  ]) async {
+    effective ??= await _effectiveMatches();
     final folders = await _db.allFolderRows(); // sorted by sortOrder asc
     final folderByPath = {for (final f in folders) f.path: f};
     final currentByFolder = await _currentFolderPaths(folders);
@@ -282,7 +293,33 @@ class DriftLibraryRepository
     if (isPlaceholderSeriesId(seriesId)) {
       return _placeholderEpisodesFor(seriesId);
     }
-    final logical = await _logicalEpisodes();
+    final all = await _episodesOf(await _logicalEpisodes());
+    return all[seriesId] ?? const [];
+  }
+
+  @override
+  Future<Map<int, List<Episode>>> episodesBySeries() async {
+    final effective = await _effectiveMatches();
+    final result = await _episodesOf(await _logicalEpisodes(effective));
+    // Placeholders too, so a caller that needs "every card's episodes" makes
+    // exactly one call and never falls back to the per-series read.
+    final placeholderIds = <int>{
+      for (final e in effective)
+        if (e.seriesId == null && e.pending && e.file.parsedTitle.isNotEmpty)
+          placeholderSeriesId(normalizeTitle(e.file.parsedTitle)),
+    };
+    for (final id in placeholderIds) {
+      result[id] = await _placeholderEpisodesFor(id, effective: effective);
+    }
+    return result;
+  }
+
+  /// Every logical episode as a domain [Episode], grouped by series and
+  /// sorted by display number — the ONE pass the per-series and the
+  /// all-series reads both take, so they cannot disagree.
+  Future<Map<int, List<Episode>>> _episodesOf(
+    Map<(int, int), _Logical> logical,
+  ) async {
     final watch = {
       for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
     };
@@ -290,20 +327,22 @@ class DriftLibraryRepository
     for (final a in await _db.allSkipAnswers()) {
       (skips[(a.seriesId, a.episode)] ??= []).add(a);
     }
-    final mine = [
-      for (final l in logical.values)
-        if (l.seriesId == seriesId) l,
-    ]..sort((a, b) => (a.displayNumber ?? 0).compareTo(b.displayNumber ?? 0));
-    final view = await _skipView();
-    return [
-      for (final l in mine)
+    final view = await _currentSkipView();
+    final bySeries = <int, List<Episode>>{};
+    for (final l in logical.values) {
+      (bySeries[l.seriesId] ??= []).add(
         _toEpisode(
           l,
-          watch[(seriesId, l.anchored)],
-          skips[(seriesId, l.anchored)],
+          watch[(l.seriesId, l.anchored)],
+          skips[(l.seriesId, l.anchored)],
           view,
         ),
-    ];
+      );
+    }
+    for (final list in bySeries.values) {
+      list.sort((a, b) => a.number.compareTo(b.number));
+    }
+    return bySeries;
   }
 
   @override
@@ -341,8 +380,11 @@ class DriftLibraryRepository
   /// copies are one row) and resolved to their playable current path. Watch
   /// state is keyed by the placeholder's synthetic id, so resume survives until
   /// the show is identified (then re-keys to the real id on the next scan).
-  Future<List<Episode>> _placeholderEpisodesFor(int placeholderId) async {
-    final effective = await _effectiveMatches();
+  Future<List<Episode>> _placeholderEpisodesFor(
+    int placeholderId, {
+    List<_Effective>? effective,
+  }) async {
+    effective ??= await _effectiveMatches();
     final folders = await _db.allFolderRows();
     final folderByPath = {for (final f in folders) f.path: f};
     final currentByFolder = await _currentFolderPaths(folders);
@@ -391,7 +433,7 @@ class DriftLibraryRepository
             fileRef: sources.first.fileRef,
             title: number > 0
                 ? 'Episode $number'
-                : _name(sources.first.fileRef),
+                : basenameOf(sources.first.fileRef),
             seriesId: placeholderId,
             anchoredNumber: anchored,
             watched: w?.watched ?? false,
@@ -403,12 +445,6 @@ class DriftLibraryRepository
     ];
   }
 
-  /// Basename of a path (for an un-numbered placeholder episode's label).
-  static String _name(String path) {
-    final i = path.lastIndexOf(RegExp(r'[/\\]'));
-    return i == -1 ? path : path.substring(i + 1);
-  }
-
   // --- Watch state (keyed by episode identity, never file path) ---
 
   @override
@@ -417,45 +453,30 @@ class DriftLibraryRepository
     required Duration position,
     required Duration duration,
   }) async {
-    // Progress-only write: PRESERVE the existing watched + manual-override flags
+    // Progress-only write: the watched + manual-override flags are PRESERVED
     // (never clobber a manual watched/unwatched while resume keeps ticking).
-    final existing = await _db.watchStateFor(
-      episode.seriesId,
-      episode.anchoredNumber,
-    );
-    await _db.upsertWatchState(
-      WatchStateRow(
-        seriesId: episode.seriesId,
-        episode: episode.anchoredNumber,
-        resumePositionMs: position.inMilliseconds,
-        durationMs: duration.inMilliseconds,
-        watched: existing?.watched ?? false,
-        watchedManual: existing?.watchedManual ?? false,
-        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-      ),
+    // One statement, so it cannot interleave with a concurrent mark-watched.
+    await _db.saveProgressRow(
+      seriesId: episode.seriesId,
+      episode: episode.anchoredNumber,
+      resumePositionMs: position.inMilliseconds,
+      durationMs: duration.inMilliseconds,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }
 
   @override
   Future<void> setWatched(Episode episode, {required bool watched}) async {
-    final existing = await _db.watchStateFor(
-      episode.seriesId,
-      episode.anchoredNumber,
-    );
-    // The AUTO / threshold path. A MANUAL override wins: never touch a row the
-    // user set by hand (the sticky watched-override is sacred user data).
-    if (existing?.watchedManual ?? false) return;
-    await _db.upsertWatchState(
-      WatchStateRow(
-        seriesId: episode.seriesId,
-        episode: episode.anchoredNumber,
-        // Marking watched clears resume so it leaves "Continue watching".
-        resumePositionMs: watched ? 0 : (existing?.resumePositionMs ?? 0),
-        durationMs: existing?.durationMs ?? episode.duration.inMilliseconds,
-        watched: watched,
-        watchedManual: false,
-        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-      ),
+    // The AUTO / threshold path. A MANUAL override wins: the statement's WHERE
+    // leaves a row the user set by hand untouched (the sticky watched-override
+    // is sacred user data). Marking watched clears resume so it leaves
+    // "Continue watching".
+    await _db.setWatchedAutoRow(
+      seriesId: episode.seriesId,
+      episode: episode.anchoredNumber,
+      watched: watched,
+      durationMs: episode.duration.inMilliseconds,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }
 
@@ -464,24 +485,16 @@ class DriftLibraryRepository
     Episode episode, {
     required bool watched,
   }) async {
-    final existing = await _db.watchStateFor(
-      episode.seriesId,
-      episode.anchoredNumber,
-    );
     // Sticky manual override: set watched + mark it manual so the auto/threshold
     // path leaves it alone, and it survives re-entry AND refresh/rescan (seam #5
     // — watch_state has no fill-path writer). Progress is UNTOUCHED: the saved
     // resume position + duration carry over exactly.
-    await _db.upsertWatchState(
-      WatchStateRow(
-        seriesId: episode.seriesId,
-        episode: episode.anchoredNumber,
-        resumePositionMs: existing?.resumePositionMs ?? 0,
-        durationMs: existing?.durationMs ?? episode.duration.inMilliseconds,
-        watched: watched,
-        watchedManual: true,
-        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-      ),
+    await _db.setWatchedManualRow(
+      seriesId: episode.seriesId,
+      episode: episode.anchoredNumber,
+      watched: watched,
+      durationMs: episode.duration.inMilliseconds,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }
 
@@ -503,7 +516,7 @@ class DriftLibraryRepository
     }
     final prefs = await allPreferences();
     final externalIds = await _db.externalIdsBySeriesId();
-    final view = await _skipView();
+    final view = await _currentSkipView();
 
     final result = <ContinueWatching>[];
     for (final w in inProgress) {
@@ -613,7 +626,7 @@ class DriftLibraryRepository
     if (next == null) return const NoNextEpisode();
     final w = await _db.watchStateFor(next.seriesId, next.anchored);
     final answers = await _db.skipAnswersFor(next.seriesId, next.anchored);
-    return NextEpisode(_toEpisode(next, w, answers, await _skipView()));
+    return NextEpisode(_toEpisode(next, w, answers, await _currentSkipView()));
   }
 
   @override
@@ -638,7 +651,7 @@ class DriftLibraryRepository
     }
 
     final result = <int, Episode>{};
-    final view = await _skipView();
+    final view = await _currentSkipView();
     latestWatched.forEach((seriesId, anchored) {
       // Same resolver as nextEpisode — within-season next.
       final next = _resolveNext(seriesId, anchored, logical);
@@ -664,36 +677,29 @@ class DriftLibraryRepository
     Map<(int, int), _Logical> logical,
   ) => logical[(seriesId, anchored + 1)];
 
-  /// Everything the READ path needs to turn stored answers into skip windows.
-  ///
-  /// All three are wired AFTER construction because the settings repository is
-  /// built FROM this one (it delegates show-preferences here), so the two
-  /// cannot both be constructor arguments. Null until wired, and the nulls
-  /// degrade to "no filter, built-in order, no cross-checking".
-  ///
-  /// [loadActiveSkipSources] yields the enabled source TOKENS in priority
-  /// order. The composition root supplies it because only it knows which
-  /// sources this build ships; the repository must not see a provider (seam
-  /// #1). A source absent from that list is one the user switched off, and its
-  /// stored answers stop being used the moment they do — no refresh.
-  Future<Duration> Function()? loadMinSkipLength;
-  Future<List<String>> Function()? loadActiveSkipSources;
-  Future<bool> Function()? loadCorroborateSkips;
-
   /// Read fresh per query, never snapshotted, so changing any of these takes
-  /// effect on the next read instead of needing a rescan.
-  Future<({Duration floor, List<String> order, bool corroborate})>
-  _skipView() async => (
-    floor: await loadMinSkipLength?.call() ?? Duration.zero,
-    order: await loadActiveSkipSources?.call() ?? const <String>[],
-    corroborate: await loadCorroborateSkips?.call() ?? false,
-  );
+  /// effect on the next read instead of needing a rescan. `disabled` is what
+  /// the build ships minus what is enabled: a source the user switched off,
+  /// whose stored answers must stop being used the moment they do.
+  Future<_SkipView> _currentSkipView() async {
+    final order = await skipView.activeSources();
+    final known = await skipView.knownSources();
+    return (
+      floor: await skipView.minLength(),
+      order: order,
+      disabled: {
+        for (final k in known)
+          if (!order.contains(k)) k,
+      },
+      corroborate: await skipView.corroborate(),
+    );
+  }
 
   Episode _toEpisode(
     _Logical l,
     WatchStateRow? w,
     List<SkipSourceAnswerRow>? answers,
-    ({Duration floor, List<String> order, bool corroborate}) view,
+    _SkipView view,
   ) {
     // Resolved HERE, not at write time. Order picks the times, cross-checking
     // picks the verdict, the floor filters — so all three take effect at once
@@ -709,8 +715,14 @@ class DriftLibraryRepository
           ),
       ],
       sourceOrder: view.order,
+      disabledSources: view.disabled,
       corroborate: view.corroborate,
     );
+    // The floor applies to the RANGE; a window it drops takes its verdict
+    // with it, so the two fields cannot disagree (a null range beside a
+    // `corroborated` verdict used to be representable).
+    final intro = dropIfShorterThan(resolved.intro?.range, view.floor);
+    final outro = dropIfShorterThan(resolved.outro?.range, view.floor);
     return Episode(
       number: l.displayNumber ?? 0,
       fileRef: l.activeFileRef,
@@ -722,16 +734,22 @@ class DriftLibraryRepository
       duration: Duration(milliseconds: w?.durationMs ?? 0),
       sources: l.sources,
       pinnedSourceFolder: l.pinnedFolder,
-      introSkip: dropIfShorterThan(resolved.intro?.range, view.floor),
-      outroSkip: dropIfShorterThan(resolved.outro?.range, view.floor),
-      introConfidence: resolved.intro?.confidence ?? SkipConfidence.single,
-      outroConfidence: resolved.outro?.confidence ?? SkipConfidence.single,
+      introSkip: intro,
+      outroSkip: outro,
+      introConfidence: intro == null
+          ? SkipConfidence.single
+          : resolved.intro!.confidence,
+      outroConfidence: outro == null
+          ? SkipConfidence.single
+          : resolved.outro!.confidence,
     );
   }
 
-  /// Build a [SkipRange] when both bounds are present, else null.
+  /// Build a [SkipRange] when both bounds are present AND ordered, else null.
+  /// An inverted window from a bad stored row must not reach the player,
+  /// where "skip" would seek backwards.
   SkipRange? _range(int? startMs, int? endMs) =>
-      (startMs != null && endMs != null)
+      (startMs != null && endMs != null && endMs > startMs)
       ? SkipRange(
           start: Duration(milliseconds: startMs),
           end: Duration(milliseconds: endMs),
@@ -773,50 +791,20 @@ class DriftLibraryRepository
     for (final r in await _db.allShowPrefRows()) r.seriesId: _toPrefs(r),
   };
 
+  // Each write is ONE statement that touches only its own field, so two menu
+  // actions racing cannot lose each other's value; the master switch is one
+  // statement over every cached show.
   @override
-  Future<void> setPictureMode(int seriesId, PictureMode mode) async {
-    final existing = await _db.showPrefFor(seriesId);
-    await _db.upsertShowPref(
-      ShowPreferenceRow(
-        seriesId: seriesId,
-        pictureMode: mode.token,
-        nextEpisodeHidden: existing?.nextEpisodeHidden ?? false,
-      ),
-    );
-  }
+  Future<void> setPictureMode(int seriesId, PictureMode mode) =>
+      _db.setShowPictureMode(seriesId, mode.token);
 
   @override
-  Future<void> setNextEpisodeHidden(
-    int seriesId, {
-    required bool hidden,
-  }) async {
-    final existing = await _db.showPrefFor(seriesId);
-    await _db.upsertShowPref(
-      ShowPreferenceRow(
-        seriesId: seriesId,
-        pictureMode: existing?.pictureMode ?? PictureMode.normal.token,
-        nextEpisodeHidden: hidden,
-      ),
-    );
-  }
+  Future<void> setNextEpisodeHidden(int seriesId, {required bool hidden}) =>
+      _db.setShowNextEpisodeHidden(seriesId, hidden: hidden);
 
   @override
-  Future<void> setAllNextEpisodeHidden({required bool hidden}) async {
-    // Overwrite every cached show's flag, preserving each show's picture mode.
-    final existing = {
-      for (final r in await _db.allShowPrefRows()) r.seriesId: r,
-    };
-    for (final s in await _db.allSeriesRows()) {
-      await _db.upsertShowPref(
-        ShowPreferenceRow(
-          seriesId: s.seriesId,
-          pictureMode:
-              existing[s.seriesId]?.pictureMode ?? PictureMode.normal.token,
-          nextEpisodeHidden: hidden,
-        ),
-      );
-    }
-  }
+  Future<void> setAllNextEpisodeHidden({required bool hidden}) =>
+      _db.setAllNextEpisodeHidden(hidden: hidden);
 
   // Sort key = the same display title, lowercased. The empty-string fallback
   // this used to carry only differed for an all-null-title series (unreachable —
@@ -825,3 +813,11 @@ class DriftLibraryRepository
   // observable sort change.
   String _sortTitle(Series s) => s.displayTitle.toLowerCase();
 }
+
+/// The live settings in force for one read.
+typedef _SkipView = ({
+  Duration floor,
+  List<String> order,
+  Set<String> disabled,
+  bool corroborate,
+});

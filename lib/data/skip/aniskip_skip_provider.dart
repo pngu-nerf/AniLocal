@@ -35,7 +35,7 @@ class AniSkipSkipProvider implements SkipProvider {
   /// arrives later from the cross-map, and recording an answer now would stop
   /// this source ever being asked again.
   @override
-  bool canAnswer(SkipLookup lookup) => lookup.malId != null;
+  Future<bool> canAnswer(SkipLookup lookup) async => lookup.malId != null;
 
   @override
   bool get readsFile => false;

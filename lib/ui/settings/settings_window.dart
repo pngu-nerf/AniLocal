@@ -280,7 +280,7 @@ class _SecondsFieldState extends State<_SecondsField> {
       _controller.text = '${widget.seconds}'; // unparseable -> leave it alone
       return;
     }
-    final clamped = parsed.clamp(0, 600);
+    final clamped = parsed.clamp(0, minSkipLengthMax.inSeconds);
     _controller.text = '$clamped';
     widget.onChanged(clamped);
   }
