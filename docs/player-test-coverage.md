@@ -103,29 +103,24 @@ fullscreen route** (there's no real fullscreen route in the harness) — checkli
 §D. `Escape` exits fullscreen only, so its effect is likewise fullscreen-only and
 manual.
 
-### ⚠️ Watched-marking / seek-vs-playback heuristic — NOT unit-tested (blocked; do NOT fake it)
-The rule (`_maybeMarkFromPlayback`, `_maybeMarkShortEpisode`, `_onPosition` in
-`lib/ui/theater/zones/video_zone.dart:259-310`): a position jump `>2000ms` (or
-backward) is a **seek** and must NOT mark watched; only continuous playback
-crossing the threshold marks; an episode shorter than the threshold marks on
-open.
+### ✅ Watched-marking / seek-vs-playback heuristic — unit-tested (2026-09-12)
+The rule: a position step larger than `kPositionEventGap` (2s, scaled by the
+playback rate) or backward is a **seek** and must NOT mark watched; only
+continuous playback crossing the threshold marks; an episode shorter than the
+threshold marks on open; a zero threshold is the off-switch.
 
-**Why there is no genuine test:** the logic is private State on `_VideoZoneState`,
-which can't be pumped (its `Video` surface needs a real `VideoController` →
-libmpv; see the harness note above — the engine is injected now, the surface
-still isn't),
-and the decision is inline (no pure seam to call directly, unlike
-`PlaybackController.resumeStartFor`, which *was* extracted and *is* tested in
-`test/playback_resume_start_test.dart`). Re-implementing the rule in the test
-would only test the copy, not production — a false-confidence test, which this
-effort exists to eliminate.
+**How it became testable** — exactly the fix this section used to recommend:
+the decision is a pure function, `shouldMarkFromPlayback` (with
+`wholeEpisodeWithinThreshold`) in `lib/playback/playback_rules.dart`, pinned in
+`test/playback_rules_test.dart` (including the rate scaling — at 2× the old
+inline rule read continuous playback as seeks). The SEQUENCING — which engine
+event may act, the once-per-episode attempt, the manual-override path that
+keeps saving progress — is `PlaybackSession`, pinned in
+`test/playback_session_test.dart` over `RecordingPlayer`. `VideoZone` is now a
+150-line adapter with nothing left in it to test.
 
-**Recommended fix (flagged, NOT done in this test-only pass):** extract the
-marking decision into a pure function — e.g.
-`static bool shouldMarkFromPlayback({required int deltaMs, required Duration remaining, required Duration threshold})`
-— the same move that made `resumeStartFor` testable. Then the seek/playback/
-threshold branches get a genuine unit test. Until then this behavior is
-**manual-verify** (checklist §D "Resume position" / watched-at-threshold).
+**Still manual-verify:** that libmpv actually emits `completed` at EOF and
+positions at the cadence the rule assumes (stated on `kPositionEventGap`).
 
 ## Separately flagged (pre-existing, not touched here)
 - **`SeekBar` uncancelled stream subscriptions + missing `dispose()`**

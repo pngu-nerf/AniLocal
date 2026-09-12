@@ -335,7 +335,7 @@ stays honest while unreachable.
 
 ## How this was verified
 
-`./tool/check.sh` (analyze + format) and `flutter test` green after every slice. Every new
+`./tool/check.sh` (format + analyze + the whole test suite) green after every slice. Every new
 test was mutation-checked — revert the fix, confirm it fails — after a vacuous test was
 caught exactly that way early in the work. Every migration was additionally replayed against
 a **copy of the real populated cache**, which caught two defects the suite missed: the

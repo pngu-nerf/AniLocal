@@ -1,7 +1,12 @@
 # Maintainability assessment (read-only)
 
-> **Status (updated 2026-09-10): STALE — the oldest doc here. Read it for its
-> framing, not its facts.** Its headline finding #1 ("there is no read-this-first
+> **Status (updated 2026-09-12): STALE — the oldest doc here. Read it for its
+> framing, not its facts.** The 2026-09-12 audit passes closed the remaining
+> items it names — the two screen extractions, the unstated seek heuristic (now
+> `kPositionEventGap` in `lib/playback/playback_rules.dart`, tested), the
+> watched-marking guards (now `PlaybackSession`, tested), the untested throttle —
+> see `CHANGELOG.md` 0.1.0. Line references into `video_zone.dart` point at code
+> that has since moved to `playback_session.dart` and `playback_rules.dart`. Its headline finding #1 ("there is no read-this-first
 > doc for a human maintainer") was FIXED: `docs/ARCHITECTURE.md` exists and is the
 > front door. Finding #2's premise is gone too — the README it calls a "7-line
 > stub" has been rewritten with a documentation index. Every concrete number below
@@ -233,6 +238,12 @@ one gray area is that the player widgets hold and call a `media_kit` `Player` di
 (e.g. `seek_bar.dart:64`, `player_control_bar.dart:249`) — intentional and *not* a
 seam-#1 violation (media_kit is infra, deliberately not on the forbidden list), but if the
 seam ever tightens, those are the spots to route through `PlaybackController`.
+
+> **Update (2026-09-12):** both extractions below are DONE — `lib/ui/library/series_card.dart`
+> and `lib/ui/series_detail/missing_episode_tiles.dart` exist, and the two screens are 816 and
+> 913 lines. The player's behaviour also left `video_zone.dart` (150 lines) for the tested
+> `PlaybackSession`. The counts in this section are the state at assessment time, kept as the
+> record of what was found.
 
 **Two oversized UI files would make a maintainer wince — both fixable by extraction, not
 restructuring:**

@@ -4,7 +4,7 @@
 that work by luck, inconsistent patterns, dead code. Not tidiness.
 **Method:** for every finding, the test is *"to change X, how many places must I
 edit?"* — more than one ⇒ flagged.
-**Status (updated 2026-09-10): PARTLY FIXED, and the line numbers have rotted.**
+**Status (updated 2026-09-12): FIXED in substance, and the line numbers have rotted.** The seek heuristic it flags below is now a stated, tested constant (`kPositionEventGap`, `lib/playback/playback_rules.dart`); the rules it produced live in `CLAUDE.md` → "Single-source-of-truth rules" and are enforced by the lint set and `tool/check.sh`.
 This was written as a pure diagnosis and said "nothing here is fixed"; that is no
 longer true. Since then: **A1** is fixed (settings come from ONE injected
 `SettingsRepository`; `SettingsActions` is constructed nowhere in `lib/`, and

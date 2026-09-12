@@ -83,9 +83,12 @@ program and what is parked: **`docs/multi-source-plan.md`**.
 | **The scan/refresh pipeline** | `lib/sync/library_sync.dart` (`sync`, `refreshMetadata`); fix-match writes live in `lib/sync/fix_match_service.dart` |
 | **Playback engine** | `lib/playback/playback_controller.dart` (owns the media_kit `Player`, built with `player_configuration.dart`), `media_remote.dart`; the player's decisions are pure functions in `playback_rules.dart`, sequenced by `PlaybackSession` |
 | **The player UI** (video, controls, seek bar, rail) | `lib/ui/theater/` — `zones/` + `controls/`. ⚠️ see "Here be dragons" below |
-| **Screens** (home/library, detail, unmatched, fix-match, settings — folders live in Settings → Sources) | `lib/ui/` (+ `lib/ui/library/`) |
+| **Screens** (home/library, detail, unmatched, fix-match, settings — library folders live in Settings › Folders) | `lib/ui/` (+ `lib/ui/library/`) |
 | **The instrument look** (VFD "fine-instrument" theme, Technics SC-CH900) | `lib/ui/theme/` — tokens (`xp_tokens`), widgets (`xp_widgets`), theme (`xp_theme`), readouts (`vfd_readout`, `header_readout`), brand mark (`brand_wordmark`) |
 | **The app shell / persistent header** | `lib/ui/shell/` — `app_shell` (the ONE window chrome, mounted above the Navigator in `MaterialApp.builder`), `header_controller` (route-keyed spec stack + spinner grace), `header_scope` (`HeaderPublisher` mixin), `header_spec` |
+| **How a shipped feature works, and why** | `docs/feature-log.md` — one paragraph per feature, with the measurements behind each threshold |
+| **Tests** | `test/` — one file per subject, grouped; the shared doubles in `test/support/` (ONE fake in ONE place: `FakeLibraryRepository`, `FakeFixMatch`, `FakeSettings`/`RecorderSettings`, `FakeVolumeResolver`, `RecordingPlayer`); pixel goldens of the instrument look in `test/goldens/`; live harnesses OUTSIDE the gate in `test_live/` |
+| **Tooling** | `tool/check.sh` (the gate), `tool/coverage.sh` (a report), `tool/release.sh` (bump → build → sign → notarize → DMG), `tool/sqlite_version_check.sh` (the weekly vendored-SQLite watch) |
 | **Shared UI shells/components** | `lib/ui/widgets/` — `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list`, `xp_reorderable_list` (the ONE priority-list widget — three users: library folders, metadata sources, skip sources) |
 
 ---
@@ -224,3 +227,8 @@ at the code site with the exact crash/symptom):
   workflow.")
 - Native deps (libmpv via media_kit; vendored SQLite) and their offline-build
   caveats are logged in `CLAUDE.md` → "Dependencies."
+- **Release:** `tool/release.sh <version>` — the signing and notarization steps
+  run only with a Developer ID configured; without one it stops after an
+  unsigned Release build with the hardened runtime on. `CHANGELOG.md` is the
+  release record; `ROADMAP.md` → "Distribution track" lists what is still open
+  (the bundle-id decision, signing, an update path).
