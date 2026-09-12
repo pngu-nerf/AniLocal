@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -68,9 +69,117 @@ Future<File> _writeMp4(
   return file;
 }
 
+// ------------------------------------------------------------------ Matroska
+//
+// EBML fixtures built by hand: element id (with its length marker), a
+// variable-length size, then the body. Enough of the container to exercise
+// every branch of the walk without a real file.
+
+Uint8List _vint(int value, {int? width}) {
+  var w = width ?? 1;
+  if (width == null) {
+    while (value >= (1 << (7 * w)) - 1 && w < 8) {
+      w++;
+    }
+  }
+  final out = Uint8List(w);
+  var v = value;
+  for (var k = w - 1; k >= 0; k--) {
+    out[k] = v & 0xFF;
+    v >>= 8;
+  }
+  out[0] |= 0x80 >> (w - 1);
+  return out;
+}
+
+/// The all-ones marker the spec reserves for "size unknown".
+Uint8List _unknownSize() => Uint8List.fromList([0xFF]);
+
+Uint8List _idBytes(int id) {
+  final out = <int>[];
+  var v = id;
+  while (v > 0) {
+    out.insert(0, v & 0xFF);
+    v >>= 8;
+  }
+  return Uint8List.fromList(out);
+}
+
+Uint8List _ebml(int id, List<int> body, {Uint8List? size}) {
+  final out = BytesBuilder()
+    ..add(_idBytes(id))
+    ..add(size ?? _vint(body.length))
+    ..add(body);
+  return out.toBytes();
+}
+
+Uint8List _uint(int v) {
+  final out = <int>[];
+  do {
+    out.insert(0, v & 0xFF);
+    v >>= 8;
+  } while (v > 0);
+  return Uint8List.fromList(out);
+}
+
+Uint8List _float64(double v) =>
+    (ByteData(8)..setFloat64(0, v)).buffer.asUint8List();
+
+Uint8List _atomMkv({
+  required Duration start,
+  Duration? end,
+  String? title,
+  bool hidden = false,
+}) => _ebml(0xB6, [
+  ..._ebml(0x91, _uint(start.inMicroseconds * 1000)),
+  if (end != null) ..._ebml(0x92, _uint(end.inMicroseconds * 1000)),
+  if (hidden) ..._ebml(0x98, [1]),
+  if (title != null) ..._ebml(0x80, _ebml(0x85, utf8.encode(title))),
+]);
+
+Uint8List _edition(List<Uint8List> atoms, {bool isDefault = false}) =>
+    _ebml(0x45B9, [
+      if (isDefault) ..._ebml(0x45DB, [1]),
+      for (final a in atoms) ...a,
+    ]);
+
+/// A whole file: EBML header, then a Segment holding Info (scale + duration),
+/// Chapters (the given editions) and a Cluster. [chaptersSize] overrides the
+/// declared size of the Chapters element to build corrupt files.
+Uint8List _mkv({
+  required List<Uint8List> editions,
+  Duration duration = const Duration(minutes: 24),
+  Uint8List? chaptersSize,
+  bool withInfo = true,
+}) {
+  final info = _ebml(0x1549A966, [
+    ..._ebml(0x2AD7B1, _uint(1000000)),
+    ..._ebml(0x4489, _float64(duration.inMilliseconds.toDouble())),
+  ]);
+  final chapters = _ebml(0x1043A770, [
+    for (final e in editions) ...e,
+  ], size: chaptersSize);
+  final cluster = _ebml(0x1F43B675, List.filled(32, 0));
+  final segment = _ebml(0x18538067, [
+    if (withInfo) ...info,
+    ...chapters,
+    ...cluster,
+  ]);
+  return (BytesBuilder()
+        ..add(_ebml(0x1A45DFA3, _ebml(0x4286, [1])))
+        ..add(segment))
+      .toBytes();
+}
+
 void main() {
   late Directory dir;
   const reader = ChapterReader();
+
+  Future<File> writeMkv(String name, Uint8List bytes) async {
+    final f = File('${dir.path}/$name');
+    await f.writeAsBytes(bytes);
+    return f;
+  }
 
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('anilocal_chapters_');
@@ -150,6 +259,150 @@ void main() {
 
     // Whatever survives, it must not throw.
     await expectLater(reader.read(file.path), completes);
+  });
+
+  group('Matroska', () {
+    test(
+      'reads marks, the duration, an explicit end and a UTF-8 title',
+      () async {
+        final f = await writeMkv(
+          'ok.mkv',
+          _mkv(
+            editions: [
+              _edition([
+                _atomMkv(start: Duration.zero, title: 'オープニング'),
+                _atomMkv(
+                  start: const Duration(seconds: 90),
+                  end: const Duration(seconds: 100),
+                ),
+                _atomMkv(start: const Duration(seconds: 200)),
+              ]),
+            ],
+          ),
+        );
+        final c = await reader.read(f.path);
+        expect(c.duration, const Duration(minutes: 24));
+        expect(c.marks.map((m) => m.start.inSeconds), [0, 90, 200]);
+        expect(c.marks.first.title, 'オープニング', reason: 'UTF-8, not Latin-1');
+        expect(c.marks[1].end, const Duration(seconds: 100));
+        expect(c.marks[2].end, isNull);
+      },
+    );
+
+    test('a hidden chapter is not a boundary', () async {
+      final f = await writeMkv(
+        'hidden.mkv',
+        _mkv(
+          editions: [
+            _edition([
+              _atomMkv(start: Duration.zero),
+              _atomMkv(start: const Duration(seconds: 5), hidden: true),
+              _atomMkv(start: const Duration(seconds: 90)),
+            ]),
+          ],
+        ),
+      );
+      expect((await reader.read(f.path)).marks.map((m) => m.start.inSeconds), [
+        0,
+        90,
+      ]);
+    });
+
+    test('several editions: the DEFAULT one, never both interleaved', () async {
+      final f = await writeMkv(
+        'editions.mkv',
+        _mkv(
+          editions: [
+            _edition([
+              _atomMkv(start: Duration.zero),
+              _atomMkv(start: const Duration(seconds: 500)),
+            ]),
+            _edition([
+              _atomMkv(start: Duration.zero),
+              _atomMkv(start: const Duration(seconds: 90)),
+            ], isDefault: true),
+          ],
+        ),
+      );
+      expect(
+        (await reader.read(f.path)).marks.map((m) => m.start.inSeconds),
+        [0, 90],
+        reason: 'the flagged edition wins',
+      );
+    });
+
+    test('with no default flag the FIRST edition is read', () async {
+      final f = await writeMkv(
+        'first.mkv',
+        _mkv(
+          editions: [
+            _edition([_atomMkv(start: const Duration(seconds: 7))]),
+            _edition([_atomMkv(start: const Duration(seconds: 8))]),
+          ],
+        ),
+      );
+      expect((await reader.read(f.path)).marks.single.start.inSeconds, 7);
+    });
+
+    test('a Chapters element claiming an absurd size yields nothing', () async {
+      // The size field says 7 exabytes; `read(size)` would have asked for
+      // that allocation — an OutOfMemoryError past the `on Exception`.
+      final f = await writeMkv(
+        'huge.mkv',
+        _mkv(
+          editions: [
+            _edition([_atomMkv(start: Duration.zero)]),
+          ],
+          chaptersSize: _vint(0x00FFFFFFFFFFFF, width: 8),
+        ),
+      );
+      expect((await reader.read(f.path)).isEmpty, isTrue);
+    });
+
+    test('an unknown-size child stops the walk cleanly', () async {
+      final f = await writeMkv(
+        'unknown.mkv',
+        _mkv(
+          editions: [
+            _edition([_atomMkv(start: Duration.zero)]),
+          ],
+          chaptersSize: _unknownSize(),
+        ),
+      );
+      expect((await reader.read(f.path)).isEmpty, isTrue);
+    });
+
+    test('a file truncated inside Chapters keeps the whole atoms', () async {
+      final full = _mkv(
+        editions: [
+          _edition([
+            _atomMkv(start: Duration.zero),
+            _atomMkv(start: const Duration(seconds: 90)),
+          ]),
+        ],
+      );
+      // Cut the file a few bytes into the Cluster: Chapters is intact but the
+      // declared Segment size now runs past the end.
+      final cut = full.sublist(0, full.length - 20);
+      final f = await writeMkv('truncated.mkv', cut);
+      expect((await reader.read(f.path)).marks.map((m) => m.start.inSeconds), [
+        0,
+        90,
+      ]);
+    });
+
+    test('no Info/Duration means nothing, never a guess', () async {
+      final f = await writeMkv(
+        'noinfo.mkv',
+        _mkv(
+          editions: [
+            _edition([_atomMkv(start: Duration.zero)]),
+          ],
+          withInfo: false,
+        ),
+      );
+      expect((await reader.read(f.path)).isEmpty, isTrue);
+    });
   });
 
   group('ChaptersSkipProvider.canAnswer', () {

@@ -4,11 +4,17 @@ import 'models/skip_range.dart';
 ///
 /// Containers store chapter STARTS; a chapter's end is the next one's start,
 /// and the last one ends at the file's duration. [ChapterSpan] is the resolved
-/// form after that arithmetic.
+/// form after that arithmetic. Matroska MAY also state an explicit end
+/// (`ChapterTimeEnd`); when it does, [end] carries it and wins over the
+/// next-start rule — a chapter that ends before the next begins is a gap the
+/// author meant.
 class ChapterMark {
-  const ChapterMark({required this.start, this.title});
+  const ChapterMark({required this.start, this.end, this.title});
 
   final Duration start;
+
+  /// The container's own end for this chapter, when it states one.
+  final Duration? end;
 
   /// Almost always empty in practice — across a 285-file library only THREE
   /// chapters carried one — which is why OP/ED is inferred from duration
@@ -45,7 +51,9 @@ List<ChapterSpan> chapterSpans(List<ChapterMark> marks, Duration duration) {
   final spans = <ChapterSpan>[];
   for (var i = 0; i < sorted.length; i++) {
     final start = sorted[i].start;
-    final end = i + 1 < sorted.length ? sorted[i + 1].start : duration;
+    final end =
+        sorted[i].end ??
+        (i + 1 < sorted.length ? sorted[i + 1].start : duration);
     if (end > start) spans.add(ChapterSpan(start, end));
   }
   return spans;

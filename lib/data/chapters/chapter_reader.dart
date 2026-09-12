@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -75,25 +76,39 @@ class ChapterReader {
   static const int _idTimecodeScale = 0x2AD7B1;
   static const int _idDuration = 0x4489;
   static const int _idEditionEntry = 0x45B9;
+  static const int _idEditionFlagDefault = 0x45DB;
   static const int _idChapterAtom = 0xB6;
   static const int _idChapterTimeStart = 0x91;
+  static const int _idChapterTimeEnd = 0x92;
+  static const int _idChapterFlagHidden = 0x98;
   static const int _idChapterString = 0x85;
   static const int _idChapterDisplay = 0x80;
+
+  /// The most a header element we READ INTO MEMORY may claim to be. Chapters
+  /// and Info are kilobytes; a size field beyond this is a corrupt or hostile
+  /// file, and `f.read(size)` would otherwise try to allocate whatever it
+  /// said — up to exabytes for an unknown-size marker — as an
+  /// `OutOfMemoryError`, which is an Error and so escaped the catch below.
+  static const int _maxHeaderElement = 16 << 20;
 
   Future<FileChapters> _readMatroska(RandomAccessFile f, int length) async {
     // EBML header, then the Segment whose children we want.
     await f.setPosition(0);
     if (await _readElementId(f) == null) return FileChapters.none;
     final headerSize = await _readVint(f);
-    if (headerSize == null) return FileChapters.none;
-    await f.setPosition(await f.position() + headerSize);
+    if (headerSize == null || headerSize.unknown) return FileChapters.none;
+    await f.setPosition(await f.position() + headerSize.value);
 
     if (await _readElementId(f) != _idSegment) return FileChapters.none;
     final segmentSize = await _readVint(f);
+    if (segmentSize == null) return FileChapters.none;
     final segmentStart = await f.position();
-    final segmentEnd = segmentSize == null || segmentSize == 0
+    // An unknown-size Segment is legal (a live-captured file); it simply runs
+    // to the end of the file. A declared size past the end is clamped.
+    final declaredEnd = segmentSize.unknown || segmentSize.value == 0
         ? length
-        : segmentStart + segmentSize;
+        : segmentStart + segmentSize.value;
+    final segmentEnd = declaredEnd > length ? length : declaredEnd;
 
     Uint8List? chapters;
     Uint8List? info;
@@ -103,21 +118,28 @@ class ChapterReader {
       final id = await _readElementId(f);
       if (id == null) break;
       final size = await _readVint(f);
-      if (size == null) break;
+      // An unknown-size CHILD cannot be skipped over (its end is wherever the
+      // next top-level id happens to be), so the walk stops here.
+      if (size == null || size.unknown) break;
       final body = await f.position();
-      if (id == _idChapters) {
+      if (id == _idChapters || id == _idInfo) {
+        if (size.value > _maxHeaderElement || body + size.value > segmentEnd) {
+          return FileChapters.none; // corrupt size: refuse rather than guess
+        }
         await f.setPosition(body);
-        chapters = await f.read(size);
-      } else if (id == _idInfo) {
-        await f.setPosition(body);
-        info = await f.read(size);
+        final data = await f.read(size.value);
+        if (id == _idChapters) {
+          chapters = data;
+        } else {
+          info = data;
+        }
       } else if (id == _idCluster) {
         // Media payload starts here; everything we want precedes it. (A file
         // that puts Chapters after the clusters is legal but vanishingly rare,
         // and walking megabytes of media to find out is not worth it.)
         break;
       }
-      final next = body + size;
+      final next = body + size.value;
       if (next <= offset) break; // zero-length Void etc. — never loop forever
       offset = next;
     }
@@ -129,49 +151,90 @@ class ChapterReader {
       if (child.id == _idTimecodeScale) scale = _ebmlUint(child.data);
       if (child.id == _idDuration) durationTicks = _ebmlFloat(child.data);
     }
+    // No Duration means the last chapter cannot be closed, and no caller has
+    // a duration to lend (the fill path never opens the container itself), so
+    // the file yields nothing rather than a guess.
     if (durationTicks == null) return FileChapters.none;
     final duration = Duration(
       microseconds: (durationTicks * scale / 1000).round(),
     );
 
-    final marks = <ChapterMark>[];
+    return FileChapters(
+      marks: _marksOf(_pickEdition(chapters)),
+      duration: duration,
+    );
+  }
+
+  /// ONE edition's chapters. A file can carry several (an ordered "director's
+  /// cut" edition beside the plain one), and reading them all interleaved two
+  /// timelines into one list. The edition flagged default wins; otherwise the
+  /// first — which is what a player shows.
+  static Uint8List? _pickEdition(Uint8List chapters) {
+    Uint8List? first;
     for (final edition in _ebmlChildren(chapters)) {
       if (edition.id != _idEditionEntry) continue;
-      for (final atom in _ebmlChildren(edition.data)) {
-        if (atom.id != _idChapterAtom) continue;
-        int? startNs;
-        String? title;
-        for (final field in _ebmlChildren(atom.data)) {
-          if (field.id == _idChapterTimeStart) {
-            // Spec: ChapterTimeStart is nanoseconds and is NOT scaled.
-            startNs = _ebmlUint(field.data);
-          } else if (field.id == _idChapterDisplay) {
-            for (final display in _ebmlChildren(field.data)) {
-              if (display.id == _idChapterString) {
-                title = String.fromCharCodes(display.data);
-              }
-            }
-          }
-        }
-        if (startNs != null) {
-          marks.add(
-            ChapterMark(
-              start: Duration(microseconds: startNs ~/ 1000),
-              title: (title?.isEmpty ?? true) ? null : title,
-            ),
-          );
+      first ??= edition.data;
+      for (final field in _ebmlChildren(edition.data)) {
+        if (field.id == _idEditionFlagDefault && _ebmlUint(field.data) == 1) {
+          return edition.data;
         }
       }
     }
-    return FileChapters(marks: marks, duration: duration);
+    return first;
   }
 
-  Future<int?> _readElementId(RandomAccessFile f) =>
-      _readVint(f, keepMarker: true);
+  static List<ChapterMark> _marksOf(Uint8List? edition) {
+    if (edition == null) return const [];
+    final marks = <ChapterMark>[];
+    for (final atom in _ebmlChildren(edition)) {
+      if (atom.id != _idChapterAtom) continue;
+      int? startNs;
+      int? endNs;
+      var hidden = false;
+      String? title;
+      for (final field in _ebmlChildren(atom.data)) {
+        switch (field.id) {
+          // Spec: ChapterTimeStart/End are nanoseconds and are NOT scaled.
+          case _idChapterTimeStart:
+            startNs = _ebmlUint(field.data);
+          case _idChapterTimeEnd:
+            endNs = _ebmlUint(field.data);
+          case _idChapterFlagHidden:
+            hidden = _ebmlUint(field.data) == 1;
+          case _idChapterDisplay:
+            for (final display in _ebmlChildren(field.data)) {
+              if (display.id == _idChapterString) {
+                // UTF-8 by spec; `String.fromCharCodes` read the bytes as
+                // Latin-1 and mojibaked every non-ASCII title.
+                title = utf8.decode(display.data, allowMalformed: true);
+              }
+            }
+        }
+      }
+      // A hidden chapter is one the author does not want shown or navigated
+      // to; it is not a boundary a viewer would skip to either.
+      if (startNs == null || hidden) continue;
+      marks.add(
+        ChapterMark(
+          start: Duration(microseconds: startNs ~/ 1000),
+          end: endNs == null ? null : Duration(microseconds: endNs ~/ 1000),
+          title: (title?.isEmpty ?? true) ? null : title,
+        ),
+      );
+    }
+    return marks;
+  }
+
+  Future<int?> _readElementId(RandomAccessFile f) async =>
+      (await _readVint(f, keepMarker: true))?.value;
 
   /// EBML variable-length integer. [keepMarker] keeps the length bits, which is
-  /// how element IDs are conventionally written.
-  Future<int?> _readVint(RandomAccessFile f, {bool keepMarker = false}) async {
+  /// how element IDs are conventionally written. `unknown` is the all-ones
+  /// value the spec reserves for "size not known".
+  Future<({int value, bool unknown})?> _readVint(
+    RandomAccessFile f, {
+    bool keepMarker = false,
+  }) async {
     final first = await f.read(1);
     if (first.isEmpty || first[0] == 0) return null;
     var mask = 0x80;
@@ -182,14 +245,16 @@ class ChapterReader {
       if (width > 8) return null;
     }
     var value = keepMarker ? first[0] : first[0] & (mask - 1);
+    var allOnes = (first[0] & (mask - 1)) == mask - 1;
     if (width > 1) {
       final rest = await f.read(width - 1);
       if (rest.length != width - 1) return null;
       for (final byte in rest) {
         value = (value << 8) | byte;
+        if (byte != 0xFF) allOnes = false;
       }
     }
-    return value;
+    return (value: value, unknown: !keepMarker && allOnes);
   }
 
   /// Children of an EBML master element already held in memory.
@@ -204,9 +269,8 @@ class ChapterReader {
       if (size == null) break;
       i += size.width;
       final end = i + size.value;
-      if (end > buffer.length) break;
+      if (end > buffer.length) break; // truncated: keep what parsed so far
       out.add((id: id.value, data: Uint8List.sublistView(buffer, i, end)));
-      if (end <= i && size.value != 0) break;
       i = end;
     }
     return out;
@@ -312,8 +376,10 @@ class ChapterReader {
       final titleLength = b[i];
       i += 1;
       if (i + titleLength > b.length) break;
-      final title = String.fromCharCodes(
+      // UTF-8 by spec (Nero writes it so); Latin-1 mojibaked non-ASCII.
+      final title = utf8.decode(
         Uint8List.sublistView(b, i, i + titleLength),
+        allowMalformed: true,
       );
       i += titleLength;
       marks.add(
@@ -349,7 +415,9 @@ class ChapterReader {
       } else if (size == 0) {
         size = limit - offset; // "to end of file"
       }
-      if (size < headerSize) return null;
+      // A bad atom ends THIS level's walk; it does not abandon the file. One
+      // corrupt atom before `moov` used to lose every chapter.
+      if (size < headerSize) break;
       final name = String.fromCharCodes(header.sublist(4, 8));
       if (name == path.first) {
         final body = offset + headerSize;

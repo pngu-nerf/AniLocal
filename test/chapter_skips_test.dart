@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 ChapterMark _at(int seconds) => ChapterMark(start: Duration(seconds: seconds));
 
 void main() {
+  _explicitEnd();
   const episode = Duration(minutes: 24); // 1440s
 
   test('an opening at the very start is found', () {
@@ -163,5 +164,16 @@ void main() {
   test('a single mark yields nothing on its own', () {
     // One mark plus the duration is one span covering the whole episode.
     expect(inferSkipsFromChapters([_at(0)], episode), isNull);
+  });
+}
+
+void _explicitEnd() {
+  test('an explicit ChapterTimeEnd wins over the next start', () {
+    final spans = chapterSpans(const [
+      ChapterMark(start: Duration.zero, end: Duration(seconds: 80)),
+      ChapterMark(start: Duration(seconds: 90)),
+    ], const Duration(minutes: 24));
+    expect(spans.first.end, const Duration(seconds: 80));
+    expect(spans.last.end, const Duration(minutes: 24));
   });
 }
