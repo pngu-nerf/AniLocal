@@ -359,6 +359,55 @@ class UpNextControl extends StatelessWidget {
   }
 }
 
+/// What a failed open looks like: a headline in the panel's error colour and
+/// the engine's own line under it, over the frame that stayed black. Renders
+/// nothing while playback is healthy. The engine's text is shown because a
+/// viewer needs to know WHICH file libmpv refused — that line names it — and
+/// the same text is in the diagnostics ring for a report.
+class PlaybackErrorNotice extends StatelessWidget {
+  const PlaybackErrorNotice({super.key, required this.state});
+
+  final ValueListenable<PlayerControlsState> state;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<PlayerControlsState>(
+      valueListenable: state,
+      builder: (context, s, _) {
+        final message = s.errorMessage;
+        if (message == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.all(Xp.spaceXl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Couldn’t play this episode',
+                style: TextStyle(
+                  color: Xp.error,
+                  fontSize: Xp.fontSizeTitle,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: Xp.spaceS),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Xp.textDim,
+                  fontSize: Xp.fontSizeCaption,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// The centered EP readout — "EP 12" in dot matrix, the panel's one piece of
 /// pure information.
 ///

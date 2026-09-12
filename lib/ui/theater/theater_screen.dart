@@ -85,6 +85,9 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   /// us (green traffic light, Ctrl-Cmd-F).
   bool _fullscreen = false;
 
+  /// Bumped when Settings closes over the player — see VideoZone.settingsRevision.
+  int _settingsRevision = 0;
+
   @override
   void initState() {
     super.initState();
@@ -189,7 +192,12 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   /// scan and no network.)
   Future<void> _openSettings() async {
     await widget.onSettings();
-    if (mounted) unawaited(_loadEpisodes());
+    if (!mounted) return;
+    // The PLAYING episode re-reads its settings too (skip mode, auto-play,
+    // watched threshold) — they were read once per episode, so a change made
+    // from inside the player used to apply only to the next one.
+    setState(() => _settingsRevision++);
+    unawaited(_loadEpisodes());
   }
 
   @override
@@ -222,6 +230,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
         settings: widget.services.settings,
         fullscreen: _fullscreen,
         onToggleFullscreen: _toggleFullscreen,
+        settingsRevision: _settingsRevision,
         onEpisodeChanged: _onAdvanced,
       ),
       TheaterZone.seriesInfo: SeriesInfoZone(

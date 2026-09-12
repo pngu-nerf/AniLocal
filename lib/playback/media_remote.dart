@@ -23,8 +23,8 @@ class MediaRemote {
     required VoidCallback onPause,
     required VoidCallback onTogglePlayPause,
     required VoidCallback onNext,
-  }) {
-    if (!Platform.isMacOS) return;
+  }) : _active = Platform.isMacOS {
+    if (!_active) return;
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'play':
@@ -40,7 +40,13 @@ class MediaRemote {
     });
   }
 
+  /// A remote that talks to nothing — for the playback session's tests, which
+  /// run on a Mac but have no native side to answer the channel.
+  MediaRemote.silent() : _active = false;
+
   static const MethodChannel _channel = MethodChannel('anilocal/media_remote');
+
+  final bool _active;
 
   /// Publish the current playback state to the system now-playing center so the
   /// OS treats this app as the active media source (the precondition for it to
@@ -51,7 +57,7 @@ class MediaRemote {
     required Duration position,
     required bool playing,
   }) {
-    if (!Platform.isMacOS) return Future<void>.value();
+    if (!_active) return Future<void>.value();
     return _channel.invokeMethod<void>('updateNowPlaying', <String, Object>{
       'title': title,
       'durationMs': duration.inMilliseconds,
@@ -62,7 +68,7 @@ class MediaRemote {
 
   /// Relinquish now-playing status and stop receiving commands. Call on dispose.
   void dispose() {
-    if (!Platform.isMacOS) return;
+    if (!_active) return;
     _channel.setMethodCallHandler(null);
     unawaited(_channel.invokeMethod<void>('clear'));
   }

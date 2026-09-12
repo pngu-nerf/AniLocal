@@ -14,7 +14,7 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] **No window frame anywhere** — every screen is edge-to-edge on the chassis: no blue border, no rounded-top clip, no inset. Entering/leaving the player must therefore produce NO horizontal shift (there is no frame-width delta left to cause one). Content is clipped by the macOS window's own rounded corners.
 - [ ] **Fullscreen hides the header everywhere** (not just in the player), driven straight from the window's fullscreen signal.
 - [ ] **Fullscreen only ENGAGES in the player.** On the library/detail/Unmatched/Fix-match pages the green button and `Cmd-Ctrl-F` must NOT go fullscreen — they zoom the window instead, traffic lights intact. Entering fullscreen there would hide the header AND the traffic lights, leaving no way out.
-- [ ] **Escape always exits fullscreen, from any page** — the app-wide backstop, not the player's shortcut. Verify it works with nothing focused. Escape must NOT be swallowed when not fullscreen.
+- [ ] **Escape always exits fullscreen, from any page** — the app-wide backstop, not the player's shortcut. Verify it works with nothing focused. Escape must NOT be swallowed when not fullscreen. (Suspected: a dialog over a fullscreen theater loses its Escape to the backstop — UNREPRODUCED, so the backstop is deliberately unchanged; reproduce "fullscreen, nothing focused, dialog open, Escape" before narrowing it.)
 - [ ] **Leaving the player while fullscreen exits fullscreen** (the runner force-exits when the player withdraws permission), so a popped player can't strand the window.
 - [ ] **Toggling fullscreen mid-playback does not restart playback** — no blink, no resume jump, no post-toggle shift. The header slot collapses to zero height rather than being removed, so the Navigator (and `VideoZone` inside it) is never re-parented. This is the acceptance criterion for the player joining the shared header.
 - [ ] Back button clears the macOS traffic lights and pops back to detail.
@@ -22,8 +22,9 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] Video "stage" background stays true/near-black behind letterboxing — reads as theater, not a gap.
 
 ## B. Visible elements
-**Video zone** (`video_zone.dart`)
+**Video zone** (`video_zone.dart`, behaviour in `playback_session.dart`)
 - [ ] Video renders via media_kit `Video` — **no tint/effect/overlay on the texture**.
+- [ ] **A file that cannot be opened says so** — "Couldn't play this episode" with mpv's line under it, centred over the frame; the line is also in Copy diagnostics. Never a silent black frame.
 - [ ] Controls overlay drawn by media_kit's `Video(controls:)` builder (same builder windowed **and** fullscreen).
 
 **Series-info zone** (`series_info_zone.dart`)
@@ -87,11 +88,13 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] **Wake-on-move on `Listener.onPointerHover`, not the MouseRegion** (a `MouseRegion` with `cursor:none` stops firing its own `onHover`).
 - [ ] **Cursor-hide scoped to the video overlay only** — the rail and series-info keep their cursors.
 - [ ] **Media-remote** (AirPods/media keys/Bluetooth) route to the same `play`/`pause`/`playOrPause`/next paths; `updateNowPlaying` current; `dispose()` relinquishes.
-- [ ] **Auto-skip** (off/button/auto; auto seeks once per window; outro seeks within the episode, never advances; outro button hidden during the up-next pre-roll).
+- [ ] **Auto-skip** (off/button/auto; auto seeks once per window; outro seeks within the episode — landing 750ms short of the end, so the seek itself can never complete the episode; outro button hidden during the up-next pre-roll). In **off**, the timeline shades no markers either.
+- [ ] **Resume point survives a rail tap in auto mode** with an intro at 0:00 — the position-zero event `open()` reports before the resume seek must not fire the skip (`PlaybackSession._awaitingStart`; pinned by `playback_session_test`).
+- [ ] **Settings changed over the player apply to the PLAYING episode** — change skip mode / auto-play / threshold from the player's ⚙, close, and the current episode behaves accordingly (`VideoZone.settingsRevision`).
 - [ ] **Confidence gate** — a **conflicting** window (two sources whose windows overlap less than `kSkipCorroborationMinOverlap` = 60%, judged on read when cross-checking is on) still shows its Skip button but **never fires on its own**, in auto mode. Skipping into real content is what a viewer cannot undo; an unoffered skip is a keypress. Corroborated and single windows auto-skip normally.
 - [ ] **Minimum skip length** — with Settings → Skip → "Ignore skips shorter than" set, a window below the floor shows **no button, no marker, no auto-skip**, consistently in the player, the timeline strip and the detail page (it is filtered on the READ path, so no rescan is needed and the change is immediate).
-- [ ] **Up-next / auto-advance** (pre-roll last ~5s, countdown, cancelable; completion advances when enabled & not cancelled; season boundary stops cleanly; single `advanceToNext()`).
-- [ ] **Resume position** (`open(startAt: resumePosition)`; persists on 5s timer / episode switch / dispose; skips saving once watched or at zero; watched once within the watched-threshold of the end — default 90s, Settings → Playback).
+- [ ] **Up-next / auto-advance** (pre-roll last ~5s, countdown, cancelable; completion advances when enabled & not cancelled; season boundary stops cleanly; single `advanceToNext()`, which joins an advance already in flight — the countdown, the completion event, a media-remote "next" and a held → cannot open the same episode twice or skip one). **Holding → at the end advances ONCE**: key repeats are swallowed at the end, not turned into advances.
+- [ ] **Resume position** (`open(startAt: resumePosition)`; persists on a 1s tick ONLY when the position moved, on pause, 250ms after a paused scrub settles, on episode switch / dispose / app-inactive; skips saving once watched or at zero; watched once within the watched-threshold of the end — default 90s, Settings → Playback). **A manually-unwatched episode keeps saving progress** past the threshold — the auto mark reports that it did not apply.
 - [ ] **Swap-in-place** (`ValueKey(widget.series.seriesId)`, in `theater_screen.dart`) — episodes swap on the same controller; a different series gets a fresh frame.
 - [ ] **Bar surface fades WITH the controls** — the solid VFD panel is inside the same `AnimatedOpacity` (200ms) + `IgnorePointer` as the bar, so idle-while-playing clears panel *and* controls and the picture is left pristine. It must never become a permanent strip over the video.
 

@@ -466,18 +466,19 @@ class DriftLibraryRepository
   }
 
   @override
-  Future<void> setWatched(Episode episode, {required bool watched}) async {
+  Future<bool> setWatched(Episode episode, {required bool watched}) async {
     // The AUTO / threshold path. A MANUAL override wins: the statement's WHERE
     // leaves a row the user set by hand untouched (the sticky watched-override
-    // is sacred user data). Marking watched clears resume so it leaves
-    // "Continue watching".
-    await _db.setWatchedAutoRow(
+    // is sacred user data), and the row count says so to the caller. Marking
+    // watched clears resume so it leaves "Continue watching".
+    final changed = await _db.setWatchedAutoRow(
       seriesId: episode.seriesId,
       episode: episode.anchoredNumber,
       watched: watched,
       durationMs: episode.duration.inMilliseconds,
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
+    return changed > 0;
   }
 
   @override

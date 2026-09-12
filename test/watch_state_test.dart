@@ -186,10 +186,16 @@ void main() {
     await touch('Cowboy Bebop - 03.mkv', 800);
     await sync.sync([dir.path]);
 
+    expect(
+      await repo.setWatched(await episode(1, 3), watched: false),
+      isTrue,
+      reason: 'an untouched episode takes the auto path',
+    );
     // User manually marks UNWATCHED…
     await repo.setWatchedManual(await episode(1, 3), watched: false);
-    // …then the threshold tries to auto-mark watched — must be a no-op.
-    await repo.setWatched(await episode(1, 3), watched: true);
+    // …then the threshold tries to auto-mark watched — must be a no-op, and
+    // must SAY so, so the player keeps saving progress for the episode.
+    expect(await repo.setWatched(await episode(1, 3), watched: true), isFalse);
     expect(
       (await episode(1, 3)).watched,
       isFalse,

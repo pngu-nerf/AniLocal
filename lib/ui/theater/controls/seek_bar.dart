@@ -40,17 +40,30 @@ class _SeekBarState extends State<SeekBar> {
   Duration _duration = Duration.zero;
   double? _dragFraction; // non-null while scrubbing
 
+  // The player is APP-LIFETIME; this bar is not. Unowned subscriptions here
+  // used to outlive every theater visit, each adding two permanent listeners
+  // that fired at position-event rate for the rest of the run.
+  StreamSubscription<Duration>? _posSub;
+  StreamSubscription<Duration>? _durSub;
+
   @override
   void initState() {
     super.initState();
     _position = widget.player.state.position;
     _duration = widget.player.state.duration;
-    widget.player.stream.position.listen((p) {
+    _posSub = widget.player.stream.position.listen((p) {
       if (mounted && _dragFraction == null) setState(() => _position = p);
     });
-    widget.player.stream.duration.listen((d) {
+    _durSub = widget.player.stream.duration.listen((d) {
       if (mounted) setState(() => _duration = d);
     });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_posSub?.cancel());
+    unawaited(_durSub?.cancel());
+    super.dispose();
   }
 
   double get _fraction {

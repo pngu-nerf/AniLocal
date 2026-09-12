@@ -15,8 +15,10 @@ abstract interface class WatchStateRepository {
   /// AUTO (threshold-derived) watched mark. Marking watched clears the resume
   /// position (a finished episode leaves "Continue watching"). RESPECTS a manual
   /// override: if the episode was set by [setWatchedManual], this is a no-op —
-  /// the manual value wins over the threshold.
-  Future<void> setWatched(Episode episode, {required bool watched});
+  /// the manual value wins over the threshold. Returns whether the mark was
+  /// APPLIED (false when a manual override held), so the player knows whether
+  /// to keep saving progress for the episode.
+  Future<bool> setWatched(Episode episode, {required bool watched});
 
   /// MANUAL, sticky watched-override (the per-episode toggle). Wins over the
   /// auto/threshold path and survives re-entry AND metadata refresh/rescan.

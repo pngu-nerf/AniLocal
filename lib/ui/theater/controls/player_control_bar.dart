@@ -9,6 +9,7 @@ import '../../theme/xp_tokens.dart';
 import 'control_bar_config.dart';
 import 'player_controls.dart';
 import 'player_controls_state.dart';
+import 'player_shortcuts.dart';
 import 'seek_bar.dart';
 
 /// THE control bar — one implementation, rendered in BOTH windowed and
@@ -35,14 +36,14 @@ class PlayerControlBar extends StatelessWidget {
 
   Widget _control(PlayerControl c, {bool compact = false}) => switch (c) {
     PlayerControl.playPause => PlayPauseButton(player: player),
-    // The seek bar reads the current episode's cached skip windows so it can
-    // shade the OP/ED regions on the real timeline.
+    // The seek bar shades the current episode's cached skip windows on the
+    // real timeline — none when skipping is off (see the state's getters).
     PlayerControl.seekBar => ValueListenableBuilder<PlayerControlsState>(
       valueListenable: state,
       builder: (context, s, _) => SeekBar(
         player: player,
-        introSkip: s.episode?.introSkip,
-        outroSkip: s.episode?.outroSkip,
+        introSkip: s.introMarker,
+        outroSkip: s.outroMarker,
       ),
     ),
     PlayerControl.timeLabel => TimeLabel(player: player),
@@ -251,48 +252,53 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   /// Keyboard shortcuts, live in BOTH modes because this overlay renders in
-  /// both. They DELEGATE to the same paths the on-screen controls use — never a
-  /// parallel implementation: space → playOrPause; ←/→ → seek ±10s via the
-  /// shared [Player.seek] (the seek bar's primitive); ↑/↓ → volume. Seeking
-  /// PAST the end routes to [PlayerControlsActions.playNext] — i.e.
-  /// `PlaybackController.advanceToNext()`, the same advance the up-next pre-roll
-  /// and auto-advance use ("seek past end starts the next episode").
+  /// both. The key map is [playerShortcuts]; each action DELEGATES to the same
+  /// path the on-screen control uses — never a parallel implementation: space
+  /// → playOrPause; ←/→ → seek ±[kSeekStep] via the shared [Player.seek] (the
+  /// seek bar's primitive); ↑/↓ → volume. Seeking PAST the end routes to
+  /// [PlayerControlsActions.playNext] — i.e. `PlaybackController.advanceToNext()`,
+  /// the same advance the up-next pre-roll and auto-advance use ("seek past end
+  /// starts the next episode"). Escape is not here — see the key map's doc.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final key = event.logicalKey;
-    // NOTE: Escape is deliberately NOT handled here any more. It exits
-    // fullscreen from ONE place — the app-wide backstop in `AppShell`, which
-    // runs before focus dispatch and therefore works even when nothing is
-    // focused (the state this player has historically fallen into). Handling it
-    // here as well would be dead code that looks load-bearing.
+    final shortcut = playerShortcuts[event.logicalKey];
+    if (shortcut == null) return KeyEventResult.ignored;
+    final repeat = event is KeyRepeatEvent;
     final p = widget.player;
-    if (key == LogicalKeyboardKey.space) {
-      unawaited(p.playOrPause());
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      _seekRelative(const Duration(seconds: 10));
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
-      _seekRelative(const Duration(seconds: -10));
-    } else if (key == LogicalKeyboardKey.arrowUp) {
-      unawaited(p.setVolume((p.state.volume + 5).clamp(0.0, 100.0)));
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      unawaited(p.setVolume((p.state.volume - 5).clamp(0.0, 100.0)));
-    } else {
-      return KeyEventResult.ignored;
+    switch (shortcut) {
+      case PlayerShortcut.playPause:
+        unawaited(p.playOrPause());
+      case PlayerShortcut.seekForward:
+        _seekRelative(kSeekStep, repeat: repeat);
+      case PlayerShortcut.seekBack:
+        _seekRelative(-kSeekStep, repeat: repeat);
+      case PlayerShortcut.volumeUp:
+        unawaited(
+          p.setVolume((p.state.volume + kVolumeStep).clamp(0.0, 100.0)),
+        );
+      case PlayerShortcut.volumeDown:
+        unawaited(
+          p.setVolume((p.state.volume - kVolumeStep).clamp(0.0, 100.0)),
+        );
     }
     _show(); // surface the bar on any keyboard interaction
     return KeyEventResult.handled;
   }
 
-  void _seekRelative(Duration delta) {
+  void _seekRelative(Duration delta, {required bool repeat}) {
     final p = widget.player;
     final dur = p.state.duration;
     final target = p.state.position + delta;
     // Forward past the end → advance to the next episode (same action as the
-    // up-next countdown), not a clamp/no-op.
+    // up-next countdown), not a clamp/no-op. Only a PRESS advances: a held →
+    // repeats at the OS key-repeat rate, and each repeat would be another
+    // advance — an episode skipped by holding a key a moment too long. The
+    // repeat is swallowed (handled, no action) rather than seeking, so the
+    // held key stops at the end instead of bouncing.
     if (delta > Duration.zero && dur > Duration.zero && target >= dur) {
-      widget.actions.playNext();
+      if (!repeat) widget.actions.playNext();
       return;
     }
     final clamped = target < Duration.zero
@@ -363,6 +369,8 @@ class _PlayerControlsState extends State<PlayerControls> {
                   onTap: _togglePlay,
                 ),
               ),
+              // The engine's failure, over the frame it failed to fill.
+              Center(child: PlaybackErrorNotice(state: widget.state)),
               Align(
                 alignment: Alignment.bottomCenter,
                 child: AnimatedOpacity(

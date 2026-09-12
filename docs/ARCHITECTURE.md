@@ -69,7 +69,7 @@ program and what is parked: **`docs/multi-source-plan.md`**.
 | **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v20**; 11 tables + 2 indexes; migration comments narrate v2→v20) |
 | **Cache → domain mapping + all reads/writes** | `lib/data/cache/drift_library_repository.dart` (one class implements six of the interfaces — see below) |
 | **Settings** (auto-play, skip mode, watched threshold, layout fractions, the two source orders, the minimum skip length, cross-checking, …) | `lib/domain/repositories/settings_repository.dart` + `lib/data/cache/drift_settings_repository.dart` — ONE injected object |
-| **Watched / resume state** | `WatchStateRepository` (impl in `drift_library_repository.dart`); the single write path lives in the player's `video_zone.dart` |
+| **Watched / resume state** | `WatchStateRepository` (impl in `drift_library_repository.dart`); the single write path is the player's `PlaybackSession` (`lib/ui/theater/zones/playback_session.dart`) |
 | **Metadata sources** ("what is this show") | `lib/data/metadata/` — the `MetadataProvider` seam + one adapter per source. The composition root holds ONE ordered list, shared by scan and fix-match |
 | **AniList access** | `lib/data/anilist/` (GraphQL client + queries) — the ONLY place; reached solely by its adapter and `main.dart` |
 | **Series identity** | `lib/data/cache/series_identity.dart` — the three id bands. `series_id` is AniLocal's OWN surrogate; provider ids live in `series_external_ids`. `CacheDatabase.ensureSeriesId` is the sole minting site |
@@ -81,7 +81,7 @@ program and what is parked: **`docs/multi-source-plan.md`**.
 | **Source order + on/off** | `lib/domain/models/source_preference.dart` (`applySourceOrder` — THE ordering rule, shared by scan, fix-match and both settings panels) + `source_descriptor.dart` (what a row is, in either family) |
 | **Filename identification** | `lib/data/scanner/` (parser + matcher, behind an interface — swappable) |
 | **The scan/refresh pipeline** | `lib/sync/library_sync.dart` (`sync`, `refreshMetadata`); fix-match writes live in `lib/sync/fix_match_service.dart` |
-| **Playback engine** | `lib/playback/playback_controller.dart` (owns the media_kit `Player`), `media_remote.dart` |
+| **Playback engine** | `lib/playback/playback_controller.dart` (owns the media_kit `Player`, built with `player_configuration.dart`), `media_remote.dart`; the player's decisions are pure functions in `playback_rules.dart`, sequenced by `PlaybackSession` |
 | **The player UI** (video, controls, seek bar, rail) | `lib/ui/theater/` — `zones/` + `controls/`. ⚠️ see "Here be dragons" below |
 | **Screens** (home/library, detail, unmatched, fix-match, settings — folders live in Settings → Sources) | `lib/ui/` (+ `lib/ui/library/`) |
 | **The instrument look** (VFD "fine-instrument" theme, Technics SC-CH900) | `lib/ui/theme/` — tokens (`xp_tokens`), widgets (`xp_widgets`), theme (`xp_theme`), readouts (`vfd_readout`, `header_readout`), brand mark (`brand_wordmark`) |
@@ -153,8 +153,9 @@ at the code site with the exact crash/symptom):
   `TooltipDismissOnResize` (window-metrics). Fullscreen resizes the window with
   no route transition, so the observer alone no longer covers it.
 - **Overflow clamps** (`theater_layout.dart`) and **watched-marking guards**
-  (`video_zone.dart`: `_thresholdLoaded`, `_markedWatched`, the >2000ms
-  seek-vs-playback heuristic).
+  (`playback_session.dart`: `_thresholdLoaded`, `_markAttempted`; the
+  seek-vs-playback heuristic is `shouldMarkFromPlayback` in
+  `playback_rules.dart`, with its cadence assumption stated there).
 - **The fullscreen window's style mask** (`macos/Runner/MainFlutterWindow.swift`)
   — never assign it in the fullscreen toggle. Doing so rebuilds the window's
   frame view, the window loses key status, and Flutter stops receiving BOTH key

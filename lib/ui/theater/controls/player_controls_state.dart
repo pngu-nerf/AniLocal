@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/skip_mode.dart';
+import '../../../domain/models/skip_range.dart';
 
 /// The DOMAIN-side control state the bar needs that the media_kit player streams
 /// don't carry: which episode is playing, whether a skip affordance is live,
@@ -29,6 +30,7 @@ class PlayerControlsState {
     this.preRollShowing = false,
     this.preRollSeconds = 0,
     this.fullscreen = false,
+    this.errorMessage,
   });
 
   final Episode? episode;
@@ -47,6 +49,19 @@ class PlayerControlsState {
   /// STATE, not a route — see the class doc.
   final bool fullscreen;
 
+  /// The engine's last failure for THIS episode (a missing file, an unreadable
+  /// container, a codec libmpv lacks), or null while playback is healthy.
+  /// Cleared by the next open. Rendered over the frame so a failure is never a
+  /// silent black screen.
+  final String? errorMessage;
+
+  /// The skip windows the timeline shades. Nothing in [SkipMode.off]: a viewer
+  /// who turned skipping off asked not to be shown where the themes are.
+  SkipRange? get introMarker =>
+      skipMode == SkipMode.off ? null : episode?.introSkip;
+  SkipRange? get outroMarker =>
+      skipMode == SkipMode.off ? null : episode?.outroSkip;
+
   PlayerControlsState copyWith({
     Episode? episode,
     SkipMode? skipMode,
@@ -57,6 +72,8 @@ class PlayerControlsState {
     bool? preRollShowing,
     int? preRollSeconds,
     bool? fullscreen,
+    String? errorMessage,
+    bool clearError = false,
   }) => PlayerControlsState(
     episode: episode ?? this.episode,
     skipMode: skipMode ?? this.skipMode,
@@ -66,6 +83,7 @@ class PlayerControlsState {
     preRollShowing: preRollShowing ?? this.preRollShowing,
     preRollSeconds: preRollSeconds ?? this.preRollSeconds,
     fullscreen: fullscreen ?? this.fullscreen,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
   );
 }
 

@@ -81,7 +81,8 @@ class _MutableRepo
     required Duration duration,
   }) async {}
   @override
-  Future<void> setWatched(Episode episode, {required bool watched}) async {}
+  Future<bool> setWatched(Episode episode, {required bool watched}) async =>
+      true;
 
   @override
   Future<void> setWatchedManual(Episode e, {required bool watched}) async {}

@@ -1067,13 +1067,15 @@ class CacheDatabase extends _$CacheDatabase {
   /// The AUTO/threshold watched write: a no-op on a row the user set by hand
   /// (the WHERE), marking watched clears resume so the episode leaves
   /// "Continue watching", and an existing duration is kept.
-  Future<void> setWatchedAutoRow({
+  /// Returns the rows written: 1 when the mark applied, 0 when a manual
+  /// override held the row.
+  Future<int> setWatchedAutoRow({
     required int seriesId,
     required int episode,
     required bool watched,
     required int durationMs,
     required int updatedAtMs,
-  }) => customStatement(
+  }) => customUpdate(
     'INSERT INTO watch_state (series_id, episode, resume_position_ms, '
     'duration_ms, watched, watched_manual, updated_at_ms) '
     'VALUES (?, ?, 0, ?, ?, 0, ?) '
@@ -1083,7 +1085,15 @@ class CacheDatabase extends _$CacheDatabase {
     'ELSE watch_state.resume_position_ms END, '
     'updated_at_ms = excluded.updated_at_ms '
     'WHERE watch_state.watched_manual = 0',
-    [seriesId, episode, durationMs, watched ? 1 : 0, updatedAtMs],
+    variables: [
+      Variable<int>(seriesId),
+      Variable<int>(episode),
+      Variable<int>(durationMs),
+      Variable<int>(watched ? 1 : 0),
+      Variable<int>(updatedAtMs),
+    ],
+    updates: {watchStates},
+    updateKind: UpdateKind.insert,
   );
 
   /// The sticky MANUAL write: sets watched and marks it manual; resume and
