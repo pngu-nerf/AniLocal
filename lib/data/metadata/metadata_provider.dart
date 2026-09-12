@@ -1,5 +1,5 @@
-import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/series.dart';
+import '../source_exception.dart';
 
 /// Thrown when a provider cannot answer. Carries [failure] so the UI can say
 /// WHOSE end the fault is on (see `metadata_failure_message.dart`), and so the
@@ -9,17 +9,8 @@ import '../../domain/models/series.dart';
 /// Provider-agnostic on purpose: `LibrarySync` catches THIS, not any one
 /// provider's exception type, which is what lets a second provider be added
 /// without touching the fill path.
-class MetadataException implements Exception {
-  const MetadataException(
-    this.message, {
-    this.failure = MetadataFailure.service,
-  });
-
-  final String message;
-  final MetadataFailure failure;
-
-  @override
-  String toString() => 'MetadataException: $message';
+class MetadataException extends SourceException {
+  const MetadataException(super.message, {super.failure});
 }
 
 /// One source of "what is this show" — AniList, Kitsu, MyAnimeList, …

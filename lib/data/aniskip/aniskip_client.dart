@@ -1,29 +1,15 @@
-import 'dart:convert';
-
 import 'package:anilocal/data/anilist/anilist_client.dart' show AniListClient;
 import 'package:http/http.dart' as http;
 
-import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/skip_range.dart';
-import '../http_failure.dart';
-import '../user_agent.dart';
+import '../json_http.dart';
+import '../request_throttle.dart';
+import '../source_exception.dart';
 
 /// Thrown for an AniSkip request that failed transport-side (network / non-404
 /// HTTP). "No data" is NOT an exception — it returns null.
-class AniSkipException implements Exception {
-  const AniSkipException(
-    this.message, {
-    this.failure = MetadataFailure.service,
-  });
-
-  final String message;
-
-  /// Whose end the fault is on, so a skip failure is attributed the same way a
-  /// metadata one is. Defaults to [MetadataFailure.service] — never blame the
-  /// user's connection without evidence.
-  final MetadataFailure failure;
-  @override
-  String toString() => 'AniSkipException: $message';
+class AniSkipException extends SourceException {
+  const AniSkipException(super.message, {super.failure});
 }
 
 /// Read-only client for the AniSkip community API (verified v2:
@@ -33,12 +19,25 @@ class AniSkipException implements Exception {
 /// JSON to domain [EpisodeSkips], so no AniSkip shape leaks out. Used ONLY on
 /// the scan/fill path; playback reads skip data from the cache, never here.
 class AniSkipClient {
-  AniSkipClient({http.Client? httpClient, Uri? base})
+  AniSkipClient({http.Client? httpClient, Uri? base, Duration? minInterval})
     : _http = httpClient ?? http.Client(),
-      _base = base ?? Uri.parse('https://api.aniskip.com/v2');
+      _base = base ?? Uri.parse('https://api.aniskip.com/v2') {
+    _json = JsonHttp(
+      _http,
+      service: 'AniSkip',
+      fail: (m, {required failure}) => AniSkipException(m, failure: failure),
+      // AniSkip documents no limit. A scan asks once per episode, hundreds in
+      // a row for a new library; spacing them is courtesy to a volunteer
+      // service, not compliance, and 5/s is far above what a scan needs.
+      throttle: RequestThrottle(
+        minInterval ?? const Duration(milliseconds: 200),
+      ),
+    );
+  }
 
   final http.Client _http;
   final Uri _base;
+  late final JsonHttp _json;
 
   /// OP/ED windows for ([malId], [episode]). Returns null when AniSkip has no
   /// data (HTTP 404 / `found:false` / no op|ed) — a normal, common case.
@@ -56,52 +55,9 @@ class AniSkipClient {
       },
     );
 
-    final http.Response response;
-    try {
-      response = await _http.get(
-        uri,
-        headers: {
-          'Accept': 'application/json',
-          // A named UA — same reason as AniList: avoid edge/WAF blocks.
-          'User-Agent': aniLocalUserAgent,
-        },
-      );
-    } on Exception catch (e) {
-      throw AniSkipException(
-        'Network error contacting AniSkip: $e',
-        failure: MetadataFailure.connection,
-      );
-    }
-
-    if (response.statusCode == 404) return null; // no data for this episode
-    if (response.statusCode != 200) {
-      throw AniSkipException(
-        'AniSkip request failed: HTTP ${response.statusCode}.',
-        // Shared with every other client so they all attribute alike. AniSkip
-        // has no error envelope of its own, so a 4xx that isn't 404 reads as
-        // something in the network path.
-        failure: classifyHttpFailure(
-          response.statusCode,
-          carriesProviderError: false,
-        ),
-      );
-    }
-
-    final Object? decoded;
-    try {
-      // BYTES as UTF-8, never `.body`: with no charset in the content-type,
-      // package:http falls back to latin1 (the Kitsu mojibake trap).
-      decoded = jsonDecode(
-        utf8.decode(response.bodyBytes, allowMalformed: true),
-      );
-    } on FormatException catch (e) {
-      throw AniSkipException(
-        'Malformed AniSkip response: $e',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
-    if (decoded is! Map<String, dynamic>) return null;
-    if (decoded['found'] != true) return null;
+    // 404 is AniSkip's "no data for this episode" — a normal answer.
+    final decoded = await _json.getJsonOrNull(uri);
+    if (decoded == null) return null;
     final results = decoded['results'];
     if (results is! List) return null;
 

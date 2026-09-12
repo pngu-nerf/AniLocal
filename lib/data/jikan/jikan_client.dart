@@ -1,25 +1,16 @@
-import 'dart:convert';
-
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/external_ids.dart';
-import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/series_format.dart';
 import '../../domain/models/titles.dart';
-import '../http_failure.dart';
+import '../json_http.dart';
 import '../request_throttle.dart';
-import '../user_agent.dart';
+import '../source_exception.dart';
 
 /// Thrown for any Jikan request that doesn't yield a usable result.
-class JikanException implements Exception {
-  const JikanException(this.message, {this.failure = MetadataFailure.service});
-
-  final String message;
-  final MetadataFailure failure;
-
-  @override
-  String toString() => 'JikanException: $message';
+class JikanException extends SourceException {
+  const JikanException(super.message, {super.failure});
 }
 
 /// Read-only client for Jikan, the community proxy in front of MyAnimeList.
@@ -40,19 +31,23 @@ class JikanException implements Exception {
 class JikanClient {
   JikanClient({http.Client? httpClient, Uri? baseUrl, Duration? minInterval})
     : _http = httpClient ?? http.Client(),
-      _base = baseUrl ?? Uri.parse('https://api.jikan.moe/v4'),
-      _throttler = RequestThrottle(
+      _base = baseUrl ?? Uri.parse('https://api.jikan.moe/v4') {
+    _json = JsonHttp(
+      _http,
+      service: 'Jikan',
+      fail: (m, {required failure}) => JikanException(m, failure: failure),
+      // Jikan documents 3 requests/second. Requests are spaced by at least
+      // this much so a scan can't trip the limiter and turn a working source
+      // into a failing one. Injectable so tests don't sleep.
+      throttle: RequestThrottle(
         minInterval ?? const Duration(milliseconds: 350),
-      );
+      ),
+    );
+  }
 
   final http.Client _http;
   final Uri _base;
-
-  /// Jikan documents 3 requests/second. Requests are spaced by at least this
-  /// much so a scan can't trip the limiter and turn a working source into a
-  /// failing one. Injectable so tests don't sleep.
-
-  final RequestThrottle _throttler;
+  late final JsonHttp _json;
 
   /// Ranked-candidate search. Returns `[]` for a genuine no-match.
   Future<List<Series>> searchCandidates(
@@ -132,81 +127,21 @@ class JikanClient {
     return null;
   }
 
-  Future<Map<String, dynamic>> _get(
-    String path,
-    Map<String, String> query,
-  ) async {
-    await _throttle();
-
-    final http.Response response;
-    try {
-      response = await _http.get(
+  /// One GET through the shared scaffold, which also spaces the requests.
+  /// Jikan's characteristic failure is a 504 from its own gateway, which
+  /// classifies as `service` — their end, not the user's. That is the honest
+  /// attribution: MAL is usually fine underneath.
+  Future<Map<String, dynamic>> _get(String path, Map<String, String> query) =>
+      _json.getJson(
         _base.replace(
           pathSegments: [..._base.pathSegments, ...path.split('/')],
           queryParameters: query.isEmpty ? null : query,
         ),
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': aniLocalUserAgent,
-        },
+        errorTextOf: _errorText,
       );
-    } on Exception catch (e) {
-      throw JikanException(
-        'Network error contacting Jikan: $e',
-        failure: MetadataFailure.connection,
-      );
-    }
 
-    // Decode the BYTES as UTF-8: Jikan sends `application/json` with no
-    // charset, and Dart's http package falls back to latin1 in that case,
-    // which mojibakes every Japanese title. JSON is UTF-8 per RFC 8259.
-    final body = utf8.decode(response.bodyBytes, allowMalformed: true);
-
-    if (response.statusCode != 200) {
-      final detail = _errorText(body);
-      throw JikanException(
-        detail == null
-            ? 'Jikan request failed: HTTP ${response.statusCode}.'
-            : 'Jikan request failed: HTTP ${response.statusCode} — $detail',
-        // Jikan's characteristic failure is a 504 from its own gateway, which
-        // classifies as `service` — their end, not the user's. That is the
-        // honest attribution: MAL is usually fine underneath.
-        failure: classifyHttpFailure(
-          response.statusCode,
-          carriesProviderError: detail != null,
-        ),
-      );
-    }
-
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(body);
-    } on FormatException catch (e) {
-      throw JikanException(
-        'Malformed Jikan response: $e',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
-    if (decoded is! Map<String, dynamic>) {
-      throw const JikanException(
-        'Unexpected Jikan response shape.',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
-    return decoded;
-  }
-
-  /// Space requests out so a scan can't trip Jikan's 3/second limiter.
-  Future<void> _throttle() => _throttler.wait();
-
-  /// Jikan's error envelope, or null when the body isn't one.
   static String? _errorText(String body) {
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(body);
-    } on FormatException {
-      return null;
-    }
+    final decoded = JsonHttp.tryDecode(body);
     if (decoded is! Map<String, dynamic>) return null;
     return _string(decoded['message']) ?? _string(decoded['error']);
   }

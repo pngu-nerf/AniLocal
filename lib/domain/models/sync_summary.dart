@@ -16,6 +16,7 @@ class SyncSummary extends Equatable {
     this.lookupsBySource = const {},
     this.unreadableFolders = const [],
     this.apiFailure,
+    this.cancelled = false,
   });
 
   /// Total video files found on disk.
@@ -34,7 +35,7 @@ class SyncSummary extends Equatable {
   final int matched;
   final int unmatched;
 
-  /// Delta files whose lookup hit a transient AniList error this scan. They are
+  /// Delta files whose lookup hit a transient source error this scan. They are
   /// NOT dropped — a new file stays the pending placeholder written in phase 1
   /// (shown named in the library) and is retried next scan; an already-matched
   /// changed file keeps its existing match.
@@ -57,7 +58,7 @@ class SyncSummary extends Equatable {
   /// silently dropped.
   final List<String> unreadableFolders;
 
-  /// Set when every AniList lookup this scan failed — the API is unreachable,
+  /// Set when every metadata lookup this scan failed — the sources are unreachable,
   /// not "the content is gone". Like an unreadable folder, the cache is
   /// PRESERVED (no removals/prune) so a transient outage can't empty a
   /// populated library. Carries WHOSE end the fault is on so the UI can tell
@@ -65,9 +66,14 @@ class SyncSummary extends Equatable {
   /// failure.
   final MetadataFailure? apiFailure;
 
-  /// Whether AniList was unreachable this scan. Derived from [apiFailure] so
-  /// the flag and the reason can never disagree.
+  /// Whether every metadata lookup failed this scan. Derived from
+  /// [apiFailure] so the flag and the reason can never disagree.
   bool get apiUnreachable => apiFailure != null;
+
+  /// The user stopped the scan. Everything counted here was COMMITTED before
+  /// the stop; no removals were applied, and the titles not yet identified
+  /// remain pending placeholders that the next scan picks up.
+  final bool cancelled;
 
   @override
   List<Object?> get props => [
@@ -81,5 +87,6 @@ class SyncSummary extends Equatable {
     lookupsBySource,
     unreadableFolders,
     apiFailure,
+    cancelled,
   ];
 }

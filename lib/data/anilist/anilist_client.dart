@@ -1,30 +1,15 @@
-import 'dart:convert';
-
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/series.dart';
-import '../http_failure.dart';
-import '../user_agent.dart';
+import '../json_http.dart';
+import '../source_exception.dart';
 import 'anilist_mapper.dart';
 import 'anilist_queries.dart';
 
 /// Thrown for any AniList request that doesn't yield a usable result.
-class AniListException implements Exception {
-  const AniListException(
-    this.message, {
-    this.failure = MetadataFailure.service,
-  });
-
-  final String message;
-
-  /// Whose end the fault is on, for the UI to render. Defaults to
-  /// [MetadataFailure.service] because blaming the user's connection without
-  /// evidence is the worse error: it sends them to debug a working network.
-  final MetadataFailure failure;
-
-  @override
-  String toString() => 'AniListException: $message';
+class AniListException extends SourceException {
+  const AniListException(super.message, {super.failure});
 }
 
 /// Read-only client for AniList's public GraphQL API.
@@ -35,10 +20,17 @@ class AniListException implements Exception {
 class AniListClient {
   AniListClient({http.Client? httpClient, Uri? endpoint})
     : _http = httpClient ?? http.Client(),
-      _endpoint = endpoint ?? Uri.parse('https://graphql.anilist.co');
+      _endpoint = endpoint ?? Uri.parse('https://graphql.anilist.co') {
+    _json = JsonHttp(
+      _http,
+      service: 'AniList',
+      fail: (m, {required failure}) => AniListException(m, failure: failure),
+    );
+  }
 
   final http.Client _http;
   final Uri _endpoint;
+  late final JsonHttp _json;
 
   /// Search for up to [perPage] anime candidates by [title], for client-side
   /// ranking (Stage 3). [formatsIn] restricts formats; pass episodic formats to
@@ -109,72 +101,14 @@ class AniListClient {
     return result;
   }
 
-  /// Shared POST + error handling. Returns the decoded JSON body.
+  /// One POST through the shared scaffold; the GraphQL `errors` envelope on
+  /// a 200 is the only AniList-specific check left here.
   Future<Map<String, dynamic>> _post(Map<String, dynamic> body) async {
-    final http.Response response;
-    try {
-      response = await _http.post(
-        _endpoint,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          // Without this, AniList's Cloudflare returns HTTP 403.
-          'User-Agent': aniLocalUserAgent,
-        },
-        body: jsonEncode(body),
-      );
-    } on Exception catch (e) {
-      // No HTTP response at all: the request never reached AniList, so the
-      // fault is on this side of the wire.
-      throw AniListException(
-        'Network error contacting AniList: $e',
-        failure: MetadataFailure.connection,
-      );
-    }
-
-    // Decode the BYTES as UTF-8, never `response.body`. AniList sends
-    // `application/json` with no `charset`, and Dart's http package falls back
-    // to latin1 in that case. It happens to be harmless today because AniList
-    // \u-escapes non-ASCII, but relying on a server's escaping choice is a trap
-    // — Kitsu sends raw UTF-8 under the same header. JSON is UTF-8 by
-    // specification (RFC 8259).
-    final responseBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-
-    if (response.statusCode != 200) {
-      final detail = _graphQLErrorText(responseBody);
-      throw AniListException(
-        detail == null
-            ? 'AniList request failed: HTTP ${response.statusCode}.'
-            : 'AniList request failed: HTTP ${response.statusCode} — $detail',
-        // Today's "API temporarily disabled" 403 carries a GraphQL envelope,
-        // so it reads as AniList's end; the old Cloudflare UA block did not,
-        // and reads as the network path.
-        failure: classifyHttpFailure(
-          response.statusCode,
-          carriesProviderError: detail != null,
-        ),
-      );
-    }
-
-    // Guarded, not a cast: a 200 carrying HTML (an edge interstitial) would
-    // otherwise throw a bare FormatException that escapes every `on
-    // AniListException` handler upstream — aborting the whole scan and skipping
-    // the cache-preserving unreachable guard in LibrarySync.
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(responseBody);
-    } on FormatException catch (e) {
-      throw AniListException(
-        'Malformed AniList response: $e',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
-    if (decoded is! Map<String, dynamic>) {
-      throw const AniListException(
-        'Unexpected AniList response shape.',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
+    final decoded = await _json.postJson(
+      _endpoint,
+      body: body,
+      errorTextOf: _graphQLErrorText,
+    );
     if (decoded['errors'] != null) {
       throw AniListException('AniList GraphQL error: ${decoded['errors']}');
     }
@@ -185,12 +119,7 @@ class AniListClient {
   /// body isn't one. Doubles as the "did AniList write this?" test, so the
   /// classification and the message can never disagree about the body.
   static String? _graphQLErrorText(String body) {
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(body);
-    } on FormatException {
-      return null;
-    }
+    final decoded = JsonHttp.tryDecode(body);
     if (decoded is! Map<String, dynamic>) return null;
     final errors = decoded['errors'];
     if (errors is! List || errors.isEmpty) return null;

@@ -71,6 +71,47 @@ void main() {
     expect(map.malFor(290), 290);
   });
 
+  test('two concurrent loads share ONE fetch', () async {
+    var calls = 0;
+    final store = CrossMapStore(
+      httpClient: okClient(() => calls++),
+      directory: dirFn,
+    );
+    final maps = await Future.wait([store.load(), store.load()]);
+    expect(calls, 1, reason: 'the second caller joins the first load');
+    expect(maps.first.malFor(290), 290);
+    expect(maps.last.malFor(290), 290);
+  });
+
+  test(
+    'the in-memory copy expires with the same age as the disk one',
+    () async {
+      var calls = 0;
+      final store = CrossMapStore(
+        httpClient: okClient(() => calls++),
+        directory: dirFn,
+        maxAge: const Duration(days: 7),
+      );
+      final t0 = DateTime(2026, 1, 1);
+      await store.load(now: t0);
+      await store.load(now: t0.add(const Duration(days: 6)));
+      expect(calls, 1, reason: 'still fresh in memory');
+      await store.load(now: t0.add(const Duration(days: 8)));
+      expect(calls, 2, reason: 'a week-long session refetches once stale');
+    },
+  );
+
+  test(
+    'the cache file is written atomically — no .tmp is left behind',
+    () async {
+      final store = CrossMapStore(httpClient: okClient(null), directory: dirFn);
+      await store.load();
+      final names = dir.listSync().map((e) => e.uri.pathSegments.last).toList();
+      expect(names, contains('crossmap.json'));
+      expect(names.where((n) => n.endsWith('.tmp')), isEmpty);
+    },
+  );
+
   test('a stale cache is refetched', () async {
     var calls = 0;
     final seed = CrossMapStore(

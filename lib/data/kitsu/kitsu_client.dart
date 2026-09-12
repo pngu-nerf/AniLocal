@@ -1,24 +1,15 @@
-import 'dart:convert';
-
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/external_ids.dart';
-import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/series_format.dart';
 import '../../domain/models/titles.dart';
-import '../http_failure.dart';
-import '../user_agent.dart';
+import '../json_http.dart';
+import '../source_exception.dart';
 
 /// Thrown for any Kitsu request that doesn't yield a usable result.
-class KitsuException implements Exception {
-  const KitsuException(this.message, {this.failure = MetadataFailure.service});
-
-  final String message;
-  final MetadataFailure failure;
-
-  @override
-  String toString() => 'KitsuException: $message';
+class KitsuException extends SourceException {
+  const KitsuException(super.message, {super.failure});
 }
 
 /// Read-only client for Kitsu's public JSON:API.
@@ -36,10 +27,17 @@ class KitsuException implements Exception {
 class KitsuClient {
   KitsuClient({http.Client? httpClient, Uri? baseUrl})
     : _http = httpClient ?? http.Client(),
-      _base = baseUrl ?? Uri.parse('https://kitsu.io/api/edge');
+      _base = baseUrl ?? Uri.parse('https://kitsu.io/api/edge') {
+    _json = JsonHttp(
+      _http,
+      service: 'Kitsu',
+      fail: (m, {required failure}) => KitsuException(m, failure: failure),
+    );
+  }
 
   final http.Client _http;
   final Uri _base;
+  late final JsonHttp _json;
 
   /// Ranked-candidate search. Returns `[]` for a genuine no-match.
   Future<List<Series>> searchCandidates(String title, {int perPage = 10}) =>
@@ -182,65 +180,17 @@ class KitsuClient {
     return null;
   }
 
-  /// Shared GET + error handling. Returns the decoded JSON:API body.
+  /// One GET through the shared scaffold; the JSON:API `errors` envelope on
+  /// a 200 is the only Kitsu-specific check left here.
   Future<Map<String, dynamic>> _get(Map<String, String> query) async {
-    final http.Response response;
-    try {
-      response = await _http.get(
-        _base.replace(
-          pathSegments: [..._base.pathSegments, 'anime'],
-          queryParameters: query,
-        ),
-        headers: {
-          'Accept': 'application/vnd.api+json',
-          'User-Agent': aniLocalUserAgent,
-        },
-      );
-    } on Exception catch (e) {
-      // No HTTP response at all: the request never reached Kitsu.
-      throw KitsuException(
-        'Network error contacting Kitsu: $e',
-        failure: MetadataFailure.connection,
-      );
-    }
-
-    // Decode the BYTES as UTF-8, never `response.body`. Kitsu returns raw
-    // multi-byte UTF-8 with no `charset` in its content-type, and Dart's http
-    // package falls back to latin1 in that case — which turns every Japanese
-    // title into mojibake. JSON is UTF-8 by specification (RFC 8259), so this
-    // is correct regardless of what any server declares.
-    final body = utf8.decode(response.bodyBytes, allowMalformed: true);
-
-    if (response.statusCode != 200) {
-      final detail = _errorText(body);
-      throw KitsuException(
-        detail == null
-            ? 'Kitsu request failed: HTTP ${response.statusCode}.'
-            : 'Kitsu request failed: HTTP ${response.statusCode} — $detail',
-        failure: classifyHttpFailure(
-          response.statusCode,
-          carriesProviderError: detail != null,
-        ),
-      );
-    }
-
-    // Guarded, not a cast — a 200 carrying an edge interstitial must not throw
-    // a bare FormatException past every `on MetadataException` upstream.
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(body);
-    } on FormatException catch (e) {
-      throw KitsuException(
-        'Malformed Kitsu response: $e',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
-    if (decoded is! Map<String, dynamic>) {
-      throw const KitsuException(
-        'Unexpected Kitsu response shape.',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
+    final decoded = await _json.getJson(
+      _base.replace(
+        pathSegments: [..._base.pathSegments, 'anime'],
+        queryParameters: query,
+      ),
+      headers: const {'Accept': 'application/vnd.api+json'},
+      errorTextOf: _errorText,
+    );
     if (decoded['errors'] != null) {
       throw KitsuException('Kitsu API error: ${decoded['errors']}');
     }
@@ -250,12 +200,7 @@ class KitsuClient {
   /// Kitsu's own error text from a JSON:API error envelope, or null when the
   /// body isn't one. Doubles as the "did Kitsu write this?" test.
   static String? _errorText(String body) {
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(body);
-    } on FormatException {
-      return null;
-    }
+    final decoded = JsonHttp.tryDecode(body);
     if (decoded is! Map<String, dynamic>) return null;
     final errors = decoded['errors'];
     if (errors is! List || errors.isEmpty) return null;

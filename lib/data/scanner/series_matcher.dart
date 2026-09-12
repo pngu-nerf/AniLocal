@@ -51,11 +51,22 @@ class SeriesMatcher {
     );
   }
 
-  Future<MatchResult> match(String title) async {
+  /// Identify [title] through the chain.
+  ///
+  /// [providers] lets a caller that resolves the order ONCE per run pass it in
+  /// (a scan asks for hundreds of titles; re-reading the saved order from the
+  /// database for each would be hundreds of identical queries, and per-run is
+  /// as fresh as the rule needs — the order cannot change mid-scan from the
+  /// scan's own point of view). Omitted, it is read fresh, which is what
+  /// fix-match wants.
+  Future<MatchResult> match(
+    String title, {
+    List<MetadataProvider>? providers,
+  }) async {
     MetadataException? lastFailure;
     var tried = 0;
 
-    for (final provider in await activeProviders()) {
+    for (final provider in providers ?? await activeProviders()) {
       // Not a failure — a provider awaiting a client ID simply isn't available,
       // and must not count towards "everything is down".
       if (!await provider.isConfigured()) continue;

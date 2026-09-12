@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:anilocal/data/cache/art_cache.dart' show ArtCache;
 import 'package:http/http.dart' as http;
@@ -50,27 +51,45 @@ class CrossMapStore {
   static const int _formatVersion = 1;
 
   CrossMap? _memo;
+  DateTime? _memoAt;
+  Future<CrossMap>? _inFlight;
 
   /// The map, from memory, then disk, then the network — whichever answers
   /// first. Fresh disk cache means no network at all.
-  Future<CrossMap> load({DateTime? now}) async {
-    if (_memo != null) return _memo!;
-
+  ///
+  /// Two callers at once share ONE load (the AniSkip id backfill and Jikan's
+  /// id enrichment both reach for it from the same run), and the in-memory
+  /// copy expires on the same [maxAge] the disk cache does, so a session that
+  /// stays open for days does not keep serving a map that went stale.
+  Future<CrossMap> load({DateTime? now}) {
     final at = now ?? DateTime.now();
+    final memo = _memo;
+    final memoAt = _memoAt;
+    if (memo != null && memoAt != null && !_isStale(memoAt, at)) {
+      return Future.value(memo);
+    }
+    return _inFlight ??= _load(at).whenComplete(() => _inFlight = null);
+  }
+
+  Future<CrossMap> _load(DateTime at) async {
     final file = await _cacheFile();
     final cached = await _readCache(file);
     if (cached != null && !_isStale(cached.fetchedAt, at)) {
+      _memoAt = cached.fetchedAt;
       return _memo = cached.map;
     }
 
     final fetched = await _fetchAndDerive();
     if (fetched != null) {
       await _writeCache(file, fetched, at);
+      _memoAt = at;
       return _memo = fetched;
     }
 
     // Fetch failed. A STALE map still answers most lookups correctly and is
-    // strictly better than none — ids don't change, the list only grows.
+    // strictly better than none — ids don't change, the list only grows. Held
+    // for a full [maxAge] before retrying, so an outage is not hammered.
+    _memoAt = at;
     return _memo = cached?.map ?? CrossMap.empty;
   }
 
@@ -115,7 +134,11 @@ class CrossMapStore {
   Future<void> _writeCache(File file, CrossMap map, DateTime at) async {
     try {
       await file.parent.create(recursive: true);
-      await file.writeAsString(
+      // Write beside, then rename: a crash or a full disk mid-write leaves
+      // the previous cache intact instead of a truncated file (which degraded
+      // safely, but cost a 5.8MB refetch).
+      final tmp = File('${file.path}.tmp');
+      await tmp.writeAsString(
         jsonEncode({
           'v': _formatVersion,
           'fetchedAtMs': at.millisecondsSinceEpoch,
@@ -126,6 +149,7 @@ class CrossMapStore {
         }),
         flush: true,
       );
+      await tmp.rename(file.path);
     } on Exception catch (e) {
       // A cache we can't write just means we refetch next time. Not fatal.
       AppLog.warn('Cross-map: could not write cache', error: e);
@@ -154,18 +178,27 @@ class CrossMapStore {
     }
     if (response.statusCode != 200) return null;
 
+    // Decoding 5.8MB of JSON and reducing it is a few hundred milliseconds of
+    // pure CPU; on the main isolate that was a visible frame stall on the
+    // weekly refetch. It runs on its own isolate — the input is bytes and the
+    // output a plain map, both cheap to send across.
+    final entries = await Isolate.run(() => deriveEntries(response.bodyBytes));
+    return entries == null || entries.isEmpty ? null : CrossMap(entries);
+  }
+
+  /// Reduce the upstream list (as UTF-8 bytes) to the id pairs we read. Null
+  /// when the body is not JSON or not a list. Top-level so it can run on
+  /// another isolate; public so the derivation can be tested without a fetch.
+  static Map<int, CrossMapEntry>? deriveEntries(List<int> bytes) {
     final Object? decoded;
     try {
       // BYTES as UTF-8, never `.body` — same charset trap as every other
       // client, and for a 5.8MB body the latin1 detour was a memory cost too.
-      decoded = jsonDecode(
-        utf8.decode(response.bodyBytes, allowMalformed: true),
-      );
+      decoded = jsonDecode(utf8.decode(bytes, allowMalformed: true));
     } on FormatException {
       return null;
     }
     if (decoded is! List) return null;
-
     final entries = <int, CrossMapEntry>{};
     for (final row in decoded) {
       if (row is! Map<String, dynamic>) continue;
@@ -179,7 +212,7 @@ class CrossMapStore {
         kitsuId: kitsu is int ? kitsu : null,
       );
     }
-    return entries.isEmpty ? null : CrossMap(entries);
+    return entries;
   }
 
   void dispose() => _http.close();

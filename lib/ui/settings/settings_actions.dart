@@ -119,7 +119,8 @@ Future<void> refreshMetadata(
             ? SnackBar(
                 content: Text(
                   'Refreshed ${r.seriesRefreshed} series · '
-                  '${r.skipsFetched} skip sets fetched',
+                  '${r.skipsFetched} skip sets fetched'
+                  '${r.skipLookupsFailed > 0 ? ' · ${r.skipLookupsFailed} skip lookups failed, will retry' : ''}',
                 ),
               )
             : SnackBar(

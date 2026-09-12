@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/external_ids.dart';
@@ -8,18 +6,13 @@ import '../../domain/models/series.dart';
 import '../../domain/models/series_format.dart';
 import '../../domain/models/titles.dart';
 import '../http_failure.dart';
+import '../json_http.dart';
 import '../request_throttle.dart';
-import '../user_agent.dart';
+import '../source_exception.dart';
 
 /// Thrown for any MyAnimeList request that doesn't yield a usable result.
-class MalException implements Exception {
-  const MalException(this.message, {this.failure = MetadataFailure.service});
-
-  final String message;
-  final MetadataFailure failure;
-
-  @override
-  String toString() => 'MalException: $message';
+class MalException extends SourceException {
+  const MalException(super.message, {super.failure});
 }
 
 /// Read-only client for MyAnimeList's official API v2.
@@ -41,24 +34,28 @@ class MalClient {
     Uri? baseUrl,
     Duration? minInterval,
   }) : _http = httpClient ?? http.Client(),
-       _base = baseUrl ?? Uri.parse('https://api.myanimelist.net/v2'),
-       _throttler = RequestThrottle(
-         minInterval ?? const Duration(milliseconds: 1100),
-       );
+       _base = baseUrl ?? Uri.parse('https://api.myanimelist.net/v2') {
+    _json = JsonHttp(
+      _http,
+      service: 'MyAnimeList',
+      fail: (m, {required failure}) => MalException(m, failure: failure),
+      // MAL documents NO rate limit and returns no rate-limit headers, so
+      // there is nothing to back off from adaptively. ~1 req/s is the
+      // community's empirical guidance and the safest default; throttling
+      // shows up as a 403, which the docs list as "DoS detected".
+      throttle: RequestThrottle(
+        minInterval ?? const Duration(milliseconds: 1100),
+      ),
+    );
+  }
 
   final http.Client _http;
   final Uri _base;
+  late final JsonHttp _json;
 
   /// The user's client ID, read fresh per request so pasting one takes effect
   /// immediately and revoking it stops working immediately.
   final Future<String?> Function() loadClientId;
-
-  /// MAL documents NO rate limit and returns no rate-limit headers, so there is
-  /// nothing to back off from adaptively. ~1 req/s is the community's empirical
-  /// guidance and the safest default; throttling shows up as a 403, which the
-  /// docs list as "DoS detected".
-
-  final RequestThrottle _throttler;
 
   /// The fields MAL must be asked for explicitly — it returns only id, title
   /// and main_picture otherwise.
@@ -153,6 +150,9 @@ class MalClient {
     return _string(picture['large']) ?? _string(picture['medium']);
   }
 
+  /// One GET through the shared scaffold. The key is read fresh per request
+  /// so pasting one takes effect immediately and revoking it stops working
+  /// immediately; MAL's own error envelope decides the attribution.
   Future<Map<String, dynamic>> _get(
     String path,
     Map<String, String> query,
@@ -164,60 +164,15 @@ class MalClient {
         failure: MetadataFailure.unauthorized,
       );
     }
-    await _throttle();
-
-    final http.Response response;
-    try {
-      response = await _http.get(
-        _base.replace(
-          pathSegments: [..._base.pathSegments, ...path.split('/')],
-          queryParameters: query,
-        ),
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': aniLocalUserAgent,
-          'X-MAL-CLIENT-ID': clientId,
-        },
-      );
-    } on Exception catch (e) {
-      throw MalException(
-        'Network error contacting MyAnimeList: $e',
-        failure: MetadataFailure.connection,
-      );
-    }
-
-    // MAL does send `charset=UTF-8` and \u-escapes non-ASCII, so this is
-    // belt-and-braces rather than a fix — but decoding bytes is the habit that
-    // doesn't break when a server lies about its charset, as Kitsu does.
-    final body = utf8.decode(response.bodyBytes, allowMalformed: true);
-
-    if (response.statusCode != 200) {
-      final detail = _errorMessage(body);
-      throw MalException(
-        detail == null
-            ? 'MyAnimeList request failed: HTTP ${response.statusCode}.'
-            : 'MyAnimeList request failed: '
-                  'HTTP ${response.statusCode} — $detail',
-        failure: _classify(response.statusCode, body),
-      );
-    }
-
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(body);
-    } on FormatException catch (e) {
-      throw MalException(
-        'Malformed MyAnimeList response: $e',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
-    if (decoded is! Map<String, dynamic>) {
-      throw const MalException(
-        'Unexpected MyAnimeList response shape.',
-        failure: MetadataFailure.malformedResponse,
-      );
-    }
-    return decoded;
+    return _json.getJson(
+      _base.replace(
+        pathSegments: [..._base.pathSegments, ...path.split('/')],
+        queryParameters: query,
+      ),
+      headers: {'X-MAL-CLIENT-ID': clientId},
+      errorTextOf: _errorMessage,
+      classify: _classify,
+    );
   }
 
   /// Attribute a MAL failure, which needs more than the status code.
@@ -243,20 +198,13 @@ class MalClient {
     return classifyHttpFailure(status, carriesProviderError: code.isNotEmpty);
   }
 
-  Future<void> _throttle() => _throttler.wait();
-
   static String? _errorMessage(String body) => _envelope(body)?['message'];
   static String? _errorCode(String body) => _envelope(body)?['error'];
 
   /// MAL's error envelope is `{"error": "...", "message": "..."}`; `message`
   /// can be the empty string, so callers must tolerate a blank.
   static Map<String, String>? _envelope(String body) {
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(body);
-    } on FormatException {
-      return null;
-    }
+    final decoded = JsonHttp.tryDecode(body);
     if (decoded is! Map<String, dynamic>) return null;
     final error = decoded['error'];
     final message = decoded['message'];

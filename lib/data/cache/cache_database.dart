@@ -1069,6 +1069,17 @@ class CacheDatabase extends _$CacheDatabase {
   Future<void> upsertSkipAnswer(SkipSourceAnswerRow row) =>
       into(skipSourceAnswers).insertOnConflictUpdate(row);
 
+  /// One transaction for a batch of answers (a refresh writes them per
+  /// episode; hundreds of autocommits was hundreds of fsyncs).
+  Future<void> upsertSkipAnswers(List<SkipSourceAnswerRow> rows) {
+    if (rows.isEmpty) return Future.value();
+    return transaction(() async {
+      for (final r in rows) {
+        await into(skipSourceAnswers).insertOnConflictUpdate(r);
+      }
+    });
+  }
+
   // --- Hidden episodes (missing-episodes feature). Written ONLY by the
   //     hide/unhide UI actions; the fill path (applySync) and refreshMetadata
   //     never touch this table, so a rescan/refresh can't wipe it (seam #5). ---

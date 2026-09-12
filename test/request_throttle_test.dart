@@ -60,6 +60,25 @@ void main() {
     });
   });
 
+  test('two CONCURRENT callers are spaced, not fired together', () {
+    // Both used to read the same "last request" stamp, compute the same
+    // delay and fire at once — which is exactly what a fix-match search during
+    // a scan did on the shared Jikan client.
+    fakeAsync((async) {
+      final clock = _ManualStopwatch();
+      final throttle = RequestThrottle(interval, stopwatch: clock);
+      var first = false;
+      var second = false;
+      unawaited(throttle.wait().then((_) => first = true));
+      unawaited(throttle.wait().then((_) => second = true));
+      async.flushMicrotasks();
+      expect(first, isTrue);
+      expect(second, isFalse, reason: 'queued behind the first');
+      async.elapse(interval);
+      expect(second, isTrue);
+    });
+  });
+
   test('the wait is bounded by the interval whatever the clock says', () {
     // A monotonic stopwatch cannot go backwards — that is the property that
     // replaced `DateTime.now()`, whose backward jump produced a wait of

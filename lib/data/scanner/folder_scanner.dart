@@ -1,5 +1,6 @@
 import 'dart:io';
 import '../../diagnostics/app_log.dart';
+import '../paths.dart';
 
 /// Walks a library folder and finds video files. Behind an interface so the
 /// traversal strategy is swappable and testable.
@@ -76,7 +77,7 @@ class FileSystemFolderScanner implements FolderScanner {
     List<Directory> pending,
   ) {
     for (final entity in entries) {
-      final name = _basename(entity.path);
+      final name = basenameOf(entity.path);
       if (name.startsWith('.')) continue;
       if (entity is Directory) {
         pending.add(entity);
@@ -88,10 +89,5 @@ class FileSystemFolderScanner implements FolderScanner {
         }
       }
     }
-  }
-
-  String _basename(String path) {
-    final i = path.lastIndexOf(RegExp(r'[/\\]'));
-    return i == -1 ? path : path.substring(i + 1);
   }
 }

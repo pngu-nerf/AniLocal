@@ -90,6 +90,11 @@ void main() {
     test('volumeSubpathOf strips the mount prefix', () {
       expect(volumeSubpathOf('/Volumes/Anime', '/Volumes/Anime'), '');
       expect(
+        volumeSubpathOf('/Users/me/anime', '/Volumes/Anime'),
+        isNull,
+        reason: 'not under the mount: refuse, never "the root"',
+      );
+      expect(
         volumeSubpathOf('/Volumes/Anime/shows', '/Volumes/Anime'),
         'shows',
       );

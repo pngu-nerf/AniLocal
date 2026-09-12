@@ -181,10 +181,14 @@ Future<String?> resolveFolderPath({
 /// `/Volumes/Anime/shows` under mount `/Volumes/Anime` → `shows`; the volume
 /// root itself → `''`). Used to record [LibraryFolders.volumeSubpath] when
 /// binding a folder to its volume.
-String volumeSubpathOf(String folderPath, String mountPoint) {
+String? volumeSubpathOf(String folderPath, String mountPoint) {
   if (folderPath == mountPoint) return '';
   if (folderPath.startsWith('$mountPoint/')) {
     return folderPath.substring(mountPoint.length + 1);
   }
-  return ''; // folder is not under the reported mount — treat as the root
+  // Not under the reported mount: NULL, and the caller must not bind. This
+  // used to return '' ("treat as the root"), which persisted a binding that
+  // resolved the library folder to the whole volume after a remount — the
+  // next scan walked the entire drive.
+  return null;
 }

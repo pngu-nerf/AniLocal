@@ -1,5 +1,5 @@
-import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/skip_range.dart';
+import '../source_exception.dart';
 
 /// Skip-source tokens. A SEPARATE namespace from the metadata sources: the two
 /// lists are ordered independently, so a token only has to be unique within its
@@ -22,14 +22,8 @@ const String kFingerprintSource = 'fingerprint';
 
 /// Thrown when a skip source cannot answer. Mirrors `MetadataException` so the
 /// two families report failures the same way and the UI copy is shared.
-class SkipException implements Exception {
-  const SkipException(this.message, {this.failure = MetadataFailure.service});
-
-  final String message;
-  final MetadataFailure failure;
-
-  @override
-  String toString() => 'SkipException: $message';
+class SkipException extends SourceException {
+  const SkipException(super.message, {super.failure});
 }
 
 /// Everything a skip source might need to answer for ONE episode.
