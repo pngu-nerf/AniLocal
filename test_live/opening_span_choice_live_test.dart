@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print — a live harness REPORTS; its output is the point.
+
 import 'dart:io';
 
 import 'package:anilocal/data/aniskip/aniskip_client.dart';
@@ -8,6 +10,8 @@ import 'package:anilocal/domain/chapter_skips.dart';
 import 'package:anilocal/domain/models/skip_range.dart';
 import 'package:anilocal/domain/skip_corroboration.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'live_environment.dart';
 
 /// Settles ONE open question with data: when a file has more than one
 /// theme-length chapter before its midpoint, is the EARLIEST the opening (what
@@ -41,7 +45,6 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// Writes its findings to `build/opening_span_report.txt` (gitignored) so the
 /// numbers survive the run and can be read without scrolling the log.
-const String _root = '/Volumes/Anime';
 const String _reportPath = 'build/opening_span_report.txt';
 
 /// Every theme-length chapter span starting before the midpoint, in order.
@@ -70,23 +73,19 @@ void main() {
       final lines = <String>[];
       void log(String s) {
         lines.add(s);
-        // ignore: avoid_print
         print(s);
       }
 
-      if (!Directory(_root).existsSync()) {
-        markTestSkipped('$_root is not mounted');
-        return;
-      }
+      if (!liveReady(tools: ['sqlite3'])) return;
       // Prove readability up front rather than reporting an empty library: TCC
       // denies reads on a removable volume per RESPONSIBLE PROCESS, and
       // ChapterReader turns any failure into "no chapters", so a permission
       // problem would otherwise look exactly like a library with no chapter marks.
       try {
-        Directory(_root).listSync().take(1).toList();
+        Directory(liveLibraryRoot).listSync().take(1).toList();
       } on FileSystemException catch (e) {
         fail(
-          'Cannot read $_root — ${e.osError?.message ?? e.message}.\n'
+          'Cannot read $liveLibraryRoot — ${e.osError?.message ?? e.message}.\n'
           'This is a macOS permission denial, not an absent library: grant the '
           'app hosting this shell access under Privacy & Security > Files and '
           'Folders > Removable Volumes.',
@@ -251,7 +250,6 @@ void main() {
 
       Directory('build').createSync(recursive: true);
       File(_reportPath).writeAsStringSync('${lines.join('\n')}\n');
-      // ignore: avoid_print
       print('\nreport written to $_reportPath');
     },
     timeout: const Timeout(Duration(minutes: 30)),

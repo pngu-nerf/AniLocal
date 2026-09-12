@@ -31,95 +31,97 @@ CachedFileRow _file(int id, int ep) => CachedFileRow(
 );
 
 void main() {
-  late CacheDatabase db;
-  late DriftLibraryRepository repo;
+  group('show preferences', () {
+    late CacheDatabase db;
+    late DriftLibraryRepository repo;
 
-  // The fill path (a scan): re-upserts series + files, never watch/prefs.
-  Future<void> fill() => db.applySync(
-    seriesUpserts: [_series(1)],
-    fileUpserts: [_file(1, 1)],
-    removedKeys: const [],
-  );
-
-  setUp(() {
-    db = CacheDatabase(NativeDatabase.memory());
-    repo = DriftLibraryRepository(
-      db,
-      skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+    // The fill path (a scan): re-upserts series + files, never watch/prefs.
+    Future<void> fill() => db.applySync(
+      seriesUpserts: [_series(1)],
+      fileUpserts: [_file(1, 1)],
+      removedKeys: const [],
     );
-  });
-  tearDown(() => db.close());
 
-  test('all-default when nothing is stored', () async {
-    final p = await repo.preferencesFor(1);
-    expect(p.pictureMode, PictureMode.normal);
-    expect(p.nextEpisodeHidden, isFalse);
-    expect(await repo.allPreferences(), isEmpty);
-  });
-
-  test('prefs round-trip and surface on the Series projection', () async {
-    await fill();
-    await repo.setPictureMode(1, PictureMode.blur);
-    await repo.setNextEpisodeHidden(1, hidden: true);
-
-    final p = await repo.preferencesFor(1);
-    expect(p.pictureMode, PictureMode.blur);
-    expect(p.nextEpisodeHidden, isTrue);
-
-    final s = (await repo.allSeries()).firstWhere((s) => s.seriesId == 1);
-    expect(s.pictureMode, PictureMode.blur);
-    expect(s.nextEpisodeHidden, isTrue);
-  });
-
-  test('setting one pref preserves the other', () async {
-    await repo.setPictureMode(1, PictureMode.removed);
-    await repo.setNextEpisodeHidden(1, hidden: true);
-    // The next-hidden write must not reset the picture mode…
-    expect((await repo.preferencesFor(1)).pictureMode, PictureMode.removed);
-    // …and a picture-mode write must not reset next-hidden.
-    await repo.setPictureMode(1, PictureMode.normal);
-    expect((await repo.preferencesFor(1)).nextEpisodeHidden, isTrue);
-  });
-
-  test(
-    'setAllNextEpisodeHidden overwrites every show, preserving picture mode',
-    () async {
-      await db.applySync(
-        seriesUpserts: [_series(1), _series(2)],
-        fileUpserts: [_file(1, 1), _file(2, 1)],
-        removedKeys: const [],
+    setUp(() {
+      db = CacheDatabase(NativeDatabase.memory());
+      repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
       );
-      // Divergent starting state: show 1 hidden + blurred, show 2 shown.
-      await repo.setPictureMode(1, PictureMode.blur);
-      await repo.setNextEpisodeHidden(1, hidden: true);
-      await repo.setNextEpisodeHidden(2, hidden: false);
+    });
+    tearDown(() => db.close());
 
-      // Global ON → all become hidden; picture modes untouched.
-      await repo.setAllNextEpisodeHidden(hidden: true);
-      expect((await repo.preferencesFor(1)).nextEpisodeHidden, isTrue);
-      expect((await repo.preferencesFor(2)).nextEpisodeHidden, isTrue);
-      expect((await repo.preferencesFor(1)).pictureMode, PictureMode.blur);
+    test('all-default when nothing is stored', () async {
+      final p = await repo.preferencesFor(1);
+      expect(p.pictureMode, PictureMode.normal);
+      expect(p.nextEpisodeHidden, isFalse);
+      expect(await repo.allPreferences(), isEmpty);
+    });
 
-      // Global OFF → all become shown.
-      await repo.setAllNextEpisodeHidden(hidden: false);
-      expect((await repo.preferencesFor(1)).nextEpisodeHidden, isFalse);
-      expect((await repo.preferencesFor(2)).nextEpisodeHidden, isFalse);
-      expect((await repo.preferencesFor(1)).pictureMode, PictureMode.blur);
-    },
-  );
-
-  test(
-    'preferences are SACRED across a rescan (no fill-path writer)',
-    () async {
+    test('prefs round-trip and surface on the Series projection', () async {
       await fill();
       await repo.setPictureMode(1, PictureMode.blur);
       await repo.setNextEpisodeHidden(1, hidden: true);
 
-      await fill(); // rescan re-runs the fill path
+      final p = await repo.preferencesFor(1);
+      expect(p.pictureMode, PictureMode.blur);
+      expect(p.nextEpisodeHidden, isTrue);
 
       final s = (await repo.allSeries()).firstWhere((s) => s.seriesId == 1);
-      expect(s.pictureMode, PictureMode.blur, reason: 'survives rescan');
-      expect(s.nextEpisodeHidden, isTrue, reason: 'survives rescan');
-    },
-  );
+      expect(s.pictureMode, PictureMode.blur);
+      expect(s.nextEpisodeHidden, isTrue);
+    });
+
+    test('setting one pref preserves the other', () async {
+      await repo.setPictureMode(1, PictureMode.removed);
+      await repo.setNextEpisodeHidden(1, hidden: true);
+      // The next-hidden write must not reset the picture mode…
+      expect((await repo.preferencesFor(1)).pictureMode, PictureMode.removed);
+      // …and a picture-mode write must not reset next-hidden.
+      await repo.setPictureMode(1, PictureMode.normal);
+      expect((await repo.preferencesFor(1)).nextEpisodeHidden, isTrue);
+    });
+
+    test(
+      'setAllNextEpisodeHidden overwrites every show, preserving picture mode',
+      () async {
+        await db.applySync(
+          seriesUpserts: [_series(1), _series(2)],
+          fileUpserts: [_file(1, 1), _file(2, 1)],
+          removedKeys: const [],
+        );
+        // Divergent starting state: show 1 hidden + blurred, show 2 shown.
+        await repo.setPictureMode(1, PictureMode.blur);
+        await repo.setNextEpisodeHidden(1, hidden: true);
+        await repo.setNextEpisodeHidden(2, hidden: false);
+
+        // Global ON → all become hidden; picture modes untouched.
+        await repo.setAllNextEpisodeHidden(hidden: true);
+        expect((await repo.preferencesFor(1)).nextEpisodeHidden, isTrue);
+        expect((await repo.preferencesFor(2)).nextEpisodeHidden, isTrue);
+        expect((await repo.preferencesFor(1)).pictureMode, PictureMode.blur);
+
+        // Global OFF → all become shown.
+        await repo.setAllNextEpisodeHidden(hidden: false);
+        expect((await repo.preferencesFor(1)).nextEpisodeHidden, isFalse);
+        expect((await repo.preferencesFor(2)).nextEpisodeHidden, isFalse);
+        expect((await repo.preferencesFor(1)).pictureMode, PictureMode.blur);
+      },
+    );
+
+    test(
+      'preferences are SACRED across a rescan (no fill-path writer)',
+      () async {
+        await fill();
+        await repo.setPictureMode(1, PictureMode.blur);
+        await repo.setNextEpisodeHidden(1, hidden: true);
+
+        await fill(); // rescan re-runs the fill path
+
+        final s = (await repo.allSeries()).firstWhere((s) => s.seriesId == 1);
+        expect(s.pictureMode, PictureMode.blur, reason: 'survives rescan');
+        expect(s.nextEpisodeHidden, isTrue, reason: 'survives rescan');
+      },
+    );
+  });
 }

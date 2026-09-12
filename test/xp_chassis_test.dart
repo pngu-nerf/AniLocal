@@ -13,39 +13,41 @@ import 'support/shell_harness.dart';
 /// records that assert as an exception, so a plain pump + `takeException()` is
 /// the check; if either shell regresses to a `ColoredBox`, this fails.
 void main() {
-  testWidgets(
-    'the app shell puts a ListTile on a Material (no ink-hidden warning)',
-    (tester) async {
-      await tester.pumpWidget(
-        ShellHarness().app(
-          home: SpecPage(
-            spec: const HeaderSpec(title: 'X'),
-            body: ListView(
-              children: [ListTile(title: const Text('row'), onTap: () {})],
+  group('XpChassis', () {
+    testWidgets(
+      'the app shell puts a ListTile on a Material (no ink-hidden warning)',
+      (tester) async {
+        await tester.pumpWidget(
+          ShellHarness().app(
+            home: SpecPage(
+              spec: const HeaderSpec(title: 'X'),
+              body: ListView(
+                children: [ListTile(title: const Text('row'), onTap: () {})],
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-    },
-  );
+        );
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+      },
+    );
 
-  testWidgets(
-    'XpDialog puts a ListTile on a Material (no ink-hidden warning)',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: XpDialog(
-              title: 'X',
-              content: ListTile(title: const Text('row'), onTap: () {}),
-              actions: const [Text('ok')],
+    testWidgets(
+      'XpDialog puts a ListTile on a Material (no ink-hidden warning)',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: XpDialog(
+                title: 'X',
+                content: ListTile(title: const Text('row'), onTap: () {}),
+                actions: const [Text('ok')],
+              ),
             ),
           ),
-        ),
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  });
 }

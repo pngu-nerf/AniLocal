@@ -13,6 +13,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'support/recording_player.dart';
+
 /// The player bar's VFD restyle. What's pinned here is what a later "tidy-up"
 /// would silently undo:
 ///  - the EP readout lives in the SHARED config, so it can't quietly become
@@ -26,62 +28,10 @@ import 'package:media_kit/media_kit.dart';
 /// Look itself (phosphor colours, glow) is deliberately NOT asserted — that is
 /// what device verification is for; these are the structural claims.
 
-const Stream<Never> _empty = Stream<Never>.empty();
-
-/// Native-free stand-in so the controls can build in the harness. Records the
-/// calls the controls make, so a restyled control can be shown to still drive
-/// the same player path.
-class _StubPlayer implements Player {
-  final List<Invocation> calls = [];
-
-  @override
-  final PlayerState state = const PlayerState();
-
-  @override
-  final PlayerStream stream = const PlayerStream(
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-  );
-
-  double? get volumeSet => calls.isEmpty
-      ? null
-      : calls
-                .lastWhere((c) => c.memberName == #setVolume)
-                .positionalArguments
-                .first
-            as double;
-
-  bool get setVolumeCalled => calls.any((c) => c.memberName == #setVolume);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    if (invocation.isMethod) calls.add(invocation);
-    return Future<void>.value();
-  }
-}
+/// The last volume the controls asked the player for, or null if none.
+double? _volumeSet(RecordingPlayer player) => player.called(#setVolume)
+    ? player.lastCall(#setVolume).positionalArguments.first as double
+    : null;
 
 Episode _ep(int n) => Episode(
   number: n,
@@ -112,7 +62,7 @@ Widget _bar({
       child: Align(
         alignment: Alignment.bottomCenter,
         child: PlayerControlBar(
-          player: player ?? _StubPlayer(),
+          player: player ?? RecordingPlayer(),
           state: ValueNotifier(
             fullscreen ? state.copyWith(fullscreen: true) : state,
           ),
@@ -186,7 +136,7 @@ void main() {
               width: 900,
               height: 600,
               child: PlayerControls(
-                player: _StubPlayer(),
+                player: RecordingPlayer(),
                 state: ValueNotifier(PlayerControlsState(episode: _ep(3))),
                 actions: _actions,
               ),
@@ -255,7 +205,7 @@ void volumeGroup() {
     testWidgets('it still sets the volume — tap and drag, live', (
       tester,
     ) async {
-      final player = _StubPlayer();
+      final player = RecordingPlayer();
       await tester.pumpWidget(
         _bar(
           state: PlayerControlsState(episode: _ep(3)),
@@ -269,14 +219,14 @@ void volumeGroup() {
       final rect = tester.getRect(meter);
       await tester.tapAt(Offset(rect.left + rect.width * 0.25, rect.center.dy));
       await tester.pump();
-      expect(player.setVolumeCalled, isTrue, reason: 'tap sets volume');
-      expect(player.volumeSet, closeTo(25, 2));
+      expect(player.called(#setVolume), isTrue, reason: 'tap sets volume');
+      expect(_volumeSet(player), closeTo(25, 2));
 
       // Drag reports LIVE, like the slider's onChanged did — not only on
       // release, which is the seek bar's contract and would feel wrong here.
       await tester.drag(meter, const Offset(30, 0));
       await tester.pump();
-      expect(player.volumeSet, greaterThan(25));
+      expect(_volumeSet(player), greaterThan(25));
     });
 
     testWidgets('it is spoken, though it is only painted', (tester) async {

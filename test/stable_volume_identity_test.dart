@@ -20,30 +20,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_volume_resolver.dart';
 import 'support/graphql_request.dart';
-
-/// Fake [VolumeResolver]: configured by `infoByPath` (longest-prefix match →
-/// VolumeInfo) and `mountById` (uuid → current mount, null = not mounted). Lets
-/// a test simulate a volume remounting under a different name with no diskutil.
-class _FakeVolumeResolver implements VolumeResolver {
-  final Map<String, VolumeInfo> infoByPath = {};
-  final Map<String, String?> mountById = {};
-
-  @override
-  Future<VolumeInfo?> infoForPath(String path) async {
-    String? best;
-    for (final k in infoByPath.keys) {
-      if (path == k || path.startsWith('$k/')) {
-        if (best == null || k.length > best.length) best = k;
-      }
-    }
-    return best == null ? null : infoByPath[best];
-  }
-
-  @override
-  Future<String?> mountPointForVolumeId(String volumeId) async =>
-      mountById[volumeId];
-}
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
   jsonEncode({
@@ -129,7 +107,7 @@ void main() {
 
     test('resolveFolderPath: fast path uses an existing stored path', () async {
       final dir = await Directory.systemTemp.createTemp('anilocal_fp_');
-      final resolver = _FakeVolumeResolver();
+      final resolver = FakeVolumeResolver();
       // Stored path exists -> returned directly, resolver never consulted.
       expect(
         await resolveFolderPath(
@@ -144,7 +122,7 @@ void main() {
     });
 
     test('resolveFolderPath: follows a remounted volume by id', () async {
-      final resolver = _FakeVolumeResolver()..mountById['VOL'] = '/Volumes/New';
+      final resolver = FakeVolumeResolver()..mountById['VOL'] = '/Volumes/New';
       expect(
         await resolveFolderPath(
           storedPath: '/Volumes/Old/shows', // gone
@@ -157,7 +135,7 @@ void main() {
     });
 
     test('resolveFolderPath: null when the volume is not mounted', () async {
-      final resolver = _FakeVolumeResolver(); // VOL not in mountById
+      final resolver = FakeVolumeResolver(); // VOL not in mountById
       expect(
         await resolveFolderPath(
           storedPath: '/Volumes/Old', // gone
@@ -175,7 +153,7 @@ void main() {
     late CacheDatabase db;
     late DriftLibraryRepository repo;
     late LibrarySync sync;
-    late _FakeVolumeResolver fake;
+    late FakeVolumeResolver fake;
 
     Future<void> touch(String path, int size) async {
       final f = File(path);
@@ -186,7 +164,7 @@ void main() {
     setUp(() async {
       dir = await Directory.systemTemp.createTemp('anilocal_vol_');
       db = CacheDatabase(NativeDatabase.memory());
-      fake = _FakeVolumeResolver();
+      fake = FakeVolumeResolver();
       repo = DriftLibraryRepository(
         db,
         resolver: fake,

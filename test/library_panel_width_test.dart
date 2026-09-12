@@ -39,80 +39,82 @@ Future<void> _pumpAt(WidgetTester tester, Widget app, double width) async {
 }
 
 void main() {
-  testWidgets('the panel keeps its width as the window resizes — the GRID '
-      'absorbs the change', (tester) async {
-    const w = 300.0;
-    final widths = <double>[];
-    final gridWidths = <double>[];
+  group('library panel width', () {
+    testWidgets('the panel keeps its width as the window resizes — the GRID '
+        'absorbs the change', (tester) async {
+      const w = 300.0;
+      final widths = <double>[];
+      final gridWidths = <double>[];
 
-    // Every size at or above the app's enforced 600pt minimum window.
-    for (final windowWidth in <double>[1512, 1100, 800, 600]) {
-      await _pumpAt(tester, _layout(panelWidth: w), windowWidth);
-      widths.add(tester.getSize(find.byKey(_panelKey)).width);
-      gridWidths.add(tester.getSize(find.byKey(_gridKey)).width);
-    }
+      // Every size at or above the app's enforced 600pt minimum window.
+      for (final windowWidth in <double>[1512, 1100, 800, 600]) {
+        await _pumpAt(tester, _layout(panelWidth: w), windowWidth);
+        widths.add(tester.getSize(find.byKey(_panelKey)).width);
+        gridWidths.add(tester.getSize(find.byKey(_gridKey)).width);
+      }
 
-    expect(
-      widths,
-      everyElement(w),
-      reason:
-          'the panel must be $w at every window size — a fraction would '
-          'have given four different widths',
-    );
-    // …and the grid is what actually changed.
-    expect(gridWidths.toSet().length, gridWidths.length);
-  });
+      expect(
+        widths,
+        everyElement(w),
+        reason:
+            'the panel must be $w at every window size — a fraction would '
+            'have given four different widths',
+      );
+      // …and the grid is what actually changed.
+      expect(gridWidths.toSet().length, gridWidths.length);
+    });
 
-  testWidgets('the minimum is a REAL width at the tightest window', (
-    tester,
-  ) async {
-    // The old failure: 0.15 "at minimum" was ~90pt in a 600pt window.
-    await _pumpAt(
+    testWidgets('the minimum is a REAL width at the tightest window', (
       tester,
-      _layout(panelWidth: LibraryLayoutConfig.panelWidthMin),
-      600,
-    );
-    final panel = tester.getSize(find.byKey(_panelKey)).width;
-    expect(panel, LibraryLayoutConfig.panelWidthMin);
-    expect(panel, greaterThanOrEqualTo(220));
-    // …and the grid still has usable room beside it.
-    expect(
-      tester.getSize(find.byKey(_gridKey)).width,
-      greaterThanOrEqualTo(360),
-    );
-  });
+    ) async {
+      // The old failure: 0.15 "at minimum" was ~90pt in a 600pt window.
+      await _pumpAt(
+        tester,
+        _layout(panelWidth: LibraryLayoutConfig.panelWidthMin),
+        600,
+      );
+      final panel = tester.getSize(find.byKey(_panelKey)).width;
+      expect(panel, LibraryLayoutConfig.panelWidthMin);
+      expect(panel, greaterThanOrEqualTo(220));
+      // …and the grid still has usable room beside it.
+      expect(
+        tester.getSize(find.byKey(_gridKey)).width,
+        greaterThanOrEqualTo(360),
+      );
+    });
 
-  testWidgets('the widest panel still fits the tightest window', (
-    tester,
-  ) async {
-    // panelWidthMax + the layout's grid floor is exactly the 600pt minimum
-    // window, so the safety clamp must NOT bite here: the panel keeps its width.
-    await _pumpAt(
+    testWidgets('the widest panel still fits the tightest window', (
       tester,
-      _layout(panelWidth: LibraryLayoutConfig.panelWidthMax),
-      600,
-    );
-    expect(
-      tester.getSize(find.byKey(_panelKey)).width,
-      LibraryLayoutConfig.panelWidthMax,
-    );
-    expect(tester.takeException(), isNull);
-  });
+    ) async {
+      // panelWidthMax + the layout's grid floor is exactly the 600pt minimum
+      // window, so the safety clamp must NOT bite here: the panel keeps its width.
+      await _pumpAt(
+        tester,
+        _layout(panelWidth: LibraryLayoutConfig.panelWidthMax),
+        600,
+      );
+      expect(
+        tester.getSize(find.byKey(_panelKey)).width,
+        LibraryLayoutConfig.panelWidthMax,
+      );
+      expect(tester.takeException(), isNull);
+    });
 
-  testWidgets('below the enforced minimum window it degrades instead of '
-      'overflowing', (tester) async {
-    // Only reachable in tests — the runner enforces 600 — but it must not hand
-    // the grid a negative width.
-    await _pumpAt(tester, _layout(panelWidth: 480), 380);
-    expect(tester.takeException(), isNull);
-    expect(tester.getSize(find.byKey(_gridKey)).width, greaterThan(0));
-  });
+    testWidgets('below the enforced minimum window it degrades instead of '
+        'overflowing', (tester) async {
+      // Only reachable in tests — the runner enforces 600 — but it must not hand
+      // the grid a negative width.
+      await _pumpAt(tester, _layout(panelWidth: 480), 380);
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.byKey(_gridKey)).width, greaterThan(0));
+    });
 
-  testWidgets('collapsed is still a fixed thin strip', (tester) async {
-    await _pumpAt(tester, _layout(panelWidth: 300, collapsed: true), 1100);
-    expect(
-      tester.getSize(find.byKey(_panelKey)).width,
-      LibraryLayoutConfig.landingDefault.collapsedPanelWidth,
-    );
+    testWidgets('collapsed is still a fixed thin strip', (tester) async {
+      await _pumpAt(tester, _layout(panelWidth: 300, collapsed: true), 1100);
+      expect(
+        tester.getSize(find.byKey(_panelKey)).width,
+        LibraryLayoutConfig.landingDefault.collapsedPanelWidth,
+      );
+    });
   });
 }

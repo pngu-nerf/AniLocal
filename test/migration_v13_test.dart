@@ -43,44 +43,46 @@ CREATE TABLE hidden_episodes (anilist_id INTEGER NOT NULL,
 ''';
 
 void main() {
-  /// A populated v12 database, opened through the real v12 -> v13 migration.
-  CacheDatabase openMigratedV12() => CacheDatabase(
-    NativeDatabase.memory(
-      setup: (raw) {
-        final v = raw.select('PRAGMA user_version').first.values.first as int;
-        if (v != 0) return;
-        raw.execute(_v12Ddl);
-        raw.execute(
-          "INSERT INTO series_cache (anilist_id, romaji, format, episode_count) "
-          "VALUES (1, 'Cowboy Bebop', 'TV', 26)",
-        );
-        raw.execute(
-          'INSERT INTO watch_state (anilist_id, episode, resume_position_ms, '
-          'duration_ms, watched, watched_manual, updated_at_ms) '
-          'VALUES (1, 3, 0, 1440000, 1, 1, 5)',
-        );
-        raw.execute('PRAGMA user_version = 12');
-      },
-    ),
-  );
+  group('migration v12 -> v13', () {
+    /// A populated v12 database, opened through the real v12 -> v13 migration.
+    CacheDatabase openMigratedV12() => CacheDatabase(
+      NativeDatabase.memory(
+        setup: (raw) {
+          final v = raw.select('PRAGMA user_version').first.values.first as int;
+          if (v != 0) return;
+          raw.execute(_v12Ddl);
+          raw.execute(
+            "INSERT INTO series_cache (anilist_id, romaji, format, episode_count) "
+            "VALUES (1, 'Cowboy Bebop', 'TV', 26)",
+          );
+          raw.execute(
+            'INSERT INTO watch_state (anilist_id, episode, resume_position_ms, '
+            'duration_ms, watched, watched_manual, updated_at_ms) '
+            'VALUES (1, 3, 0, 1440000, 1, 1, 5)',
+          );
+          raw.execute('PRAGMA user_version = 12');
+        },
+      ),
+    );
 
-  test('v12 -> v13 creates an empty show_preferences table', () async {
-    final db = openMigratedV12();
-    addTearDown(db.close);
+    test('v12 -> v13 creates an empty show_preferences table', () async {
+      final db = openMigratedV12();
+      addTearDown(db.close);
 
-    // The new table exists and starts empty — no show has an override yet.
-    expect(await db.allShowPrefRows(), isEmpty);
-  });
+      // The new table exists and starts empty — no show has an override yet.
+      expect(await db.allShowPrefRows(), isEmpty);
+    });
 
-  test('existing content is untouched by the migration', () async {
-    final db = openMigratedV12();
-    addTearDown(db.close);
+    test('existing content is untouched by the migration', () async {
+      final db = openMigratedV12();
+      addTearDown(db.close);
 
-    final series = await db.allSeriesRows();
-    expect(series.single.seriesId, 1);
-    // The manual watched-override from v12 survives intact.
-    final w = (await db.allWatchStateRows()).single;
-    expect(w.watched, isTrue);
-    expect(w.watchedManual, isTrue);
+      final series = await db.allSeriesRows();
+      expect(series.single.seriesId, 1);
+      // The manual watched-override from v12 survives intact.
+      final w = (await db.allWatchStateRows()).single;
+      expect(w.watched, isTrue);
+      expect(w.watchedManual, isTrue);
+    });
   });
 }

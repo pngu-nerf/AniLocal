@@ -43,172 +43,178 @@ Map<String, dynamic> _m(int id, String romaji) => {
 };
 
 void main() {
-  late Directory dir;
-  late CacheDatabase db;
-  late DriftLibraryRepository repo;
-  late LibrarySync sync;
-  var anilistDown = false;
-  var anilistOffline = false;
+  group('scan resilience', () {
+    late Directory dir;
+    late CacheDatabase db;
+    late DriftLibraryRepository repo;
+    late LibrarySync sync;
+    var anilistDown = false;
+    var anilistOffline = false;
 
-  /// AniList's verbatim outage response — a 403 that DOES carry a well-formed
-  /// GraphQL envelope. Using the real shape here (not plain text) is what
-  /// proves the client classifies by status before touching the body.
-  http.Response apiDisabled() => http.Response(
-    jsonEncode({
-      'errors': [
-        {
-          'message':
-              'The AniList API has been temporarily disabled due to '
-              'severe stability issues.',
-          'status': 403,
-        },
-      ],
-      'data': null,
-    }),
-    403,
-    headers: {'content-type': 'application/json'},
-  );
-
-  Future<void> touch(String name, int size) async {
-    final f = File('${dir.path}/$name');
-    await f.create(recursive: true);
-    await f.writeAsString('x' * size);
-  }
-
-  setUp(() async {
-    dir = await Directory.systemTemp.createTemp('anilocal_resil_');
-    db = CacheDatabase(NativeDatabase.memory());
-    repo = DriftLibraryRepository(
-      db,
-      skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+    /// AniList's verbatim outage response — a 403 that DOES carry a well-formed
+    /// GraphQL envelope. Using the real shape here (not plain text) is what
+    /// proves the client classifies by status before touching the body.
+    http.Response apiDisabled() => http.Response(
+      jsonEncode({
+        'errors': [
+          {
+            'message':
+                'The AniList API has been temporarily disabled due to '
+                'severe stability issues.',
+            'status': 403,
+          },
+        ],
+        'data': null,
+      }),
+      403,
+      headers: {'content-type': 'application/json'},
     );
-    anilistDown = false;
-    anilistOffline = false;
-    final artDir = await Directory('${dir.path}/.art').create();
-    final mock = MockClient((req) async {
-      if (req.method == 'POST') {
-        if (anilistOffline) {
-          throw const SocketException('Network is unreachable');
+
+    Future<void> touch(String name, int size) async {
+      final f = File('${dir.path}/$name');
+      await f.create(recursive: true);
+      await f.writeAsString('x' * size);
+    }
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('anilocal_resil_');
+      db = CacheDatabase(NativeDatabase.memory());
+      repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+      );
+      anilistDown = false;
+      anilistOffline = false;
+      final artDir = await Directory('${dir.path}/.art').create();
+      final mock = MockClient((req) async {
+        if (req.method == 'POST') {
+          if (anilistOffline) {
+            throw const SocketException('Network is unreachable');
+          }
+          if (anilistDown) return apiDisabled();
+          final q = (graphqlVariables(req)['search'] as String).toLowerCase();
+          if (q.contains('cowboy')) return _page([_m(1, 'Cowboy Bebop')]);
+          if (q.contains('trigun')) return _page([_m(2, 'Trigun')]);
+          return _page(const []);
         }
-        if (anilistDown) return apiDisabled();
-        final q = (graphqlVariables(req)['search'] as String).toLowerCase();
-        if (q.contains('cowboy')) return _page([_m(1, 'Cowboy Bebop')]);
-        if (q.contains('trigun')) return _page([_m(2, 'Trigun')]);
-        return _page(const []);
-      }
-      return http.Response.bytes([1, 2, 3], 200);
-    });
-    sync = LibrarySync(
-      scanner: const FileSystemFolderScanner(),
-      parser: const HeuristicFilenameParser(),
-      matcher: SeriesMatcher(
-        providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
-      ),
-      cache: db,
-      art: ArtCache(httpClient: mock, directory: () async => artDir),
-      skipProviders: [
-        AniSkipSkipProvider(
-          AniSkipClient(
-            httpClient: MockClient((_) async => http.Response('', 404)),
-          ),
+        return http.Response.bytes([1, 2, 3], 200);
+      });
+      sync = LibrarySync(
+        scanner: const FileSystemFolderScanner(),
+        parser: const HeuristicFilenameParser(),
+        matcher: SeriesMatcher(
+          providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
         ),
-      ],
+        cache: db,
+        art: ArtCache(httpClient: mock, directory: () async => artDir),
+        skipProviders: [
+          AniSkipSkipProvider(
+            AniSkipClient(
+              httpClient: MockClient((_) async => http.Response('', 404)),
+            ),
+          ),
+        ],
+      );
+    });
+
+    tearDown(() async {
+      await db.close();
+      await dir.delete(recursive: true);
+    });
+
+    test(
+      'all-lookups-failing scan preserves the cached library (no wipe)',
+      () async {
+        // Healthy scan populates the cache.
+        await touch('Cowboy Bebop - 01.mkv', 100);
+        await touch('Cowboy Bebop - 02.mkv', 200);
+        await sync.sync([dir.path]);
+        expect((await repo.allSeries()).length, 1);
+        expect((await repo.episodesFor(1)).length, 2);
+
+        // Library reorganized (old files gone) AND AniList is down: the one new
+        // title needs a lookup, which 403s — so every attempted lookup fails.
+        await File('${dir.path}/Cowboy Bebop - 01.mkv').delete();
+        await File('${dir.path}/Cowboy Bebop - 02.mkv').delete();
+        await touch('Trigun - 01.mkv', 300);
+        anilistDown = true;
+
+        final summary = await sync.sync([dir.path]);
+
+        expect(summary.apiUnreachable, isTrue);
+        expect(summary.removed, 0, reason: 'an outage must remove nothing');
+
+        // The already-matched series is preserved through the outage, not pruned.
+        final series = await repo.allSeries();
+        final cowboy = series.firstWhere((s) => s.seriesId == 1);
+        expect(cowboy.pending, isFalse);
+        expect(
+          (await repo.episodesFor(1)).length,
+          2,
+          reason: 'cached episodes preserved, not emptied',
+        );
+
+        // And the new file isn't dropped because AniList was down — it's kept as
+        // a NAMED placeholder (retried once the API recovers), not lost.
+        final trigun = series.firstWhere((s) => s.pending);
+        expect(trigun.titles.romaji, 'Trigun');
+        expect(await repo.unmatchedFiles(), isEmpty);
+      },
     );
-  });
 
-  tearDown(() async {
-    await db.close();
-    await dir.delete(recursive: true);
-  });
+    test(
+      'an outage is attributed to AniList, not the user\'s connection',
+      () async {
+        await touch('Trigun - 01.mkv', 300);
+        anilistDown = true;
 
-  test(
-    'all-lookups-failing scan preserves the cached library (no wipe)',
-    () async {
-      // Healthy scan populates the cache.
+        final summary = await sync.sync([dir.path]);
+
+        // AniList answered, so the user's network demonstrably works. Telling them
+        // to check their connection here would send them debugging a working one.
+        expect(summary.apiFailure, MetadataFailure.service);
+        expect(summary.apiUnreachable, isTrue);
+      },
+    );
+
+    test('being offline is attributed to the user\'s connection', () async {
+      await touch('Trigun - 01.mkv', 300);
+      anilistOffline = true;
+
+      final summary = await sync.sync([dir.path]);
+
+      expect(summary.apiFailure, MetadataFailure.connection);
+      // The file still survives as a named placeholder, as in any outage.
+      final trigun = (await repo.allSeries()).firstWhere((s) => s.pending);
+      expect(trigun.titles.romaji, 'Trigun');
+    });
+
+    test('a healthy scan reports no failure at all', () async {
+      await touch('Cowboy Bebop - 01.mkv', 100);
+
+      final summary = await sync.sync([dir.path]);
+
+      expect(summary.apiFailure, isNull);
+      expect(summary.apiUnreachable, isFalse);
+    });
+
+    test('a healthy scan still removes a genuinely-gone file', () async {
+      // The resilience guard must NOT block normal removals when the API is fine.
       await touch('Cowboy Bebop - 01.mkv', 100);
       await touch('Cowboy Bebop - 02.mkv', 200);
       await sync.sync([dir.path]);
-      expect((await repo.allSeries()).length, 1);
       expect((await repo.episodesFor(1)).length, 2);
 
-      // Library reorganized (old files gone) AND AniList is down: the one new
-      // title needs a lookup, which 403s — so every attempted lookup fails.
       await File('${dir.path}/Cowboy Bebop - 01.mkv').delete();
-      await File('${dir.path}/Cowboy Bebop - 02.mkv').delete();
-      await touch('Trigun - 01.mkv', 300);
-      anilistDown = true;
+      final summary = await sync.sync([dir.path]); // API up
 
-      final summary = await sync.sync([dir.path]);
-
-      expect(summary.apiUnreachable, isTrue);
-      expect(summary.removed, 0, reason: 'an outage must remove nothing');
-
-      // The already-matched series is preserved through the outage, not pruned.
-      final series = await repo.allSeries();
-      final cowboy = series.firstWhere((s) => s.seriesId == 1);
-      expect(cowboy.pending, isFalse);
+      expect(summary.apiUnreachable, isFalse);
+      expect(summary.removed, 1);
       expect(
         (await repo.episodesFor(1)).length,
-        2,
-        reason: 'cached episodes preserved, not emptied',
+        1,
+        reason: 'gone file removed',
       );
-
-      // And the new file isn't dropped because AniList was down — it's kept as
-      // a NAMED placeholder (retried once the API recovers), not lost.
-      final trigun = series.firstWhere((s) => s.pending);
-      expect(trigun.titles.romaji, 'Trigun');
-      expect(await repo.unmatchedFiles(), isEmpty);
-    },
-  );
-
-  test(
-    'an outage is attributed to AniList, not the user\'s connection',
-    () async {
-      await touch('Trigun - 01.mkv', 300);
-      anilistDown = true;
-
-      final summary = await sync.sync([dir.path]);
-
-      // AniList answered, so the user's network demonstrably works. Telling them
-      // to check their connection here would send them debugging a working one.
-      expect(summary.apiFailure, MetadataFailure.service);
-      expect(summary.apiUnreachable, isTrue);
-    },
-  );
-
-  test('being offline is attributed to the user\'s connection', () async {
-    await touch('Trigun - 01.mkv', 300);
-    anilistOffline = true;
-
-    final summary = await sync.sync([dir.path]);
-
-    expect(summary.apiFailure, MetadataFailure.connection);
-    // The file still survives as a named placeholder, as in any outage.
-    final trigun = (await repo.allSeries()).firstWhere((s) => s.pending);
-    expect(trigun.titles.romaji, 'Trigun');
-  });
-
-  test('a healthy scan reports no failure at all', () async {
-    await touch('Cowboy Bebop - 01.mkv', 100);
-
-    final summary = await sync.sync([dir.path]);
-
-    expect(summary.apiFailure, isNull);
-    expect(summary.apiUnreachable, isFalse);
-  });
-
-  test('a healthy scan still removes a genuinely-gone file', () async {
-    // The resilience guard must NOT block normal removals when the API is fine.
-    await touch('Cowboy Bebop - 01.mkv', 100);
-    await touch('Cowboy Bebop - 02.mkv', 200);
-    await sync.sync([dir.path]);
-    expect((await repo.episodesFor(1)).length, 2);
-
-    await File('${dir.path}/Cowboy Bebop - 01.mkv').delete();
-    final summary = await sync.sync([dir.path]); // API up
-
-    expect(summary.apiUnreachable, isFalse);
-    expect(summary.removed, 1);
-    expect((await repo.episodesFor(1)).length, 1, reason: 'gone file removed');
+    });
   });
 }

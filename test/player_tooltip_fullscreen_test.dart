@@ -21,49 +21,51 @@ import 'package:flutter_test/flutter_test.dart';
 /// the root navigator calls on push/pop — with a tooltip mounted, and assert it
 /// gets cleared (so nothing remains to re-lay-out during the resize).
 void main() {
-  testWidgets(
-    'route observer clears a mounted tooltip on pop (native exit) and push (enter)',
-    (tester) async {
-      final observer = TooltipDismissingRouteObserver();
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: Tooltip(
-                message: 'Exit fullscreen',
-                child: SizedBox(width: 24, height: 24),
+  group('TooltipDismissObserver on fullscreen exit', () {
+    testWidgets(
+      'route observer clears a mounted tooltip on pop (native exit) and push (enter)',
+      (tester) async {
+        final observer = TooltipDismissingRouteObserver();
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: Tooltip(
+                  message: 'Exit fullscreen',
+                  child: SizedBox(width: 24, height: 24),
+                ),
               ),
             ),
           ),
-        ),
-      );
-      final tip = tester.state<TooltipState>(find.byType(Tooltip));
-      final route = MaterialPageRoute<void>(builder: (_) => const SizedBox());
+        );
+        final tip = tester.state<TooltipState>(find.byType(Tooltip));
+        final route = MaterialPageRoute<void>(builder: (_) => const SizedBox());
 
-      Future<void> showTip() async {
-        tip.ensureTooltipVisible();
+        Future<void> showTip() async {
+          tip.ensureTooltipVisible();
+          await tester.pump();
+          expect(find.text('Exit fullscreen'), findsOneWidget);
+        }
+
+        // didPop == the native green-button exit: media_kit pops the fullscreen
+        // route through the root navigator, which this observer watches.
+        await showTip();
+        observer.didPop(route, route);
         await tester.pump();
-        expect(find.text('Exit fullscreen'), findsOneWidget);
-      }
+        expect(find.text('Exit fullscreen'), findsNothing);
 
-      // didPop == the native green-button exit: media_kit pops the fullscreen
-      // route through the root navigator, which this observer watches.
-      await showTip();
-      observer.didPop(route, route);
-      await tester.pump();
-      expect(find.text('Exit fullscreen'), findsNothing);
+        // didPush == fullscreen ENTER (also resizes the window).
+        await showTip();
+        observer.didPush(route, route);
+        await tester.pump();
+        expect(find.text('Exit fullscreen'), findsNothing);
 
-      // didPush == fullscreen ENTER (also resizes the window).
-      await showTip();
-      observer.didPush(route, route);
-      await tester.pump();
-      expect(find.text('Exit fullscreen'), findsNothing);
-
-      // didReplace / didRemove are covered by the same one-line dismiss.
-      await showTip();
-      observer.didReplace(newRoute: route, oldRoute: route);
-      await tester.pump();
-      expect(find.text('Exit fullscreen'), findsNothing);
-    },
-  );
+        // didReplace / didRemove are covered by the same one-line dismiss.
+        await showTip();
+        observer.didReplace(newRoute: route, oldRoute: route);
+        await tester.pump();
+        expect(find.text('Exit fullscreen'), findsNothing);
+      },
+    );
+  });
 }

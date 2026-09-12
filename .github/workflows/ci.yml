@@ -17,7 +17,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          # Pinned, not `stable`: test/goldens are rasterised by the engine,
+          # so they hold only for the SDK that generated them. Bumping this
+          # regenerates the goldens in the same commit.
+          flutter-version: 3.44.1
           cache: true
       - run: flutter pub get
       - run: ./tool/check.sh
@@ -27,6 +30,15 @@ jobs:
         run: |
           dart run build_runner build --delete-conflicting-outputs
           git diff --exit-code -- '*.g.dart'
+      # A report, not a gate: the number is printed in the log and the lcov
+      # file kept as an artifact. See tool/coverage.sh for why there is no
+      # threshold.
+      - name: coverage
+        run: ./tool/coverage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lcov
+          path: coverage/lcov.info
 
   build:
     # Separate job: `pod install` curls the libmpv xcframeworks on a cold
@@ -38,7 +50,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          # Pinned, not `stable`: test/goldens are rasterised by the engine,
+          # so they hold only for the SDK that generated them. Bumping this
+          # regenerates the goldens in the same commit.
+          flutter-version: 3.44.1
           cache: true
       - run: flutter pub get
       - run: flutter build macos --debug

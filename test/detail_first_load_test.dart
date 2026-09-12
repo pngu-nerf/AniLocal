@@ -1,23 +1,11 @@
 import 'dart:async';
 
-import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
-import 'package:anilocal/domain/models/identified_episode.dart';
-import 'package:anilocal/domain/models/library_folder.dart';
-import 'package:anilocal/domain/models/next_result.dart';
-import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/series.dart';
-import 'package:anilocal/domain/models/show_preferences.dart';
 import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/titles.dart';
-import 'package:anilocal/domain/repositories/fix_match_repository.dart';
-import 'package:anilocal/domain/repositories/library_repository.dart';
-import 'package:anilocal/domain/repositories/missing_episodes_repository.dart';
 import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
-import 'package:anilocal/domain/repositories/source_selection_repository.dart';
-import 'package:anilocal/domain/repositories/watch_order_repository.dart';
-import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/playback/playback_controller.dart';
 import 'package:anilocal/ui/library_services.dart';
 import 'package:anilocal/ui/routes.dart';
@@ -27,6 +15,8 @@ import 'package:anilocal/ui/settings/sources_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_fix_match.dart';
+import 'support/fake_library_repository.dart';
 import 'support/fake_settings.dart';
 import 'support/shell_harness.dart';
 
@@ -54,124 +44,21 @@ List<Episode> _episodes() => [
     ),
 ];
 
-class _Repo
-    implements
-        LibraryRepository,
-        WatchStateRepository,
-        SourceSelectionRepository,
-        WatchOrderRepository,
-        MissingEpisodesRepository,
-        ShowPreferencesRepository {
-  _Repo({this.episodesCompleter, List<Episode>? episodes})
-    : _episodesOverride = episodes;
+/// The show page's repository: three episodes on series 7 unless a test
+/// supplies its own, with `upNextBySeries` pre-answered the way the real
+/// repository would (furthest watched is 2, so next is anchor 3) — a test
+/// checks the page's own derivation against it.
+FakeLibraryRepository _repo({
+  Completer<List<Episode>>? episodesCompleter,
+  List<Episode>? episodes,
+}) => FakeLibraryRepository(
+  series: [_series()],
+  episodes: {7: episodes ?? _episodes()},
+  episodesCompleter: episodesCompleter,
+  upNext: {7: _episodes()[2]},
+);
 
-  final List<Episode>? _episodesOverride;
-
-  /// When supplied, `episodesFor` hangs until the test completes it — that is
-  /// how "the DB hasn't answered yet" is simulated.
-  final Completer<List<Episode>>? episodesCompleter;
-
-  /// Every call the page makes, so a test can assert on what it DIDN'T ask for.
-  final List<String> calls = [];
-
-  @override
-  Future<List<Episode>> episodesFor(int seriesId) {
-    calls.add('episodesFor');
-    return episodesCompleter?.future ??
-        Future.value(_episodesOverride ?? _episodes());
-  }
-
-  @override
-  Future<Map<int, List<Episode>>> episodesBySeries() async => {};
-
-  @override
-  Future<Map<int, Episode>> upNextBySeries() async {
-    calls.add('upNextBySeries');
-    return {7: _episodes()[2]};
-  }
-
-  @override
-  Future<Set<int>> hiddenEpisodes(int seriesId) async {
-    calls.add('hiddenEpisodes');
-    return const {};
-  }
-
-  @override
-  Future<List<Series>> allSeries() async => [_series()];
-  @override
-  Future<List<IdentifiedEpisode>> unmatchedFiles() async => const [];
-  @override
-  Future<List<LibraryFolder>> watchedFolders() async => const [];
-  @override
-  Future<void> addFolder(String path) async {}
-  @override
-  Future<void> removeFolder(LibraryFolder folder) async {}
-  @override
-  Future<void> reorderFolders(List<LibraryFolder> ordered) async {}
-  @override
-  Future<void> saveProgress(
-    Episode e, {
-    required Duration position,
-    required Duration duration,
-  }) async {}
-  @override
-  Future<bool> setWatched(Episode e, {required bool watched}) async => true;
-  @override
-  Future<void> setWatchedManual(Episode e, {required bool watched}) async {}
-  @override
-  Future<void> clearProgress(Episode e) async {}
-  @override
-  Future<List<ContinueWatching>> continueWatching() async => const [];
-  @override
-  Future<void> selectSource(Episode e, {required String folderPath}) async {}
-  @override
-  Future<void> clearSource(Episode e) async {}
-  @override
-  Future<NextResult> nextEpisode(Episode current) async =>
-      const NoNextEpisode();
-  @override
-  Future<Map<int, Set<int>>> allHiddenEpisodes() async => const {};
-  @override
-  Future<void> hideEpisodes(int id, List<int> eps) async {}
-  @override
-  Future<void> unhideEpisodes(int id, List<int> eps) async {}
-  @override
-  Future<ShowPreferences> preferencesFor(int id) async =>
-      const ShowPreferences();
-  @override
-  Future<Map<int, ShowPreferences>> allPreferences() async => const {};
-  @override
-  Future<void> setPictureMode(int id, PictureMode m) async {}
-  @override
-  Future<void> setNextEpisodeHidden(int id, {required bool hidden}) async {}
-  @override
-  Future<void> setAllNextEpisodeHidden({required bool hidden}) async {}
-}
-
-class _FixMatch implements FixMatchRepository {
-  @override
-  Future<List<Series>> searchCandidates(String q) async => const [];
-  @override
-  Future<void> assignFile({
-    required String filePath,
-    required Series chosen,
-    int? anchoredEpisode,
-    int continuousOffset = 0,
-    bool displayContinuous = false,
-  }) async {}
-  @override
-  Future<void> assignRange({
-    required List<String> filePaths,
-    required Series chosen,
-    int anchorStart = 1,
-    int continuousOffset = 0,
-    bool displayContinuous = false,
-  }) async {}
-  @override
-  Future<void> clearOverride(String filePath) async {}
-}
-
-Widget _app(_Repo repo) {
+Widget _app(FakeLibraryRepository repo) {
   final h = ShellHarness();
   return h.app(
     home: SeriesDetailScreen(
@@ -193,12 +80,12 @@ void _noop() {}
 /// interface, a real (idle) playback controller, and a settings bundle with
 /// whatever source lists the test wants the ⚙ window to show.
 LibraryServices _services(
-  _Repo repo, {
+  FakeLibraryRepository repo, {
   List<SourceDescriptor> metadata = const [],
   List<SourceDescriptor> skip = const [],
 }) => LibraryServices(
   repository: repo,
-  fixMatch: _FixMatch(),
+  fixMatch: const FakeFixMatch(),
   watchState: repo,
   sourceSelection: repo,
   watchOrder: repo,
@@ -234,7 +121,7 @@ void main() {
     // episodesFor never completes during this test: the DB is "still thinking".
     final pending = Completer<List<Episode>>();
     addTearDown(() => pending.complete(const []));
-    await tester.pumpWidget(_app(_Repo(episodesCompleter: pending)));
+    await tester.pumpWidget(_app(_repo(episodesCompleter: pending)));
     await tester.pump();
 
     expect(
@@ -256,7 +143,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final repo = _Repo();
+    final repo = _repo();
     await tester.pumpWidget(_app(repo));
     await tester.pumpAndSettle();
 
@@ -276,7 +163,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final repo = _Repo();
+    final repo = _repo();
     // The old query's answer for this series, computed by the real repository
     // semantics: furthest watched is 2, so next is the episode at anchor 3.
     final expected = (await repo.upNextBySeries())[7]!;
@@ -302,7 +189,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(_app(_Repo(episodes: eps)));
+      await tester.pumpWidget(_app(_repo(episodes: eps)));
       await tester.pumpAndSettle();
       final state = tester.state(find.byType(SeriesDetailScreen));
       return (state as dynamic).debugNextEpisode as Episode?;
@@ -357,7 +244,7 @@ void _settingsFromShowPageTests() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final repo = _Repo();
+    final repo = _repo();
     final shell = ShellHarness();
     await tester.pumpWidget(
       shell.app(

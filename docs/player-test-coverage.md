@@ -11,6 +11,17 @@ one to fill the gap.
 > no test. Where the harness genuinely can't exercise a path, a documented
 > manual-verify note is the honest answer — not a shallow test.
 
+> **Measured (2026-09-12).** `tool/coverage.sh` — the whole suite with line
+> coverage, generated Drift code excluded — reports **76.6% of `lib/`
+> (5,307 of 6,930 lines)**. CI prints the figure on every run and keeps the
+> lcov file as an artifact; there is deliberately no threshold. The player's
+> own behaviour is now under test without an engine: `playback_rules_test`
+> (the decisions), `playback_session_test` (the sequencing, over
+> `RecordingPlayer`), `playback_controller_test`, and
+> `player_advance_and_lifetime_test`; `test/goldens/` pins the VFD chrome,
+> the dot-matrix readout, the segmented timeline with markers, the control
+> bar and the three picture modes as images.
+>
 > **Scope note (2026-09-10).** This file covers the PLAYER only, and it predates
 > the source-pluggability program, so it does not enumerate that work's ~12 test
 > files (`provider_fallback_test`, `skip_provider_test`, `skip_corroboration_test`,

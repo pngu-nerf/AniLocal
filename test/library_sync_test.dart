@@ -40,204 +40,45 @@ Map<String, dynamic> _m(int id, String romaji, String cover) => {
 };
 
 void main() {
-  late Directory dir;
-  late CacheDatabase db;
-  late LibrarySync sync;
-  late DriftLibraryRepository repo;
-  var anilistCalls = 0;
+  group('LibrarySync', () {
+    late Directory dir;
+    late CacheDatabase db;
+    late LibrarySync sync;
+    late DriftLibraryRepository repo;
+    var anilistCalls = 0;
 
-  Future<File> touch(String name, {String content = 'x'}) async {
-    final f = File('${dir.path}/$name');
-    await f.writeAsString(content);
-    return f;
-  }
+    Future<File> touch(String name, {String content = 'x'}) async {
+      final f = File('${dir.path}/$name');
+      await f.writeAsString(content);
+      return f;
+    }
 
-  setUp(() async {
-    dir = await Directory.systemTemp.createTemp('anilocal_sync_');
-    anilistCalls = 0;
-    db = CacheDatabase(NativeDatabase.memory());
-    final artDir = await Directory('${dir.path}/art').create();
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('anilocal_sync_');
+      anilistCalls = 0;
+      db = CacheDatabase(NativeDatabase.memory());
+      final artDir = await Directory('${dir.path}/art').create();
 
-    final mock = MockClient((req) async {
-      if (req.method == 'POST') {
-        anilistCalls++;
-        final search = (graphqlVariables(req)['search']) as String;
-        if (search.toLowerCase().contains('cowboy')) {
-          return _page([_m(1, 'Cowboy Bebop', 'https://art.test/1.jpg')]);
+      final mock = MockClient((req) async {
+        if (req.method == 'POST') {
+          anilistCalls++;
+          final search = (graphqlVariables(req)['search']) as String;
+          if (search.toLowerCase().contains('cowboy')) {
+            return _page([_m(1, 'Cowboy Bebop', 'https://art.test/1.jpg')]);
+          }
+          return _page(const []); // no match
         }
-        return _page(const []); // no match
-      }
-      return http.Response.bytes([0, 1, 2, 3], 200); // art bytes
-    });
+        return http.Response.bytes([0, 1, 2, 3], 200); // art bytes
+      });
 
-    sync = LibrarySync(
-      scanner: const FileSystemFolderScanner(),
-      parser: const HeuristicFilenameParser(),
-      matcher: SeriesMatcher(
-        providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
-      ),
-      cache: db,
-      art: ArtCache(httpClient: mock, directory: () async => artDir),
-      skipProviders: [
-        AniSkipSkipProvider(
-          AniSkipClient(
-            httpClient: MockClient((_) async => http.Response('', 404)),
-          ),
-        ),
-      ],
-    );
-    repo = DriftLibraryRepository(
-      db,
-      skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
-    );
-  });
-
-  tearDown(() async {
-    await db.close();
-    await dir.delete(recursive: true);
-  });
-
-  test(
-    'first scan: matches one series, records the no-match, caches art',
-    () async {
-      await touch('Cowboy Bebop - 01.mkv');
-      await touch('Totally Unknown Show - 01.mkv');
-
-      final s = await sync.sync([dir.path]);
-
-      expect(s.filesScanned, 2);
-      expect(s.matched, 1);
-      expect(s.unmatched, 1);
-
-      final series = await repo.allSeries();
-      expect(series.single.titles.romaji, 'Cowboy Bebop');
-      // Art downloaded to a local file that exists.
-      expect(series.single.coverImageRef, isNotNull);
-      expect(File(series.single.coverImageRef!).existsSync(), isTrue);
-
-      final unmatched = await repo.unmatchedFiles();
-      expect(unmatched.single.parsedTitle, 'Totally Unknown Show');
-    },
-  );
-
-  test(
-    'rescan with no changes: nothing reprocessed, no AniList calls',
-    () async {
-      await touch('Cowboy Bebop - 01.mkv');
-      await touch('Totally Unknown Show - 01.mkv');
-      await sync.sync([dir.path]);
-      final callsAfterFirst = anilistCalls;
-
-      final s = await sync.sync([dir.path]);
-
-      expect(s.unchanged, 2);
-      expect(s.processed, 0);
-      expect(anilistCalls, callsAfterFirst, reason: 'no refetch of unchanged');
-      // The no-match file is still recorded, not vanished.
-      expect((await repo.unmatchedFiles()).length, 1);
-    },
-  );
-
-  test(
-    'adding an episode of a known series: only that file, no AniList call',
-    () async {
-      await touch('Cowboy Bebop - 01.mkv');
-      await sync.sync([dir.path]);
-      final callsAfterFirst = anilistCalls;
-
-      await touch('Cowboy Bebop - 02.mkv');
-      final s = await sync.sync([dir.path]);
-
-      expect(s.processed, 1);
-      expect(s.unchanged, 1);
-      expect(s.totalLookups, 0, reason: 'known series reused from cache');
-      expect(
-        s.lookupsBySource,
-        isEmpty,
-        reason: 'nothing was asked, so no source is named',
-      );
-      expect(anilistCalls, callsAfterFirst);
-      final episodes = await repo.episodesFor(1);
-      expect(episodes.map((e) => e.number), [1, 2]);
-    },
-  );
-
-  test('removing a file: cache updates, orphan series pruned', () async {
-    final ep1 = await touch('Cowboy Bebop - 01.mkv');
-    await sync.sync([dir.path]);
-    expect((await repo.allSeries()).length, 1);
-    await db.upsertSkipAnswer(
-      const SkipSourceAnswerRow(
-        seriesId: 1,
-        episode: 1,
-        source: 'chapters',
-        introStartMs: 0,
-        introEndMs: 90000,
-        askedAtMs: 0,
-      ),
-    );
-
-    await ep1.delete();
-    final s = await sync.sync([dir.path]);
-
-    expect(s.removed, 1);
-    expect(
-      await repo.allSeries(),
-      isEmpty,
-    ); // last episode gone -> series pruned
-    expect(await repo.episodesFor(1), isEmpty);
-    // ONE prune policy: what is derived from the files goes with them; what
-    // is the show's memory stays, so a show that comes back keeps its id.
-    expect(await db.allSkipAnswers(), isEmpty, reason: 'derived — pruned');
-    expect(
-      (await db.externalIdsBySeriesId())[1]?.anilist,
-      1,
-      reason: 'identity memory — kept',
-    );
-  });
-
-  test('a file that vanishes between listing and stat is not cached', () async {
-    // `File.stat()` on a vanished file does not throw; it reports notFound
-    // with size -1 and a 1970 date. Cached, that would be a bogus fingerprint
-    // that looks changed on every later scan.
-    await touch('Cowboy Bebop - 01.mkv');
-    final ghost = '${dir.path}/Cowboy Bebop - 02.mkv';
-    final ghostSync = LibrarySync(
-      scanner: _GhostScanner(const FileSystemFolderScanner(), extra: ghost),
-      parser: const HeuristicFilenameParser(),
-      matcher: sync.matcher,
-      cache: db,
-      art: sync.art,
-      skipProviders: const [],
-    );
-    final s = await ghostSync.sync([dir.path]);
-    expect(s.filesScanned, 1, reason: 'the ghost was listed but not counted');
-    expect((await db.allFileRows()).map((f) => f.relativePath), [
-      'Cowboy Bebop - 01.mkv',
-    ]);
-  });
-
-  test(
-    'transient AniList error: file kept as a pending placeholder, retried',
-    () async {
-      // A matcher whose search always throws (e.g. 429).
-      final failing = LibrarySync(
+      sync = LibrarySync(
         scanner: const FileSystemFolderScanner(),
         parser: const HeuristicFilenameParser(),
         matcher: SeriesMatcher(
-          providers: [
-            AniListMetadataProvider(
-              AniListClient(
-                httpClient: MockClient((_) async => http.Response('boom', 500)),
-              ),
-            ),
-          ],
+          providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
         ),
         cache: db,
-        art: ArtCache(
-          httpClient: MockClient((_) async => http.Response.bytes([0], 200)),
-          directory: () async => dir,
-        ),
+        art: ArtCache(httpClient: mock, directory: () async => artDir),
         skipProviders: [
           AniSkipSkipProvider(
             AniSkipClient(
@@ -246,58 +87,225 @@ void main() {
           ),
         ],
       );
-      await touch('Cowboy Bebop - 01.mkv');
+      repo = DriftLibraryRepository(
+        db,
+        skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
+      );
+    });
 
-      final s = await failing.sync([dir.path]);
+    tearDown(() async {
+      await db.close();
+      await dir.delete(recursive: true);
+    });
 
-      expect(s.errored, 1);
-      expect(s.matched, 0);
-      expect(s.unmatched, 0);
-      // NOT confused with confirmed-unmatched (it's "not yet tried").
-      expect(await repo.unmatchedFiles(), isEmpty);
-      // Kept and shown as a NAMED placeholder (immediate population), not dropped.
-      final placeholder = (await repo.allSeries()).single;
-      expect(placeholder.pending, isTrue);
-      expect(placeholder.titles.romaji, 'Cowboy Bebop');
-      expect(placeholder.coverImageRef, isNull);
+    test(
+      'first scan: matches one series, records the no-match, caches art',
+      () async {
+        await touch('Cowboy Bebop - 01.mkv');
+        await touch('Totally Unknown Show - 01.mkv');
 
-      // A later healthy scan (the shared `sync`, AniList up) upgrades it IN
-      // PLACE to the real match — no user action, no re-add.
-      final s2 = await sync.sync([dir.path]);
-      expect(s2.matched, 1, reason: 'pending file re-identified once online');
-      final matched = (await repo.allSeries()).single;
-      expect(matched.pending, isFalse);
-      expect(matched.seriesId, 1);
-      expect(matched.titles.romaji, 'Cowboy Bebop');
-      expect(await repo.unmatchedFiles(), isEmpty);
-    },
-  );
+        final s = await sync.sync([dir.path]);
 
-  test(
-    'unreadable watched folder: cached files preserved, surfaced loudly',
-    () async {
-      // Scan a subfolder, then make it unreadable (delete it) and rescan it.
-      final libDir = await Directory('${dir.path}/lib').create();
-      await File('${libDir.path}/Cowboy Bebop - 01.mkv').writeAsString('x');
-      await sync.sync([libDir.path]);
+        expect(s.filesScanned, 2);
+        expect(s.matched, 1);
+        expect(s.unmatched, 1);
+
+        final series = await repo.allSeries();
+        expect(series.single.titles.romaji, 'Cowboy Bebop');
+        // Art downloaded to a local file that exists.
+        expect(series.single.coverImageRef, isNotNull);
+        expect(File(series.single.coverImageRef!).existsSync(), isTrue);
+
+        final unmatched = await repo.unmatchedFiles();
+        expect(unmatched.single.parsedTitle, 'Totally Unknown Show');
+      },
+    );
+
+    test(
+      'rescan with no changes: nothing reprocessed, no AniList calls',
+      () async {
+        await touch('Cowboy Bebop - 01.mkv');
+        await touch('Totally Unknown Show - 01.mkv');
+        await sync.sync([dir.path]);
+        final callsAfterFirst = anilistCalls;
+
+        final s = await sync.sync([dir.path]);
+
+        expect(s.unchanged, 2);
+        expect(s.processed, 0);
+        expect(
+          anilistCalls,
+          callsAfterFirst,
+          reason: 'no refetch of unchanged',
+        );
+        // The no-match file is still recorded, not vanished.
+        expect((await repo.unmatchedFiles()).length, 1);
+      },
+    );
+
+    test(
+      'adding an episode of a known series: only that file, no AniList call',
+      () async {
+        await touch('Cowboy Bebop - 01.mkv');
+        await sync.sync([dir.path]);
+        final callsAfterFirst = anilistCalls;
+
+        await touch('Cowboy Bebop - 02.mkv');
+        final s = await sync.sync([dir.path]);
+
+        expect(s.processed, 1);
+        expect(s.unchanged, 1);
+        expect(s.totalLookups, 0, reason: 'known series reused from cache');
+        expect(
+          s.lookupsBySource,
+          isEmpty,
+          reason: 'nothing was asked, so no source is named',
+        );
+        expect(anilistCalls, callsAfterFirst);
+        final episodes = await repo.episodesFor(1);
+        expect(episodes.map((e) => e.number), [1, 2]);
+      },
+    );
+
+    test('removing a file: cache updates, orphan series pruned', () async {
+      final ep1 = await touch('Cowboy Bebop - 01.mkv');
+      await sync.sync([dir.path]);
       expect((await repo.allSeries()).length, 1);
-
-      await libDir.delete(recursive: true); // folder vanished -> unreadable
-      final s = await sync.sync([libDir.path]);
-
-      expect(s.unreadableFolders, [libDir.path]);
-      expect(
-        s.removed,
-        0,
-        reason: 'do NOT delete files under an unreadable folder',
+      await db.upsertSkipAnswer(
+        const SkipSourceAnswerRow(
+          seriesId: 1,
+          episode: 1,
+          source: 'chapters',
+          introStartMs: 0,
+          introEndMs: 90000,
+          askedAtMs: 0,
+        ),
       );
+
+      await ep1.delete();
+      final s = await sync.sync([dir.path]);
+
+      expect(s.removed, 1);
       expect(
-        (await repo.allSeries()).length,
+        await repo.allSeries(),
+        isEmpty,
+      ); // last episode gone -> series pruned
+      expect(await repo.episodesFor(1), isEmpty);
+      // ONE prune policy: what is derived from the files goes with them; what
+      // is the show's memory stays, so a show that comes back keeps its id.
+      expect(await db.allSkipAnswers(), isEmpty, reason: 'derived — pruned');
+      expect(
+        (await db.externalIdsBySeriesId())[1]?.anilist,
         1,
-        reason: 'cached items preserved',
+        reason: 'identity memory — kept',
       );
-    },
-  );
+    });
+
+    test('a file that vanishes between listing and stat is not cached', () async {
+      // `File.stat()` on a vanished file does not throw; it reports notFound
+      // with size -1 and a 1970 date. Cached, that would be a bogus fingerprint
+      // that looks changed on every later scan.
+      await touch('Cowboy Bebop - 01.mkv');
+      final ghost = '${dir.path}/Cowboy Bebop - 02.mkv';
+      final ghostSync = LibrarySync(
+        scanner: _GhostScanner(const FileSystemFolderScanner(), extra: ghost),
+        parser: const HeuristicFilenameParser(),
+        matcher: sync.matcher,
+        cache: db,
+        art: sync.art,
+        skipProviders: const [],
+      );
+      final s = await ghostSync.sync([dir.path]);
+      expect(s.filesScanned, 1, reason: 'the ghost was listed but not counted');
+      expect((await db.allFileRows()).map((f) => f.relativePath), [
+        'Cowboy Bebop - 01.mkv',
+      ]);
+    });
+
+    test(
+      'transient AniList error: file kept as a pending placeholder, retried',
+      () async {
+        // A matcher whose search always throws (e.g. 429).
+        final failing = LibrarySync(
+          scanner: const FileSystemFolderScanner(),
+          parser: const HeuristicFilenameParser(),
+          matcher: SeriesMatcher(
+            providers: [
+              AniListMetadataProvider(
+                AniListClient(
+                  httpClient: MockClient(
+                    (_) async => http.Response('boom', 500),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          cache: db,
+          art: ArtCache(
+            httpClient: MockClient((_) async => http.Response.bytes([0], 200)),
+            directory: () async => dir,
+          ),
+          skipProviders: [
+            AniSkipSkipProvider(
+              AniSkipClient(
+                httpClient: MockClient((_) async => http.Response('', 404)),
+              ),
+            ),
+          ],
+        );
+        await touch('Cowboy Bebop - 01.mkv');
+
+        final s = await failing.sync([dir.path]);
+
+        expect(s.errored, 1);
+        expect(s.matched, 0);
+        expect(s.unmatched, 0);
+        // NOT confused with confirmed-unmatched (it's "not yet tried").
+        expect(await repo.unmatchedFiles(), isEmpty);
+        // Kept and shown as a NAMED placeholder (immediate population), not dropped.
+        final placeholder = (await repo.allSeries()).single;
+        expect(placeholder.pending, isTrue);
+        expect(placeholder.titles.romaji, 'Cowboy Bebop');
+        expect(placeholder.coverImageRef, isNull);
+
+        // A later healthy scan (the shared `sync`, AniList up) upgrades it IN
+        // PLACE to the real match — no user action, no re-add.
+        final s2 = await sync.sync([dir.path]);
+        expect(s2.matched, 1, reason: 'pending file re-identified once online');
+        final matched = (await repo.allSeries()).single;
+        expect(matched.pending, isFalse);
+        expect(matched.seriesId, 1);
+        expect(matched.titles.romaji, 'Cowboy Bebop');
+        expect(await repo.unmatchedFiles(), isEmpty);
+      },
+    );
+
+    test(
+      'unreadable watched folder: cached files preserved, surfaced loudly',
+      () async {
+        // Scan a subfolder, then make it unreadable (delete it) and rescan it.
+        final libDir = await Directory('${dir.path}/lib').create();
+        await File('${libDir.path}/Cowboy Bebop - 01.mkv').writeAsString('x');
+        await sync.sync([libDir.path]);
+        expect((await repo.allSeries()).length, 1);
+
+        await libDir.delete(recursive: true); // folder vanished -> unreadable
+        final s = await sync.sync([libDir.path]);
+
+        expect(s.unreadableFolders, [libDir.path]);
+        expect(
+          s.removed,
+          0,
+          reason: 'do NOT delete files under an unreadable folder',
+        );
+        expect(
+          (await repo.allSeries()).length,
+          1,
+          reason: 'cached items preserved',
+        );
+      },
+    );
+  });
 }
 
 /// A scanner that lists one path that does not exist, standing in for a file

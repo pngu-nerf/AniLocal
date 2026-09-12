@@ -1,9 +1,13 @@
+// ignore_for_file: avoid_print — a live harness REPORTS; its output is the point.
+
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/chapters/chapter_reader.dart';
 import 'package:anilocal/domain/chapter_skips.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'live_environment.dart';
 
 /// Drives the REAL container parsers over the REAL library and checks them
 /// against ffprobe, which is the only independent authority available.
@@ -15,7 +19,6 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// Hand-written binary parsers are exactly the code where "it compiles and the
 /// unit tests pass" proves least, so this exists to compare against reality.
-const String _root = '/Volumes/Anime';
 
 List<double> _ffprobeStarts(String path) {
   final out = Process.runSync('ffprobe', [
@@ -48,9 +51,12 @@ double? _ffprobeDuration(String path) {
 }
 
 void main() {
-  final root = Directory(_root);
-  if (!root.existsSync()) {
-    test('LIVE: library not mounted', () => fail('$_root is not mounted'));
+  final root = Directory(liveLibraryRoot);
+  if (!root.existsSync() || !hasTool('ffprobe')) {
+    // The file list is built at load time, so the guard has to be too; the
+    // SKIP (not a failure) is still recorded from inside a test body, where
+    // the reporter can see it.
+    test('LIVE: environment', () => liveReady(tools: ['ffprobe']));
     return;
   }
 
@@ -121,7 +127,6 @@ void main() {
         }
       }
 
-      // ignore: avoid_print
       print('  compared $compared files, $withChapters with chapters');
       expect(compared, greaterThan(0), reason: 'no media found to compare');
       expect(
@@ -159,7 +164,6 @@ void main() {
         }
       }
 
-      // ignore: avoid_print
       print('  inferred skip windows for $inferred files');
       expect(inferred, greaterThan(0));
       expect(wrongLength, isEmpty);

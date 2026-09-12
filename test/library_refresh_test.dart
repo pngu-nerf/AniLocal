@@ -1,26 +1,14 @@
-import 'package:anilocal/domain/models/continue_watching.dart';
-import 'package:anilocal/domain/models/episode.dart';
-import 'package:anilocal/domain/models/identified_episode.dart';
-import 'package:anilocal/domain/models/library_folder.dart';
-import 'package:anilocal/domain/models/next_result.dart';
-import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/series.dart';
-import 'package:anilocal/domain/models/show_preferences.dart';
 import 'package:anilocal/domain/models/sync_summary.dart';
 import 'package:anilocal/domain/models/titles.dart';
-import 'package:anilocal/domain/repositories/fix_match_repository.dart';
-import 'package:anilocal/domain/repositories/library_repository.dart';
-import 'package:anilocal/domain/repositories/missing_episodes_repository.dart';
-import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
-import 'package:anilocal/domain/repositories/source_selection_repository.dart';
-import 'package:anilocal/domain/repositories/watch_order_repository.dart';
-import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/playback/playback_controller.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_fix_match.dart';
+import 'support/fake_library_repository.dart';
 import 'support/fake_settings.dart';
 
 const _summary = SyncSummary(
@@ -39,222 +27,121 @@ Series _s(int id, String title) => Series(
   titles: Titles(romaji: title),
 );
 
-class _MutableLib
-    implements
-        LibraryRepository,
-        WatchStateRepository,
-        SourceSelectionRepository,
-        WatchOrderRepository,
-        MissingEpisodesRepository,
-        ShowPreferencesRepository {
-  List<Series> series = [];
-
-  @override
-  Future<List<Series>> allSeries() async => series;
-  @override
-  Future<List<Episode>> episodesFor(int seriesId) async => const [];
-  @override
-  Future<Map<int, List<Episode>>> episodesBySeries() async => {
-    for (final s in await allSeries())
-      s.seriesId: await episodesFor(s.seriesId),
-  };
-
-  @override
-  Future<List<IdentifiedEpisode>> unmatchedFiles() async => const [];
-  @override
-  Future<List<LibraryFolder>> watchedFolders() async => const [];
-  @override
-  Future<void> addFolder(String path) async {}
-  @override
-  Future<void> removeFolder(LibraryFolder folder) async {}
-  @override
-  Future<void> reorderFolders(List<LibraryFolder> orderedFolders) async {}
-  @override
-  Future<void> saveProgress(
-    Episode e, {
-    required Duration position,
-    required Duration duration,
-  }) async {}
-  @override
-  Future<bool> setWatched(Episode e, {required bool watched}) async => true;
-
-  @override
-  Future<void> setWatchedManual(Episode e, {required bool watched}) async {}
-
-  @override
-  Future<ShowPreferences> preferencesFor(int seriesId) async =>
-      const ShowPreferences();
-  @override
-  Future<Map<int, ShowPreferences>> allPreferences() async => const {};
-  @override
-  Future<void> setPictureMode(int seriesId, PictureMode mode) async {}
-  @override
-  Future<void> setNextEpisodeHidden(
-    int seriesId, {
-    required bool hidden,
-  }) async {}
-
-  @override
-  Future<void> setAllNextEpisodeHidden({required bool hidden}) async {}
-  @override
-  Future<void> clearProgress(Episode e) async {}
-  @override
-  Future<List<ContinueWatching>> continueWatching() async => const [];
-  @override
-  Future<void> selectSource(Episode e, {required String folderPath}) async {}
-  @override
-  Future<void> clearSource(Episode e) async {}
-  @override
-  Future<NextResult> nextEpisode(Episode current) async =>
-      const NoNextEpisode();
-  @override
-  Future<Map<int, Episode>> upNextBySeries() async => const {};
-  @override
-  Future<Set<int>> hiddenEpisodes(int seriesId) async => const {};
-  @override
-  Future<Map<int, Set<int>>> allHiddenEpisodes() async => const {};
-  @override
-  Future<void> hideEpisodes(int seriesId, List<int> episodes) async {}
-  @override
-  Future<void> unhideEpisodes(int seriesId, List<int> episodes) async {}
-}
-
-class _FakeFixMatch implements FixMatchRepository {
-  @override
-  Future<List<Series>> searchCandidates(String query) async => const [];
-  @override
-  Future<void> assignFile({
-    required String filePath,
-    required Series chosen,
-    int? anchoredEpisode,
-    int continuousOffset = 0,
-    bool displayContinuous = false,
-  }) async {}
-  @override
-  Future<void> assignRange({
-    required List<String> filePaths,
-    required Series chosen,
-    int anchorStart = 1,
-    int continuousOffset = 0,
-    bool displayContinuous = false,
-  }) async {}
-  @override
-  Future<void> clearOverride(String filePath) async {}
-}
-
 void main() {
-  testWidgets('library grid re-reads the cache after a scan completes', (
-    tester,
-  ) async {
-    // A realistic window, not the 800x600 default: the test font is much wider
-    // than the real one, so at the default size the header's action tabs eat
-    // the centred VFD screen and its title starts scrolling — and a running
-    // marquee makes pumpAndSettle time out.
-    tester.view.physicalSize = const Size(1400, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final repo = _MutableLib()..series = [_s(1, 'Alpha')];
+  group('library refresh', () {
+    testWidgets('library grid re-reads the cache after a scan completes', (
+      tester,
+    ) async {
+      // A realistic window, not the 800x600 default: the test font is much wider
+      // than the real one, so at the default size the header's action tabs eat
+      // the centred VFD screen and its title starts scrolling — and a running
+      // marquee makes pumpAndSettle time out.
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repo = FakeLibraryRepository(series: [_s(1, 'Alpha')]);
 
-    await tester.pumpWidget(
-      AniLocalApp(
-        repository: repo,
-        fixMatch: _FakeFixMatch(),
-        watchState: repo,
-        sourceSelection: repo,
-        missing: repo,
-        showPreferences: repo,
-        settings: const FakeSettings(),
-        watchOrder: repo,
-        playback: PlaybackController(resolver: repo),
-        onScan: (_) async {
-          // A scan that adds a new series to the cache.
-          repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];
-          return _summary;
-        },
-        onRefreshMetadata: () async =>
-            const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-        onAddFolder: () async => (added: false, deniedLabel: null),
-        accessIssues: ValueNotifier<List<String>>(const []),
-        missingFolders: ValueNotifier<List<String>>(const []),
-        missingFolderPaths: ValueNotifier<Set<String>>(const {}),
-        onOpenAccessSettings: () async => true,
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        AniLocalApp(
+          repository: repo,
+          fixMatch: const FakeFixMatch(),
+          watchState: repo,
+          sourceSelection: repo,
+          missing: repo,
+          showPreferences: repo,
+          settings: const FakeSettings(),
+          watchOrder: repo,
+          playback: PlaybackController(resolver: repo),
+          onScan: (_) async {
+            // A scan that adds a new series to the cache.
+            repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];
+            return _summary;
+          },
+          onRefreshMetadata: () async =>
+              const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+          onAddFolder: () async => (added: false, deniedLabel: null),
+          accessIssues: ValueNotifier<List<String>>(const []),
+          missingFolders: ValueNotifier<List<String>>(const []),
+          missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+          onOpenAccessSettings: () async => true,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Bravo'), findsNothing);
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text('Bravo'), findsNothing);
 
-    await tester.tap(find.byTooltip('Scan library folders'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Scan library folders'));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.text('Bravo'),
-      findsOneWidget,
-      reason: 'grid must reflect the post-scan cache',
-    );
-    expect(find.text('Alpha'), findsOneWidget);
-  });
-
-  testWidgets('a refresh NEVER blanks the grid — content stays on screen and '
-      'no spinner appears', (tester) async {
-    // The flash: _reload() used to re-assign the FutureBuilder's future, which
-    // reset it to `waiting`, so the whole layout — grid, panel, search field —
-    // was replaced by a centred spinner for a frame and rebuilt. That also
-    // dropped the grid's scroll position. A refresh must update in place.
-    tester.view.physicalSize = const Size(1400, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    final repo = _MutableLib()..series = [_s(1, 'Alpha')];
-    await tester.pumpWidget(
-      AniLocalApp(
-        repository: repo,
-        fixMatch: _FakeFixMatch(),
-        watchState: repo,
-        sourceSelection: repo,
-        missing: repo,
-        showPreferences: repo,
-        settings: const FakeSettings(),
-        watchOrder: repo,
-        playback: PlaybackController(resolver: repo),
-        onScan: (_) async {
-          repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];
-          return _summary;
-        },
-        onRefreshMetadata: () async =>
-            const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-        onAddFolder: () async => (added: false, deniedLabel: null),
-        accessIssues: ValueNotifier<List<String>>(const []),
-        missingFolders: ValueNotifier<List<String>>(const []),
-        missingFolderPaths: ValueNotifier<Set<String>>(const {}),
-        onOpenAccessSettings: () async => true,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Alpha'), findsOneWidget);
-
-    // Kick off a refresh and watch EVERY frame until it settles. At no point
-    // may the existing content vanish or a spinner take its place.
-    await tester.tap(find.byTooltip('Scan library folders'));
-    for (var i = 0; i < 10; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
       expect(
-        find.text('Alpha'),
+        find.text('Bravo'),
         findsOneWidget,
-        reason: 'the grid was blanked mid-refresh at frame $i',
+        reason: 'grid must reflect the post-scan cache',
       );
-      expect(
-        find.byType(CircularProgressIndicator),
-        findsNothing,
-        reason:
-            'a refresh must not fall back to the first-load spinner '
-            '(frame $i)',
+      expect(find.text('Alpha'), findsOneWidget);
+    });
+
+    testWidgets('a refresh NEVER blanks the grid — content stays on screen and '
+        'no spinner appears', (tester) async {
+      // The flash: _reload() used to re-assign the FutureBuilder's future, which
+      // reset it to `waiting`, so the whole layout — grid, panel, search field —
+      // was replaced by a centred spinner for a frame and rebuilt. That also
+      // dropped the grid's scroll position. A refresh must update in place.
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = FakeLibraryRepository(series: [_s(1, 'Alpha')]);
+      await tester.pumpWidget(
+        AniLocalApp(
+          repository: repo,
+          fixMatch: const FakeFixMatch(),
+          watchState: repo,
+          sourceSelection: repo,
+          missing: repo,
+          showPreferences: repo,
+          settings: const FakeSettings(),
+          watchOrder: repo,
+          playback: PlaybackController(resolver: repo),
+          onScan: (_) async {
+            repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];
+            return _summary;
+          },
+          onRefreshMetadata: () async =>
+              const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+          onAddFolder: () async => (added: false, deniedLabel: null),
+          accessIssues: ValueNotifier<List<String>>(const []),
+          missingFolders: ValueNotifier<List<String>>(const []),
+          missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+          onOpenAccessSettings: () async => true,
+        ),
       );
-    }
-    await tester.pumpAndSettle();
-    expect(find.text('Bravo'), findsOneWidget, reason: 'and it did refresh');
+      await tester.pumpAndSettle();
+      expect(find.text('Alpha'), findsOneWidget);
+
+      // Kick off a refresh and watch EVERY frame until it settles. At no point
+      // may the existing content vanish or a spinner take its place.
+      await tester.tap(find.byTooltip('Scan library folders'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(
+          find.text('Alpha'),
+          findsOneWidget,
+          reason: 'the grid was blanked mid-refresh at frame $i',
+        );
+        expect(
+          find.byType(CircularProgressIndicator),
+          findsNothing,
+          reason:
+              'a refresh must not fall back to the first-load spinner '
+              '(frame $i)',
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Bravo'), findsOneWidget, reason: 'and it did refresh');
+    });
   });
 }

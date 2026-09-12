@@ -69,111 +69,123 @@ class _ScriptedProvider implements MetadataProvider {
 /// scan was one 380-line method that wrote everything at the very end, could
 /// not be stopped, and could be started twice over one database.
 void main() {
-  late Directory dir;
-  late CacheDatabase db;
+  group('LibrarySync control flow', () {
+    late Directory dir;
+    late CacheDatabase db;
 
-  setUp(() async {
-    dir = await Directory.systemTemp.createTemp('anilocal_ctl_');
-    db = CacheDatabase(NativeDatabase.memory());
-    for (var i = 1; i <= 6; i++) {
-      await File('${dir.path}/Show $i - 01.mkv').writeAsString('x');
-    }
-  });
-  tearDown(() async {
-    await db.close();
-    await dir.delete(recursive: true);
-  });
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('anilocal_ctl_');
+      db = CacheDatabase(NativeDatabase.memory());
+      for (var i = 1; i <= 6; i++) {
+        await File('${dir.path}/Show $i - 01.mkv').writeAsString('x');
+      }
+    });
+    tearDown(() async {
+      await db.close();
+      await dir.delete(recursive: true);
+    });
 
-  LibrarySync build(_ScriptedProvider provider, {int batchSize = 2}) =>
-      LibrarySync(
-        scanner: const FileSystemFolderScanner(),
-        parser: const HeuristicFilenameParser(),
-        matcher: SeriesMatcher(providers: [provider]),
-        cache: db,
-        art: ArtCache(
-          httpClient: MockClient(
-            (_) async => http.Response.bytes([1, 2, 3], 200),
+    LibrarySync build(_ScriptedProvider provider, {int batchSize = 2}) =>
+        LibrarySync(
+          scanner: const FileSystemFolderScanner(),
+          parser: const HeuristicFilenameParser(),
+          matcher: SeriesMatcher(providers: [provider]),
+          cache: db,
+          art: ArtCache(
+            httpClient: MockClient(
+              (_) async => http.Response.bytes([1, 2, 3], 200),
+            ),
+            directory: () async => Directory('${dir.path}/.art')..createSync(),
           ),
-          directory: () async => Directory('${dir.path}/.art')..createSync(),
-        ),
-        skipProviders: const [],
-        batchSize: batchSize,
-      );
+          skipProviders: const [],
+          batchSize: batchSize,
+        );
 
-  test('each batch is COMMITTED before the next starts', () async {
-    final seenCommitted = <int, int>{}; // nth lookup -> matched rows so far
-    late _ScriptedProvider provider;
-    provider = _ScriptedProvider(
-      onSearch: (nth) async {
-        seenCommitted[nth] = (await db.allFileRows())
-            .where((f) => f.seriesId != null)
-            .length;
-      },
-    );
-    await build(provider, batchSize: 2).sync([dir.path]);
-
-    // Six titles, batches of two: lookups 3 and 5 start after one and two
-    // batches have been written respectively.
-    expect(seenCommitted[1], 0);
-    expect(seenCommitted[3], 2, reason: 'batch 1 on disk before batch 2 runs');
-    expect(seenCommitted[5], 4, reason: 'batch 2 on disk before batch 3 runs');
-  });
-
-  test(
-    'cancelling keeps what was committed and leaves the rest pending',
-    () async {
-      final cancellation = SyncCancellation();
-      final provider = _ScriptedProvider(
+    test('each batch is COMMITTED before the next starts', () async {
+      final seenCommitted = <int, int>{}; // nth lookup -> matched rows so far
+      late _ScriptedProvider provider;
+      provider = _ScriptedProvider(
         onSearch: (nth) async {
-          if (nth == 3) cancellation.cancel(); // mid-way through batch 2
+          seenCommitted[nth] = (await db.allFileRows())
+              .where((f) => f.seriesId != null)
+              .length;
         },
       );
-      final summary = await build(
-        provider,
-        batchSize: 2,
-      ).sync([dir.path], cancellation: cancellation);
+      await build(provider, batchSize: 2).sync([dir.path]);
 
-      expect(summary.cancelled, isTrue);
-      expect(summary.matched, 2, reason: 'exactly the first committed batch');
-      expect(summary.removed, 0, reason: 'a cancelled run removes nothing');
-      final rows = await db.allFileRows();
-      expect(rows.where((f) => f.seriesId != null).length, 2);
+      // Six titles, batches of two: lookups 3 and 5 start after one and two
+      // batches have been written respectively.
+      expect(seenCommitted[1], 0);
       expect(
-        rows.where((f) => f.pendingIdentification).length,
+        seenCommitted[3],
+        2,
+        reason: 'batch 1 on disk before batch 2 runs',
+      );
+      expect(
+        seenCommitted[5],
         4,
-        reason:
-            'the rest are the placeholders phase 1 wrote — retried next scan',
+        reason: 'batch 2 on disk before batch 3 runs',
       );
-      expect(
-        provider.searches,
-        3,
-        reason: 'stopped at the checkpoint after it',
-      );
-    },
-  );
+    });
 
-  test('progress is reported after each committed batch', () async {
-    final progress = <String>[];
-    await build(
-      _ScriptedProvider(),
-      batchSize: 4,
-    ).sync([dir.path], onProgress: (p) => progress.add('$p'));
-    expect(progress, ['identifying 4/6', 'identifying 6/6']);
-  });
+    test(
+      'cancelling keeps what was committed and leaves the rest pending',
+      () async {
+        final cancellation = SyncCancellation();
+        final provider = _ScriptedProvider(
+          onSearch: (nth) async {
+            if (nth == 3) cancellation.cancel(); // mid-way through batch 2
+          },
+        );
+        final summary = await build(
+          provider,
+          batchSize: 2,
+        ).sync([dir.path], cancellation: cancellation);
 
-  test('a second run while one is in flight is refused loudly', () async {
-    final gate = Completer<void>();
-    final provider = _ScriptedProvider(onSearch: (_) => gate.future);
-    final sync = build(provider);
-    final first = sync.sync([dir.path]);
-    await Future<void>.delayed(Duration.zero); // let it reach the first lookup
-    expect(sync.isRunning, isTrue);
-    await expectLater(
-      sync.refreshMetadata(),
-      throwsA(isA<SyncAlreadyRunning>()),
+        expect(summary.cancelled, isTrue);
+        expect(summary.matched, 2, reason: 'exactly the first committed batch');
+        expect(summary.removed, 0, reason: 'a cancelled run removes nothing');
+        final rows = await db.allFileRows();
+        expect(rows.where((f) => f.seriesId != null).length, 2);
+        expect(
+          rows.where((f) => f.pendingIdentification).length,
+          4,
+          reason:
+              'the rest are the placeholders phase 1 wrote — retried next scan',
+        );
+        expect(
+          provider.searches,
+          3,
+          reason: 'stopped at the checkpoint after it',
+        );
+      },
     );
-    gate.complete();
-    await first;
-    expect(sync.isRunning, isFalse);
+
+    test('progress is reported after each committed batch', () async {
+      final progress = <String>[];
+      await build(
+        _ScriptedProvider(),
+        batchSize: 4,
+      ).sync([dir.path], onProgress: (p) => progress.add('$p'));
+      expect(progress, ['identifying 4/6', 'identifying 6/6']);
+    });
+
+    test('a second run while one is in flight is refused loudly', () async {
+      final gate = Completer<void>();
+      final provider = _ScriptedProvider(onSearch: (_) => gate.future);
+      final sync = build(provider);
+      final first = sync.sync([dir.path]);
+      await Future<void>.delayed(
+        Duration.zero,
+      ); // let it reach the first lookup
+      expect(sync.isRunning, isTrue);
+      await expectLater(
+        sync.refreshMetadata(),
+        throwsA(isA<SyncAlreadyRunning>()),
+      );
+      gate.complete();
+      await first;
+      expect(sync.isRunning, isFalse);
+    });
   });
 }

@@ -42,50 +42,54 @@ CREATE TABLE hidden_episodes (anilist_id INTEGER NOT NULL,
 ''';
 
 void main() {
-  /// A populated v11 database, opened through the real v11 -> v12 migration.
-  CacheDatabase openMigratedV11() => CacheDatabase(
-    NativeDatabase.memory(
-      setup: (raw) {
-        final v = raw.select('PRAGMA user_version').first.values.first as int;
-        if (v != 0) return;
-        raw.execute(_v11Ddl);
-        // A WATCHED episode and an in-progress one — both pre-date the override.
-        raw.execute(
-          'INSERT INTO watch_state (anilist_id, episode, resume_position_ms, '
-          'duration_ms, watched, updated_at_ms) VALUES (1, 3, 0, 1440000, 1, 5)',
-        );
-        raw.execute(
-          'INSERT INTO watch_state (anilist_id, episode, resume_position_ms, '
-          'duration_ms, watched, updated_at_ms) VALUES (1, 4, 600000, 1440000, 0, 6)',
-        );
-        raw.execute('PRAGMA user_version = 11');
-      },
-    ),
-  );
+  group('migration v11 -> v12', () {
+    /// A populated v11 database, opened through the real v11 -> v12 migration.
+    CacheDatabase openMigratedV11() => CacheDatabase(
+      NativeDatabase.memory(
+        setup: (raw) {
+          final v = raw.select('PRAGMA user_version').first.values.first as int;
+          if (v != 0) return;
+          raw.execute(_v11Ddl);
+          // A WATCHED episode and an in-progress one — both pre-date the override.
+          raw.execute(
+            'INSERT INTO watch_state (anilist_id, episode, resume_position_ms, '
+            'duration_ms, watched, updated_at_ms) VALUES (1, 3, 0, 1440000, 1, 5)',
+          );
+          raw.execute(
+            'INSERT INTO watch_state (anilist_id, episode, resume_position_ms, '
+            'duration_ms, watched, updated_at_ms) VALUES (1, 4, 600000, 1440000, 0, 6)',
+          );
+          raw.execute('PRAGMA user_version = 11');
+        },
+      ),
+    );
 
-  test('v11 -> v12 adds watched_manual defaulting to false', () async {
-    final db = openMigratedV11();
-    addTearDown(db.close);
-
-    final rows = await db.allWatchStateRows();
-    expect(rows, hasLength(2));
-    // Every migrated row is NON-manual — its `watched` value keeps its
-    // threshold-derived meaning; nothing is retroactively a manual override.
-    expect(rows.every((r) => r.watchedManual == false), isTrue);
-  });
-
-  test(
-    'existing watch state is otherwise unaffected by the migration',
-    () async {
+    test('v11 -> v12 adds watched_manual defaulting to false', () async {
       final db = openMigratedV11();
       addTearDown(db.close);
 
-      final byEp = {for (final r in await db.allWatchStateRows()) r.episode: r};
-      // The watched episode stays watched; the in-progress one keeps its resume.
-      expect(byEp[3]!.watched, isTrue);
-      expect(byEp[3]!.resumePositionMs, 0);
-      expect(byEp[4]!.watched, isFalse);
-      expect(byEp[4]!.resumePositionMs, 600000);
-    },
-  );
+      final rows = await db.allWatchStateRows();
+      expect(rows, hasLength(2));
+      // Every migrated row is NON-manual — its `watched` value keeps its
+      // threshold-derived meaning; nothing is retroactively a manual override.
+      expect(rows.every((r) => r.watchedManual == false), isTrue);
+    });
+
+    test(
+      'existing watch state is otherwise unaffected by the migration',
+      () async {
+        final db = openMigratedV11();
+        addTearDown(db.close);
+
+        final byEp = {
+          for (final r in await db.allWatchStateRows()) r.episode: r,
+        };
+        // The watched episode stays watched; the in-progress one keeps its resume.
+        expect(byEp[3]!.watched, isTrue);
+        expect(byEp[3]!.resumePositionMs, 0);
+        expect(byEp[4]!.watched, isFalse);
+        expect(byEp[4]!.resumePositionMs, 600000);
+      },
+    );
+  });
 }

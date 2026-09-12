@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'support/recording_player.dart';
+
 /// Regression guard for the player's cursor-hide "wake-on-move" wiring — the
 /// fragile-machinery trap the maintainability assessment flagged (the OLD test
 /// here was a false-positive: it mirrored the structure in a private harness and
@@ -19,7 +21,7 @@ import 'package:media_kit/media_kit.dart';
 /// regression checklist.
 ///
 /// HOW this test is genuine (vs the old one): it pumps the REAL `PlayerControls`
-/// widget (via a native-free stand-in [Player] — see [_FakePlayer]) and asserts
+/// widget (via a native-free stand-in [Player] — [RecordingPlayer]) and asserts
 /// the production widget tree's shape:
 ///   • the wake handler is on a `Listener.onPointerHover`, AND
 ///   • the cursor-hiding `MouseRegion` directly under it carries NO `onHover`.
@@ -33,53 +35,6 @@ import 'package:media_kit/media_kit.dart';
 /// hover to a MouseRegion regardless of cursor). So this test locks the WIRING
 /// (which is what a maintainer would "clean up"); the platform suppression itself
 /// is confirmed by a fullscreen wiggle on device (regression checklist §C/§D).
-
-const Stream<Never> _empty = Stream<Never>.empty();
-
-/// A no-native stand-in for media_kit's [Player]: the harness can't construct a
-/// real one (libmpv/`Mpv.framework` is absent in `flutter test`), so this
-/// supplies a real [PlayerState] and real (empty) [PlayerStream] — everything
-/// the controls read at build time — and `noSuchMethod` swallows the rest
-/// (seek/playOrPause/… only fire on interaction, never during a structural
-/// pump).
-class _FakePlayer implements Player {
-  _FakePlayer({bool playing = false}) : state = PlayerState(playing: playing);
-
-  @override
-  final PlayerState state;
-
-  @override
-  final PlayerStream stream = const PlayerStream(
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-    _empty,
-  );
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => null;
-}
 
 Widget _app(Player player) => MaterialApp(
   home: Scaffold(
@@ -116,78 +71,85 @@ Finder get _overlayRegion => find
     .first;
 
 void main() {
-  testWidgets(
-    'STRUCTURAL: wake-on-move is on Listener.onPointerHover, NOT the cursor '
-    'MouseRegion (fails if the wake is moved onto the MouseRegion)',
-    (tester) async {
-      await tester.pumpWidget(_app(_FakePlayer()));
+  group('player cursor wake', () {
+    testWidgets(
+      'STRUCTURAL: wake-on-move is on Listener.onPointerHover, NOT the cursor '
+      'MouseRegion (fails if the wake is moved onto the MouseRegion)',
+      (tester) async {
+        await tester.pumpWidget(_app(RecordingPlayer()));
 
-      // Wake lives on a Listener — exactly one, and it also reclaims focus.
-      expect(
-        _wakeListener,
-        findsOneWidget,
-        reason:
-            'reveal-on-move must hang off Listener.onPointerHover (above the '
-            'cursor MouseRegion). If it were moved onto the MouseRegion, no '
-            'Listener would carry onPointerHover and this finds nothing.',
-      );
+        // Wake lives on a Listener — exactly one, and it also reclaims focus.
+        expect(
+          _wakeListener,
+          findsOneWidget,
+          reason:
+              'reveal-on-move must hang off Listener.onPointerHover (above the '
+              'cursor MouseRegion). If it were moved onto the MouseRegion, no '
+              'Listener would carry onPointerHover and this finds nothing.',
+        );
 
-      // The cursor MouseRegion directly under it must NOT carry the wake: a
-      // cursor:none MouseRegion stops firing onHover, which is the whole bug.
-      final region = tester.widget<MouseRegion>(_overlayRegion);
-      expect(
-        region.onHover,
-        isNull,
-        reason:
-            'the cursor-hiding MouseRegion must not carry wake-on-move '
-            '(onHover) — it goes dead under cursor:none. Wake belongs on the '
-            'Listener above it.',
-      );
-      // Sanity: it IS the cursor region (toggling cursor + windowed re-entry).
-      expect(region.onEnter, isNotNull);
-      expect(region.cursor, SystemMouseCursors.basic); // visible at rest
-    },
-  );
+        // The cursor MouseRegion directly under it must NOT carry the wake: a
+        // cursor:none MouseRegion stops firing onHover, which is the whole bug.
+        final region = tester.widget<MouseRegion>(_overlayRegion);
+        expect(
+          region.onHover,
+          isNull,
+          reason:
+              'the cursor-hiding MouseRegion must not carry wake-on-move '
+              '(onHover) — it goes dead under cursor:none. Wake belongs on the '
+              'Listener above it.',
+        );
+        // Sanity: it IS the cursor region (toggling cursor + windowed re-entry).
+        expect(region.onEnter, isNotNull);
+        expect(region.cursor, SystemMouseCursors.basic); // visible at rest
+      },
+    );
 
-  testWidgets(
-    'BEHAVIORAL: idle auto-hide drops the cursor to none, then a mouse MOVE '
-    '(no click) via the wake path brings it back',
-    (tester) async {
-      // playing:true so the 3s idle timer actually hides (it only hides while
-      // playing — a paused player keeps controls, by design).
-      await tester.pumpWidget(_app(_FakePlayer(playing: true)));
+    testWidgets(
+      'BEHAVIORAL: idle auto-hide drops the cursor to none, then a mouse MOVE '
+      '(no click) via the wake path brings it back',
+      (tester) async {
+        // playing:true so the 3s idle timer actually hides (it only hides while
+        // playing — a paused player keeps controls, by design).
+        await tester.pumpWidget(
+          _app(RecordingPlayer(state: const PlayerState(playing: true))),
+        );
 
-      MouseCursor cursor() => tester.widget<MouseRegion>(_overlayRegion).cursor;
+        MouseCursor cursor() =>
+            tester.widget<MouseRegion>(_overlayRegion).cursor;
 
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      final center = tester.getCenter(find.byType(PlayerControls));
-      // Enter the overlay → _show() → controls visible + 3s idle timer armed.
-      await gesture.addPointer(location: center);
-      addTearDown(gesture.removePointer);
-      await tester.pump();
-      expect(cursor(), SystemMouseCursors.basic, reason: 'visible at rest');
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        final center = tester.getCenter(find.byType(PlayerControls));
+        // Enter the overlay → _show() → controls visible + 3s idle timer armed.
+        await gesture.addPointer(location: center);
+        addTearDown(gesture.removePointer);
+        await tester.pump();
+        expect(cursor(), SystemMouseCursors.basic, reason: 'visible at rest');
 
-      // Idle while playing → auto-hide → cursor none.
-      await tester.pump(const Duration(seconds: 3));
-      await tester.pump();
-      expect(
-        cursor(),
-        SystemMouseCursors.none,
-        reason: 'controls (and cursor) auto-hide after idle while playing',
-      );
+        // Idle while playing → auto-hide → cursor none.
+        await tester.pump(const Duration(seconds: 3));
+        await tester.pump();
+        expect(
+          cursor(),
+          SystemMouseCursors.none,
+          reason: 'controls (and cursor) auto-hide after idle while playing',
+        );
 
-      // A bare MOVE (hover, no button) must recover — this is the fullscreen
-      // in-place recovery. (This exercises the wake loop end-to-end; it does
-      // NOT distinguish Listener-vs-MouseRegion wiring — the tester delivers
-      // hover either way — which is exactly why the STRUCTURAL test above is
-      // the real guard.)
-      await gesture.moveTo(center + const Offset(24, 12));
-      await tester.pump();
-      expect(
-        cursor(),
-        SystemMouseCursors.basic,
-        reason: 'a mouse move brings controls + cursor back, no click needed',
-      );
-    },
-  );
+        // A bare MOVE (hover, no button) must recover — this is the fullscreen
+        // in-place recovery. (This exercises the wake loop end-to-end; it does
+        // NOT distinguish Listener-vs-MouseRegion wiring — the tester delivers
+        // hover either way — which is exactly why the STRUCTURAL test above is
+        // the real guard.)
+        await gesture.moveTo(center + const Offset(24, 12));
+        await tester.pump();
+        expect(
+          cursor(),
+          SystemMouseCursors.basic,
+          reason: 'a mouse move brings controls + cursor back, no click needed',
+        );
+      },
+    );
+  });
 }

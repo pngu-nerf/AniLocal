@@ -24,45 +24,47 @@ Map<String, dynamic> _m(int id, String romaji) => {
 };
 
 void main() {
-  test('retries without leading word when first search is empty', () async {
-    final searches = <String>[];
-    final matcher = SeriesMatcher(
-      providers: [
-        AniListMetadataProvider(
-          AniListClient(
-            httpClient: MockClient((req) async {
-              final search = (graphqlVariables(req)['search']) as String;
-              searches.add(search);
-              if (search == 'Cowboy Bebop') {
-                return _page([_m(1, 'Cowboy Bebop')]);
-              }
-              return _page(const []); // polluted query -> empty
-            }),
-          ),
-        ),
-      ],
-    );
-
-    final result = await matcher.match('ZzzRip Cowboy Bebop');
-
-    expect(result.series?.seriesId, 1);
-    expect(searches, ['ZzzRip Cowboy Bebop', 'Cowboy Bebop']);
-  });
-
-  test('returns no match when candidates score below the floor', () async {
-    final matcher = SeriesMatcher(
-      providers: [
-        AniListMetadataProvider(
-          AniListClient(
-            httpClient: MockClient(
-              (req) async => _page([_m(1, 'Completely Different Show')]),
+  group('SeriesMatcher', () {
+    test('retries without leading word when first search is empty', () async {
+      final searches = <String>[];
+      final matcher = SeriesMatcher(
+        providers: [
+          AniListMetadataProvider(
+            AniListClient(
+              httpClient: MockClient((req) async {
+                final search = (graphqlVariables(req)['search']) as String;
+                searches.add(search);
+                if (search == 'Cowboy Bebop') {
+                  return _page([_m(1, 'Cowboy Bebop')]);
+                }
+                return _page(const []); // polluted query -> empty
+              }),
             ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
 
-    final result = await matcher.match('zzz nonsense qux');
-    expect(result.series, isNull);
+      final result = await matcher.match('ZzzRip Cowboy Bebop');
+
+      expect(result.series?.seriesId, 1);
+      expect(searches, ['ZzzRip Cowboy Bebop', 'Cowboy Bebop']);
+    });
+
+    test('returns no match when candidates score below the floor', () async {
+      final matcher = SeriesMatcher(
+        providers: [
+          AniListMetadataProvider(
+            AniListClient(
+              httpClient: MockClient(
+                (req) async => _page([_m(1, 'Completely Different Show')]),
+              ),
+            ),
+          ),
+        ],
+      );
+
+      final result = await matcher.match('zzz nonsense qux');
+      expect(result.series, isNull);
+    });
   });
 }

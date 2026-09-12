@@ -37,59 +37,61 @@ Future<ShellHarness> _pumpHome(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('a pushed page is opaque on its FIRST frame — the page below '
-      'does not paint through', (tester) async {
-    final h = await _pumpHome(tester);
-    expect(find.text('LIBRARY'), findsOneWidget);
-
-    h.push(_page('DETAIL', 'Detail'));
-    await tester.pump();
-
-    expect(
-      find.text('DETAIL'),
-      findsOneWidget,
-      reason: 'the pushed page is up on frame 1',
-    );
-    expect(
-      find.text('LIBRARY'),
-      findsNothing,
-      reason:
-          'the page below must be offstage immediately — if it is still '
-          'painting, its content composites under the arriving page for the '
-          "length of the route's transition duration",
-    );
-  });
-
-  testWidgets('and stays opaque — no bleed appears a few frames in', (
-    tester,
-  ) async {
-    final h = await _pumpHome(tester);
-    h.push(_page('DETAIL', 'Detail'));
-    for (var i = 0; i < 5; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-      expect(find.text('LIBRARY'), findsNothing, reason: 'bleed at frame $i');
-    }
-  });
-
-  testWidgets(
-    'back-navigation is opaque too — the popped page does not linger',
-    (tester) async {
+  group('route opacity', () {
+    testWidgets('a pushed page is opaque on its FIRST frame — the page below '
+        'does not paint through', (tester) async {
       final h = await _pumpHome(tester);
+      expect(find.text('LIBRARY'), findsOneWidget);
+
       h.push(_page('DETAIL', 'Detail'));
       await tester.pump();
-      expect(find.text('DETAIL'), findsOneWidget);
 
-      h.pop();
-      await tester.pump();
-
-      expect(find.text('LIBRARY'), findsOneWidget);
       expect(
         find.text('DETAIL'),
+        findsOneWidget,
+        reason: 'the pushed page is up on frame 1',
+      );
+      expect(
+        find.text('LIBRARY'),
         findsNothing,
         reason:
-            'the popped page must be gone on the first frame back, not '
-            'composited over the library while it fades',
+            'the page below must be offstage immediately — if it is still '
+            'painting, its content composites under the arriving page for the '
+            "length of the route's transition duration",
       );
-    },
-  );
+    });
+
+    testWidgets('and stays opaque — no bleed appears a few frames in', (
+      tester,
+    ) async {
+      final h = await _pumpHome(tester);
+      h.push(_page('DETAIL', 'Detail'));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(find.text('LIBRARY'), findsNothing, reason: 'bleed at frame $i');
+      }
+    });
+
+    testWidgets(
+      'back-navigation is opaque too — the popped page does not linger',
+      (tester) async {
+        final h = await _pumpHome(tester);
+        h.push(_page('DETAIL', 'Detail'));
+        await tester.pump();
+        expect(find.text('DETAIL'), findsOneWidget);
+
+        h.pop();
+        await tester.pump();
+
+        expect(find.text('LIBRARY'), findsOneWidget);
+        expect(
+          find.text('DETAIL'),
+          findsNothing,
+          reason:
+              'the popped page must be gone on the first frame back, not '
+              'composited over the library while it fades',
+        );
+      },
+    );
+  });
 }

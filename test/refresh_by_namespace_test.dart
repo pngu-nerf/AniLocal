@@ -21,64 +21,66 @@ import 'package:http/testing.dart';
 /// a single show — silently. `MetadataProvider.idNamespace` existed for exactly
 /// this and had no reader.
 void main() {
-  test(
-    'a Jikan-identified show is re-fetched by its MAL id on refresh',
-    () async {
-      final dir = await Directory.systemTemp.createTemp('anilocal_ns_');
-      addTearDown(() => dir.delete(recursive: true));
-      final db = CacheDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
-      await File('${dir.path}/Namespace Show - 01.mkv').writeAsString('x');
+  group('refresh by id namespace', () {
+    test(
+      'a Jikan-identified show is re-fetched by its MAL id on refresh',
+      () async {
+        final dir = await Directory.systemTemp.createTemp('anilocal_ns_');
+        addTearDown(() => dir.delete(recursive: true));
+        final db = CacheDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        await File('${dir.path}/Namespace Show - 01.mkv').writeAsString('x');
 
-      final byIdRequests = <String>[];
-      final mock = MockClient((req) async {
-        final path = req.url.path;
-        if (req.url.queryParameters.containsKey('q')) {
+        final byIdRequests = <String>[];
+        final mock = MockClient((req) async {
+          final path = req.url.path;
+          if (req.url.queryParameters.containsKey('q')) {
+            return http.Response(
+              jsonEncode({
+                'data': [
+                  {'mal_id': 99, 'title': 'Namespace Show'},
+                ],
+              }),
+              200,
+            );
+          }
+          byIdRequests.add(path);
           return http.Response(
             jsonEncode({
-              'data': [
-                {'mal_id': 99, 'title': 'Namespace Show'},
-              ],
+              'data': {'mal_id': 99, 'title': 'Namespace Show'},
             }),
             200,
           );
-        }
-        byIdRequests.add(path);
-        return http.Response(
-          jsonEncode({
-            'data': {'mal_id': 99, 'title': 'Namespace Show'},
-          }),
-          200,
+        });
+        final jikan = JikanMetadataProvider(
+          JikanClient(httpClient: mock, minInterval: Duration.zero),
         );
-      });
-      final jikan = JikanMetadataProvider(
-        JikanClient(httpClient: mock, minInterval: Duration.zero),
-      );
-      LibrarySync build() => LibrarySync(
-        scanner: const FileSystemFolderScanner(),
-        parser: const HeuristicFilenameParser(),
-        matcher: SeriesMatcher(providers: [jikan]),
-        cache: db,
-        art: ArtCache(
-          httpClient: mock,
-          directory: () async => Directory('${dir.path}/.art')..createSync(),
-        ),
-        skipProviders: const [],
-      );
+        LibrarySync build() => LibrarySync(
+          scanner: const FileSystemFolderScanner(),
+          parser: const HeuristicFilenameParser(),
+          matcher: SeriesMatcher(providers: [jikan]),
+          cache: db,
+          art: ArtCache(
+            httpClient: mock,
+            directory: () async => Directory('${dir.path}/.art')..createSync(),
+          ),
+          skipProviders: const [],
+        );
 
-      await build().sync([dir.path]);
-      final ids = await db.externalIdsBySeriesId();
-      expect(
-        ids.values.single.mal,
-        99,
-        reason: 'stored under the mal namespace',
-      );
-      expect(byIdRequests, isEmpty);
+        await build().sync([dir.path]);
+        final ids = await db.externalIdsBySeriesId();
+        expect(
+          ids.values.single.mal,
+          99,
+          reason: 'stored under the mal namespace',
+        );
+        expect(byIdRequests, isEmpty);
 
-      final summary = await build().refreshMetadata();
+        final summary = await build().refreshMetadata();
 
-      expect(byIdRequests, ['/v4/anime/99']);
-      expect(summary.seriesRefreshed, 1);
-    },
-  );
+        expect(byIdRequests, ['/v4/anime/99']);
+        expect(summary.seriesRefreshed, 1);
+      },
+    );
+  });
 }

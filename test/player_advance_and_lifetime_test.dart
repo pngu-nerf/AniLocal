@@ -35,81 +35,88 @@ Widget _controls(RecordingPlayer player, {required VoidCallback playNext}) =>
 /// The bar's two lifetime contracts: a held key does not advance episodes,
 /// and a bar that leaves the tree leaves the app-lifetime player alone.
 void main() {
-  testWidgets('seeking past the end advances on a PRESS, not on key repeat', (
-    tester,
-  ) async {
-    var advances = 0;
-    final player = RecordingPlayer(
-      state: const PlayerState(
+  group('player control bar advance and lifetime', () {
+    testWidgets('seeking past the end advances on a PRESS, not on key repeat', (
+      tester,
+    ) async {
+      var advances = 0;
+      final player = RecordingPlayer(
+        state: const PlayerState(
+          duration: Duration(minutes: 24),
+          position: Duration(minutes: 23, seconds: 55),
+        ),
+      );
+      await tester.pumpWidget(_controls(player, playNext: () => advances++));
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      expect(advances, 1, reason: 'the press advances');
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      expect(advances, 1, reason: 'a held → would skip an episode per repeat');
+      expect(
+        player.seeks,
+        isEmpty,
+        reason: 'nor does the repeat bounce the seek',
+      );
+
+      // Away from the end, repeats still seek — holding → scrubs as before.
+      player.state = const PlayerState(
         duration: Duration(minutes: 24),
-        position: Duration(minutes: 23, seconds: 55),
-      ),
-    );
-    await tester.pumpWidget(_controls(player, playNext: () => advances++));
-    await tester.pump();
+        position: Duration(minutes: 5),
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      expect(player.seeks, hasLength(2));
+      await tester.pump(
+        const Duration(seconds: 3),
+      ); // drain the auto-hide timer
+    });
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-    expect(advances, 1, reason: 'the press advances');
-    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
-    expect(advances, 1, reason: 'a held → would skip an episode per repeat');
-    expect(
-      player.seeks,
-      isEmpty,
-      reason: 'nor does the repeat bounce the seek',
-    );
+    testWidgets('the seek bar releases its player subscriptions on dispose', (
+      tester,
+    ) async {
+      final player = RecordingPlayer();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: SeekBar(player: player)),
+        ),
+      );
+      expect(player.positionHasListener, isTrue);
+      expect(player.durationHasListener, isTrue);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      expect(
+        player.positionHasListener,
+        isFalse,
+        reason:
+            'the player outlives every theater visit; the bar must not '
+            'leave a listener behind each time',
+      );
+      expect(player.durationHasListener, isFalse);
+    });
 
-    // Away from the end, repeats still seek — holding → scrubs as before.
-    player.state = const PlayerState(
-      duration: Duration(minutes: 24),
-      position: Duration(minutes: 5),
-    );
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
-    expect(player.seeks, hasLength(2));
-    await tester.pump(const Duration(seconds: 3)); // drain the auto-hide timer
-  });
-
-  testWidgets('the seek bar releases its player subscriptions on dispose', (
-    tester,
-  ) async {
-    final player = RecordingPlayer();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: SeekBar(player: player)),
-      ),
-    );
-    expect(player.positionHasListener, isTrue);
-    expect(player.durationHasListener, isTrue);
-    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-    expect(
-      player.positionHasListener,
-      isFalse,
-      reason:
-          'the player outlives every theater visit; the bar must not '
-          'leave a listener behind each time',
-    );
-    expect(player.durationHasListener, isFalse);
-  });
-
-  test('timeline markers are withheld when skipping is off', () {
-    final intro = SkipRange(
-      start: Duration.zero,
-      end: const Duration(seconds: 90),
-    );
-    final episode = Episode(number: 1, fileRef: '/a.mkv', introSkip: intro);
-    expect(
-      PlayerControlsState(
-        episode: episode,
-        skipMode: SkipMode.button,
-      ).introMarker,
-      intro,
-    );
-    expect(
-      PlayerControlsState(episode: episode, skipMode: SkipMode.off).introMarker,
-      isNull,
-    );
+    test('timeline markers are withheld when skipping is off', () {
+      final intro = SkipRange(
+        start: Duration.zero,
+        end: const Duration(seconds: 90),
+      );
+      final episode = Episode(number: 1, fileRef: '/a.mkv', introSkip: intro);
+      expect(
+        PlayerControlsState(
+          episode: episode,
+          skipMode: SkipMode.button,
+        ).introMarker,
+        intro,
+      );
+      expect(
+        PlayerControlsState(
+          episode: episode,
+          skipMode: SkipMode.off,
+        ).introMarker,
+        isNull,
+      );
+    });
   });
 }

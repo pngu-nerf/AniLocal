@@ -1,3 +1,4 @@
+import 'package:anilocal/ui/shell/header_controller.dart';
 import 'package:anilocal/ui/shell/header_spec.dart';
 import 'package:anilocal/ui/theme/brand_wordmark.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
@@ -157,7 +158,7 @@ void main() {
     // Push a second page: back becomes real, the readout must not move.
     _harness.push(const SpecPage(spec: HeaderSpec(title: 'Pushed')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(HeaderController.spinnerGrace);
     final withBack = tester.getRect(find.byType(HeaderReadout));
     expect(withBack, noBack);
 
@@ -165,7 +166,7 @@ void main() {
     // hit-testable — that's what makes it exactly the right width.
     _harness.pop();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(HeaderController.spinnerGrace);
     final reserved = tester.widget<Visibility>(
       find
           .ancestor(

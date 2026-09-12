@@ -597,6 +597,54 @@ void main() {
       );
     });
 
+    test('the same guarantee holds over the PRODUCTION connection '
+        '(createInBackground)', () async {
+      // The app opens its cache with NativeDatabase.createInBackground — a
+      // separate isolate, drift's remote executor. The wrapper's transaction
+      // has to hold across that boundary too; the in-process test above
+      // cannot prove it does.
+      final dir = await Directory.systemTemp.createTemp('anilocal_atomic_bg_');
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/cache.sqlite');
+      final seed = sqlite3.sqlite3.open(file.path);
+      seedBrokenV18(seed);
+      seed.close();
+
+      final broken = CacheDatabase(NativeDatabase.createInBackground(file));
+      await expectLater(broken.allSeriesRows(), throwsA(anything));
+      await broken.close();
+
+      final raw = sqlite3.sqlite3.open(file.path);
+      expect(raw.select('PRAGMA user_version').first.values.first, 18);
+      expect(
+        raw
+            .select("SELECT name FROM sqlite_master WHERE type='table'")
+            .map((r) => r['name'])
+            .toSet(),
+        isNot(contains('skip_source_answers')),
+      );
+      expect(
+        raw.select('SELECT resume_position_ms FROM watch_state').single.values,
+        [987654],
+      );
+      raw.execute(
+        'CREATE TABLE skip_segments (series_id INTEGER NOT NULL, '
+        'episode INTEGER NOT NULL, intro_start_ms INTEGER, '
+        'intro_end_ms INTEGER, outro_start_ms INTEGER, '
+        'outro_end_ms INTEGER, '
+        "source TEXT NOT NULL DEFAULT '', "
+        'intro_confidence INTEGER NOT NULL DEFAULT 0, '
+        'outro_confidence INTEGER NOT NULL DEFAULT 0, '
+        "resolved_key TEXT NOT NULL DEFAULT '', "
+        'PRIMARY KEY (series_id, episode))',
+      );
+      raw.close();
+
+      final repaired = CacheDatabase(NativeDatabase.createInBackground(file));
+      addTearDown(repaired.close);
+      expect((await repaired.allSeriesRows()).single.romaji, 'Bebop');
+    });
+
     test(
       'a cache from a NEWER build is refused, and its version untouched',
       () async {

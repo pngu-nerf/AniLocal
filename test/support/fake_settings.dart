@@ -19,8 +19,8 @@ class FakeSettings implements SettingsRepository {
   Future<void> setAutoPlayNext(bool enabled) async {}
 
   // Empty = "built-in order, everything enabled" (see applySourceOrder). A test
-  // that needs to observe writes subclasses and overrides, as _Recorder does in
-  // settings_window_test — this class stays const and side-effect-free.
+  // that needs to observe writes uses RecorderSettings (recorder_settings.dart)
+  // — this class stays const and side-effect-free.
   @override
   Future<List<SourcePreference>> loadMetadataSourceOrder() async => const [];
   @override

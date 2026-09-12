@@ -24,6 +24,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_volume_resolver.dart';
+
 /// A skip source whose behaviour each test dictates.
 class _FakeSkip implements SkipProvider {
   _FakeSkip(
@@ -68,20 +70,6 @@ class _FakeSkip implements SkipProvider {
     if (failure != null) throw SkipException('$token down', failure: failure!);
     return windows;
   }
-}
-
-/// A [VolumeResolver] a test configures directly: `mountById` says where a
-/// volume UUID is mounted RIGHT NOW (null = not mounted), so a test can move a
-/// library folder to a new mount name without diskutil.
-class _FakeVolumeResolver implements VolumeResolver {
-  final Map<String, String?> mountById = {};
-
-  @override
-  Future<VolumeInfo?> infoForPath(String path) async => null;
-
-  @override
-  Future<String?> mountPointForVolumeId(String volumeId) async =>
-      mountById[volumeId];
 }
 
 /// The answer a given source recorded for episode 1, or null if never asked.
@@ -289,7 +277,7 @@ void main() {
             await Directory(remounted).rename(stored);
           }
         });
-        final resolver = _FakeVolumeResolver()..mountById['VOL-1'] = remounted;
+        final resolver = FakeVolumeResolver()..mountById['VOL-1'] = remounted;
 
         // Refresh: the file is unchanged and was never asked about.
         final seenOnRefresh = <SkipLookup>[];

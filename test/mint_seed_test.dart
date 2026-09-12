@@ -8,21 +8,23 @@ import 'package:flutter_test/flutter_test.dart';
 /// goes missing, restarting at the base would re-issue an id another show
 /// already owns — a silent merge. The floor is what is already in use.
 void main() {
-  test('a missing counter never re-issues a minted id', () async {
-    final db = CacheDatabase(NativeDatabase.memory());
-    addTearDown(db.close);
+  group('minted-id counter seeding', () {
+    test('a missing counter never re-issues a minted id', () async {
+      final db = CacheDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
 
-    final first = await db.ensureSeriesId(const ExternalIds(kitsu: 1));
-    final second = await db.ensureSeriesId(const ExternalIds(kitsu: 2));
-    expect(isMintedSeriesId(first), isTrue);
-    expect(second, first + 1);
+      final first = await db.ensureSeriesId(const ExternalIds(kitsu: 1));
+      final second = await db.ensureSeriesId(const ExternalIds(kitsu: 2));
+      expect(isMintedSeriesId(first), isTrue);
+      expect(second, first + 1);
 
-    await db.customStatement(
-      "DELETE FROM app_settings WHERE key = 'next_minted_series_id'",
-    );
+      await db.customStatement(
+        "DELETE FROM app_settings WHERE key = 'next_minted_series_id'",
+      );
 
-    final third = await db.ensureSeriesId(const ExternalIds(kitsu: 3));
-    expect(third, greaterThan(second), reason: 'seeded from what exists');
-    expect({first, second, third}, hasLength(3));
+      final third = await db.ensureSeriesId(const ExternalIds(kitsu: 3));
+      expect(third, greaterThan(second), reason: 'seeded from what exists');
+      expect({first, second, third}, hasLength(3));
+    });
   });
 }

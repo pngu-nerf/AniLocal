@@ -69,6 +69,8 @@ class RecordingPlayer implements Player {
   bool get durationHasListener => _duration.hasListener;
 
   bool called(Symbol member) => calls.any((c) => c.memberName == member);
+  int callCount(Symbol member) =>
+      calls.where((c) => c.memberName == member).length;
   Invocation lastCall(Symbol member) =>
       calls.lastWhere((c) => c.memberName == member);
 
