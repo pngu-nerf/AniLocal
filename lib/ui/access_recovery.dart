@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
+import 'widgets/xp_banner.dart';
 import 'widgets/xp_dialog.dart';
 
 /// Written path shown in every access-recovery surface, so a stale deep-link
 /// never strands the user.
 const String kFilesAndFoldersPath =
-    'System Settings → Privacy & Security → Files and Folders';
+    'System Settings › Privacy & Security › Files and Folders';
 
 /// Contextual recovery, shown right after an add hits a denied category.
 Future<void> showAccessDeniedDialog(
@@ -20,7 +24,7 @@ Future<void> showAccessDeniedDialog(
       title: 'Folder access needed',
       content: Text(
         "AniLocal can't access $label.\n\n"
-        'Enable AniLocal in $kFilesAndFoldersPath, then sync metadata.',
+        'Enable AniLocal in $kFilesAndFoldersPath, then scan again.',
       ),
       actions: [
         XpButton(label: 'Later', onPressed: () => Navigator.of(ctx).pop()),
@@ -49,28 +53,26 @@ class AccessBanner extends StatelessWidget {
 
   final List<String> labels;
   final Future<bool> Function() onOpenSettings;
-  final VoidCallback onRescan;
+
+  /// Null while a scan is already running: the button reads disabled.
+  final VoidCallback? onRescan;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return MaterialBanner(
-      backgroundColor: scheme.errorContainer,
-      leading: Icon(Icons.lock_outline, color: scheme.onErrorContainer),
-      content: Text(
+  Widget build(BuildContext context) => XpBanner(
+    icon: Icons.lock_outline,
+    iconColor: Xp.error,
+    message:
         "Can't access ${labels.join(', ')}. "
         'Enable AniLocal in $kFilesAndFoldersPath.',
-        style: TextStyle(color: scheme.onErrorContainer),
+    actions: [
+      XpButton(dense: true, label: 'Scan', onPressed: onRescan),
+      XpButton(
+        dense: true,
+        label: 'Open Settings',
+        onPressed: () => unawaited(onOpenSettings()),
       ),
-      actions: [
-        TextButton(onPressed: onRescan, child: const Text('Sync metadata')),
-        TextButton(
-          onPressed: () => onOpenSettings(),
-          child: const Text('Open Settings'),
-        ),
-      ],
-    );
-  }
+    ],
+  );
 }
 
 /// Ambient recovery for a library folder whose drive/mount is OFFLINE — a
@@ -85,22 +87,16 @@ class ReconnectBanner extends StatelessWidget {
   });
 
   final List<String> labels;
-  final VoidCallback onRescan;
+
+  /// Null while a scan is already running: the button reads disabled.
+  final VoidCallback? onRescan;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return MaterialBanner(
-      backgroundColor: scheme.secondaryContainer,
-      leading: Icon(Icons.link_off, color: scheme.onSecondaryContainer),
-      content: Text(
+  Widget build(BuildContext context) => XpBanner(
+    icon: Icons.link_off,
+    message:
         "${labels.join(', ')} isn't connected. Reconnect it to access this "
-        'library, then sync metadata.',
-        style: TextStyle(color: scheme.onSecondaryContainer),
-      ),
-      actions: [
-        TextButton(onPressed: onRescan, child: const Text('Sync metadata')),
-      ],
-    );
-  }
+        'library, then scan again.',
+    actions: [XpButton(dense: true, label: 'Scan', onPressed: onRescan)],
+  );
 }

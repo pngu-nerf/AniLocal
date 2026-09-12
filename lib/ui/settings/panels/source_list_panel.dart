@@ -175,7 +175,10 @@ class _SourceListPanelState extends State<SourceListPanel> {
           padding: const EdgeInsets.only(bottom: 10),
           child: Text(
             widget.caption,
-            style: const TextStyle(color: Xp.textDim, fontSize: 11),
+            style: const TextStyle(
+              color: Xp.textDim,
+              fontSize: Xp.fontSizeCaption,
+            ),
           ),
         ),
         if (widget.extra != null)
@@ -220,7 +223,3 @@ class _SourceListPanelState extends State<SourceListPanel> {
     );
   }
 }
-
-/// Named once so each category id and any deep-link to it can't drift apart.
-const String metadataCategoryId = 'metadata';
-const String skipCategoryId = 'skip';

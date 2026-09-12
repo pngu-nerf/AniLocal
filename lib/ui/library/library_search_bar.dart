@@ -17,6 +17,7 @@ class LibrarySearchBar extends StatelessWidget {
     required this.onChanged,
     required this.onClear,
     this.hintText = 'Search your library',
+    this.onSubmitted,
   });
 
   final TextEditingController controller;
@@ -25,6 +26,9 @@ class LibrarySearchBar extends StatelessWidget {
 
   /// Placeholder text (e.g. "Search episodes" when reused on the detail page).
   final String hintText;
+
+  /// Enter in the field. Null for a live filter, which needs no submit.
+  final ValueChanged<String>? onSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -39,15 +43,22 @@ class LibrarySearchBar extends StatelessWidget {
             child: TextField(
               controller: controller,
               onChanged: onChanged,
+              onSubmitted: onSubmitted,
               textInputAction: TextInputAction.search,
               cursorColor: Xp.accentBright,
-              style: const TextStyle(fontSize: 13, color: Xp.text),
+              style: const TextStyle(
+                fontSize: Xp.fontSizeLabel,
+                color: Xp.text,
+              ),
               decoration: InputDecoration(
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 border: InputBorder.none,
                 hintText: hintText,
-                hintStyle: const TextStyle(color: Xp.textFaint, fontSize: 13),
+                hintStyle: const TextStyle(
+                  color: Xp.textFaint,
+                  fontSize: Xp.fontSizeLabel,
+                ),
               ),
             ),
           ),

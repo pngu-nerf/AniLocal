@@ -61,12 +61,12 @@ class PlaybackPanel extends StatelessWidget {
               LengthLimitingTextInputFormatter(5),
             ],
             keyboardType: TextInputType.datetime,
-            style: const TextStyle(color: Xp.text, fontSize: 13),
+            style: const TextStyle(color: Xp.text, fontSize: Xp.fontSizeLabel),
             decoration: InputDecoration(
               isDense: true,
               hintText: 'm:ss',
               errorText: model.thresholdValid ? null : 'm:ss, max 9:59',
-              errorStyle: const TextStyle(fontSize: 10),
+              errorStyle: const TextStyle(fontSize: Xp.fontSizeMicro),
             ),
             onChanged: model.editThreshold,
             onEditingComplete: () {

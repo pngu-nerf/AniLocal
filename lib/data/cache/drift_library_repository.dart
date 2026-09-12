@@ -431,9 +431,9 @@ class DriftLibraryRepository
           return Episode(
             number: number,
             fileRef: sources.first.fileRef,
-            title: number > 0
-                ? 'Episode $number'
-                : basenameOf(sources.first.fileRef),
+            // Un-numbered (a movie/special): the file's name is the only
+            // label there is. Numbered: none — `displayTitle` says Episode N.
+            title: number > 0 ? null : basenameOf(sources.first.fileRef),
             seriesId: placeholderId,
             anchoredNumber: anchored,
             watched: w?.watched ?? false,
@@ -726,7 +726,8 @@ class DriftLibraryRepository
     return Episode(
       number: l.displayNumber ?? 0,
       fileRef: l.activeFileRef,
-      title: l.displayNumber != null ? 'Episode ${l.displayNumber}' : null,
+      // No fabricated title: `Episode.displayTitle` supplies "Episode N".
+      title: null,
       seriesId: l.seriesId,
       anchoredNumber: l.anchored,
       watched: w?.watched ?? false,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/xp_pressable.dart';
 import '../theme/xp_tokens.dart';
 import 'episode_row.dart';
 
@@ -56,27 +57,20 @@ class EpisodeTile extends StatefulWidget {
 }
 
 class _EpisodeTileState extends State<EpisodeTile> {
-  bool _hover = false;
-
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: ColoredBox(
-          color: _hover ? Xp.surfaceAlt : Colors.transparent,
-          child: EpisodeRow(
-            number: widget.number,
-            title: widget.title,
-            active: widget.active,
-            nowPlayingCapable: widget.nowPlaying,
-            detail: widget.detail,
-            trailing: widget.trailing,
-          ),
+    return XpPressable(
+      onTap: widget.onTap,
+      semanticsLabel: widget.title,
+      builder: (context, s) => ColoredBox(
+        color: s.hovered || s.focused ? Xp.surfaceAlt : Colors.transparent,
+        child: EpisodeRow(
+          number: widget.number,
+          title: widget.title,
+          active: widget.active,
+          nowPlayingCapable: widget.nowPlaying,
+          detail: widget.detail,
+          trailing: widget.trailing,
         ),
       ),
     );

@@ -8,7 +8,7 @@ import '../../theme/xp_widgets.dart';
 import '../../widgets/xp_reorderable_list.dart';
 import '../sources_actions.dart';
 
-/// Sources: the watched library folders, in priority order.
+/// Folders: the watched library folders, in priority order.
 ///
 /// This is the old standalone `FoldersScreen` rehoused in the settings window —
 /// same repository calls, same drag-to-reorder, same add/remove. Nothing about
@@ -82,7 +82,7 @@ class _SourcesPanelState extends State<SourcesPanel> {
       return Center(
         child: XpButton(
           icon: Icons.add,
-          label: 'Add a source',
+          label: 'Add a folder',
           onPressed: _add,
         ),
       );
@@ -96,7 +96,10 @@ class _SourcesPanelState extends State<SourcesPanel> {
               child: Text(
                 'Drag to set priority. When an episode exists in more than one '
                 'source, the top one plays.',
-                style: TextStyle(color: Xp.textDim, fontSize: 11),
+                style: TextStyle(
+                  color: Xp.textDim,
+                  fontSize: Xp.fontSizeCaption,
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -104,7 +107,7 @@ class _SourcesPanelState extends State<SourcesPanel> {
               dense: true,
               icon: Icons.create_new_folder_outlined,
               label: 'Add',
-              tooltip: 'Add source',
+              tooltip: 'Add folder',
               onPressed: _add,
             ),
           ],
@@ -131,5 +134,3 @@ class _SourcesPanelState extends State<SourcesPanel> {
 }
 
 /// Kept out of [SourcesPanel] so the Library panel's "Edit sources" row and the
-/// header's Sources tab name the same category, not two copies of a string.
-const String sourcesCategoryId = 'sources';

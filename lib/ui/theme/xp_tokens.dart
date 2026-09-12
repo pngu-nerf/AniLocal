@@ -21,6 +21,9 @@ import 'package:flutter/material.dart';
 ///   elements, never decoratively.
 /// - **Cream wordmark** ([wordmark]) for branding labels; calm cyan-tinted
 ///   off-white ([text]) for legible body/list text (NOT glowing).
+/// - **Dark only, by design.** A lit display panel has one appearance; there
+///   is no light theme and no `ThemeMode`, and a future maintainer should read
+///   that as a decision, not a gap.
 abstract final class Xp {
   // --- Grounds -------------------------------------------------------------
   /// True black — the void behind the window and the phosphor display field.
@@ -95,6 +98,20 @@ abstract final class Xp {
   /// Never used decoratively; its scarcity is what makes it read as status.
   static const Color warning = Color(0xFFFFB43C);
 
+  /// Failure — the snackbar ground for "the service is down", the error
+  /// panel's icon. Warm and low-chroma so it sits with the amber rather than
+  /// introducing a third phosphor; it is the only red in the app, and it was
+  /// a raw literal inside the theme until it had a name.
+  static const Color error = Color(0xFFE36A5B);
+
+  /// Text on an [accent]-filled surface.
+  static const Color onAccent = Color(0xFF07171A);
+
+  /// Translucent black laid over a cover: a control's backing, and the heavier
+  /// wash behind an unavailable show's icon.
+  static const Color scrim = Color(0x73000000);
+  static const Color scrimHeavy = Color(0x8A000000);
+
   // --- Chassis header (was the "title bar") --------------------------------
   /// Thin lit hairline under the top edge of the header — a single cyan rule.
   static const Color titleGloss = Color(0xFF2A5A63);
@@ -125,6 +142,26 @@ abstract final class Xp {
   );
 
   // --- Metrics -------------------------------------------------------------
+  /// Spacing scale. Gaps and paddings come from here; a bare number in a
+  /// layout is a literal that will drift from its neighbours.
+  static const double spaceXxs = 2;
+  static const double spaceXs = 4;
+  static const double spaceS = 8;
+  static const double spaceM = 12;
+  static const double spaceL = 16;
+  static const double spaceXl = 24;
+
+  /// Type scale for body-role text (the chrome role sizes itself through
+  /// [chrome]). Four steps, no half points: the ten distinct sizes that had
+  /// accumulated across the UI collapse onto these.
+  static const double fontSizeMicro = 10; // badges and counters only
+  static const double fontSizeCaption = 11;
+  static const double fontSizeBody = 12;
+  static const double fontSizeLabel = 13;
+  static const double fontSizeTitle = 15;
+  static const double fontSizeHeading = 16;
+  static const double fontSizeDisplay = 20;
+
   /// Width of a single bezel ring (an element has two = a 2px machined lip).
   static const double bevel = 1;
 

@@ -4,26 +4,20 @@ import 'package:flutter/material.dart';
 
 import '../diagnostics/app_log.dart';
 import '../domain/models/identified_episode.dart';
-import '../domain/repositories/fix_match_repository.dart';
-import '../domain/repositories/library_repository.dart';
-import 'fix_match_screen.dart';
+import 'library_services.dart';
+import 'routes.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
-import 'shell/instant_page_route.dart';
+import 'theme/xp_pressable.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 
-/// Lists files that matched no AniList entry (kept on record across rescans).
-/// Tapping one opens fix-match to assign it (the OPM Specials case).
+/// Lists files that matched no show (kept on record across rescans). Tapping
+/// one opens fix-match to assign it (the OPM Specials case).
 class UnmatchedScreen extends StatefulWidget {
-  const UnmatchedScreen({
-    super.key,
-    required this.repository,
-    required this.fixMatch,
-  });
+  const UnmatchedScreen({super.key, required this.services});
 
-  final LibraryRepository repository;
-  final FixMatchRepository fixMatch;
+  final LibraryServices services;
 
   @override
   State<UnmatchedScreen> createState() => _UnmatchedScreenState();
@@ -46,7 +40,7 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
 
   void _reload() {
     unawaited(
-      widget.repository.unmatchedFiles().then(
+      widget.services.repository.unmatchedFiles().then(
         (f) {
           if (mounted) setState(() => _files = f);
         },
@@ -61,14 +55,11 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
   }
 
   Future<void> _fix(IdentifiedEpisode f) async {
-    final done = await Navigator.of(context).push<bool>(
-      InstantPageRoute<bool>(
-        builder: (_) => FixMatchScreen(
-          fixMatch: widget.fixMatch,
-          filePaths: [f.filePath],
-          prefillQuery: f.parsedTitle,
-        ),
-      ),
+    final done = await AppRoutes.fixMatch(
+      context,
+      services: widget.services,
+      filePaths: [f.filePath],
+      prefillQuery: f.parsedTitle,
     );
     if (done == true) _reload();
   }
@@ -76,82 +67,81 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
   @override
   Widget build(BuildContext context) {
     publishHeader();
-    return Builder(
-      builder: (context) {
-        final files = _files;
-        // Spinner ONLY before the first load has ever arrived.
-        if (files == null) {
-          final error = _loadError;
-          if (error != null) {
-            return Center(
-              child: Text(
-                'Couldn\'t read the unmatched list — details are in '
-                'Settings › About.',
-                style: TextStyle(color: Xp.textDim),
-              ),
-            );
-          }
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (files.isEmpty) {
-          return const Center(
-            child: Text(
-              'No unmatched files.',
-              style: TextStyle(color: Xp.textDim),
-            ),
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          itemCount: files.length,
-          itemBuilder: (_, i) {
-            final f = files[i];
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
-              child: _Tappable(
-                onTap: () => _fix(f),
-                child: XpPanel(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.help_outline,
-                        size: 18,
-                        color: Xp.textDim,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ChromeLabel(
-                              f.fileName,
-                              upper: false,
-                              fontSize: 13,
-                              letterSpacing: 1,
-                              maxLines: 2,
+    final files = _files;
+    // Spinner ONLY before the first load has ever arrived.
+    if (files == null) {
+      final error = _loadError;
+      if (error != null) {
+        return const Center(
+          child: Text(
+            "Couldn't read the unmatched list — details are in "
+            'Settings › About.',
+            style: TextStyle(color: Xp.textDim),
+          ),
+        );
+      }
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (files.isEmpty) {
+      return const Center(
+        child: Text('No unmatched files.', style: TextStyle(color: Xp.textDim)),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      itemCount: files.length,
+      itemBuilder: (_, i) {
+        final f = files[i];
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(Xp.spaceS, 3, Xp.spaceS, 3),
+          child: XpPressable(
+            onTap: () => _fix(f),
+            semanticsLabel: 'Fix match for ${f.fileName}',
+            builder: (context, s) => Opacity(
+              opacity: s.pressed ? 0.7 : 1,
+              child: XpPanel(
+                color: s.hovered || s.focused ? Xp.surfaceAlt : null,
+                padding: const EdgeInsets.fromLTRB(
+                  Xp.spaceS + 2,
+                  Xp.spaceS,
+                  Xp.spaceS + 2,
+                  Xp.spaceS,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.help_outline, size: 18, color: Xp.textDim),
+                    const SizedBox(width: Xp.spaceM),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ChromeLabel(
+                            f.fileName,
+                            upper: false,
+                            fontSize: Xp.fontSizeLabel,
+                            letterSpacing: 1,
+                            maxLines: 2,
+                          ),
+                          const SizedBox(height: Xp.spaceXxs),
+                          Text(
+                            'parsed: "${f.parsedTitle}"'
+                            '${f.parsedEpisodeNumber != null ? ' · ep ${f.parsedEpisodeNumber}' : ''}',
+                            style: const TextStyle(
+                              color: Xp.textDim,
+                              fontSize: Xp.fontSizeCaption,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'parsed: "${f.parsedTitle}"'
-                              '${f.parsedEpisodeNumber != null ? ' · ep ${f.parsedEpisodeNumber}' : ''}',
-                              style: const TextStyle(
-                                color: Xp.textDim,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.edit, size: 16, color: Xp.text),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: Xp.spaceS),
+                    const Icon(Icons.edit, size: 16, color: Xp.text),
+                  ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
@@ -159,34 +149,4 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
 
   @override
   HeaderSpec buildHeaderSpec() => const HeaderSpec(title: 'Unmatched files');
-}
-
-/// A press-feedback wrapper (mirrors the detail list's tappable rows) so a whole
-/// row reads as a button without a Material [InkWell] ripple on the chassis.
-class _Tappable extends StatefulWidget {
-  const _Tappable({required this.onTap, required this.child});
-
-  final VoidCallback onTap;
-  final Widget child;
-
-  @override
-  State<_Tappable> createState() => _TappableState();
-}
-
-class _TappableState extends State<_Tappable> {
-  bool _down = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _down = true),
-        onTapUp: (_) => setState(() => _down = false),
-        onTapCancel: () => setState(() => _down = false),
-        onTap: widget.onTap,
-        child: Opacity(opacity: _down ? 0.7 : 1, child: widget.child),
-      ),
-    );
-  }
 }

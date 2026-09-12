@@ -186,7 +186,7 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Bravo'), findsNothing);
 
-    await tester.tap(find.byTooltip('Sync metadata'));
+    await tester.tap(find.byTooltip('Scan library folders'));
     await tester.pumpAndSettle();
 
     expect(
@@ -238,7 +238,7 @@ void main() {
 
     // Kick off a refresh and watch EVERY frame until it settles. At no point
     // may the existing content vanish or a spinner take its place.
-    await tester.tap(find.byTooltip('Sync metadata'));
+    await tester.tap(find.byTooltip('Scan library folders'));
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 16));
       expect(

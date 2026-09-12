@@ -41,9 +41,13 @@ class ShowCover extends StatelessWidget {
   final double? iconSize;
   final double blurSigma;
 
-  /// Whether a cached cover file is actually present to display.
+  /// Whether the show has a cover to display. A PATH check, not a stat: the
+  /// path is recorded only when a download succeeded, and `Image.file` below
+  /// handles the rare externally-deleted file itself. The stat this replaced
+  /// ran inside `build`, once per card per rebuild — every keystroke in the
+  /// library search re-read every cover on disk.
   static bool hasCover(String? imagePath) =>
-      imagePath != null && File(imagePath).existsSync();
+      imagePath != null && imagePath.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +59,13 @@ class ShowCover extends StatelessWidget {
     // have nothing to act on here; callers disable those options.)
     if (!hasCover(imagePath)) return _placeholder(placeholderIcon);
 
-    final image = Image.file(File(imagePath!), fit: fit);
+    final image = Image.file(
+      File(imagePath!),
+      fit: fit,
+      // The file can be gone (a sweep, a hand edit): fall to the placeholder
+      // instead of Flutter's grey error box.
+      errorBuilder: (_, _, _) => _placeholder(placeholderIcon),
+    );
     if (pictureMode == PictureMode.blur) {
       // Clip so the blur can't bleed past the cover's bounds.
       return ClipRect(

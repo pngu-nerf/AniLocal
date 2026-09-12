@@ -6,11 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/episode.dart';
 import '../../domain/models/series.dart';
-import '../../domain/repositories/library_repository.dart';
-import '../../domain/repositories/settings_repository.dart';
-import '../../domain/repositories/watch_order_repository.dart';
-import '../../domain/repositories/watch_state_repository.dart';
-import '../../playback/playback_controller.dart';
+import '../library_services.dart';
+import '../routes.dart';
 import '../shell/header_scope.dart';
 import '../shell/header_spec.dart';
 import '../window_chrome.dart';
@@ -33,44 +30,27 @@ class TheaterScreen extends StatefulWidget {
     super.key,
     required this.series,
     required this.initialEpisode,
-    required this.repository,
-    required this.watchState,
-    required this.watchOrder,
-    required this.playback,
-    required this.settings,
-    required this.unmatchedCount,
-    required this.onScan,
-    required this.onUnmatched,
+    required this.services,
+    required this.header,
     required this.onSettings,
     this.config = TheaterLayoutConfig.theaterDefault,
   });
 
   final Series series;
   final Episode initialEpisode;
-  final LibraryRepository repository;
-  final WatchStateRepository watchState;
-  final WatchOrderRepository watchOrder;
 
-  /// The app-lifetime playback engine (composition root), handed to the
-  /// VideoZone. The theater CONSUMES it; popping this route stops playback
-  /// but leaves the engine alive.
-  final PlaybackController playback;
+  /// Every repository, the settings and the app-lifetime playback engine (see
+  /// `LibraryServices`). The theater CONSUMES the engine; popping this route
+  /// stops playback but leaves the engine alive.
+  final LibraryServices services;
 
-  /// ALL app-wide settings behind ONE injected object — the theater reads the
-  /// player prefs (auto-play / skip / watched-threshold, forwarded to VideoZone)
-  /// and the persisted rail-width fraction from it.
-  final SettingsRepository settings;
+  /// The shared header actions (Scan / Unmatched), forwarded from the launching
+  /// screen so the theater header is IDENTICAL to home/detail — same
+  /// [HeaderActionsBar], only the back button differs.
+  final HeaderHooks header;
 
-  /// The shared header actions (Sync / Unmatched / Settings), forwarded from the
-  /// launching screen so the theater header is IDENTICAL to home/detail — same
-  /// [HeaderActionsBar], only the back button differs. Sync runs quietly here
-  /// (no local spinner), like the detail screen.
-  ///
-  /// [onSettings] returns a Future so this screen can await the window: Sources
-  /// is a category inside it, and reordering sources changes which copy plays.
-  final int unmatchedCount;
-  final Future<void> Function() onScan;
-  final VoidCallback onUnmatched;
+  /// Returns a Future so this screen can await the window: Folders is a
+  /// category inside it, and reordering them changes which copy plays.
   final Future<void> Function() onSettings;
 
   /// The arrangement. Defaults to the YouTube-style theater; a future Settings
@@ -114,6 +94,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     // while the window is already fullscreen renders correctly on frame one.
     _fullscreen = WindowChrome.fullscreen.value;
     WindowChrome.fullscreen.addListener(_onWindowFullscreenChanged);
+    widget.services.scanning.addListener(_onScanningChanged);
     // The player is the ONLY place fullscreen has an exit (⛶ / Escape), so it
     // is the only place the window is allowed to enter it. Scoped to exactly
     // this screen's lifetime; the runner force-exits when it goes away.
@@ -124,6 +105,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
 
   @override
   void dispose() {
+    widget.services.scanning.removeListener(_onScanningChanged);
     WindowChrome.fullscreen.removeListener(_onWindowFullscreenChanged);
     unawaited(WindowChrome.setFullscreenAllowed(false));
     super.dispose();
@@ -137,17 +119,20 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     setState(() => _fullscreen = WindowChrome.fullscreen.value);
   }
 
+  void _onScanningChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Already clamped by the repository (every setting is, on load).
   Future<void> _loadRailFraction() async {
-    final stored = await widget.settings.loadRailFraction();
-    final clamped = stored.clamp(
-      TheaterLayoutConfig.railFractionMin,
-      TheaterLayoutConfig.railFractionMax,
-    );
-    if (mounted) setState(() => _railFraction = clamped);
+    final stored = await widget.services.settings.loadRailFraction();
+    if (mounted) setState(() => _railFraction = stored);
   }
 
   Future<void> _loadEpisodes() async {
-    final eps = await widget.repository.episodesFor(widget.series.seriesId);
+    final eps = await widget.services.repository.episodesFor(
+      widget.series.seriesId,
+    );
     if (mounted) setState(() => _episodes = eps);
   }
 
@@ -211,11 +196,10 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   HeaderSpec buildHeaderSpec() => HeaderSpec(
     title: widget.series.displayTitle,
     actions: AppActions(
-      // Sync runs quietly from the theater (no local spinner), like detail.
-      scanning: false,
-      unmatchedCount: widget.unmatchedCount,
-      onScan: widget.onScan,
-      onUnmatched: widget.onUnmatched,
+      scanning: widget.services.scanning.value,
+      unmatchedCount: widget.header.unmatchedCount,
+      onScan: widget.header.onScan,
+      onUnmatched: widget.header.onUnmatched,
       onSettings: _openSettings,
     ),
   );
@@ -232,10 +216,10 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
         // within a series, the same frame swaps episodes in place.
         key: ValueKey(widget.series.seriesId),
         episode: _current,
-        watchState: widget.watchState,
-        watchOrder: widget.watchOrder,
-        playback: widget.playback,
-        settings: widget.settings,
+        watchState: widget.services.watchState,
+        watchOrder: widget.services.watchOrder,
+        playback: widget.services.playback,
+        settings: widget.services.settings,
         fullscreen: _fullscreen,
         onToggleFullscreen: _toggleFullscreen,
         onEpisodeChanged: _onAdvanced,
@@ -282,7 +266,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
             : (f) => setState(() => _railFraction = f),
         onRailResizeEnd: _fullscreen
             ? null
-            : () => widget.settings.setRailFraction(_railFraction),
+            : () => widget.services.settings.setRailFraction(_railFraction),
       ),
     );
   }

@@ -4,7 +4,7 @@ import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 
 /// The app actions at the TOP-RIGHT of the title bar, as labelled tabs (icon +
-/// title) that hang to the bar's bottom edge — Sync, Unmatched (only when
+/// title) that hang to the bar's bottom edge — Scan, Unmatched (only when
 /// [unmatchedCount] > 0), Settings. Sources is deliberately NOT here: it is a
 /// settings category now, reached through ⚙ like every other setting, so the
 /// header keeps ONE door into configuration rather than two. Shared by EVERY
@@ -52,10 +52,13 @@ class HeaderActionsBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
         ],
+        // "Scan": it walks the library folders. "Refresh metadata", in
+        // Settings, is the OTHER operation (network only, no files) — the two
+        // used to share the word "sync" and users could not tell them apart.
         XpTitleTab(
           icon: Icons.sync,
-          label: 'Sync',
-          tooltip: scanning ? 'Syncing…' : 'Sync metadata',
+          label: 'Scan',
+          tooltip: scanning ? 'Scanning…' : 'Scan library folders',
           showLabel: showLabel,
           onPressed: scanning ? null : onScan,
         ),

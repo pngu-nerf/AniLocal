@@ -101,14 +101,17 @@ class XpReorderableList<T> extends StatelessWidget {
                     ChromeLabel(
                       titleOf(item),
                       upper: false,
-                      fontSize: 13,
+                      fontSize: Xp.fontSizeLabel,
                       letterSpacing: 1,
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
                       Text(
                         subtitle,
-                        style: const TextStyle(color: Xp.textDim, fontSize: 11),
+                        style: const TextStyle(
+                          color: Xp.textDim,
+                          fontSize: Xp.fontSizeCaption,
+                        ),
                       ),
                     ],
                   ],

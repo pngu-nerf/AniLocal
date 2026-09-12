@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,14 +6,18 @@ import 'package:flutter/material.dart';
 import '../diagnostics/app_log.dart';
 import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
+import 'library/library_search_bar.dart';
+import 'metadata_failure_message.dart';
+import 'settings/setting_row.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
+import 'theme/xp_pressable.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 
-/// Minimal manual fix-match: search the metadata sources → pick from ranked candidates →
-/// assign. For a split (multiple files), an optional toggle chooses continuous
-/// vs AniList-faithful display numbering. Pops `true` when an override is set.
+/// Manual fix-match: search the metadata sources → pick from ranked candidates
+/// → assign. For a split (multiple files), a toggle chooses continuous vs
+/// source-faithful display numbering. Pops `true` when an override is set.
 class FixMatchScreen extends StatefulWidget {
   const FixMatchScreen({
     super.key,
@@ -49,6 +54,7 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
   @override
   void initState() {
     super.initState();
+    _query.addListener(_onQueryChanged);
     _search();
   }
 
@@ -58,11 +64,28 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
     super.dispose();
   }
 
+  /// The Search button follows the field: disabled while it is blank, so a
+  /// press with nothing typed cannot silently do nothing.
+  void _onQueryChanged() => setState(() {});
+
+  bool get _canSearch => _query.text.trim().isNotEmpty;
+
   void _search() {
-    if (_query.text.trim().isEmpty) return;
+    if (!_canSearch) return;
+    final future = widget.fixMatch.searchCandidates(_query.text.trim());
+    // Logged ONCE, here, where the future is created — not inside `build`,
+    // where a failed search re-logged itself on every rebuild and flooded the
+    // diagnostics ring.
+    unawaited(
+      future.then(
+        (_) {},
+        onError: (Object e, StackTrace stack) =>
+            AppLog.error('Fix-match search failed', error: e, stack: stack),
+      ),
+    );
     setState(() {
       _selected = null;
-      _results = widget.fixMatch.searchCandidates(_query.text.trim());
+      _results = future;
     });
   }
 
@@ -86,16 +109,16 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
         );
       }
       if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
+    } catch (e, stack) {
+      AppLog.error('Fix-match assign failed', error: e, stack: stack);
       if (mounted) {
         setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Assign failed: $e'),
+            content: Text("Couldn't assign. ${userFacingMessage(e)}"),
             duration: const Duration(seconds: 8),
           ),
         );
-        AppLog.error('Fix-match assign failed', error: e);
       }
     }
   }
@@ -107,50 +130,55 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Xp.spaceL),
           child: Row(
             children: [
               Expanded(
-                child: TextField(
+                // The SAME search field the library and the show page use.
+                child: LibrarySearchBar(
                   controller: _query,
-                  decoration: const InputDecoration(
-                    labelText: 'Search',
-                    border: OutlineInputBorder(),
-                  ),
+                  hintText: 'Search for the show',
+                  onChanged: (_) {},
+                  onClear: _query.clear,
                   onSubmitted: (_) => _search(),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: Xp.spaceS),
               XpButton(
                 icon: Icons.search,
                 tooltip: 'Search',
-                onPressed: _search,
+                onPressed: _canSearch ? _search : null,
               ),
             ],
           ),
         ),
         if (widget.isSplit && count > 1)
-          SwitchListTile(
-            value: _continuous,
-            onChanged: (v) => setState(() => _continuous = v),
-            title: const Text('Continuous numbering'),
-            subtitle: Text(
-              _continuous
-                  ? 'Show ${widget.priorEpisodeCount + 1}, ${widget.priorEpisodeCount + 2}… '
-                        '(prior season had ${widget.priorEpisodeCount})'
-                  : 'Show AniList episodes 1, 2, 3…',
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Xp.spaceL),
+            child: SettingRow(
+              label: 'Continuous numbering',
+              subtitle: _continuous
+                  ? 'Show ${widget.priorEpisodeCount + 1}, '
+                        '${widget.priorEpisodeCount + 2}… (the prior season '
+                        'had ${widget.priorEpisodeCount})'
+                  : 'Show episodes 1, 2, 3… as the source numbers them',
+              control: SettingSwitch(
+                value: _continuous,
+                onChanged: (v) => setState(() => _continuous = v),
+              ),
             ),
           ),
         const Divider(height: 1, color: Xp.divider),
         Expanded(child: _candidates()),
         SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(Xp.spaceL),
             child: XpButton(
               lit: _selected != null && !_busy,
-              label: _busy
-                  ? 'Assigning…'
-                  : (_selected == null ? 'Pick a match' : 'Assign'),
+              // One label. The instruction ("pick a match") lives in the
+              // candidate pane's empty state, not on a button that renamed
+              // itself whenever it could not be pressed.
+              label: _busy ? 'Assigning…' : 'Assign',
               onPressed: (_selected == null || _busy) ? null : _assign,
             ),
           ),
@@ -172,14 +200,17 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
       future: _results,
       builder: (context, snapshot) {
         if (_results == null) {
-          return const _CandidatesMessage('Search for the correct title.');
+          return const _CandidatesMessage(
+            'Search for the correct title, then pick a match.',
+          );
         }
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          AppLog.error('Fix-match search failed', error: snapshot.error);
-          return _CandidatesMessage('Search failed: ${snapshot.error}');
+          return _CandidatesMessage(
+            'Search failed. ${userFacingMessage(snapshot.error!)}',
+          );
         }
         final results = snapshot.data ?? const [];
         if (results.isEmpty) {
@@ -188,93 +219,112 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
         return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 6),
           itemCount: results.length,
-          itemBuilder: (_, i) {
-            final s = results[i];
-            final selected = _selected?.seriesId == s.seriesId;
-            final title = s.displayTitle;
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () => setState(() => _selected = s),
-                  child: XpPanel(
-                    // Selection is shown by lighting the panel face (dim cyan).
-                    color: selected ? Xp.accentDeep : null,
-                    padding: const EdgeInsets.fromLTRB(8, 6, 10, 6),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 36,
-                          height: 52,
-                          child:
-                              s.coverImageRef != null &&
-                                  _isLocal(s.coverImageRef!)
-                              ? Image.file(
-                                  File(s.coverImageRef!),
-                                  fit: BoxFit.cover,
-                                )
-                              : const ColoredBox(
-                                  color: Xp.well,
-                                  child: Icon(
-                                    Icons.image_outlined,
-                                    color: Xp.textFaint,
-                                    size: 18,
-                                  ),
-                                ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ChromeLabel(
-                                title,
-                                upper: false,
-                                fontSize: 13,
-                                letterSpacing: 1,
-                                maxLines: 2,
-                                color: selected ? Xp.accentBright : Xp.text,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                [
-                                  if (s.format != null) s.format,
-                                  if (s.episodeCount != null)
-                                    '${s.episodeCount} ep',
-                                  if (s.externalIds.anilist != null)
-                                    'AniList #${s.externalIds.anilist}',
-                                ].join(' · '),
-                                style: const TextStyle(
-                                  color: Xp.textDim,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (selected) ...[
-                          const SizedBox(width: 8),
-                          const Icon(
-                            Icons.check_circle,
-                            size: 18,
-                            color: Xp.accent,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
+          itemBuilder: (_, i) => _CandidateRow(
+            series: results[i],
+            selected: _selected?.seriesId == results[i].seriesId,
+            onTap: () => setState(() => _selected = results[i]),
+          ),
         );
       },
     );
   }
+}
 
-  bool _isLocal(String ref) => !ref.startsWith('http');
+/// One ranked candidate. Its cover comes straight from the provider — a
+/// REMOTE URL — so it is fetched, not read from disk: the old `_isLocal` test
+/// treated every provider URL as not-local and drew the placeholder for every
+/// candidate, always.
+class _CandidateRow extends StatelessWidget {
+  const _CandidateRow({
+    required this.series,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Series series;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = series;
+    final title = s.displayTitle;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Xp.spaceS, 3, Xp.spaceS, 3),
+      child: XpPressable(
+        onTap: onTap,
+        semanticsLabel: title,
+        builder: (context, state) => XpPanel(
+          // Selection is shown by lighting the panel face (dim cyan).
+          color: selected
+              ? Xp.accentDeep
+              : (state.hovered || state.focused ? Xp.surfaceAlt : null),
+          padding: const EdgeInsets.fromLTRB(Xp.spaceS, 6, Xp.spaceS + 2, 6),
+          child: Row(
+            children: [
+              SizedBox(width: 36, height: 52, child: _cover(s.coverImageRef)),
+              const SizedBox(width: Xp.spaceM),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ChromeLabel(
+                      title,
+                      upper: false,
+                      fontSize: Xp.fontSizeLabel,
+                      letterSpacing: 1,
+                      maxLines: 2,
+                      color: selected ? Xp.accentBright : Xp.text,
+                    ),
+                    const SizedBox(height: Xp.spaceXxs),
+                    Text(
+                      [
+                        if (s.format != null) s.format,
+                        if (s.episodeCount != null) '${s.episodeCount} ep',
+                        if (s.externalIds.anilist != null)
+                          'AniList #${s.externalIds.anilist}',
+                      ].join(' · '),
+                      style: const TextStyle(
+                        color: Xp.textDim,
+                        fontSize: Xp.fontSizeCaption,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: Xp.spaceS),
+                const Icon(Icons.check_circle, size: 18, color: Xp.accent),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const _placeholder = ColoredBox(
+    color: Xp.well,
+    child: Icon(Icons.image_outlined, color: Xp.textFaint, size: 18),
+  );
+
+  Widget _cover(String? ref) {
+    if (ref == null || ref.isEmpty) return _placeholder;
+    final uri = Uri.tryParse(ref);
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      return Image.network(
+        ref,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _placeholder,
+      );
+    }
+    return Image.file(
+      File(ref),
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _placeholder,
+    );
+  }
 }
 
 /// Centered dim message for the candidates area's empty / prompt / error states.
@@ -286,7 +336,7 @@ class _CandidatesMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(Xp.spaceXl),
       child: Text(
         text,
         textAlign: TextAlign.center,

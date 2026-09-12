@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
+
+import '../../../domain/format_duration.dart';
 import '../../../domain/models/episode.dart';
 import '../../theme/vfd_readout.dart';
 import '../../theme/xp_tokens.dart';
@@ -57,15 +59,6 @@ class TimeLabel extends StatelessWidget {
   const TimeLabel({super.key, required this.player});
   final Player player;
 
-  static String _fmt(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes % 60;
-    final s = d.inSeconds % 60;
-    final mm = h > 0 ? m.toString().padLeft(2, '0') : '$m';
-    final ss = s.toString().padLeft(2, '0');
-    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
-  }
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Duration>(
@@ -83,7 +76,7 @@ class TimeLabel extends StatelessWidget {
             // bar's one readout pitch so it and the EP readout are the same
             // size by construction.
             child: VfdReadout(
-              '${_fmt(pos)} / ${_fmt(dur)}',
+              '${formatDuration(pos)} / ${formatDuration(dur)}',
               dotPitch: kVfdBarPitch,
             ),
           );
@@ -331,7 +324,7 @@ class UpNextControl extends StatelessWidget {
       builder: (context, s, _) {
         final next = s.upNext;
         if (!s.preRollShowing || next == null) return const SizedBox.shrink();
-        final title = next.title ?? 'Episode ${next.number}';
+        final title = next.displayTitle;
         // A compact pair of display controls — the armed "play next" segment
         // (lit, carrying the countdown) + a glyph-only cancel — so the up-next
         // reads as the same family as Skip Intro/Outro. The next-episode title

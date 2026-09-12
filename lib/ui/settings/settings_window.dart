@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../diagnostics/app_log.dart';
 import '../../domain/repositories/settings_repository.dart';
+import '../metadata_failure_message.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 import '../widgets/xp_dialog.dart';
@@ -16,6 +18,7 @@ import 'panels/source_list_panel.dart';
 import 'panels/sources_panel.dart';
 import 'setting_row.dart';
 import 'settings_actions.dart';
+import 'settings_categories.dart';
 import 'settings_model.dart';
 import 'settings_shell.dart';
 
@@ -35,14 +38,31 @@ Future<SettingsOutcome> showAppSettingsDialog(
   required SettingsDialogActions actions,
   String? initialCategory,
 }) async {
-  // Sources now lives IN this window, so what used to be the folders page's
+  // Folders now live IN this window, so what used to be the folders page's
   // before/after comparison happens here — once, for both entry points,
   // instead of each caller re-deriving it.
-  final before = await _folderPaths(actions);
-  final model = await SettingsModel.load(
-    repository: settings,
-    loadUnmatchedCount: actions.loadUnmatchedCount,
-  );
+  final List<String> before;
+  final SettingsModel model;
+  try {
+    before = await _folderPaths(actions);
+    model = await SettingsModel.load(
+      repository: settings,
+      loadUnmatchedCount: actions.loadUnmatchedCount,
+    );
+  } catch (e, stack) {
+    // The one situation you most need Settings › About (an unreadable cache)
+    // used to make the ⚙ do nothing and reject unhandled. Say so instead.
+    AppLog.error('Settings could not load', error: e, stack: stack);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Couldn't open Settings. ${userFacingMessage(e)}"),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
+    return const SettingsOutcome.unchanged();
+  }
   if (!context.mounted) {
     model.dispose();
     return const SettingsOutcome.unchanged();
@@ -91,9 +111,6 @@ class SettingsOutcome {
   /// The priority order differs (true for an add/remove too, since the list
   /// itself differs) — at minimum, re-read.
   final bool sourceOrderChanged;
-
-  /// Anything about sources moved; the view underneath is stale.
-  bool get sourcesChanged => sourceSetChanged || sourceOrderChanged;
 }
 
 class _SettingsWindow extends StatelessWidget {
@@ -111,14 +128,16 @@ class _SettingsWindow extends StatelessWidget {
   /// `SettingsShell` never changes, and nothing else in this file does either.
   ///
   /// Only categories with content are listed; there are no placeholder pages.
-  List<SettingsCategory> _categories(BuildContext context) => [
+  List<SettingsCategory> _categories() => [
     // Sources leads, and so is the landing panel: it is the only category that
     // decides what the library CONTAINS (and, by its order, which copy plays)
     // rather than how it behaves — and with no Sources tab in the header, this
     // window is the only way to it.
     SettingsCategory(
       id: sourcesCategoryId,
-      label: 'Sources',
+      // "Folders": what you own. "Sources" was doing three jobs — library
+      // folders, metadata/skip providers, and an episode's file copies.
+      label: 'Folders',
       icon: Icons.folder_open,
       // Fills the pane and scrolls itself: it hosts a reorderable list.
       scrollable: false,
@@ -189,25 +208,25 @@ class _SettingsWindow extends StatelessWidget {
       ),
     ),
     SettingsCategory(
-      id: 'playback',
+      id: playbackCategoryId,
       label: 'Playback',
       icon: Icons.play_circle_outline,
       builder: (_) => PlaybackPanel(model: model),
     ),
     SettingsCategory(
-      id: 'library',
+      id: libraryCategoryId,
       label: 'Library',
       icon: Icons.video_library_outlined,
       builder: (_) => LibraryPanel(model: model, actions: actions),
     ),
     SettingsCategory(
-      id: 'homepage',
+      id: homepageCategoryId,
       label: 'Homepage',
       icon: Icons.home_outlined,
       builder: (_) => HomepagePanel(model: model),
     ),
     SettingsCategory(
-      id: 'about',
+      id: aboutCategoryId,
       label: 'About',
       icon: Icons.info_outline,
       builder: (_) => const AboutPanel(),
@@ -233,7 +252,7 @@ class _SettingsWindow extends StatelessWidget {
               ? math.min(SettingsShell.windowHeight, constraints.maxHeight)
               : SettingsShell.windowHeight,
           child: SettingsShell(
-            categories: _categories(context),
+            categories: _categories(),
             initialId: initialCategory,
           ),
         ),
@@ -297,7 +316,7 @@ class _SecondsFieldState extends State<_SecondsField> {
         LengthLimitingTextInputFormatter(3),
       ],
       keyboardType: TextInputType.number,
-      style: const TextStyle(color: Xp.text, fontSize: 13),
+      style: const TextStyle(color: Xp.text, fontSize: Xp.fontSizeLabel),
       decoration: const InputDecoration(
         isDense: true,
         suffixText: 's',

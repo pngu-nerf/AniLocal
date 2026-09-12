@@ -219,7 +219,7 @@ class _VideoZoneState extends State<VideoZone> {
   void _pushNowPlaying() {
     unawaited(
       _remote.updateNowPlaying(
-        title: _shown.title ?? 'Episode ${_shown.number}',
+        title: _shown.displayTitle,
         duration: _duration,
         position: _position,
         playing: _playback.player.state.playing,

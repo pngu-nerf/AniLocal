@@ -40,19 +40,54 @@ class SettingsModel extends ChangeNotifier {
   static Future<SettingsModel> load({
     required SettingsRepository repository,
     required Future<int> Function() loadUnmatchedCount,
-  }) async => SettingsModel(
-    repository: repository,
-    autoPlayNext: await repository.loadAutoPlayNext(),
-    skipMode: await repository.loadSkipMode(),
-    watchedThreshold: await repository.loadWatchedThreshold(),
-    missingEnabled: await repository.loadMissingEnabled(),
-    corroborateSkips: await repository.loadCorroborateSkips(),
-    minSkipLength: await repository.loadMinSkipLength(),
-    hideNextEpisode: await repository.loadHideNextEpisode(),
-    showContinueWatching: await repository.loadShowContinueWatching(),
-    showSearchBar: await repository.loadShowSearchBar(),
-    unmatchedCount: await loadUnmatchedCount(),
-  );
+  }) async {
+    // Independent reads, issued together: ten sequential awaits before the
+    // window could open was the whole wait behind the ⚙ click.
+    final (
+      (
+        autoPlayNext,
+        skipMode,
+        watchedThreshold,
+        missingEnabled,
+        corroborateSkips,
+      ),
+      (
+        minSkipLength,
+        hideNextEpisode,
+        showContinueWatching,
+        showSearchBar,
+        unmatchedCount,
+      ),
+    ) = await (
+      (
+        repository.loadAutoPlayNext(),
+        repository.loadSkipMode(),
+        repository.loadWatchedThreshold(),
+        repository.loadMissingEnabled(),
+        repository.loadCorroborateSkips(),
+      ).wait,
+      (
+        repository.loadMinSkipLength(),
+        repository.loadHideNextEpisode(),
+        repository.loadShowContinueWatching(),
+        repository.loadShowSearchBar(),
+        loadUnmatchedCount(),
+      ).wait,
+    ).wait;
+    return SettingsModel(
+      repository: repository,
+      autoPlayNext: autoPlayNext,
+      skipMode: skipMode,
+      watchedThreshold: watchedThreshold,
+      missingEnabled: missingEnabled,
+      corroborateSkips: corroborateSkips,
+      minSkipLength: minSkipLength,
+      hideNextEpisode: hideNextEpisode,
+      showContinueWatching: showContinueWatching,
+      showSearchBar: showSearchBar,
+      unmatchedCount: unmatchedCount,
+    );
+  }
 
   final SettingsRepository repository;
 

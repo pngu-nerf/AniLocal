@@ -19,6 +19,8 @@ import 'package:anilocal/domain/repositories/source_selection_repository.dart';
 import 'package:anilocal/domain/repositories/watch_order_repository.dart';
 import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/playback/playback_controller.dart';
+import 'package:anilocal/ui/library_services.dart';
+import 'package:anilocal/ui/routes.dart';
 import 'package:anilocal/ui/series_detail_screen.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:anilocal/ui/settings/sources_actions.dart';
@@ -174,31 +176,51 @@ Widget _app(_Repo repo) {
   return h.app(
     home: SeriesDetailScreen(
       series: _series(),
-      repository: repo,
-      fixMatch: _FixMatch(),
-      watchState: repo,
-      sourceSelection: repo,
-      watchOrder: repo,
-      playback: PlaybackController(resolver: repo),
-      missing: repo,
-      settings: const FakeSettings(),
-      settingsActions: SettingsActions(
-        sources: SourcesActions(
-          repository: repo,
-          onAddFolder: () async => (added: false, deniedLabel: null),
-          onOpenAccessSettings: () async => false,
-        ),
-        metadataSources: const [],
-        skipSources: const [],
-        onRefreshMetadata: () async =>
-            const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+      services: _services(repo, metadata: [], skip: []),
+      header: const HeaderHooks(
+        onScan: _noScan,
+        onUnmatched: _noop,
+        unmatchedCount: 0,
       ),
-      onScan: () async {},
-      onUnmatched: () {},
-      unmatchedCount: 0,
     ),
   );
 }
+
+Future<void> _noScan() async {}
+void _noop() {}
+
+/// The services bundle a show-page test needs: the one fake repo behind every
+/// interface, a real (idle) playback controller, and a settings bundle with
+/// whatever source lists the test wants the ⚙ window to show.
+LibraryServices _services(
+  _Repo repo, {
+  List<SourceDescriptor> metadata = const [],
+  List<SourceDescriptor> skip = const [],
+}) => LibraryServices(
+  repository: repo,
+  fixMatch: _FixMatch(),
+  watchState: repo,
+  sourceSelection: repo,
+  watchOrder: repo,
+  missingEpisodes: repo,
+  showPreferences: _NoPrefs(),
+  settings: const FakeSettings(),
+  playback: PlaybackController(resolver: repo),
+  scanning: ValueNotifier<bool>(false),
+  settingsActions: SettingsActions(
+    sources: SourcesActions(
+      repository: repo,
+      onAddFolder: () async => (added: false, deniedLabel: null),
+      onOpenAccessSettings: () async => false,
+    ),
+    metadataSources: metadata,
+    skipSources: skip,
+    onRefreshMetadata: () async =>
+        const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+  ),
+);
+
+class _NoPrefs extends Fake implements ShowPreferencesRepository {}
 
 void main() {
   _settingsFromShowPageTests();
@@ -341,35 +363,23 @@ void _settingsFromShowPageTests() {
       shell.app(
         home: SeriesDetailScreen(
           series: _series(),
-          repository: repo,
-          fixMatch: _FixMatch(),
-          watchState: repo,
-          sourceSelection: repo,
-          watchOrder: repo,
-          playback: PlaybackController(resolver: repo),
-          missing: repo,
-          settings: const FakeSettings(),
-          settingsActions: SettingsActions(
-            sources: SourcesActions(
-              repository: repo,
-              onAddFolder: () async => (added: false, deniedLabel: null),
-              onOpenAccessSettings: () async => false,
-            ),
-            metadataSources: const [
+          services: _services(
+            repo,
+            metadata: [
               SourceDescriptor(token: 'kitsu', displayName: 'Kitsu Probe'),
             ],
-            skipSources: const [
+            skip: [
               SourceDescriptor(
                 token: 'chapters',
                 displayName: 'Chapters Probe',
               ),
             ],
-            onRefreshMetadata: () async =>
-                const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
           ),
-          onScan: () async {},
-          onUnmatched: () {},
-          unmatchedCount: 0,
+          header: const HeaderHooks(
+            onScan: _noScan,
+            onUnmatched: _noop,
+            unmatchedCount: 0,
+          ),
         ),
       ),
     );

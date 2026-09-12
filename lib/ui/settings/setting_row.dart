@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/xp_pressable.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 
@@ -61,7 +62,10 @@ class SettingRow extends StatelessWidget {
                     Flexible(
                       child: Text(
                         label,
-                        style: const TextStyle(color: Xp.text, fontSize: 13),
+                        style: const TextStyle(
+                          color: Xp.text,
+                          fontSize: Xp.fontSizeLabel,
+                        ),
                       ),
                     ),
                     if (info != null) ...[
@@ -74,7 +78,10 @@ class SettingRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle!,
-                    style: const TextStyle(color: Xp.textDim, fontSize: 11),
+                    style: const TextStyle(
+                      color: Xp.textDim,
+                      fontSize: Xp.fontSizeCaption,
+                    ),
                   ),
                 ],
               ],
@@ -111,7 +118,7 @@ class SettingsGroup extends StatelessWidget {
         child: ChromeLabel(
           title,
           color: Xp.textFaint,
-          fontSize: 10,
+          fontSize: Xp.fontSizeMicro,
           letterSpacing: 1.6,
         ),
       ),
@@ -185,7 +192,7 @@ class SettingRadio extends StatelessWidget {
             label,
             style: TextStyle(
               color: selected ? Xp.text : Xp.textDim,
-              fontSize: 12,
+              fontSize: Xp.fontSizeBody,
             ),
           ),
         ],
@@ -221,20 +228,14 @@ class HoverTap extends StatefulWidget {
 }
 
 class _HoverTapState extends State<HoverTap> {
-  bool _hover = false;
-
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    onEnter: (_) => setState(() => _hover = true),
-    onExit: (_) => setState(() => _hover = false),
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.onTap,
-      child: ColoredBox(
-        color: _hover ? widget.hoverBackground : widget.background,
-        child: widget.child,
-      ),
+  Widget build(BuildContext context) => XpPressable(
+    onTap: widget.onTap,
+    builder: (context, s) => ColoredBox(
+      color: s.hovered || s.focused
+          ? widget.hoverBackground
+          : widget.background,
+      child: widget.child,
     ),
   );
 }
@@ -312,7 +313,7 @@ class _SettingInfoState extends State<SettingInfo> {
                   ChromeLabel(
                     widget.label,
                     color: Xp.textDim,
-                    fontSize: 10,
+                    fontSize: Xp.fontSizeMicro,
                     letterSpacing: 1.4,
                   ),
                   const SizedBox(height: 6),
@@ -320,7 +321,7 @@ class _SettingInfoState extends State<SettingInfo> {
                     widget.text,
                     style: const TextStyle(
                       color: Xp.text,
-                      fontSize: 12,
+                      fontSize: Xp.fontSizeBody,
                       height: 1.35,
                     ),
                   ),

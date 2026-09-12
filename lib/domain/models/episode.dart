@@ -76,6 +76,12 @@ class Episode extends Equatable {
   /// True when the same episode exists in more than one library folder.
   bool get hasMultipleSources => sources.length > 1;
 
+  /// What to call this episode: its title when one is known, else
+  /// "Episode N". Six screens used to inline this fallback, two of them with
+  /// a different rule for episode 0. CLAUDE.md cited this getter as existing;
+  /// it did not.
+  String get displayTitle => title ?? 'Episode $number';
+
   @override
   List<Object?> get props => [
     number,

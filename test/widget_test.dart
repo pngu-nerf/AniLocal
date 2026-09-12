@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_settings.dart';
+import 'support/finders.dart';
 
 class _FakeFixMatch implements FixMatchRepository {
   @override
@@ -324,7 +325,7 @@ void _errorPanelTests() {
       reason: 'the one open-failure with a specific remedy names it',
     );
     expect(
-      find.text('COPY DIAGNOSTICS'),
+      findXpLabel('Copy diagnostics'),
       findsOneWidget,
     ); // XpButton uppercases
   });

@@ -1,4 +1,5 @@
 import '../domain/models/metadata_failure.dart';
+import '../domain/models/user_facing_failure.dart';
 
 /// The ONE place metadata-failure copy lives. Both the scan snackbar and the
 /// refresh snackbar render from here, so the wording can't drift apart.
@@ -24,6 +25,20 @@ String metadataFailureCause(MetadataFailure failure) => switch (failure) {
     'The metadata service is rate-limiting requests — wait a minute, then '
         'try again.',
   MetadataFailure.unauthorized =>
-    'That source rejected its client ID — check it in Settings → Metadata. '
+    'That source rejected its client ID — check it in Settings › Metadata. '
         'Waiting will not help.',
 };
+
+/// The sentence a screen shows for a caught [error] — never the raw exception.
+///
+/// A [UserFacingFailure] from a remote source renders through
+/// [metadataFailureCause] so every screen names the same cause the same way;
+/// a local one renders its own sentence; anything else — a genuine bug — gets
+/// a generic line and the pointer at the diagnostics that hold the details.
+String userFacingMessage(Object error) {
+  if (error is UserFacingFailure) {
+    final failure = error.failure;
+    return failure == null ? error.userMessage : metadataFailureCause(failure);
+  }
+  return 'Something went wrong — details are in Settings › About.';
+}

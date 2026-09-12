@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../theme/xp_tokens.dart';
 import '../setting_row.dart';
 import '../settings_actions.dart';
+import '../settings_categories.dart';
 import '../settings_model.dart';
 import '../settings_shell.dart';
-import 'sources_panel.dart';
 
 /// Library: what the app knows about the collection, and its health.
 class LibraryPanel extends StatelessWidget {
@@ -23,10 +23,10 @@ class LibraryPanel extends StatelessWidget {
         children: [
           SettingRow(
             label: 'Missing episode placeholders',
-            subtitle: 'Ghost tiles for gaps in a series.',
+            subtitle: 'Ghost tiles for gaps in a show.',
             info:
                 'Positions with no file are shown as ghost tiles on the show '
-                'page, so a gap in a series is visible instead of silent.\n\n'
+                'page, so a gap in a show is visible instead of silent.\n\n'
                 'Ghosts you do not want can be hidden per episode; hidden ones '
                 'also drop out of the "N of M" tally.\n\n'
                 'Turning this off removes the ghost tiles, the Hidden tab and '
@@ -61,7 +61,7 @@ class LibraryPanel extends StatelessWidget {
             label: 'Refresh metadata',
             subtitle: 'Re-fetch ids and skip data',
             info:
-                'Re-fetches metadata for series already in the cache, by id, '
+                'Re-fetches metadata for shows already in the cache, by id, '
                 'and fills in any missing intro/outro skip data.\n\n'
                 'This is not a rescan: no files are read, and it never touches '
                 'your fix-matches or watch progress.',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../settings/setting_row.dart' show HoverTap;
 
 /// A small, dependency-free reusable checkbox multi-select. Rows carry a
 /// checkbox and a label; behaviour matches Sheets/Finder/Gmail:
@@ -19,7 +20,6 @@ class MultiSelectList extends StatefulWidget {
     required this.itemCount,
     required this.labelBuilder,
     required this.onSelectionChanged,
-    this.initialSelection = const {},
   });
 
   final int itemCount;
@@ -30,14 +30,12 @@ class MultiSelectList extends StatefulWidget {
   /// Fires whenever the selected index set changes.
   final ValueChanged<Set<int>> onSelectionChanged;
 
-  final Set<int> initialSelection;
-
   @override
   State<MultiSelectList> createState() => _MultiSelectListState();
 }
 
 class _MultiSelectListState extends State<MultiSelectList> {
-  late final Set<int> _selected = {...widget.initialSelection};
+  final Set<int> _selected = {};
 
   /// The last row toggled by a plain (non-shift) click — the anchor a
   /// subsequent shift-click ranges from.
@@ -93,8 +91,9 @@ class _MultiSelectListState extends State<MultiSelectList> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        InkWell(
+        HoverTap(
           onTap: _toggleSelectAll,
+          background: Colors.transparent,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -114,8 +113,9 @@ class _MultiSelectListState extends State<MultiSelectList> {
         ),
         const Divider(height: 1),
         for (var i = 0; i < widget.itemCount; i++)
-          InkWell(
+          HoverTap(
             onTap: () => _onRowTap(i),
+            background: Colors.transparent,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(

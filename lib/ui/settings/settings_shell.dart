@@ -75,11 +75,20 @@ class _SettingsShellState extends State<SettingsShell> {
       widget.categories.any((c) => c.id == widget.initialId)
       ? widget.initialId!
       : widget.categories.first.id;
-  final ScrollController _scroll = ScrollController();
+
+  /// One controller per scrollable panel: every panel stays mounted (see the
+  /// IndexedStack below), and a scrollbar refuses a controller attached to
+  /// more than one scroll view.
+  final Map<String, ScrollController> _scrolls = {};
+
+  ScrollController _scrollFor(SettingsCategory c) =>
+      _scrolls.putIfAbsent(c.id, ScrollController.new);
 
   @override
   void dispose() {
-    _scroll.dispose();
+    for (final c in _scrolls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -95,9 +104,10 @@ class _SettingsShellState extends State<SettingsShell> {
     if (id == _selectedId) return;
     if (!widget.categories.any((c) => c.id == id)) return;
     setState(() => _selectedId = id);
-    // A new panel starts at its top; carrying the old scroll offset across
-    // would open the next category part-way down.
-    if (_scroll.hasClients) _scroll.jumpTo(0);
+    // A new panel starts at its top when re-entered from the sidebar; its
+    // state (loaded lists, field text) is kept, its scroll offset is not.
+    final scroll = _scrolls[id];
+    if (scroll != null && scroll.hasClients) scroll.jumpTo(0);
   }
 
   Widget _panel(BuildContext context, SettingsCategory selected) {
@@ -107,7 +117,7 @@ class _SettingsShellState extends State<SettingsShell> {
       child: ChromeLabel(
         selected.label,
         color: Xp.text,
-        fontSize: 13,
+        fontSize: Xp.fontSizeLabel,
         letterSpacing: 2,
       ),
     );
@@ -123,10 +133,11 @@ class _SettingsShellState extends State<SettingsShell> {
         ),
       );
     }
+    final scroll = _scrollFor(selected);
     return XpScrollbar(
-      controller: _scroll,
+      controller: scroll,
       child: SingleChildScrollView(
-        controller: _scroll,
+        controller: scroll,
         padding: padding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,11 +174,16 @@ class _SettingsShellState extends State<SettingsShell> {
         Expanded(
           child: SettingsNavigation(
             select: _selectById,
-            // Keyed by category so switching pages rebuilds the panel from
-            // scratch instead of reusing the previous one's element state.
-            child: KeyedSubtree(
-              key: ValueKey(selected.id),
-              child: _panel(context, selected),
+            // Every panel stays mounted; only the selected one is shown. A
+            // panel that loads its list (Folders, Metadata, Skip) therefore
+            // loads it ONCE per window rather than flashing a spinner every
+            // time the user switches away and back.
+            child: IndexedStack(
+              index: widget.categories.indexOf(selected),
+              children: [
+                for (final c in widget.categories)
+                  KeyedSubtree(key: ValueKey(c.id), child: _panel(context, c)),
+              ],
             ),
           ),
         ),
@@ -209,7 +225,7 @@ class _SidebarItem extends StatelessWidget {
                 Expanded(
                   child: Text(
                     category.label,
-                    style: TextStyle(color: color, fontSize: 12.5),
+                    style: TextStyle(color: color, fontSize: Xp.fontSizeLabel),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

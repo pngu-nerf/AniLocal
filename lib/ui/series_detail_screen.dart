@@ -4,35 +4,27 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../diagnostics/app_log.dart';
+import '../domain/format_duration.dart';
 import '../domain/missing_episodes.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/episode_list_row.dart';
 import '../domain/models/episode_slot.dart';
 import '../domain/models/episode_source.dart';
 import '../domain/models/series.dart';
-import '../domain/repositories/fix_match_repository.dart';
-import '../domain/repositories/library_repository.dart';
-import '../domain/repositories/missing_episodes_repository.dart';
-import '../domain/repositories/settings_repository.dart';
-import '../domain/repositories/source_selection_repository.dart';
-import '../domain/repositories/watch_order_repository.dart';
-import '../domain/repositories/watch_state_repository.dart';
-import '../playback/playback_controller.dart';
-import 'fix_match_screen.dart';
+import '../domain/watch_order.dart';
 import 'library/library_search_bar.dart';
-import 'settings/settings_actions.dart';
+import 'library_services.dart';
+import 'routes.dart';
+import 'series_detail/missing_episode_tiles.dart';
 import 'settings/settings_window.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
-import 'shell/instant_page_route.dart';
-import 'theater/theater_screen.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
-import 'unmatched_screen.dart';
-import 'widgets/episode_row.dart';
+import 'widgets/download_tally_label.dart';
 import 'widgets/episode_tile.dart';
-import 'widgets/multi_select_list.dart';
 import 'widgets/show_cover.dart';
+import 'widgets/xp_banner.dart';
 import 'widgets/xp_dialog.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
@@ -62,8 +54,55 @@ bool episodeMatchesQuery({
   return fileName != null && fileName.toLowerCase().contains(q);
 }
 
-/// Series detail: cover + metadata + the episodes for this series, in the
-/// homepage's blackout-XP look (its title bar, tokens, and components). With the
+/// The rows the show page lists for [episodes], given the hidden set, the
+/// show's episode count, whether the missing-episodes feature is on, and the
+/// live search. Pure: the grouping and filtering were inlined in `build`,
+/// where they re-ran on every rebuild and could not be tested.
+@visibleForTesting
+List<EpisodeListRow> episodeRowsFor({
+  required List<Episode> episodes,
+  required Set<int> hidden,
+  required int? episodeCount,
+  required bool showMissing,
+  required String query,
+}) {
+  final q = query.trim().toLowerCase();
+  if (!showMissing) {
+    return [
+      for (final e in episodes)
+        if (episodeMatchesQuery(
+          number: e.number,
+          fileName: _basename(e.fileRef),
+          query: q,
+        ))
+          PresentRow(e),
+    ];
+  }
+  final slots = computeEpisodeSlots(
+    present: episodes,
+    hidden: hidden,
+    episodeCount: episodeCount,
+  );
+  if (q.isEmpty) return groupIntoRows(slots);
+  // Filter present + ghost slots (dropping hidden, which never show here) and
+  // re-group the survivors — so a filtered run of missing episodes still
+  // bundles/singles per the existing 2+-consecutive rule.
+  return groupIntoRows([
+    for (final s in slots)
+      if (s.status != EpisodeStatus.hidden &&
+          episodeMatchesQuery(
+            number: s.episode?.number ?? s.number,
+            // A ghost (missing) slot has no file → number-only match.
+            fileName: s.episode == null ? null : _basename(s.episode!.fileRef),
+            query: q,
+          ))
+        s,
+  ]);
+}
+
+String _basename(String path) => path.split(Platform.pathSeparator).last;
+
+/// Series detail: cover + metadata + the episodes for this series. With the
 /// missing-episodes feature on, absent episodes appear as ghost tiles (single)
 /// or bundles (consecutive runs), and hidden episodes move to a "Hidden" tab.
 /// Each present episode can be played, reassigned, source-switched, or used as a
@@ -72,51 +111,20 @@ class SeriesDetailScreen extends StatefulWidget {
   const SeriesDetailScreen({
     super.key,
     required this.series,
-    required this.repository,
-    required this.fixMatch,
-    required this.watchState,
-    required this.sourceSelection,
-    required this.watchOrder,
-    required this.playback,
-    required this.missing,
-    required this.settings,
-    required this.settingsActions,
-    // Shared header actions, so the detail header matches the home header.
-    required this.onScan,
-    required this.onUnmatched,
-    required this.unmatchedCount,
+    required this.services,
+    required this.header,
   });
 
   final Series series;
-  final LibraryRepository repository;
-  final FixMatchRepository fixMatch;
-  final WatchStateRepository watchState;
-  final SourceSelectionRepository sourceSelection;
-  final WatchOrderRepository watchOrder;
 
-  /// App-lifetime playback engine, forwarded to the theater.
-  final PlaybackController playback;
+  /// Every repository and the settings bundle (see [LibraryServices]).
+  final LibraryServices services;
 
-  /// Hidden-episode store (read + hide/unhide). Sacred across rescans (seam #5).
-  final MissingEpisodesRepository missing;
-
-  /// ALL app-wide settings behind ONE injected object — read here (missing-
-  /// enabled), forwarded to the theater (rail fraction + player prefs) and the
-  /// shared settings dialog (opened identically from home + here).
-  final SettingsRepository settings;
-
-  /// The app-wide half of the Settings window, built ONCE in `AniLocalApp` and
-  /// forwarded here so the ⚙ on this page opens the SAME window as the home
-  /// header. This screen used to assemble its own bundle and left the source
-  /// lists empty — Settings › Metadata and › Skip were blank from the show page.
-  final SettingsActions settingsActions;
-
-  /// Shared header actions (Sync / Unmatched), forwarded so the detail header
-  /// is identical to the home header. [unmatchedCount] is a snapshot. Sources
-  /// is NOT among them any more — it opens this screen's own settings window.
-  final Future<void> Function() onScan;
-  final VoidCallback onUnmatched;
-  final int unmatchedCount;
+  /// Shared header actions (Scan / Unmatched), forwarded so this header is
+  /// identical to the home header. The unmatched count it carries is the
+  /// value at push time; this screen re-reads it on every reload (a scan from
+  /// here can change it) and publishes the live number.
+  final HeaderHooks header;
 
   @override
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
@@ -124,6 +132,8 @@ class SeriesDetailScreen extends StatefulWidget {
 
 class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     with HeaderPublisher {
+  LibraryServices get _services => widget.services;
+
   List<Episode> _episodes = const [];
   Set<int> _hidden = {};
   bool _missingEnabled = true;
@@ -141,7 +151,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   /// Which tab of the episode area is showing (false = Episodes, true = Hidden).
   bool _viewingHidden = false;
 
-  Episode? _next; // next episode to watch for this series (relations-aware)
+  Episode? _next; // next episode to watch for this series
+
+  /// Live: seeded from the push-time value, re-read on every reload.
+  late int _unmatchedCount = widget.header.unmatchedCount;
 
   /// Bundles currently expanded inline into a per-episode hide checklist, keyed
   /// by the bundle's first episode number.
@@ -163,56 +176,61 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   @override
   void initState() {
     super.initState();
+    _services.scanning.addListener(_onScanningChanged);
     unawaited(_reload());
   }
 
   @override
   void dispose() {
+    _services.scanning.removeListener(_onScanningChanged);
     _scroll.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
+  void _onScanningChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _reload() async {
     try {
       // Independent — the missing-episodes setting doesn't gate WHICH episodes
-      // exist, only whether gaps are surfaced — so they wait together instead of
-      // one after the other. `hiddenEpisodes` below is NOT parallelised with
-      // them: it genuinely depends on `enabled`, and asking for hidden episodes
-      // we may not use would trade a real read for a saved hop.
-      final (enabled, eps) = await (
-        widget.settings.loadMissingEnabled(),
-        widget.repository.episodesFor(widget.series.seriesId),
+      // exist, only whether gaps are surfaced — so they wait together instead
+      // of one after the other. `hiddenEpisodes` below is NOT parallelised with
+      // them: it genuinely depends on `enabled`.
+      final (enabled, eps, unmatched) = await (
+        _services.settings.loadMissingEnabled(),
+        _services.repository.episodesFor(widget.series.seriesId),
+        _services.repository.unmatchedFiles(),
       ).wait;
       // The feature never applies to a not-yet-identified placeholder (no
-      // AniList count, synthetic negative id) — treat it as nothing hidden.
+      // episode count, synthetic negative id) — treat it as nothing hidden.
       final hidden = (!enabled || widget.series.pending)
           ? <int>{}
-          : await widget.missing.hiddenEpisodes(widget.series.seriesId);
-      // The show's files are "unavailable" when NO source of any present
-      // episode exists on disk (the drive/mount is gone). `any` short-circuits
-      // on the first reachable file, so the connected case is cheap.
-      final unavailable =
-          eps.isNotEmpty &&
-          !eps.any((e) => e.sources.any((s) => File(s.fileRef).existsSync()));
+          : await _services.missingEpisodes.hiddenEpisodes(
+              widget.series.seriesId,
+            );
+      final unavailable = eps.isNotEmpty && !await _anyReachable(eps);
       if (!mounted) return;
       setState(() {
         _episodes = eps;
         _hidden = hidden;
         _missingEnabled = enabled;
         _sourcesUnavailable = unavailable;
+        _unmatchedCount = unmatched.length;
         _loading = false;
         _error = false;
         _expandedBundles.clear();
         _bundleSelection.clear();
         _hiddenSelection = {};
         if (hidden.isEmpty) _viewingHidden = false;
-        _next = _deriveNext(eps);
+        // The ONE "what's next" rule, over the list already in hand — the
+        // same function the repository applies library-wide for the cards.
+        _next = nextToWatch(eps);
       });
     } catch (e, stack) {
-      // Don't hang on the spinner — surface an error state with retry. And
-      // keep the cause: this used to discard the exception entirely, so
-      // "Couldn't load this show's episodes" had no diagnosis path behind it.
+      // Don't hang on the spinner — surface an error state with retry, and
+      // keep the cause so the message has a diagnosis path behind it.
       AppLog.error('Show page: episode load failed', error: e, stack: stack);
       if (!mounted) return;
       setState(() {
@@ -222,40 +240,17 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     }
   }
 
-  /// The next episode to watch, derived from the list we just loaded — no
-  /// extra query.
-  ///
-  /// This mirrors `upNextBySeries()` exactly, which is: take the FURTHEST
-  /// watched anchored position, resolve the episode at `anchored + 1`
-  /// (`_resolveNext` in the repository is literally that lookup), and show it
-  /// only if it exists and is itself unwatched. A series with nothing watched
-  /// has no "next". Because `episodesFor` returns precisely those logical
-  /// episodes, built by the same `_toEpisode` with the same watch/skip lookups,
-  /// the derived Episode is the same object the query would have produced —
-  /// while the query rebuilt the WHOLE library's logical-episode map, plus every
-  /// watch and skip row, to read one entry.
-  ///
-  /// KNOWN divergence, deliberately accepted: watch-state outlives a deleted
-  /// file (it's sacred across rescans), so if the furthest-watched episode's
-  /// file is gone it isn't in `eps` and the derivation starts from the furthest
-  /// watched episode you still HAVE. The library card, still using the query,
-  /// could then suggest a later episode than this page does. The derived answer
-  /// is arguably the better one — it points at something you can actually play —
-  /// and closing the gap would cost the round-trip this removes.
-  static Episode? _deriveNext(List<Episode> eps) {
-    int? latestWatched;
+  /// Whether ANY source of any present episode exists on disk. Async and
+  /// short-circuiting: the old `existsSync` over every source ran on the UI
+  /// isolate, and on an offline SMB/NFS mount it blocked the whole app for as
+  /// long as the kernel took to give up.
+  static Future<bool> _anyReachable(List<Episode> eps) async {
     for (final e in eps) {
-      if (!e.watched) continue;
-      if (latestWatched == null || e.anchoredNumber > latestWatched) {
-        latestWatched = e.anchoredNumber;
+      for (final s in e.sources) {
+        if (await File(s.fileRef).exists()) return true;
       }
     }
-    if (latestWatched == null) return null; // never started -> nothing "next"
-    for (final e in eps) {
-      if (e.anchoredNumber != latestWatched + 1) continue;
-      return e.watched ? null : e; // already watched -> caught up
-    }
-    return null; // no episode at anchored+1
+    return false;
   }
 
   /// Test hook for the derived value — see test/detail_first_load_test.dart.
@@ -273,58 +268,55 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   });
 
   Future<void> _hide(List<int> numbers) async {
-    await widget.missing.hideEpisodes(widget.series.seriesId, numbers);
+    await _services.missingEpisodes.hideEpisodes(
+      widget.series.seriesId,
+      numbers,
+    );
     await _reload();
   }
 
   Future<void> _unhide(List<int> numbers) async {
-    await widget.missing.unhideEpisodes(widget.series.seriesId, numbers);
+    await _services.missingEpisodes.unhideEpisodes(
+      widget.series.seriesId,
+      numbers,
+    );
     await _reload();
   }
 
-  /// The header's ⚙ action — the one door to every setting, Sources included.
+  /// The header's ⚙ action — the one door to every setting, Folders included.
   ///
-  /// AWAITED, unlike before. Sources live in this window now, and reordering
-  /// them changes which copy of a duplicated episode plays; this screen renders
-  /// those paths, so it has to re-read once the window closes. Fire-and-forget
-  /// would leave the page showing the old source until you navigated away and
-  /// back.
+  /// AWAITED: Folders live in this window, and reordering them changes which
+  /// copy of a duplicated episode plays; this screen renders those paths, so
+  /// it re-reads once the window closes — after ANY visit, since the skip floor
+  /// and the missing-episodes toggle are read fresh by `_reload` too.
   Future<void> _openSettings() async {
     await showAppSettingsDialog(
       context,
-      settings: widget.settings,
-      actions: widget.settingsActions.forScreen(
+      settings: _services.settings,
+      actions: _services.settingsActions.forScreen(
         onRefreshed: _reload,
-        loadUnmatchedCount: () async =>
-            (await widget.repository.unmatchedFiles()).length,
-        onOpenUnmatched: () => Navigator.of(context).push(
-          InstantPageRoute<void>(
-            builder: (_) => UnmatchedScreen(
-              repository: widget.repository,
-              fixMatch: widget.fixMatch,
-            ),
-          ),
-        ),
+        loadUnmatchedCount: () async => _unmatchedCount,
+        onOpenUnmatched: widget.header.onUnmatched,
       ),
     );
-    if (!mounted) return;
-    // A rescan is the library screen's job (it owns the scan); this screen just
-    // needs its episode list re-resolved against the new priority order.
-    // Reload after ANY settings visit, not only a folder change: missing-episode
-    // placeholders and the skip floor are read fresh by `_reload`, and gating
-    // on `sourcesChanged` left both stale until you navigated away and back.
-    // The read is local and cheap; the stale page was a visible bug.
-    await _reload();
-  }
-
-  /// Header "Sync" on the detail screen: run the home-provided sync, then reload
-  /// this screen's data. No local spinner — the sync runs quietly.
-  Future<void> _sync() async {
-    await widget.onScan();
     if (mounted) await _reload();
   }
 
-  String get _query =>
+  /// Header "Scan" on the show page: run the home-provided scan, then reload
+  /// this screen's data. No local spinner beyond the shared header one.
+  Future<void> _scan() async {
+    await widget.header.onScan();
+    if (mounted) await _reload();
+  }
+
+  HeaderHooks get _header => HeaderHooks(
+    onScan: _scan,
+    onUnmatched: widget.header.onUnmatched,
+    unmatchedCount: _unmatchedCount,
+  );
+
+  /// What the fix-match search box is pre-filled with: the show's best title.
+  String get _fixMatchPrefill =>
       widget.series.titles.romaji ??
       widget.series.titles.english ??
       widget.series.titles.native ??
@@ -349,47 +341,26 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       _showReconnectHint();
       return;
     }
-    await Navigator.of(context).push(
-      InstantPageRoute<void>(
-        builder: (_) => TheaterScreen(
-          series: widget.series,
-          initialEpisode: e,
-          repository: widget.repository,
-          watchState: widget.watchState,
-          watchOrder: widget.watchOrder,
-          playback: widget.playback,
-          settings: widget.settings,
-          // Same header actions as this screen — so the theater header matches.
-          unmatchedCount: widget.unmatchedCount,
-          onScan: _sync,
-          onUnmatched: widget.onUnmatched,
-          onSettings: _openSettings,
-        ),
-      ),
+    await AppRoutes.theater(
+      context,
+      services: _services,
+      series: widget.series,
+      episode: e,
+      header: _header,
+      onSettings: _openSettings,
     );
     unawaited(_reload()); // reflect updated watched / resume position / up-next
   }
 
-  static String _fmt(Duration d) {
-    final m = d.inMinutes;
-    final s = d.inSeconds % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
-  }
-
   Future<void> _reassignOne(Episode e) async {
-    final done = await Navigator.of(context).push<bool>(
-      InstantPageRoute<bool>(
-        builder: (_) => FixMatchScreen(
-          fixMatch: widget.fixMatch,
-          filePaths: [e.fileRef],
-          prefillQuery: _query,
-        ),
-      ),
+    final done = await AppRoutes.fixMatch(
+      context,
+      services: _services,
+      filePaths: [e.fileRef],
+      prefillQuery: _fixMatchPrefill,
     );
     if (done == true) unawaited(_reload());
   }
-
-  static String _name(String path) => path.split(Platform.pathSeparator).last;
 
   /// Pick which source a multi-source episode plays from: "Automatic" (folder
   /// priority — the default) or a specific copy (a manual pin that survives
@@ -400,7 +371,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       builder: (dialogContext) {
         final priorityDefault = e.sources.first; // sources are priority-ordered
         return XpDialog(
-          title: 'Episode ${e.number} — source',
+          title: '${e.displayTitle} — source',
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -414,7 +385,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                   title: const Text('Automatic (highest priority)'),
                   subtitle: Text('Plays from ${priorityDefault.fileRef}'),
                   onTap: () async {
-                    await widget.sourceSelection.clearSource(e);
+                    await _services.sourceSelection.clearSource(e);
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop(true);
                     }
@@ -433,7 +404,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                         ? const Text('default')
                         : null,
                     onTap: () async {
-                      await widget.sourceSelection.selectSource(
+                      await _services.sourceSelection.selectSource(
                         e,
                         folderPath: s.folderPath,
                       );
@@ -466,19 +437,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         .sublist(start < 0 ? 0 : start)
         .map((e) => e.fileRef)
         .toList();
-    // Real prior-season count: this series' AniList episode count (fallback to
-    // the split point minus one). Never hardcoded.
+    // Real prior-season count: this show's episode count (fallback to the
+    // split point minus one). Never hardcoded.
     final prior = widget.series.episodeCount ?? (from.number - 1);
-    final done = await Navigator.of(context).push<bool>(
-      InstantPageRoute<bool>(
-        builder: (_) => FixMatchScreen(
-          fixMatch: widget.fixMatch,
-          filePaths: range,
-          prefillQuery: _query,
-          isSplit: true,
-          priorEpisodeCount: prior,
-        ),
-      ),
+    final done = await AppRoutes.fixMatch(
+      context,
+      services: _services,
+      filePaths: range,
+      prefillQuery: _fixMatchPrefill,
+      isSplit: true,
+      priorEpisodeCount: prior,
     );
     if (done == true) unawaited(_reload());
   }
@@ -490,15 +458,15 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   /// filters the list). Tap plays [e]; split resolves [e]'s real position.
   Widget _episodeTile(Episode e) {
     final multi = e.hasMultipleSources;
-    // A pending placeholder can't be source-pinned (no real identity to key the
+    // A pending placeholder can't be source-pinned (no real identity to key a
     // pin to) — it always plays the automatic source. Show the source count,
     // but not the picker.
     final pinnable = multi && !widget.series.pending;
     final subtitle = [
-      _name(e.fileRef),
-      if (multi) '${e.sources.length} sources · from ${e.fileRef}',
+      _basename(e.fileRef),
+      if (multi) '${e.sources.length} copies · playing ${e.fileRef}',
       if (!e.watched && e.resumePosition > Duration.zero)
-        '▸ resume ${_fmt(e.resumePosition)}',
+        '▸ resume ${formatDuration(e.resumePosition)}',
     ].join('\n');
 
     // The SHARED episode tile (same as the theater rail); this list keeps the
@@ -507,14 +475,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     // in trailing. Tap opens the player.
     return EpisodeTile(
       number: e.number,
-      title: e.title ?? 'Episode ${e.number}',
+      title: e.displayTitle,
       onTap: () => _play(e),
       detail: Text(
         subtitle,
-        style: const TextStyle(color: Xp.textDim, fontSize: 11),
+        style: const TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeCaption),
       ),
       trailing: [
-        const SizedBox(width: 8),
+        const SizedBox(width: Xp.spaceS),
         if (e.watched)
           const Padding(
             padding: EdgeInsets.only(top: 2, right: 2),
@@ -522,7 +490,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           ),
         if (pinnable)
           IconButton(
-            tooltip: '${e.sources.length} sources — choose…',
+            tooltip: '${e.sources.length} copies — choose…',
             icon: Badge(
               label: Text('${e.sources.length}'),
               child: const Icon(
@@ -578,7 +546,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           MenuItemButton(
             leadingIcon: const Icon(Icons.layers_outlined, size: 18),
             onPressed: () => _chooseSource(e),
-            child: const Text('Choose source…'),
+            child: const Text('Choose copy…'),
           ),
       ],
     );
@@ -588,327 +556,29 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   /// the durable per-episode override (wins over the threshold, survives re-entry
   /// + refresh); progress/resume is untouched.
   Future<void> _toggleWatched(Episode e) async {
-    await widget.watchState.setWatchedManual(e, watched: !e.watched);
+    await _services.watchState.setWatchedManual(e, watched: !e.watched);
     await _reload();
-  }
-
-  /// A faded, outlined circular badge for a missing episode's number — the
-  /// shared badge in its ghost variant (so present + missing badges can't drift).
-  Widget _ghostBadge(int number) =>
-      EpisodeNumberBadge(number: number, ghost: true);
-
-  /// A single missing episode (a ghost). Three-dots → "Hide missing episode".
-  Widget _missingSingleTile(int number) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      child: Row(
-        children: [
-          _ghostBadge(number),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ChromeLabel(
-                  'Missing',
-                  upper: false,
-                  color: Xp.textFaint,
-                  fontSize: 11,
-                  letterSpacing: 1,
-                ),
-              ],
-            ),
-          ),
-          ChromeLabel(
-            'Episode $number',
-            upper: false,
-            color: Xp.textFaint,
-            fontSize: 13,
-            letterSpacing: 1,
-          ),
-          const SizedBox(width: 4),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Xp.textDim),
-            onSelected: (v) {
-              if (v == 'hide') unawaited(_hide([number]));
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'hide', child: Text('Hide missing episode')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// A consecutive run of 2+ missing episodes: first on top, last on the bottom,
-  /// joined by a line ("these two and everything between"). Three-dots →
-  /// "Hide all" or "Select episodes to hide…" (expands inline).
-  Widget _missingBundleTile(MissingBundleRow b) {
-    final expanded = _expandedBundles.contains(b.first);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: 100,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              children: [
-                // The "first —line— last" connector, the height of two entries.
-                SizedBox(
-                  width: 34,
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 8),
-                      _ghostBadge(b.first),
-                      Expanded(
-                        child: Center(
-                          child: Container(width: 2, color: Xp.divider),
-                        ),
-                      ),
-                      _ghostBadge(b.last),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        ChromeLabel(
-                          'Episode ${b.first}',
-                          upper: false,
-                          color: Xp.textFaint,
-                          fontSize: 13,
-                          letterSpacing: 1,
-                        ),
-                        ChromeLabel(
-                          '${b.numbers.length} missing episodes',
-                          upper: false,
-                          color: Xp.textFaint,
-                          fontSize: 11,
-                          letterSpacing: 1,
-                        ),
-                        ChromeLabel(
-                          'Episode ${b.last}',
-                          upper: false,
-                          color: Xp.textFaint,
-                          fontSize: 13,
-                          letterSpacing: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Xp.textDim),
-                  onSelected: (v) {
-                    if (v == 'hideAll') unawaited(_hide(b.numbers));
-                    if (v == 'select') {
-                      setState(() => _expandedBundles.add(b.first));
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'hideAll', child: Text('Hide all')),
-                    PopupMenuItem(
-                      value: 'select',
-                      child: Text('Select episodes to hide…'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (expanded) _bundleExpansion(b),
-      ],
-    );
-  }
-
-  /// The inline per-episode checklist a bundle expands into: the reusable
-  /// multi-select over the run's episodes + a Hide button for the checked ones.
-  Widget _bundleExpansion(MissingBundleRow b) {
-    final selected = _bundleSelection[b.first] ?? const <int>{};
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(56, 0, 10, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          MultiSelectList(
-            key: ValueKey('bundle-${b.numbers.join('-')}'),
-            itemCount: b.numbers.length,
-            labelBuilder: (_, i) => Text(
-              'Episode ${b.numbers[i]}',
-              style: const TextStyle(color: Xp.text),
-            ),
-            onSelectionChanged: (sel) => setState(() {
-              _bundleSelection[b.first] = {for (final i in sel) b.numbers[i]};
-            }),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              XpButton(
-                dense: true,
-                label: 'Cancel',
-                onPressed: () => setState(() {
-                  _expandedBundles.remove(b.first);
-                  _bundleSelection.remove(b.first);
-                }),
-              ),
-              const SizedBox(width: 8),
-              XpButton(
-                dense: true,
-                icon: Icons.visibility_off,
-                label: 'Hide selected',
-                onPressed: selected.isEmpty
-                    ? null
-                    : () => _hide(selected.toList()..sort()),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// The Hidden tab: every hidden episode individually, with the reusable
-  /// multi-select + an Unhide button. No confirm dialog — select-then-unhide is
-  /// the two-step safeguard.
-  Widget _hiddenView(List<int> hiddenSorted, String query) {
-    // A search that matches no hidden episode reads as a clean empty state, not
-    // a blank list.
-    if (hiddenSorted.isEmpty) {
-      return _emptyState(
-        query.trim().isEmpty ? 'No hidden episodes' : 'No episodes match',
-      );
-    }
-    return XpPanel(
-      inset: true,
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          MultiSelectList(
-            key: ValueKey('hidden-${hiddenSorted.join('-')}'),
-            itemCount: hiddenSorted.length,
-            labelBuilder: (_, i) => Text(
-              'Episode ${hiddenSorted[i]}',
-              style: const TextStyle(color: Xp.text),
-            ),
-            onSelectionChanged: (sel) => setState(() {
-              _hiddenSelection = {for (final i in sel) hiddenSorted[i]};
-            }),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: XpButton(
-              icon: Icons.visibility,
-              label: 'Unhide',
-              onPressed: _hiddenSelection.isEmpty
-                  ? null
-                  : () => _unhide(_hiddenSelection.toList()..sort()),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// The downloaded-episode indicator ("⬇ N of M +X"), consistent with the
-  /// library card and reflecting hidden exclusions.
-  Widget _downloadIndicator(DownloadTally tally) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Row(
-        children: [
-          const Icon(Icons.download, size: 15, color: Xp.textDim),
-          const SizedBox(width: 4),
-          Text(
-            tally.total != null
-                ? '${tally.inRange} of ${tally.total}'
-                : '${tally.inRange}',
-            style: const TextStyle(color: Xp.textDim, fontSize: 12),
-          ),
-          if (tally.outOfRange > 0)
-            Text(
-              '  +${tally.outOfRange}',
-              style: const TextStyle(color: Xp.warning, fontSize: 12),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _banner({
-    required IconData icon,
-    required Color iconColor,
-    required String message,
-    required String actionLabel,
-    required VoidCallback onAction,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: XpPanel(
-        color: Xp.surfaceAlt,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          children: [
-            Icon(icon, color: iconColor, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(color: Xp.text, fontSize: 12),
-              ),
-            ),
-            const SizedBox(width: 8),
-            XpButton(
-              dense: true,
-              icon: Icons.refresh,
-              label: actionLabel,
-              onPressed: onAction,
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final series = widget.series;
-    final title = series.displayTitle;
-
-    // The ONE shared screen shell (XpScreen): a VFD back tab + the SAME
-    // HeaderActionsBar as home/theater, readout reading "AniLocal <TITLE>".
-    // Theme is applied app-wide, so no per-screen wrap.
     publishHeader();
-    return _content(series, title);
+    return _content(widget.series);
   }
 
   @override
   HeaderSpec buildHeaderSpec() => HeaderSpec(
     title: widget.series.displayTitle,
     actions: AppActions(
-      // No local spinner on the detail screen — sync runs quietly.
-      scanning: false,
-      unmatchedCount: widget.unmatchedCount,
-      onScan: _sync,
-      onUnmatched: widget.onUnmatched,
+      scanning: _services.scanning.value,
+      unmatchedCount: _unmatchedCount,
+      onScan: _scan,
+      onUnmatched: widget.header.onUnmatched,
       onSettings: _openSettings,
     ),
   );
 
-  Widget _content(Series series, String title) {
-    final art = series.coverImageRef;
+  Widget _content(Series series) {
     final showMissing = _missingEnabled && !series.pending;
     final effectiveHidden = showMissing ? _hidden : const <int>{};
     final slots = computeEpisodeSlots(
@@ -919,196 +589,77 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     final tally = computeDownloadTally(slots, series.episodeCount);
     final hiddenSorted = _hidden.toList()..sort();
     final hiddenTabAvailable = showMissing && hiddenSorted.isNotEmpty;
-
-    // Live search filters the list in front of the user. On the Episodes tab it
-    // filters present + ghost slots (dropping hidden, which never show there)
-    // and re-groups the survivors — so a filtered run of missing episodes still
-    // bundles/singles per the existing 2+-consecutive rule (grouping is computed
-    // live). Empty query → full list, normal grouping.
     final q = _episodeQuery.trim().toLowerCase();
-    final List<EpisodeListRow> rows;
-    if (!showMissing) {
-      rows = [
-        for (final e in _episodes)
-          if (episodeMatchesQuery(
-            number: e.number,
-            fileName: _name(e.fileRef),
-            query: q,
-          ))
-            PresentRow(e),
-      ];
-    } else if (q.isEmpty) {
-      rows = groupIntoRows(slots);
-    } else {
-      rows = groupIntoRows([
-        for (final s in slots)
-          if (s.status != EpisodeStatus.hidden &&
-              episodeMatchesQuery(
-                number: s.episode?.number ?? s.number,
-                // A ghost (missing) slot has no file → number-only match.
-                fileName: s.episode == null ? null : _name(s.episode!.fileRef),
-                query: q,
-              ))
-            s,
-      ]);
-    }
+    final rows = episodeRowsFor(
+      episodes: _episodes,
+      hidden: effectiveHidden,
+      episodeCount: series.episodeCount,
+      showMissing: showMissing,
+      query: q,
+    );
     final visibleHidden = q.isEmpty
         ? hiddenSorted
         : [
             for (final n in hiddenSorted)
               if (episodeMatchesQuery(number: n, query: q)) n,
           ];
+    final ready = !_loading && !_error;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Disconnected-drive banner (cached info stays visible below it).
-        if (_sourcesUnavailable && !_loading && !_error)
-          _banner(
+        if (_sourcesUnavailable && ready)
+          XpBanner(
             icon: Icons.link_off,
-            iconColor: Xp.warning,
             message:
                 "This show's drive isn't connected — reconnect it to play or "
                 'change files.',
-            actionLabel: 'Try again',
-            onAction: _reload,
+            actions: [
+              XpButton(
+                dense: true,
+                icon: Icons.refresh,
+                label: 'Try again',
+                onPressed: _reload,
+              ),
+            ],
           ),
         Expanded(
           child: XpScrollbar(
             controller: _scroll,
-            child: ListView(
+            // Slivers, not a Column inside a ListView: a 1,000-episode show
+            // used to build 1,000 tiles on every keystroke of the search.
+            child: CustomScrollView(
               controller: _scroll,
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Header: cover + titles + metadata + downloaded indicator.
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Cover through the show's picture mode (blur/removed apply
-                    // here too, consistently with the grid + player).
-                    XpBevel(
-                      raised: false,
-                      color: Xp.well,
-                      child: SizedBox(
-                        width: 150,
-                        child: AspectRatio(
-                          aspectRatio: 2 / 3,
-                          child: ShowCover(
-                            imagePath: art,
-                            pictureMode: series.pictureMode,
-                            placeholderIcon: series.pending
-                                ? Icons.hourglass_empty
-                                : Icons.movie_outlined,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (series.titles.romaji != null)
-                            Text(
-                              series.titles.romaji!,
-                              style: const TextStyle(color: Xp.text),
-                            ),
-                          if (series.titles.native != null)
-                            Text(
-                              series.titles.native!,
-                              style: const TextStyle(color: Xp.textDim),
-                            ),
-                          const SizedBox(height: 8),
-                          Text(
-                            series.pending
-                                ? 'Identifying… (not yet matched to AniList)'
-                                : [
-                                    if (series.format != null) series.format,
-                                    if (series.episodeCount != null)
-                                      '${series.episodeCount} episodes',
-                                    if (series.externalIds.anilist != null)
-                                      'AniList #${series.externalIds.anilist}',
-                                  ].join(' · '),
-                            style: const TextStyle(
-                              color: Xp.textDim,
-                              fontSize: 12,
-                            ),
-                          ),
-                          if (!series.pending && !_loading && !_error)
-                            _downloadIndicator(tally),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (_next != null && !_loading && !_error)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: XpButton(
-                      icon: Icons.play_arrow,
-                      label: _next!.seriesId == series.seriesId
-                          ? 'Play next: Episode ${_next!.number}'
-                          : 'Play next: Episode ${_next!.number} (sequel)',
-                      onPressed: () => _play(_next!),
-                    ),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.all(Xp.spaceL),
+                  sliver: SliverToBoxAdapter(
+                    child: _pageHeader(series, tally, hiddenSorted, ready),
                   ),
-                const SizedBox(height: 12),
-                // Episodes header + Episodes/Hidden tab toggle.
-                Row(
-                  children: [
-                    const Text(
-                      'Episodes',
-                      style: TextStyle(
-                        color: Xp.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (hiddenTabAvailable) ...[
-                      XpButton(
-                        dense: true,
-                        label: 'Episodes',
-                        selected: !_viewingHidden,
-                        onPressed: () => setState(() => _viewingHidden = false),
-                      ),
-                      const SizedBox(width: 4),
-                      XpButton(
-                        dense: true,
-                        label: 'Hidden (${hiddenSorted.length})',
-                        selected: _viewingHidden,
-                        onPressed: () => setState(() => _viewingHidden = true),
-                      ),
-                    ],
-                  ],
                 ),
-                const SizedBox(height: 8),
-                // Live episode search, pinned below the tab control, above the
-                // list — the same component + behavior as the homepage search.
-                if (!_loading && !_error) ...[
-                  LibrarySearchBar(
-                    controller: _searchController,
-                    hintText: 'Search episodes',
-                    onChanged: _setQuery,
-                    onClear: () {
-                      _searchController.clear();
-                      _setQuery('');
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                ],
                 if (_loading)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(Xp.spaceXl),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
                   )
                 else if (_error)
-                  _errorState()
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: Xp.spaceL),
+                    sliver: SliverToBoxAdapter(child: _errorState()),
+                  )
                 else if (_viewingHidden && hiddenTabAvailable)
-                  _hiddenView(visibleHidden, q)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: Xp.spaceL),
+                    sliver: SliverToBoxAdapter(
+                      child: _hiddenView(visibleHidden, q),
+                    ),
+                  )
                 else
-                  _episodeWell(rows, q),
+                  ..._episodeSlivers(rows, q),
+                const SliverToBoxAdapter(child: SizedBox(height: Xp.spaceL)),
               ],
             ),
           ),
@@ -1117,54 +668,174 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     );
   }
 
+  /// Cover + titles + metadata + downloaded indicator + Play next + the
+  /// Episodes/Hidden toggle + the search field.
+  Widget _pageHeader(
+    Series series,
+    DownloadTally tally,
+    List<int> hiddenSorted,
+    bool ready,
+  ) {
+    final hiddenTabAvailable =
+        _missingEnabled && !series.pending && hiddenSorted.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cover through the show's picture mode (blur/removed apply here
+            // too, consistently with the grid + player).
+            XpBevel(
+              raised: false,
+              color: Xp.well,
+              child: SizedBox(
+                width: 150,
+                child: AspectRatio(
+                  aspectRatio: 2 / 3,
+                  child: ShowCover(
+                    imagePath: series.coverImageRef,
+                    pictureMode: series.pictureMode,
+                    placeholderIcon: series.pending
+                        ? Icons.hourglass_empty
+                        : Icons.movie_outlined,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: Xp.spaceL),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (series.titles.romaji != null)
+                    Text(
+                      series.titles.romaji!,
+                      style: const TextStyle(color: Xp.text),
+                    ),
+                  if (series.titles.native != null)
+                    Text(
+                      series.titles.native!,
+                      style: const TextStyle(color: Xp.textDim),
+                    ),
+                  const SizedBox(height: Xp.spaceS),
+                  Text(
+                    series.pending
+                        ? 'Identifying… (not yet matched)'
+                        : [
+                            if (series.format != null) series.format,
+                            if (series.episodeCount != null)
+                              '${series.episodeCount} episodes',
+                            if (series.externalIds.anilist != null)
+                              'AniList #${series.externalIds.anilist}',
+                          ].join(' · '),
+                    style: const TextStyle(
+                      color: Xp.textDim,
+                      fontSize: Xp.fontSizeBody,
+                    ),
+                  ),
+                  if (!series.pending && ready)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: DownloadTallyLabel(tally),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Xp.spaceL),
+        if (_next != null && ready)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: XpButton(
+              icon: Icons.play_arrow,
+              label: 'Play next: ${_next!.displayTitle}',
+              onPressed: () => _play(_next!),
+            ),
+          ),
+        const SizedBox(height: Xp.spaceM),
+        // Episodes header + Episodes/Hidden tab toggle.
+        Row(
+          children: [
+            const Text(
+              'Episodes',
+              style: TextStyle(
+                color: Xp.text,
+                fontSize: Xp.fontSizeTitle,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Spacer(),
+            if (hiddenTabAvailable) ...[
+              XpButton(
+                dense: true,
+                label: 'Episodes',
+                selected: !_viewingHidden,
+                onPressed: () => setState(() => _viewingHidden = false),
+              ),
+              const SizedBox(width: Xp.spaceXs),
+              XpButton(
+                dense: true,
+                label: 'Hidden (${hiddenSorted.length})',
+                selected: _viewingHidden,
+                onPressed: () => setState(() => _viewingHidden = true),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: Xp.spaceS),
+        // Live episode search, pinned below the tab control, above the
+        // list — the same component + behavior as the homepage search.
+        if (ready)
+          LibrarySearchBar(
+            controller: _searchController,
+            hintText: 'Search episodes',
+            onChanged: _setQuery,
+            onClear: () {
+              _searchController.clear();
+              _setQuery('');
+            },
+          ),
+      ],
+    );
+  }
+
   /// The error state: a load failure shows this instead of an endless spinner.
   Widget _errorState() {
     return XpPanel(
       inset: true,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(Xp.spaceXl),
       child: Column(
         children: [
           const Icon(Icons.error_outline, color: Xp.warning, size: 32),
-          const SizedBox(height: 8),
+          const SizedBox(height: Xp.spaceS),
           const Text(
             "Couldn't load this show's episodes.",
             style: TextStyle(color: Xp.text),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Xp.spaceM),
           XpButton(icon: Icons.refresh, label: 'Try again', onPressed: _reload),
         ],
       ),
     );
   }
 
-  /// The episode list in a sunken XP well, rows separated by hairlines. Dimmed
-  /// when the drive is disconnected (files-dependent affordances read inert).
-  Widget _episodeWell(List<EpisodeListRow> rows, String query) {
-    final tiles = _episodeRows(rows);
-    final Widget well;
-    if (tiles.isEmpty) {
-      // Distinguish "nothing here" from "search matched nothing".
-      well = _emptyState(
-        query.trim().isEmpty ? 'No episodes' : 'No episodes match',
-      );
-    } else {
-      final children = <Widget>[];
-      for (var i = 0; i < tiles.length; i++) {
-        if (i > 0) {
-          children.add(const Divider(height: 1, color: Xp.divider));
-        }
-        children.add(tiles[i]);
-      }
-      well = XpPanel(
-        inset: true,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: children,
-        ),
+  /// The Hidden tab.
+  Widget _hiddenView(List<int> hiddenSorted, String query) {
+    // A search that matches no hidden episode reads as a clean empty state,
+    // not a blank list.
+    if (hiddenSorted.isEmpty) {
+      return _emptyState(
+        query.trim().isEmpty ? 'No hidden episodes' : 'No episodes match',
       );
     }
-    // Cached list stays visible when disconnected, just dimmed to read inert.
-    return Opacity(opacity: _sourcesUnavailable ? 0.5 : 1, child: well);
+    return HiddenEpisodesView(
+      hidden: hiddenSorted,
+      selected: _hiddenSelection,
+      onSelectionChanged: (sel) => setState(() => _hiddenSelection = sel),
+      onUnhide: () => _unhide(_hiddenSelection.toList()..sort()),
+    );
   }
 
   /// A clean centered message in a sunken well — used for empty / no-match
@@ -1172,28 +843,71 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   Widget _emptyState(String message) => XpPanel(
     inset: true,
     child: Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(Xp.spaceL),
       child: Center(
         child: Text(message, style: const TextStyle(color: Xp.textDim)),
       ),
     ),
   );
 
-  /// Materialize the grouped rows into tile widgets. Present tiles render from
-  /// the Episode the row carries (never a positional index), so a filtered list
-  /// shows — and acts on — the correct episodes.
-  List<Widget> _episodeRows(List<EpisodeListRow> rows) {
-    final widgets = <Widget>[];
-    for (final row in rows) {
-      switch (row) {
-        case PresentRow(:final episode):
-          widgets.add(_episodeTile(episode));
-        case MissingSingleRow(:final number):
-          widgets.add(_missingSingleTile(number));
-        case MissingBundleRow():
-          widgets.add(_missingBundleTile(row));
-      }
+  /// The episode list as slivers inside the sunken well, rows separated by
+  /// hairlines; each present tile renders from the Episode its row carries
+  /// (never a positional index). Dimmed when the drive is disconnected so the
+  /// files-dependent affordances read inert.
+  List<Widget> _episodeSlivers(List<EpisodeListRow> rows, String query) {
+    if (rows.isEmpty) {
+      // Distinguish "nothing here" from "search matched nothing".
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: Xp.spaceL),
+          sliver: SliverToBoxAdapter(
+            child: _emptyState(
+              query.trim().isEmpty ? 'No episodes' : 'No episodes match',
+            ),
+          ),
+        ),
+      ];
     }
-    return widgets;
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: Xp.spaceL),
+        sliver: SliverOpacity(
+          // Cached list stays visible when disconnected, just dimmed.
+          opacity: _sourcesUnavailable ? 0.5 : 1,
+          sliver: XpInsetSliver(
+            sliver: SliverList.separated(
+              itemCount: rows.length,
+              itemBuilder: (_, i) => _rowTile(rows[i]),
+              separatorBuilder: (_, _) =>
+                  const Divider(height: 1, color: Xp.divider),
+            ),
+          ),
+        ),
+      ),
+    ];
   }
+
+  Widget _rowTile(EpisodeListRow row) => switch (row) {
+    PresentRow(:final episode) => _episodeTile(episode),
+    MissingSingleRow(:final number) => MissingSingleTile(
+      number: number,
+      onHide: () => unawaited(_hide([number])),
+    ),
+    MissingBundleRow() => MissingBundleTile(
+      bundle: row,
+      expanded: _expandedBundles.contains(row.first),
+      selected: _bundleSelection[row.first] ?? const <int>{},
+      onHideAll: () => unawaited(_hide(row.numbers)),
+      onExpand: () => setState(() => _expandedBundles.add(row.first)),
+      onSelectionChanged: (sel) =>
+          setState(() => _bundleSelection[row.first] = sel),
+      onCancel: () => setState(() {
+        _expandedBundles.remove(row.first);
+        _bundleSelection.remove(row.first);
+      }),
+      onHideSelected: () => unawaited(
+        _hide((_bundleSelection[row.first] ?? const <int>{}).toList()..sort()),
+      ),
+    ),
+  };
 }

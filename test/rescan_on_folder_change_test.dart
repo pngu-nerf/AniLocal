@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_settings.dart';
+import 'support/finders.dart';
 
 const _emptySummary = SyncSummary(
   filesScanned: 0,
@@ -200,8 +201,8 @@ void main() {
     // 1) Open settings and close it WITHOUT changing the set.
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Sources'), findsWidgets, reason: 'lands on the tab');
-    await tester.tap(find.text('DONE'));
+    expect(find.text('Folders'), findsWidgets, reason: 'lands on the tab');
+    await tester.tap(findXpLabel('Done'));
     await tester.pumpAndSettle();
     expect(scans, 0, reason: 'no-op dismissal must not scan');
 
@@ -209,7 +210,7 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     repo.folders = ['/a', '/b'];
-    await tester.tap(find.text('DONE'));
+    await tester.tap(findXpLabel('Done'));
     await tester.pumpAndSettle();
     expect(scans, 1, reason: 'a changed folder set triggers one rescan');
   });

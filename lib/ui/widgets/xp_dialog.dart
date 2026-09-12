@@ -104,7 +104,7 @@ class XpDialog extends StatelessWidget {
             child: ChromeLabel(
               title,
               color: Xp.textOnTitle,
-              fontSize: 12,
+              fontSize: Xp.fontSizeBody,
               letterSpacing: 1.5,
             ),
           ),

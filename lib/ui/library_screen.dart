@@ -12,35 +12,23 @@ import '../domain/missing_episodes.dart';
 import '../domain/models/cache_errors.dart';
 import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
-import '../domain/models/picture_mode.dart';
 import '../domain/models/series.dart';
 import '../domain/models/sync_summary.dart';
-import '../domain/repositories/fix_match_repository.dart';
-import '../domain/repositories/library_repository.dart';
-import '../domain/repositories/missing_episodes_repository.dart';
-import '../domain/repositories/settings_repository.dart';
-import '../domain/repositories/show_preferences_repository.dart';
-import '../domain/repositories/source_selection_repository.dart';
-import '../domain/repositories/watch_order_repository.dart';
-import '../domain/repositories/watch_state_repository.dart';
-import '../playback/playback_controller.dart';
 import 'access_recovery.dart';
 import 'library/continue_watching_panel.dart';
 import 'library/library_layout.dart';
 import 'library/library_layout_config.dart';
 import 'library/library_search_bar.dart';
+import 'library/series_card.dart';
+import 'library_services.dart';
 import 'metadata_failure_message.dart';
-import 'series_detail_screen.dart';
+import 'routes.dart';
 import 'settings/settings_actions.dart';
 import 'settings/settings_window.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
-import 'shell/instant_page_route.dart';
-import 'theater/theater_screen.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
-import 'unmatched_screen.dart';
-import 'widgets/show_cover.dart';
 
 /// A show is "unavailable" iff it has source folders AND every one of them is
 /// currently missing — a single connected source keeps a multi-source show
@@ -66,60 +54,54 @@ bool seriesMatchesQuery(Series series, String query) {
   return false;
 }
 
-/// Stage 4/5 home: browse the cached library. Reads ONLY from the repository
-/// (cache) — instant and offline. Scan (fill path) and add-folder (native
-/// picker) are injected callbacks; the UI never imports sync/cache/picker types.
+/// "no lookups" / "3 from AniList (lookups)" / "lookups: 3 from AniList, 1
+/// from Kitsu". Names the sources that actually answered instead of a fixed
+/// one: a scan that fell through to Kitsu because AniList was down otherwise
+/// looks identical to one AniList served, and nothing else tells the user.
+/// [nameOf] maps a source token to its display name — from the SAME
+/// descriptor list the settings page shows, so the two can never call one
+/// source different things; an unknown token falls back to itself rather than
+/// an invented name. Pure, so the three branches are testable.
+@visibleForTesting
+String lookupSummary(SyncSummary s, String Function(String token) nameOf) {
+  if (s.lookupsBySource.isEmpty) return 'no lookups';
+  final byCount = s.lookupsBySource.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final parts = [for (final e in byCount) '${e.value} from ${nameOf(e.key)}'];
+  return parts.length == 1
+      ? '${parts.first} (lookups)'
+      : 'lookups: ${parts.join(', ')}';
+}
+
+/// The scan snackbar's one line.
+@visibleForTesting
+String scanSummaryText(SyncSummary s, String Function(String token) nameOf) =>
+    '${s.filesScanned} scanned · ${s.processed} new '
+    '(${s.matched} matched / ${s.unmatched} unmatched) · '
+    '${s.unchanged} unchanged · ${s.removed} removed · ${lookupSummary(s, nameOf)}'
+    '${s.cancelled ? ' · stopped early' : ''}';
+
+/// Home: browse the cached library. Reads ONLY from the repository (cache) —
+/// instant and offline. Scan (fill path) and add-folder (native picker) are
+/// injected callbacks; the UI never imports sync/cache/picker types.
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
-    required this.repository,
-    required this.fixMatch,
-    required this.watchState,
-    required this.sourceSelection,
-    required this.watchOrder,
-    required this.playback,
-    required this.missing,
-    required this.showPreferences,
-    required this.settings,
+    required this.services,
     required this.onScan,
-    required this.settingsActions,
     required this.accessIssues,
     required this.missingFolders,
     required this.missingFolderPaths,
   });
 
-  final LibraryRepository repository;
-  final FixMatchRepository fixMatch;
-  final WatchStateRepository watchState;
-  final SourceSelectionRepository sourceSelection;
-  final WatchOrderRepository watchOrder;
+  /// Every repository and the settings bundle, as ONE object (see
+  /// [LibraryServices]).
+  final LibraryServices services;
 
-  /// App-lifetime playback engine, forwarded to the theater.
-  final PlaybackController playback;
-
-  /// Hidden-episode store (missing-episodes feature); passed through to the
-  /// detail screen and read here to exclude hidden episodes from card counts.
-  final MissingEpisodesRepository missing;
-
-  /// Per-show preferences store (cover display mode + hide-next-episode), set
-  /// from each card's three-dots menu; sacred across rescans.
-  final ShowPreferencesRepository showPreferences;
-
-  /// ALL app-wide settings behind ONE injected object; read here (missing-
-  /// enabled, homepage-visibility toggles, panel fraction) and passed to the
-  /// detail/theater screens + the settings dialog.
-  final SettingsRepository settings;
-
-  /// Fill path. The `onDiscovered` callback fires mid-scan, after newly-seen files are
-  /// written as pending placeholders but before identification — the screen
-  /// wires it to a reload so the grid paints placeholders immediately.
+  /// Fill path. The `onDiscovered` callback fires mid-scan, after newly-seen
+  /// files are written as pending placeholders but before identification — the
+  /// screen wires it to a reload so the grid paints placeholders immediately.
   final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
-
-  /// The app-wide half of the Settings window — folder actions, the shipped
-  /// metadata and skip sources, refresh — built ONCE in `AniLocalApp`. This
-  /// screen's add-folder affordances and the scan summary's source names read
-  /// from it too, so the settings page and the snackbar can never disagree.
-  final SettingsActions settingsActions;
 
   /// Shared denied-state (category labels) — drives the banner; the add-dialog
   /// reads the same source via `SourcesActions.onAddFolder`'s result.
@@ -138,6 +120,8 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
+  LibraryServices get _services => widget.services;
+
   /// The cached library. NULL only until the FIRST load arrives — a refresh
   /// assigns the new list on arrival and never clears this, so the grid, the
   /// panel and the search field are never torn down and rebuilt. (This used to
@@ -159,29 +143,22 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   String _query = '';
   // Drives the chunky XP scrollbar over the grid.
   final ScrollController _gridScroll = ScrollController();
-  // seriesId -> the next episode to watch (relations-aware). Loaded async;
-  // cards show their "Next" affordance once it arrives.
+  // seriesId -> the next episode to watch. Loaded async; cards show their
+  // "Next" affordance once it arrives.
   Map<int, Episode> _upNext = {};
   // seriesId -> the set of library folders its sources live under. Greying is
   // a pure function of this + the live missing-folder set (recomputed in the
   // grid's ValueListenableBuilder, so toggling missing state needs no re-fetch).
   Map<int, Set<String>> _sourceFoldersBySeries = {};
-  // seriesId -> downloaded-episode tally for the card's "⬇N of M +X" line:
-  // inRange = downloaded eps whose anchored position is within 1..episodeCount;
-  // outOfRange = the rest (position > count, or unanchored); total = the
-  // completeness denominator (episodeCount minus any hidden in-range positions
-  // when the missing-episodes feature is on, else episodeCount; null if unknown).
-  // Loaded async alongside the source folders (same episodesFor read).
+  // seriesId -> downloaded-episode tally for the card's "⬇N of M +X" line.
   Map<int, DownloadTally> _downloadCounts = {};
-  bool _scanning = false;
   bool _continueCollapsed = false;
   // Global homepage visibility toggles (persisted). Default visible; re-read
   // after the Settings dialog closes so a change takes effect immediately.
   bool _showContinueWatching = true;
   bool _showSearchBar = true;
-  // Count of CONFIRMED-unmatched files (AniList said no) — NOT pending
-  // placeholders, which auto-resolve. Gates the top-bar Unmatched button; the
-  // Settings → Metadata entry is always shown regardless.
+  // Count of CONFIRMED-unmatched files — NOT pending placeholders, which
+  // auto-resolve. Gates the top-bar Unmatched button.
   int _unmatchedCount = 0;
   // Live continue-watching panel width. Seeded from the config so the first
   // frame is correct, then overwritten by the persisted (clamped) value.
@@ -190,20 +167,26 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   @override
   void initState() {
     super.initState();
+    // The scan flag lives in the services so every header shows it; this
+    // screen republishes its header when it flips.
+    _services.scanning.addListener(_onScanningChanged);
     _reload();
     unawaited(_loadHomepageToggles());
     _background(
       'continue-collapsed setting',
-      widget.settings.loadContinueCollapsed(),
+      _services.settings.loadContinueCollapsed(),
       (c) => setState(() => _continueCollapsed = c),
     );
-    _background('panel width setting', widget.settings.loadPanelWidth(), (f) {
-      final clamped = f.clamp(
-        LibraryLayoutConfig.panelWidthMin,
-        LibraryLayoutConfig.panelWidthMax,
-      );
-      setState(() => _panelWidth = clamped);
-    });
+    // Already clamped by the repository; the layout clamps again on drag.
+    _background(
+      'panel width setting',
+      _services.settings.loadPanelWidth(),
+      (w) => setState(() => _panelWidth = w),
+    );
+  }
+
+  void _onScanningChanged() {
+    if (mounted) setState(() {});
   }
 
   /// Every secondary read this screen fires goes through here: the value is
@@ -211,8 +194,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   /// LOGGED and leaves the field as it was. Only the main `allSeries` read
   /// owns the error panel, because that is the one whose absence is a blank
   /// screen; a sibling failing (continue-watching, up-next, a setting) must
-  /// not be an uncaught async error — before this, the eternal-spinner fix
-  /// covered one of the six reads and the other five rejected unhandled.
+  /// not be an uncaught async error.
   void _background<T>(
     String what,
     Future<T> future,
@@ -231,6 +213,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   @override
   void dispose() {
+    _services.scanning.removeListener(_onScanningChanged);
     _searchController.dispose();
     _gridScroll.dispose();
     super.dispose();
@@ -238,11 +221,11 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   void _toggleContinueCollapsed() {
     setState(() => _continueCollapsed = !_continueCollapsed);
-    unawaited(widget.settings.setContinueCollapsed(_continueCollapsed));
+    unawaited(_services.settings.setContinueCollapsed(_continueCollapsed));
   }
 
   Future<void> _dismissFromContinue(ContinueWatching entry) async {
-    await widget.watchState.clearProgress(entry.episode);
+    await _services.watchState.clearProgress(entry.episode);
     _reload();
   }
 
@@ -250,7 +233,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     // Assign ON ARRIVAL, exactly like the three fields below — nothing is
     // cleared, so the current library stays on screen while the new one loads.
     unawaited(
-      widget.repository.allSeries().then(
+      _services.repository.allSeries().then(
         (s) {
           if (!mounted) return;
           setState(() {
@@ -274,42 +257,41 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     // presence (and thus the layout) is known without a FutureBuilder.
     _background(
       'continue watching',
-      widget.watchState.continueWatching(),
+      _services.watchState.continueWatching(),
       (e) => setState(() => _continueEntries = e),
     );
     // "Up Next" per series — resolved off the cache; updates the grid when ready.
     _background(
       'up next',
-      widget.watchOrder.upNextBySeries(),
+      _services.watchOrder.upNextBySeries(),
       (m) => setState(() => _upNext = m),
     );
     // Confirmed-unmatched count — gates the top-bar Unmatched button.
     _background(
       'unmatched count',
-      widget.repository.unmatchedFiles(),
+      _services.repository.unmatchedFiles(),
       (u) => setState(() => _unmatchedCount = u.length),
     );
   }
 
-  /// Per-series stats derived from one `episodesFor` read each: the library
-  /// folders each show's sources occupy (for greying), and the downloaded-
-  /// episode tally (in-range vs out-of-range) for the card's "⬇N of M +X" line.
-  /// Reads existing cached domain state only — pure display, no schema change.
   /// Monotonic run counter for [_loadSeriesStats]. `_reload` is called from
   /// eight places, so runs overlap routinely; without this the OLDER run
   /// finishing last won the `setState` and the grid showed stale greying and
   /// tallies.
   int _statsGeneration = 0;
 
+  /// Per-series stats for the grid: the library folders each show's sources
+  /// occupy (for greying), and the downloaded-episode tally for the card's
+  /// "⬇N of M +X" line. Reads existing cached domain state only.
   Future<void> _loadSeriesStats(List<Series> series) async {
     final generation = ++_statsGeneration;
-    final missingEnabled = await widget.settings.loadMissingEnabled();
+    final missingEnabled = await _services.settings.loadMissingEnabled();
     final allHidden = missingEnabled
-        ? await widget.missing.allHiddenEpisodes()
+        ? await _services.missingEpisodes.allHiddenEpisodes()
         : const <int, Set<int>>{};
     // ONE read for every series, not one per card: `episodesFor` rebuilds the
     // whole library from five tables each time it is called.
-    final episodesBySeries = await widget.repository.episodesBySeries();
+    final episodesBySeries = await _services.repository.episodesBySeries();
     if (!mounted || generation != _statsGeneration) return;
     final folders = <int, Set<String>>{};
     final counts = <int, DownloadTally>{};
@@ -319,8 +301,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         for (final e in eps)
           for (final src in e.sources) src.folderPath,
       };
-      // The SAME rule the show page uses, through the same function — the
-      // inline copy this replaced had already drifted from it in shape.
+      // The SAME rule the show page uses, through the same function.
       final slots = computeEpisodeSlots(
         present: eps,
         hidden: allHidden[s.seriesId] ?? const <int>{},
@@ -334,24 +315,36 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     });
   }
 
+  HeaderHooks get _header => HeaderHooks(
+    onScan: _scan,
+    onUnmatched: _openUnmatched,
+    unmatchedCount: _unmatchedCount,
+  );
+
   Future<void> _play(Episode episode, Series series) async {
-    await Navigator.of(context).push(
-      InstantPageRoute<void>(
-        builder: (_) => TheaterScreen(
-          series: series,
-          initialEpisode: episode,
-          repository: widget.repository,
-          watchState: widget.watchState,
-          watchOrder: widget.watchOrder,
-          playback: widget.playback,
-          settings: widget.settings,
-          // Same header actions as the library — so the theater header matches.
-          unmatchedCount: _unmatchedCount,
-          onScan: _scan,
-          onUnmatched: _openUnmatched,
-          onSettings: _openSettings,
-        ),
-      ),
+    // The Continue panel plays straight into the theater; a show whose only
+    // drive is unplugged must get the same reconnect hint the card gives.
+    final folders = _sourceFoldersBySeries[series.seriesId] ?? const <String>{};
+    if (seriesUnavailable(folders, widget.missingFolderPaths.value)) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              "${series.displayTitle} isn't connected. Reconnect its drive, "
+              'then scan again.',
+            ),
+          ),
+        );
+      return;
+    }
+    await AppRoutes.theater(
+      context,
+      services: _services,
+      series: series,
+      episode: episode,
+      header: _header,
+      onSettings: _openSettings,
     );
     _reload(); // progress/watched/up-next may have changed
   }
@@ -360,8 +353,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       _play(entry.episode, entry.series);
 
   Future<void> _loadHomepageToggles() async {
-    final showContinue = await widget.settings.loadShowContinueWatching();
-    final showSearch = await widget.settings.loadShowSearchBar();
+    final showContinue = await _services.settings.loadShowContinueWatching();
+    final showSearch = await _services.settings.loadShowSearchBar();
     if (mounted) {
       setState(() {
         _showContinueWatching = showContinue;
@@ -377,12 +370,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   }
 
   /// The homepage ⚙ action — the shared app Settings window, identical to the
-  /// one the detail page opens from its title bar. Sources is a category in it,
+  /// one the detail page opens from its title bar. Folders is a category in it,
   /// so this is the only header door into it.
   Future<void> _openSettings() async {
     final outcome = await showAppSettingsDialog(
       context,
-      settings: widget.settings,
+      settings: _services.settings,
       actions: _settingsActions(),
     );
     if (!mounted) return;
@@ -391,11 +384,10 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     // that the cards render).
     await _loadHomepageToggles();
     if (!mounted) return;
-    // Sources live in the window now, so the folders page's old on-pop decision
-    // is made here instead — and it is the SAME decision. A folder added or
-    // removed means files to discover or drop, so it needs a SCAN; a pure
-    // reorder only re-ranks which copy of a duplicated episode is the default,
-    // which the next read re-resolves with no scan and no network.
+    // A folder added or removed means files to discover or drop, so it needs
+    // a SCAN; a pure reorder only re-ranks which copy of a duplicated episode
+    // is the default, which the next read re-resolves with no scan and no
+    // network.
     if (outcome.sourceSetChanged) {
       await _scan();
     } else {
@@ -404,16 +396,21 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   }
 
   /// This screen's hooks for the settings window, completing the app-wide
-  /// bundle in ONE place so the header's Sources action and the ⚙ action
-  /// cannot drift apart.
-  SettingsDialogActions _settingsActions() => widget.settingsActions.forScreen(
-    onRefreshed: _reload,
-    loadUnmatchedCount: () async => _unmatchedCount,
-    onOpenUnmatched: _openUnmatched,
-  );
+  /// bundle in ONE place.
+  SettingsDialogActions _settingsActions() =>
+      _services.settingsActions.forScreen(
+        onRefreshed: _reload,
+        loadUnmatchedCount: () async => _unmatchedCount,
+        onOpenUnmatched: _openUnmatched,
+      );
 
   Future<void> _scan() async {
-    setState(() => _scanning = true);
+    // One scan at a time. The header disables Scan while one runs, but the
+    // show page and the theater forward here too, and a second run over the
+    // same database is refused by the fill path anyway — this just makes the
+    // second tap a no-op instead of an error snackbar.
+    if (_services.scanning.value) return;
+    _services.scanning.value = true;
     try {
       // The mid-scan callback paints placeholders the instant they're written
       // (before identification / network), so an offline add shows its anime
@@ -423,12 +420,14 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       });
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
-      messenger.showSnackBar(SnackBar(content: Text(_summaryText(summary))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(scanSummaryText(summary, _sourceName))),
+      );
       if (summary.unreadableFolders.isNotEmpty) {
         messenger.showSnackBar(
           SnackBar(
             duration: const Duration(seconds: 8),
-            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            backgroundColor: Xp.error,
             content: Text(
               '⚠ Could not read: ${summary.unreadableFolders.join(", ")}. '
               'Re-add the folder to restore access (its cached items were kept).',
@@ -441,7 +440,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         messenger.showSnackBar(
           SnackBar(
             duration: const Duration(seconds: 8),
-            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            backgroundColor: Xp.error,
             content: Text(
               '⚠ ${metadataFailureCause(apiFailure)} '
               'Your library was kept as-is (nothing removed).',
@@ -450,28 +449,29 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         );
       }
       _reload();
-    } catch (e) {
+    } catch (e, stack) {
+      AppLog.error('Scan failed', error: e, stack: stack);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Sync failed: $e — details are in Settings › About.'),
+          content: Text('Scan failed. ${userFacingMessage(e)}'),
           duration: const Duration(seconds: 8),
         ),
       );
-      AppLog.error('Sync failed', error: e);
     } finally {
-      if (mounted) setState(() => _scanning = false);
+      _services.scanning.value = false;
     }
   }
 
   Future<void> _addFolder() async {
-    final result = await widget.settingsActions.sources.onAddFolder();
+    final sources = _services.settingsActions.sources;
+    final result = await sources.onAddFolder();
     if (!mounted) return;
     if (result.deniedLabel != null) {
       await showAccessDeniedDialog(
         context,
         result.deniedLabel!,
-        widget.settingsActions.sources.onOpenAccessSettings,
+        sources.onOpenAccessSettings,
       );
     }
     if (result.added && mounted) {
@@ -479,54 +479,20 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     }
   }
 
-  String _summaryText(SyncSummary s) =>
-      '${s.filesScanned} scanned · ${s.processed} new '
-      '(${s.matched} matched / ${s.unmatched} unmatched) · '
-      '${s.unchanged} unchanged · ${s.removed} removed · ${_lookupText(s)}';
-
-  /// "no lookups" / "3 lookups from AniList" / "3 from AniList, 1 from Kitsu".
-  ///
-  /// Names the sources that actually answered instead of a fixed one: a scan
-  /// that fell through to Kitsu because AniList was down otherwise looks
-  /// identical to one AniList served, and nothing else tells the user.
-  String _lookupText(SyncSummary s) {
-    if (s.lookupsBySource.isEmpty) return 'no lookups';
-    final byCount = s.lookupsBySource.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final parts = [
-      for (final e in byCount) '${e.value} from ${_sourceName(e.key)}',
-    ];
-    return parts.length == 1
-        ? '${parts.first} (lookups)'
-        : 'lookups: ${parts.join(', ')}';
-  }
-
-  /// A source's display name, from the SAME descriptor list the settings page
-  /// shows, so the two can never call one source different things. Falls back
-  /// to the raw token rather than inventing a name.
   String _sourceName(String token) {
-    for (final source in widget.settingsActions.metadataSources) {
+    for (final source in _services.settingsActions.metadataSources) {
       if (source.token == token) return source.displayName;
     }
     return token;
   }
 
-  void _openUnmatched() => Navigator.of(context).push(
-    InstantPageRoute<void>(
-      builder: (_) => UnmatchedScreen(
-        repository: widget.repository,
-        fixMatch: widget.fixMatch,
-      ),
-    ),
-  );
+  void _openUnmatched() =>
+      unawaited(AppRoutes.unmatched(context, services: _services));
 
   @override
   Widget build(BuildContext context) {
-    // The ONE shared screen shell (XpScreen). Home is the root route → no back
-    // tab (showBack: false); the app actions ride the header's trailing slot —
-    // the SAME HeaderActionsBar as detail/theater. The VFD readout reads
-    // "AniLocal LIBRARY". Theme is applied app-wide, so no per-screen wrap.
     publishHeader();
+    final scanning = _services.scanning.value;
     return Column(
       children: [
         // Permission-denied banner (Settings recovery).
@@ -537,8 +503,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               : AccessBanner(
                   labels: labels,
                   onOpenSettings:
-                      widget.settingsActions.sources.onOpenAccessSettings,
-                  onRescan: _scanning ? () {} : _scan,
+                      _services.settingsActions.sources.onOpenAccessSettings,
+                  onRescan: scanning ? null : _scan,
                 ),
         ),
         // Offline drive/mount banner (reconnect — NOT a permission issue).
@@ -548,7 +514,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               ? const SizedBox.shrink()
               : ReconnectBanner(
                   labels: labels,
-                  onRescan: _scanning ? () {} : _scan,
+                  onRescan: scanning ? null : _scan,
                 ),
         ),
         // Search + continue-watching panel + grid share the page via the
@@ -569,10 +535,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               }
               if (all.isEmpty) {
                 // Truly empty library — no search/panel, just onboarding.
-                return _EmptyState(
-                  scanning: _scanning,
-                  onAddFolder: _addFolder,
-                );
+                return _EmptyState(scanning: scanning, onAddFolder: _addFolder);
               }
               final filtered = [
                 for (final s in all)
@@ -584,15 +547,20 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                   panelWidth: _panelWidth,
                 ),
                 // Same divider mechanism as the theater rail: live-resize
-                // updates the fraction; drag-end persists it.
+                // updates the width; drag-end persists it.
                 onPanelResize: (w) => setState(() => _panelWidth = w),
                 onPanelResizeEnd: () =>
-                    widget.settings.setPanelWidth(_panelWidth),
+                    _services.settings.setPanelWidth(_panelWidth),
                 zones: {
                   // Search bar — hidden by the global homepage toggle.
                   if (_showSearchBar)
                     LibraryZone.search: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                      padding: const EdgeInsets.fromLTRB(
+                        Xp.spaceS,
+                        Xp.spaceS,
+                        Xp.spaceS,
+                        Xp.spaceXs,
+                      ),
                       child: LibrarySearchBar(
                         controller: _searchController,
                         onChanged: (v) => setState(() => _query = v),
@@ -606,7 +574,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                   // are entries AND the global homepage toggle allows it.
                   if (_continueEntries.isNotEmpty && _showContinueWatching)
                     LibraryZone.continueWatching: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 4, 4, 8),
+                      padding: const EdgeInsets.fromLTRB(
+                        Xp.spaceS,
+                        Xp.spaceXs,
+                        Xp.spaceXs,
+                        Xp.spaceS,
+                      ),
                       child: ContinueWatchingPanel(
                         entries: _continueEntries,
                         onPlay: _playFromContinue,
@@ -616,7 +589,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                       ),
                     ),
                   LibraryZone.grid: Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
+                    padding: const EdgeInsets.fromLTRB(
+                      Xp.spaceXs,
+                      Xp.spaceXs,
+                      Xp.spaceS,
+                      Xp.spaceS,
+                    ),
                     child: _buildGrid(filtered),
                   ),
                 },
@@ -632,7 +610,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   HeaderSpec buildHeaderSpec() => HeaderSpec(
     title: 'Library',
     actions: AppActions(
-      scanning: _scanning,
+      scanning: _services.scanning.value,
       unmatchedCount: _unmatchedCount,
       onUnmatched: _openUnmatched,
       onScan: _scan,
@@ -658,42 +636,27 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                   builder: (context, constraints) => GridView.builder(
                     controller: _gridScroll,
                     padding: _kGridPadding,
-                    // The cell is sized EXACTLY to a fixed-aspect poster box plus a
-                    // fixed text region, so every card is identically tall no matter
-                    // how long its title is. Because the poster height scales with
-                    // the tile width while the text region is a fixed pixel band,
-                    // no single childAspectRatio works at every width — so we solve
-                    // it per-layout: reproduce the old max-extent column count, then
-                    // derive the aspect ratio from this width's actual tile width.
+                    // The cell is sized EXACTLY to a fixed-aspect poster box
+                    // plus a fixed text region, so every card is identically
+                    // tall no matter how long its title is. Because the poster
+                    // height scales with the tile width while the text region
+                    // is a fixed pixel band, no single childAspectRatio works
+                    // at every width — so we solve it per-layout.
                     gridDelegate: _posterGridDelegate(constraints.maxWidth),
                     itemCount: series.length,
                     itemBuilder: (_, i) {
                       final folders =
                           _sourceFoldersBySeries[series[i].seriesId] ??
                           const <String>{};
-                      final unavailable = seriesUnavailable(folders, missing);
-                      return _SeriesCard(
+                      return SeriesCard(
                         series: series[i],
-                        repository: widget.repository,
-                        fixMatch: widget.fixMatch,
-                        watchState: widget.watchState,
-                        sourceSelection: widget.sourceSelection,
-                        watchOrder: widget.watchOrder,
-                        playback: widget.playback,
-                        // `missing` (local) is the missing-FOLDER set above;
-                        // the repository is `widget.missing`.
-                        missingRepo: widget.missing,
-                        showPreferences: widget.showPreferences,
-                        settings: widget.settings,
+                        services: _services,
+                        header: _header,
                         nextEpisode: _upNext[series[i].seriesId],
                         downloaded: _downloadCounts[series[i].seriesId],
-                        unavailable: unavailable,
+                        unavailable: seriesUnavailable(folders, missing),
                         onPlay: _play,
                         onReturn: _reload,
-                        settingsActions: widget.settingsActions,
-                        onScan: _scan,
-                        onUnmatched: _openUnmatched,
-                        unmatchedCount: _unmatchedCount,
                       );
                     },
                   ),
@@ -714,11 +677,11 @@ class _NoSearchResults extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Xp.spaceXl),
         child: Text(
           'No shows match “${query.trim()}”.',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Xp.textDim, fontSize: 14),
+          style: const TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeTitle),
         ),
       ),
     );
@@ -768,15 +731,18 @@ class _LoadErrorStateState extends State<_LoadErrorState> {
             newer
                 ? 'This library was created by a newer version of AniLocal.'
                 : "Couldn't open the library cache.",
-            style: const TextStyle(color: Xp.text, fontSize: 15),
+            style: const TextStyle(color: Xp.text, fontSize: Xp.fontSizeTitle),
           ),
           const SizedBox(height: 10),
           Text(
             newer ? 'Update the app to open it.' : '$error',
-            style: const TextStyle(color: Xp.textDim, fontSize: 12),
+            style: const TextStyle(
+              color: Xp.textDim,
+              fontSize: Xp.fontSizeBody,
+            ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Xp.spaceL),
           XpButton(
             icon: Icons.copy_outlined,
             label: _copyLabel,
@@ -802,18 +768,18 @@ class _EmptyState extends StatelessWidget {
         children: [
           const Text(
             'Your library is empty.',
-            style: TextStyle(color: Xp.text, fontSize: 15),
+            style: TextStyle(color: Xp.text, fontSize: Xp.fontSizeTitle),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Xp.spaceL),
           XpButton(
             icon: Icons.create_new_folder_outlined,
-            label: 'Add your first source',
+            label: 'Add your first folder',
             onPressed: scanning ? null : onAddFolder,
           ),
           const SizedBox(height: 10),
           const Text(
-            'Point AniLocal at a folder of anime — it syncs automatically.',
-            style: TextStyle(color: Xp.textDim, fontSize: 12),
+            'Point AniLocal at a folder of anime — it scans it for you.',
+            style: TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeBody),
           ),
         ],
       ),
@@ -821,509 +787,30 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// Poster aspect ratio (width / height) for every library card's cover.
-///
-/// Verified against the cached AniList art: `coverImage.extraLarge` is 460px
-/// wide with heights clustering at 650 (≈0.707) and ranging 0.667–0.711 — i.e.
-/// the covers are NOT a single ratio. We fix the box to the dominant 460×650
-/// and [BoxFit.cover] it — the cover FILLS the box (full-bleed, no gaps),
-/// cropping whichever dimension overflows. Because the box is already a proper
-/// ~2:3 poster shape, a normal cover fills with negligible crop; only a
-/// genuinely off-ratio poster crops slightly (acceptable — no empty side/top
-/// gaps). Every card's poster is identically sized.
-const double _kPosterAspect = 460 / 650;
-
-/// Title font size + line height for a card, shared with [_kTitleBlockHeight]
-/// so the reserved title block is exactly two lines tall.
-const double _kCardTitleFontSize = 13;
-const double _kCardTitleLineHeight = 1.25;
-
-/// Height of the ALWAYS-two-lines title block. Reserving two lines even for a
-/// one-line title (its second line stays empty) keeps the meta/download line
-/// below it pinned to the same vertical position on every card, regardless of
-/// title length.
-const double _kTitleBlockHeight =
-    _kCardTitleFontSize * _kCardTitleLineHeight * 2; // 32.5
-
-/// Fixed height of the text band under the poster: the two-line title block, a
-/// small gap, and one meta line — plus a little headroom. Fixed (and fed to the
-/// grid delegate) so every card is uniform total height regardless of title
-/// length; a short title just leaves slack inside its reserved title block.
-const double _kCardTextRegion = 6 + _kTitleBlockHeight + 2 + 15; // ≈55.5
-
 /// Grid padding — kept as a named const so the same value feeds both the
 /// [GridView] and the column-count math in [_posterGridDelegate].
-const EdgeInsets _kGridPadding = EdgeInsets.fromLTRB(16, 16, 24, 16);
+const EdgeInsets _kGridPadding = EdgeInsets.fromLTRB(
+  Xp.spaceL,
+  Xp.spaceL,
+  Xp.spaceXl,
+  Xp.spaceL,
+);
 
 /// Reproduces the old `SliverGridDelegateWithMaxCrossAxisExtent(200)` column
 /// count, then returns a fixed-count delegate whose `childAspectRatio` makes
-/// each cell exactly `posterHeight(tileWidth) + _kCardTextRegion` tall.
+/// each cell exactly `posterHeight(tileWidth) + kCardTextRegion` tall.
 SliverGridDelegate _posterGridDelegate(double gridWidth) {
   const maxExtent = 200.0;
-  const spacing = 16.0;
+  const spacing = Xp.spaceL;
   final avail = gridWidth - _kGridPadding.horizontal;
   // Same ceil rule the max-extent delegate uses, so column count is unchanged.
   final count = math.max(1, ((avail + spacing) / (maxExtent + spacing)).ceil());
   final tileWidth = (avail - spacing * (count - 1)) / count;
-  final cellHeight = tileWidth / _kPosterAspect + _kCardTextRegion;
+  final cellHeight = tileWidth / kPosterAspect + kCardTextRegion;
   return SliverGridDelegateWithFixedCrossAxisCount(
     crossAxisCount: count,
     childAspectRatio: tileWidth / cellHeight,
     crossAxisSpacing: spacing,
     mainAxisSpacing: spacing,
   );
-}
-
-class _SeriesCard extends StatefulWidget {
-  const _SeriesCard({
-    required this.series,
-    required this.repository,
-    required this.fixMatch,
-    required this.watchState,
-    required this.sourceSelection,
-    required this.watchOrder,
-    required this.playback,
-    required this.missingRepo,
-    required this.showPreferences,
-    required this.settings,
-    required this.nextEpisode,
-    required this.downloaded,
-    required this.unavailable,
-    required this.onPlay,
-    required this.onReturn,
-    // Header actions forwarded to the detail screen so its header matches home.
-    required this.settingsActions,
-    required this.onScan,
-    required this.onUnmatched,
-    required this.unmatchedCount,
-  });
-
-  final Series series;
-  final LibraryRepository repository;
-  final FixMatchRepository fixMatch;
-  final WatchStateRepository watchState;
-  final SourceSelectionRepository sourceSelection;
-  final WatchOrderRepository watchOrder;
-
-  /// App-lifetime playback engine, forwarded to the theater.
-  final PlaybackController playback;
-  final MissingEpisodesRepository missingRepo;
-  final ShowPreferencesRepository showPreferences;
-  final SettingsRepository settings;
-
-  /// The next episode to watch for this series (relations-aware), or null when
-  /// the series isn't started / has nothing next. Drives the "Next" button.
-  final Episode? nextEpisode;
-
-  /// Downloaded-episode tally for the "⬇N of M +X" metadata line: in-range vs
-  /// out-of-range counts, and the completeness denominator (M minus hidden
-  /// in-range positions). Null while the async stats load (the line then shows
-  /// just the show-type until it arrives — no wrong numbers flashed).
-  final DownloadTally? downloaded;
-
-  /// True when every source folder of this show is currently missing (offline
-  /// drive/NAS): dimmed + marked, and a tap shows a reconnect hint rather than
-  /// opening it. Still listed in place (cached art/metadata shown).
-  final bool unavailable;
-  final Future<void> Function(Episode, Series) onPlay;
-  final VoidCallback onReturn;
-
-  /// Forwarded so the detail screen's ⚙ opens the SAME settings window.
-  final SettingsActions settingsActions;
-
-  /// Header actions forwarded to the detail screen (Sync / Unmatched) so its
-  /// header matches the home header. [unmatchedCount] is a snapshot.
-  final Future<void> Function() onScan;
-  final VoidCallback onUnmatched;
-  final int unmatchedCount;
-
-  @override
-  State<_SeriesCard> createState() => _SeriesCardState();
-}
-
-class _SeriesCardState extends State<_SeriesCard> {
-  bool _hover = false;
-
-  Future<void> _open(BuildContext context, String title) async {
-    if (widget.unavailable) {
-      // Fail gracefully with a reconnect hint (consistent with the banner) —
-      // don't open into a screen that can't play anything.
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              "$title isn't connected. Reconnect its drive, then rescan.",
-            ),
-          ),
-        );
-      return;
-    }
-    await Navigator.of(context).push(
-      InstantPageRoute<void>(
-        builder: (_) => SeriesDetailScreen(
-          series: widget.series,
-          repository: widget.repository,
-          fixMatch: widget.fixMatch,
-          watchState: widget.watchState,
-          sourceSelection: widget.sourceSelection,
-          watchOrder: widget.watchOrder,
-          playback: widget.playback,
-          missing: widget.missingRepo,
-          settings: widget.settings,
-          settingsActions: widget.settingsActions,
-          onScan: widget.onScan,
-          onUnmatched: widget.onUnmatched,
-          unmatchedCount: widget.unmatchedCount,
-        ),
-      ),
-    );
-    widget.onReturn(); // continue-watching / up-next may have changed
-  }
-
-  /// The metadata line: "ShowType · ⬇N of M +X". Keeps the show-type + middot;
-  /// replaces the old scraped-count segment with the downloaded-episodes tally.
-  /// Only the "+X" (extra out-of-range downloads) is coloured (amber attention);
-  /// the "⬇N of M" is neutral. `maxLines: 1` + ellipsis degrades gracefully on a
-  /// cramped card — the tail (the +X) drops first, never overflowing. The
-  /// unavailable / pending states keep their plain copy.
-  Widget _metaLine(Series series, bool unavailable) {
-    const style = TextStyle(color: Xp.textDim, fontSize: 11, height: 1.2);
-    const one = TextOverflow.ellipsis;
-    if (unavailable) {
-      return const Text(
-        'Unavailable — not connected',
-        maxLines: 1,
-        overflow: one,
-        style: style,
-      );
-    }
-    if (series.pending) {
-      return const Text(
-        'Identifying…',
-        maxLines: 1,
-        overflow: one,
-        style: style,
-      );
-    }
-    final spans = <InlineSpan>[];
-    if (series.format != null) spans.add(TextSpan(text: series.format));
-    final dl = widget.downloaded;
-    if (dl != null) {
-      // The completeness denominator already accounts for hidden episodes (see
-      // _loadSeriesStats); null when the AniList total is unknown.
-      final m = dl.total;
-      if (spans.isNotEmpty) spans.add(const TextSpan(text: ' · '));
-      // A flat, single-color Material icon (not the ⬇ emoji, which the OS draws
-      // full-color with a box). Rendered inline via a WidgetSpan, sized to the
-      // text and explicitly given the line's neutral color (a WidgetSpan child
-      // doesn't inherit the surrounding TextSpan style) so it stays consistent.
-      spans.add(
-        const WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Padding(
-            padding: EdgeInsets.only(right: 2),
-            child: Icon(Icons.download, size: 13, color: Xp.textDim),
-          ),
-        ),
-      );
-      // "N of M" — the AniList total M is dropped when unknown (rare) → just "N".
-      spans.add(
-        TextSpan(text: m != null ? '${dl.inRange} of $m' : '${dl.inRange}'),
-      );
-      if (dl.outOfRange > 0) {
-        spans.add(
-          TextSpan(
-            text: ' +${dl.outOfRange}',
-            style: const TextStyle(color: Xp.warning),
-          ),
-        );
-      }
-    }
-    return Text.rich(
-      TextSpan(style: style, children: spans),
-      maxLines: 1,
-      overflow: one,
-    );
-  }
-
-  Future<void> _setPicture(PictureMode mode) async {
-    await widget.showPreferences.setPictureMode(widget.series.seriesId, mode);
-    widget.onReturn(); // reload so the projection (and every cover) refreshes
-  }
-
-  Future<void> _setNextHidden(bool hidden) async {
-    await widget.showPreferences.setNextEpisodeHidden(
-      widget.series.seriesId,
-      hidden: hidden,
-    );
-    widget.onReturn();
-  }
-
-  /// The per-show three-dots menu: an Edit Picture submenu (three mutually
-  /// exclusive cover states, current one checked; Blur/Reset disabled when the
-  /// show has no cached cover) + a Hide Next Episode toggle.
-  Widget _showMenu(Series series) {
-    final mode = series.pictureMode;
-    final hasCover = ShowCover.hasCover(series.coverImageRef);
-    Widget radio(bool on) =>
-        Icon(on ? Icons.radio_button_checked : Icons.radio_button_unchecked);
-    return MenuAnchor(
-      builder: (context, controller, _) => IconButton(
-        iconSize: 18,
-        visualDensity: VisualDensity.compact,
-        tooltip: 'Show options',
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.black.withValues(alpha: 0.45),
-          foregroundColor: Colors.white,
-          minimumSize: const Size(28, 28),
-          padding: EdgeInsets.zero,
-        ),
-        icon: const Icon(Icons.more_vert),
-        onPressed: () =>
-            controller.isOpen ? controller.close() : controller.open(),
-      ),
-      menuChildren: [
-        SubmenuButton(
-          leadingIcon: const Icon(Icons.image_outlined, size: 18),
-          menuChildren: [
-            MenuItemButton(
-              leadingIcon: radio(mode == PictureMode.blur),
-              // Needs a cover to blur — disabled when the show has none.
-              onPressed: hasCover ? () => _setPicture(PictureMode.blur) : null,
-              child: const Text('Blur Picture'),
-            ),
-            MenuItemButton(
-              leadingIcon: radio(mode == PictureMode.removed),
-              onPressed: () => _setPicture(PictureMode.removed),
-              child: const Text('Remove Picture'),
-            ),
-            MenuItemButton(
-              leadingIcon: radio(mode == PictureMode.normal),
-              // Reset only means something when there's a cover to restore.
-              onPressed: hasCover
-                  ? () => _setPicture(PictureMode.normal)
-                  : null,
-              child: const Text('Reset to default'),
-            ),
-          ],
-          child: const Text('Edit Picture'),
-        ),
-        MenuItemButton(
-          leadingIcon: Icon(
-            series.nextEpisodeHidden
-                ? Icons.check_box
-                : Icons.check_box_outline_blank,
-            size: 18,
-          ),
-          onPressed: () => _setNextHidden(!series.nextEpisodeHidden),
-          child: const Text('Hide Next Episode'),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final series = widget.series;
-    final unavailable = widget.unavailable;
-    final next = widget.nextEpisode;
-    final title = series.displayTitle;
-    final art = series.coverImageRef;
-    // Inverted card: the poster is the FIXED element — a 2:3 box showing the
-    // whole cover, uncropped and identical across every card — sitting in a
-    // sunken bevel frame that pops out (raised) on hover (the tactile XP cue
-    // that it's a button). Below it a fixed-height text band keeps card heights
-    // uniform regardless of title length. The "Next" affordance is a beveled
-    // footer strip OVERLAID on the poster's bottom sliver, so its presence never
-    // changes the card's height.
-    return Opacity(
-      opacity: unavailable ? 0.5 : 1,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hover = true),
-        onExit: (_) => setState(() => _hover = false),
-        child: GestureDetector(
-          onTap: () => _open(context, title),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AspectRatio(
-                aspectRatio: _kPosterAspect,
-                child: LayoutBuilder(
-                  builder: (context, box) => XpBevel(
-                    raised: _hover && !unavailable,
-                    color: Xp.well,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        // The cover, rendered through its per-show picture mode
-                        // (normal / blurred / removed). cover-fit FILLS the 2:3
-                        // box; the cached image is never altered.
-                        ShowCover(
-                          imagePath: art,
-                          pictureMode: series.pictureMode,
-                          // Pending reads as "identifying", not a broken image.
-                          placeholderIcon: series.pending
-                              ? Icons.hourglass_empty
-                              : Icons.image_not_supported,
-                        ),
-                        if (unavailable)
-                          Container(
-                            color: Colors.black54,
-                            alignment: Alignment.center,
-                            // Amber = status (the drive is disconnected, not
-                            // broken) — the panel's reserved attention color.
-                            child: const Icon(
-                              Icons.link_off,
-                              color: Xp.warning,
-                              size: 32,
-                            ),
-                          ),
-                        // Per-show "Next episode" affordance — suppressed when
-                        // this show's hide-next-episode preference is on.
-                        if (next != null &&
-                            !unavailable &&
-                            !series.nextEpisodeHidden)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            // ~1/10th of the poster, but never below a legible
-                            // floor so the label reads on the smallest tiles.
-                            height: math.max(
-                              _kNextStripMinHeight,
-                              box.maxHeight * 0.1,
-                            ),
-                            child: _NextStrip(
-                              number: next.number,
-                              onPlay: () async {
-                                await widget.onPlay(next, series);
-                                widget.onReturn();
-                              },
-                            ),
-                          ),
-                        // Per-show three-dots menu (Edit Picture / Hide Next
-                        // Episode), top-right. Not on a pending placeholder (no
-                        // real identity to key a preference to).
-                        if (!series.pending)
-                          Positioned(
-                            top: 2,
-                            right: 2,
-                            child: _showMenu(series),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(
-                height: _kCardTextRegion,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Always a two-line-tall block (a one-line title leaves
-                      // its second line empty) so the meta line below is pinned
-                      // to the same Y on every card.
-                      SizedBox(
-                        height: _kTitleBlockHeight,
-                        width: double.infinity,
-                        // Show title as a CHROME label — the thin tracked matte
-                        // caps used for "Continue watching" / "Settings". Keeps
-                        // the card's fixed font size + line height so the 2-line
-                        // title block stays uniform across cards.
-                        child: ChromeLabel(
-                          title,
-                          upper: false,
-                          maxLines: 2,
-                          fontSize: _kCardTitleFontSize,
-                          height: _kCardTitleLineHeight,
-                          letterSpacing: 1,
-                          color: _hover && !unavailable
-                              ? Xp.accentBright
-                              : Xp.text,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      _metaLine(series, unavailable),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Minimum height (logical px) of the overlaid "Next" footer strip, so its label
-/// stays legible even when 1/10th of a small poster would be thinner.
-const double _kNextStripMinHeight = 22;
-
-/// The "Next: Ep N" affordance: a beveled footer strip seated on the bottom
-/// sliver of a card's poster. It reads as an integrated part of the card (a
-/// bottom "seat"), styled from the same tokens as [XpButton] — NOT a floating
-/// Material button. Its own tap plays the next episode; because it's a nested
-/// [GestureDetector], the tap wins the gesture arena and does NOT bubble to the
-/// card's open-detail tap (the same control-vs-parent pattern the player uses).
-class _NextStrip extends StatefulWidget {
-  const _NextStrip({required this.number, required this.onPlay});
-
-  final int number;
-  final Future<void> Function() onPlay;
-
-  @override
-  State<_NextStrip> createState() => _NextStripState();
-}
-
-class _NextStripState extends State<_NextStrip> {
-  bool _hover = false;
-  bool _down = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final pressed = _down;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _down = true),
-        onTapUp: (_) => setState(() => _down = false),
-        onTapCancel: () => setState(() => _down = false),
-        onTap: widget.onPlay,
-        child: XpBevel(
-          raised: !pressed,
-          gradient: Xp.controlGradient(hover: _hover),
-          child: Transform.translate(
-            offset: pressed ? const Offset(1, 1) : Offset.zero,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.play_arrow, size: 14, color: Xp.text),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    'Next: Ep ${widget.number}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Xp.text,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

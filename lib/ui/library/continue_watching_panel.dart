@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/format_duration.dart';
 import '../../domain/models/continue_watching.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
@@ -75,7 +76,10 @@ class ContinueWatchingPanel extends StatelessWidget {
                     'Continue watching',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: Xp.textDim),
+                    style: const TextStyle(
+                      fontSize: Xp.fontSizeBody,
+                      color: Xp.textDim,
+                    ),
                   ),
                 ),
               ),
@@ -99,19 +103,6 @@ class _Card extends StatelessWidget {
   final ContinueWatching entry;
   final Future<void> Function(ContinueWatching) onPlay;
   final Future<void> Function(ContinueWatching) onDismiss;
-
-  /// Clock string for [d], rounded to the nearest second: `m:ss`, widening to
-  /// `h:mm:ss` once it's an hour or more (so 90 min reads `1:30:00`, not
-  /// `90:00`). Each value is formatted by its own magnitude, media-player style.
-  static String _clock(Duration d) {
-    final totalSeconds = (d.inMilliseconds / 1000).round();
-    final h = totalSeconds ~/ 3600;
-    final m = (totalSeconds % 3600) ~/ 60;
-    final s = totalSeconds % 60;
-    final ss = s.toString().padLeft(2, '0');
-    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$ss';
-    return '$m:$ss';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -171,7 +162,7 @@ class _Card extends StatelessWidget {
                           title,
                           upper: false,
                           maxLines: 2,
-                          fontSize: 12,
+                          fontSize: Xp.fontSizeBody,
                           letterSpacing: 1,
                         ),
                         const SizedBox(height: 2),
@@ -179,7 +170,7 @@ class _Card extends StatelessWidget {
                           'Episode ${ep.number}',
                           style: const TextStyle(
                             color: Xp.textDim,
-                            fontSize: 11,
+                            fontSize: Xp.fontSizeCaption,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -197,12 +188,12 @@ class _Card extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          '${_clock(ep.resumePosition)} / '
-                          '${_clock(ep.duration)} ~ $percent%',
+                          '${formatDuration(ep.resumePosition)} / '
+                          '${formatDuration(ep.duration)} ~ $percent%',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 10,
+                            fontSize: Xp.fontSizeMicro,
                             color: Xp.textDim,
                           ),
                         ),

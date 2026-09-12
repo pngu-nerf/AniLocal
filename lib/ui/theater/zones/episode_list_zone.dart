@@ -108,7 +108,7 @@ class _EpisodeListZoneState extends State<EpisodeListZone> {
                       // and passes a resume-progress bar as the detail slot.
                       return EpisodeTile(
                         number: e.number,
-                        title: e.title ?? 'Episode ${e.number}',
+                        title: e.displayTitle,
                         active: current,
                         nowPlaying: true,
                         onTap: () => widget.onSelect(e),

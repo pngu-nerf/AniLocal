@@ -37,7 +37,8 @@ enum LibrarySide { left, right }
 ///    points, dragged by the same [ResizeDivider] the theater rail uses and
 ///    clamped to [panelWidthMin]/[panelWidthMax].
 ///  - **Hide / add a zone** (e.g. no continue-watching entries): change
-///    [visibleZones] / omit the zone from the layout's zone map.
+///    [visibleZones], or omit the zone from the layout's zone map (what the
+///    library screen does for the search bar and the panel).
 ///
 /// None of those touch the zone widgets — the search field, the panel, the grid
 /// are all geometry-agnostic and simply fill the box the layout hands them.
@@ -90,28 +91,13 @@ class LibraryLayoutConfig {
   /// Panel width (logical px) when collapsed (just the expand affordance).
   final double collapsedPanelWidth;
 
-  /// The zones currently displayed. Hiding one is a config change. (The layout
-  /// also skips any visible zone with no widget supplied — e.g. the panel when
-  /// there's nothing to continue.)
+  /// The zones the layout will place. A zone can also be dropped by omitting
+  /// it from the zone MAP the screen hands the layout — the library screen
+  /// does that for the search bar and the panel — and the layout honours
+  /// both, so either reading of "hide this zone" is correct.
   final Set<LibraryZone> visibleZones;
 
   bool shows(LibraryZone zone) => visibleZones.contains(zone);
 
-  LibraryLayoutConfig copyWith({
-    LibrarySide? panelSide,
-    bool? panelCollapsed,
-    double? panelWidth,
-    double? collapsedPanelWidth,
-    Set<LibraryZone>? visibleZones,
-  }) => LibraryLayoutConfig(
-    panelSide: panelSide ?? this.panelSide,
-    panelCollapsed: panelCollapsed ?? this.panelCollapsed,
-    panelWidth: panelWidth ?? this.panelWidth,
-    collapsedPanelWidth: collapsedPanelWidth ?? this.collapsedPanelWidth,
-    visibleZones: visibleZones ?? this.visibleZones,
-  );
-
-  /// The default arrangement: search pinned at the top, continue-watching panel
-  /// on the left, grid filling the rest.
   static const LibraryLayoutConfig landingDefault = LibraryLayoutConfig();
 }

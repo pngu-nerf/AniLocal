@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../window_chrome.dart';
 import 'brand_wordmark.dart';
 import 'vfd_readout.dart';
+import 'xp_pressable.dart';
 import 'xp_tokens.dart';
 
 /// A CHROME label — the thin, tracked-out, matte UPPERCASE text "screen-printed
@@ -146,6 +147,43 @@ class XpPanel extends StatelessWidget {
   );
 }
 
+/// [XpPanel]'s INSET well as a sliver wrapper, so a lazily built list can sit
+/// inside the same two-ring bevel a boxed panel gets. Two nested decorated
+/// slivers reproduce [XpBevel]'s outer and inner rings for the sunken state.
+class XpInsetSliver extends StatelessWidget {
+  const XpInsetSliver({super.key, required this.sliver});
+
+  final Widget sliver;
+
+  static Border _ring({required Color topLeft, required Color bottomRight}) =>
+      Border(
+        top: BorderSide(color: topLeft, width: Xp.bevel),
+        left: BorderSide(color: topLeft, width: Xp.bevel),
+        right: BorderSide(color: bottomRight, width: Xp.bevel),
+        bottom: BorderSide(color: bottomRight, width: Xp.bevel),
+      );
+
+  @override
+  Widget build(BuildContext context) => DecoratedSliver(
+    decoration: BoxDecoration(
+      border: _ring(topLeft: Xp.bevelLoSoft, bottomRight: Xp.bevelHiSoft),
+    ),
+    sliver: SliverPadding(
+      padding: const EdgeInsets.all(Xp.bevel),
+      sliver: DecoratedSliver(
+        decoration: BoxDecoration(
+          color: Xp.well,
+          border: _ring(topLeft: Xp.bevelLo, bottomRight: Xp.bevelHi),
+        ),
+        sliver: SliverPadding(
+          padding: const EdgeInsets.all(Xp.bevel),
+          sliver: sliver,
+        ),
+      ),
+    ),
+  );
+}
+
 /// The chassis SURFACE that content sits on inside the instrument chrome
 /// (`AppShell`, [XpDialog]). It's a flat [Material] carrying the chassis
 /// [color], NOT a bare [ColoredBox] — so `ListTile`/ink widgets inside have a
@@ -222,77 +260,56 @@ class XpButton extends StatefulWidget {
 }
 
 class _XpButtonState extends State<XpButton> {
-  bool _hover = false;
-  bool _down = false;
-
   @override
-  Widget build(BuildContext context) {
-    final enabled = widget.onPressed != null;
-    final pressed = (_down || widget.selected) && enabled;
-    final dense = widget.dense;
-    final children = <Widget>[
-      if (widget.icon != null)
-        Icon(
-          widget.icon,
-          size: dense ? 14 : 16,
-          color: enabled ? (widget.lit ? Xp.accent : Xp.text) : Xp.textFaint,
-        ),
-      if (widget.icon != null && widget.label != null)
-        SizedBox(width: dense ? 5 : 7),
-      if (widget.label != null)
-        // Dense buttons live in bounded-width slots (a card) → let the label
-        // ellipsize. Toolbar buttons sit in an unbounded Wrap, where a Flexible
-        // in a min-size Row would throw, so they size to their text.
-        () {
-          // Button text is CHROME — tracked-out matte caps, printed on the key.
-          final text = Text(
-            widget.label!.toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Xp.chrome(
+  Widget build(BuildContext context) => XpPressable(
+    onTap: widget.onPressed,
+    tooltip: widget.tooltip,
+    semanticsLabel: widget.label,
+    opaque: false,
+    builder: (context, s) {
+      final pressed = s.pressed || (widget.selected && s.enabled);
+      final dense = widget.dense;
+      final color = s.enabled
+          ? (widget.lit ? Xp.accent : Xp.text)
+          : Xp.textFaint;
+      final children = <Widget>[
+        if (widget.icon != null)
+          Icon(widget.icon, size: dense ? 14 : 16, color: color),
+        if (widget.icon != null && widget.label != null)
+          SizedBox(width: dense ? 5 : 7),
+        if (widget.label != null)
+          // Button text is CHROME — tracked-out matte caps, printed on the
+          // key — through the ONE chrome label, so a screen reader hears the
+          // original-case string rather than "DONE". Dense buttons live in
+          // bounded-width slots (a card) → let the label ellipsize; toolbar
+          // buttons sit in an unbounded Wrap, where a Flexible in a min-size
+          // Row would throw, so they size to their text.
+          () {
+            final text = ChromeLabel(
+              widget.label!,
               fontSize: dense ? 11 : 12,
-              color: enabled
-                  ? (widget.lit ? Xp.accent : Xp.text)
-                  : Xp.textFaint,
+              color: color,
               letterSpacing: dense ? 1.2 : 1.6,
-            ),
-          );
-          return dense ? Flexible(child: text) : text;
-        }(),
-    ];
-
-    Widget button = XpBevel(
-      raised: !pressed,
-      gradient: enabled
-          ? Xp.controlGradient(hover: _hover)
-          : const LinearGradient(colors: [Xp.surface, Xp.surface]),
-      padding: dense
-          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
-          : Xp.controlPadding,
-      child: Transform.translate(
-        // The "depress" — content shifts into the sunken face when pressed.
-        offset: pressed ? const Offset(1, 1) : Offset.zero,
-        child: Row(mainAxisSize: MainAxisSize.min, children: children),
-      ),
-    );
-
-    if (widget.tooltip != null) {
-      button = Tooltip(message: widget.tooltip!, child: button);
-    }
-
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-        onTapUp: enabled ? (_) => setState(() => _down = false) : null,
-        onTapCancel: enabled ? () => setState(() => _down = false) : null,
-        onTap: widget.onPressed,
-        child: button,
-      ),
-    );
-  }
+            );
+            return dense ? Flexible(child: text) : text;
+          }(),
+      ];
+      return XpBevel(
+        raised: !pressed,
+        gradient: s.enabled
+            ? Xp.controlGradient(hover: s.hovered || s.focused)
+            : const LinearGradient(colors: [Xp.surface, Xp.surface]),
+        padding: dense
+            ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+            : Xp.controlPadding,
+        child: Transform.translate(
+          // The "depress" — content shifts into the sunken face when pressed.
+          offset: pressed ? const Offset(1, 1) : Offset.zero,
+          child: Row(mainAxisSize: MainAxisSize.min, children: children),
+        ),
+      );
+    },
+  );
 }
 
 /// An XP group box: a raised sub-panel with a slim caption strip and a sunken
@@ -480,7 +497,7 @@ class XpTitleBar extends StatelessWidget {
                           child: ChromeLabel(
                             caption,
                             color: Xp.textOnTitle,
-                            fontSize: 12,
+                            fontSize: Xp.fontSizeBody,
                             letterSpacing: 1.5,
                           ),
                         ),
@@ -607,63 +624,47 @@ class XpTitleTab extends StatefulWidget {
 }
 
 class _XpTitleTabState extends State<XpTitleTab> {
-  bool _hover = false;
-  bool _down = false;
-
   @override
-  Widget build(BuildContext context) {
-    final enabled = widget.onPressed != null;
-    final pressed = _down && enabled;
-    final color = enabled ? Xp.text : Xp.textFaint;
-
-    final tab = XpBevel(
-      raised: !pressed,
-      gradient: enabled
-          ? Xp.controlGradient(hover: _hover)
-          : const LinearGradient(colors: [Xp.surface, Xp.surface]),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(widget.icon, size: 14, color: color),
-            if (widget.showLabel) ...[
-              const SizedBox(width: 5),
-              // Tab labels are CHROME — tracked-out matte caps.
-              Text(
-                widget.label.toUpperCase(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Xp.chrome(
-                  fontSize: 12,
-                  color: color,
-                  letterSpacing: 1.4,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-
-    return Padding(
-      // Hang from just below the sheen; flush at the bottom so it meets the
-      // content. A 2px left gap separates adjacent tabs.
-      padding: const EdgeInsets.only(top: 3, left: 2),
-      child: MouseRegion(
-        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-        onEnter: (_) => setState(() => _hover = true),
-        onExit: (_) => setState(() => _hover = false),
-        child: GestureDetector(
-          onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-          onTapUp: enabled ? (_) => setState(() => _down = false) : null,
-          onTapCancel: enabled ? () => setState(() => _down = false) : null,
-          onTap: widget.onPressed,
-          child: Tooltip(message: widget.tooltip, child: tab),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    // Hang from just below the sheen; flush at the bottom so it meets the
+    // content. A 2px left gap separates adjacent tabs.
+    padding: const EdgeInsets.only(top: 3, left: 2),
+    child: XpPressable(
+      onTap: widget.onPressed,
+      tooltip: widget.tooltip,
+      semanticsLabel: widget.label,
+      opaque: false,
+      builder: (context, s) {
+        final color = s.enabled ? Xp.text : Xp.textFaint;
+        return XpBevel(
+          raised: !s.pressed,
+          gradient: s.enabled
+              ? Xp.controlGradient(hover: s.hovered || s.focused)
+              : const LinearGradient(colors: [Xp.surface, Xp.surface]),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, size: 14, color: color),
+                if (widget.showLabel) ...[
+                  const SizedBox(width: 5),
+                  // Tab labels are CHROME — tracked-out matte caps, through
+                  // the one chrome label (original-case semantics).
+                  ChromeLabel(
+                    widget.label,
+                    fontSize: Xp.fontSizeBody,
+                    color: color,
+                    letterSpacing: 1.4,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }
 
 /// A chunky XP scrollbar: a thick, always-visible square thumb over a sunken

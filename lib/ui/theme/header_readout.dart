@@ -159,10 +159,19 @@ class _MarqueeState extends State<_Marquee>
     // Continuous loop. To switch to scroll-once-then-settle, replace `.repeat()`
     // with `.forward()` (it ends with the title back at the start).
     unawaited(_controller.repeat());
+    // The marquee is ~800 blurred dots a frame, forever. Not while the app is
+    // in the background: stop on inactive, resume on return.
+    _lifecycle = AppLifecycleListener(
+      onInactive: _controller.stop,
+      onResume: () => unawaited(_controller.repeat()),
+    );
   }
+
+  late final AppLifecycleListener _lifecycle;
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _controller.dispose();
     super.dispose();
   }

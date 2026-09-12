@@ -22,14 +22,11 @@ class HeaderScope extends InheritedNotifier<HeaderController> {
   /// NON-subscribing read — for pages, which PUBLISH to the header and must not
   /// rebuild when it changes. A page that depended on this would rebuild every
   /// time it published, which republishes, which rebuilds…
-  static HeaderController? maybeReadOf(BuildContext context) => context
-      .getElementForInheritedWidgetOfExactType<HeaderScope>()
-      ?.widget
-      .let((w) => (w as HeaderScope).notifier);
-}
-
-extension<T> on T {
-  R let<R>(R Function(T) f) => f(this);
+  static HeaderController? maybeReadOf(BuildContext context) {
+    final element = context
+        .getElementForInheritedWidgetOfExactType<HeaderScope>();
+    return (element?.widget as HeaderScope?)?.notifier;
+  }
 }
 
 /// Mixin for the five shell pages: describe your header, and this keeps the one

@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_settings.dart';
 import 'support/fake_sources.dart';
+import 'support/finders.dart';
 
 /// The Settings window was rebuilt from one scrolling list of collapsibles into
 /// a two-pane sidebar shell. That was a STRUCTURAL and PRESENTATIONAL change
@@ -113,7 +114,7 @@ void main() {
 
     // Sources is the landing panel (it leads the sidebar); this fake has no
     // folders, so it shows its empty state.
-    expect(find.text('ADD A SOURCE'), findsOneWidget);
+    expect(findXpLabel('Add a folder'), findsOneWidget);
 
     await _openCategory(tester, 'Playback');
     expect(find.text('Autoplay next episode'), findsOneWidget);

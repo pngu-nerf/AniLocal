@@ -13,11 +13,11 @@ abstract final class XpTheme {
   static ThemeData data() {
     const scheme = ColorScheme.dark(
       primary: Xp.accent,
-      onPrimary: Colors.white,
+      onPrimary: Xp.onAccent,
       secondary: Xp.accentBright,
       surface: Xp.surface,
       onSurface: Xp.text,
-      error: Color(0xFFE36A5B),
+      error: Xp.error,
     );
 
     final base = ThemeData(
@@ -43,17 +43,17 @@ abstract final class XpTheme {
       textTheme: t
           .copyWith(
             titleMedium: t.titleMedium?.copyWith(
-              fontSize: 16,
+              fontSize: Xp.fontSizeHeading,
               fontWeight: FontWeight.w300,
               letterSpacing: 1.2,
             ),
             bodyMedium: t.bodyMedium?.copyWith(
-              fontSize: 14,
+              fontSize: Xp.fontSizeTitle,
               fontWeight: FontWeight.w300,
               letterSpacing: 0.8,
             ),
             bodySmall: t.bodySmall?.copyWith(
-              fontSize: 12,
+              fontSize: Xp.fontSizeBody,
               fontWeight: FontWeight.w300,
               letterSpacing: 0.8,
             ),
@@ -80,7 +80,7 @@ abstract final class XpTheme {
           color: Xp.text,
           fontFamily: Xp.fontFamily,
           fontFamilyFallback: Xp.fontFallback,
-          fontSize: 12,
+          fontSize: Xp.fontSizeBody,
         ),
       ),
       dialogTheme: const DialogThemeData(backgroundColor: Xp.surface),

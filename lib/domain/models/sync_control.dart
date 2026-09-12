@@ -1,3 +1,6 @@
+import 'metadata_failure.dart';
+import 'user_facing_failure.dart';
+
 /// Cooperative cancellation for a scan or a metadata refresh.
 ///
 /// The fill path checks [isCancelled] at the head of every loop that does
@@ -30,8 +33,15 @@ class SyncCancelled implements Exception {
 /// The fill path is the ONE writer of the cache and is not reentrant; the UI
 /// disables the controls while a run is in flight, so this surfaces only a
 /// race, loudly, rather than two runs interleaving writes over one database.
-class SyncAlreadyRunning implements Exception {
+class SyncAlreadyRunning implements Exception, UserFacingFailure {
   const SyncAlreadyRunning();
+
+  @override
+  MetadataFailure? get failure => null;
+
+  @override
+  String get userMessage =>
+      'A scan or refresh is already running — wait for it to finish.';
 
   @override
   String toString() => 'SyncAlreadyRunning: a scan or refresh is in progress';

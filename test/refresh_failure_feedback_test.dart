@@ -103,7 +103,7 @@ void main() {
       const RefreshSummary(seriesRefreshed: 4, skipsFetched: 2),
     );
 
-    expect(find.textContaining('Refreshed 4 series'), findsOneWidget);
+    expect(find.textContaining('Refreshed 4 shows'), findsOneWidget);
   });
 
   test('every failure kind has distinct, non-empty copy', () {

@@ -1,6 +1,6 @@
 import 'package:anilocal/domain/models/refresh_summary.dart';
-import 'package:anilocal/ui/settings/panels/sources_panel.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
+import 'package:anilocal/ui/settings/settings_categories.dart';
 import 'package:anilocal/ui/settings/settings_window.dart';
 import 'package:anilocal/ui/theme/xp_theme.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_settings.dart';
 import 'support/fake_sources.dart';
+import 'support/finders.dart';
 
 /// Sources moved out of its own page and into the settings window. This pins
 /// what the relocation must not have cost: the list, add, remove and — the one
@@ -151,7 +152,7 @@ void main() {
     expect(find.text('/media/A'), findsNothing);
   });
 
-  testWidgets('adding a source goes through the injected picker', (
+  testWidgets('adding a folder goes through the injected picker', (
     tester,
   ) async {
     final repo = FakeSourcesRepository(['/media/A']);
@@ -168,7 +169,7 @@ void main() {
       },
     );
 
-    await tester.tap(find.byTooltip('Add source'));
+    await tester.tap(find.byTooltip('Add folder'));
     await tester.pumpAndSettle();
     expect(asked, isTrue);
   });
@@ -180,7 +181,7 @@ void main() {
       final closed = await _open(tester, repo);
       await _dragRow(tester, 0, 1);
 
-      await tester.tap(find.text('DONE'));
+      await tester.tap(findXpLabel('Done'));
       await tester.pumpAndSettle();
 
       expect(closed.outcome!.sourceOrderChanged, isTrue);
@@ -195,8 +196,9 @@ void main() {
   testWidgets('an untouched window reports nothing changed', (tester) async {
     final repo = FakeSourcesRepository(['/media/A', '/media/B']);
     final closed = await _open(tester, repo);
-    await tester.tap(find.text('DONE'));
+    await tester.tap(findXpLabel('Done'));
     await tester.pumpAndSettle();
-    expect(closed.outcome!.sourcesChanged, isFalse);
+    expect(closed.outcome!.sourceSetChanged, isFalse);
+    expect(closed.outcome!.sourceOrderChanged, isFalse);
   });
 }

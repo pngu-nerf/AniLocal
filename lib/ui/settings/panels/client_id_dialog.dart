@@ -25,11 +25,39 @@ Future<String?> showClientIdDialog(
   BuildContext context, {
   required SourceDescriptor source,
   String? current,
-}) {
-  final controller = TextEditingController(text: current ?? '');
-  return showDialog<String>(
-    context: context,
-    builder: (dialogContext) => XpDialog(
+}) => showDialog<String>(
+  context: context,
+  builder: (_) => _ClientIdDialog(source: source, current: current),
+);
+
+/// Stateful so the text controller has an owner that disposes it — this was
+/// the one dialog in the app that leaked one.
+class _ClientIdDialog extends StatefulWidget {
+  const _ClientIdDialog({required this.source, required this.current});
+
+  final SourceDescriptor source;
+  final String? current;
+
+  @override
+  State<_ClientIdDialog> createState() => _ClientIdDialogState();
+}
+
+class _ClientIdDialogState extends State<_ClientIdDialog> {
+  late final TextEditingController controller = TextEditingController(
+    text: widget.current ?? '',
+  );
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext dialogContext) {
+    final source = widget.source;
+    final current = widget.current;
+    return XpDialog(
       title: '${source.displayName} client ID',
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -38,20 +66,26 @@ Future<String?> showClientIdDialog(
           Text(
             source.setupInstructions ??
                 'Paste the client ID for ${source.displayName}.',
-            style: const TextStyle(color: Xp.textDim, fontSize: 12),
+            style: const TextStyle(
+              color: Xp.textDim,
+              fontSize: Xp.fontSizeBody,
+            ),
           ),
           if (source.setupUrl != null) ...[
             const SizedBox(height: 6),
             SelectableText(
               source.setupUrl!,
-              style: const TextStyle(color: Xp.accent, fontSize: 12),
+              style: const TextStyle(
+                color: Xp.accent,
+                fontSize: Xp.fontSizeBody,
+              ),
             ),
           ],
           const SizedBox(height: 6),
           const Text(
             'It stays on this machine and is never sent anywhere but that '
             'service.',
-            style: TextStyle(color: Xp.textDim, fontSize: 11),
+            style: TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeCaption),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -68,7 +102,7 @@ Future<String?> showClientIdDialog(
             const SizedBox(height: 8),
             const Text(
               'Clearing the field removes the key and disables the source.',
-              style: TextStyle(color: Xp.textDim, fontSize: 11),
+              style: TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeCaption),
             ),
           ],
         ],
@@ -87,6 +121,6 @@ Future<String?> showClientIdDialog(
               Navigator.of(dialogContext).pop(controller.text.trim()),
         ),
       ],
-    ),
-  );
+    );
+  }
 }

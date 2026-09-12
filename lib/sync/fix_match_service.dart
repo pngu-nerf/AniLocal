@@ -3,8 +3,10 @@ import 'dart:io';
 import '../data/cache/art_cache.dart';
 import '../data/cache/cache_database.dart';
 import '../data/metadata/metadata_provider.dart';
+import '../domain/models/metadata_failure.dart';
 import '../domain/models/series.dart';
 import '../domain/models/source_preference.dart';
+import '../domain/models/user_facing_failure.dart';
 import '../domain/repositories/fix_match_repository.dart';
 
 /// Applies user match corrections. This is the ONLY writer of `match_overrides`
@@ -17,9 +19,17 @@ import '../domain/repositories/fix_match_repository.dart';
 /// id at all. No shipped provider produces one; this exists so the only
 /// alternative, writing the provider's provisional id into the AniList-seeded
 /// band as if it were ours, can never happen silently.
-class FixMatchException implements Exception {
+class FixMatchException implements Exception, UserFacingFailure {
   const FixMatchException(this.message);
   final String message;
+
+  /// A local condition — a missing file, a candidate with no ids — written
+  /// for the user at the throw site.
+  @override
+  String get userMessage => message;
+  @override
+  MetadataFailure? get failure => null;
+
   @override
   String toString() => 'FixMatchException: $message';
 }

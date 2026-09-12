@@ -62,9 +62,9 @@ class SeriesInfoZone extends StatelessWidget {
               // The now-playing episode title leads the card (the "NOW PLAYING"
               // eyebrow was removed). Chrome label, thin tracked matte caps.
               ChromeLabel(
-                nowPlaying.title ?? 'Episode ${nowPlaying.number}',
+                nowPlaying.displayTitle,
                 upper: false,
-                fontSize: 15,
+                fontSize: Xp.fontSizeTitle,
                 letterSpacing: 1.2,
               ),
               const SizedBox(height: 16),
@@ -85,7 +85,7 @@ class SeriesInfoZone extends StatelessWidget {
                         ChromeLabel(
                           title,
                           upper: false,
-                          fontSize: 20,
+                          fontSize: Xp.fontSizeDisplay,
                           maxLines: 2,
                           letterSpacing: 1.2,
                         ),

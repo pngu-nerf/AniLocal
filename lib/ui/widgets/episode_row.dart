@@ -36,7 +36,10 @@ class EpisodeNumberBadge extends StatelessWidget {
         ),
         child: Text(
           '$number',
-          style: const TextStyle(color: Xp.textFaint, fontSize: 12),
+          style: const TextStyle(
+            color: Xp.textFaint,
+            fontSize: Xp.fontSizeBody,
+          ),
         ),
       );
     }
@@ -52,7 +55,7 @@ class EpisodeNumberBadge extends StatelessWidget {
         '$number',
         style: TextStyle(
           color: active ? Xp.desktop : Xp.text,
-          fontSize: 12,
+          fontSize: Xp.fontSizeBody,
           fontWeight: FontWeight.bold,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
@@ -116,7 +119,7 @@ class EpisodeRow extends StatelessWidget {
               ChromeLabel(
                 title,
                 upper: false,
-                fontSize: 13,
+                fontSize: Xp.fontSizeLabel,
                 maxLines: 2,
                 letterSpacing: 1,
                 color: labelColor,
