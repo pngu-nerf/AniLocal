@@ -7,6 +7,11 @@ behaviour; the cache schema migrates forward automatically and never back.
 
 ## [Unreleased]
 
+### Changed
+- The app icon is the hand-drawn "AL" monogram; the square source is kept
+  uncropped in `docs/brand/` and `tool/app_icon.py` derives the macOS
+  rounded-square set from it.
+
 ## [0.1.0] — 2026-09-12
 
 The first tagged version: everything built since the June 2026 scaffold, the

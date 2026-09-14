@@ -15,4 +15,4 @@ Which document to read, by question.
 | Why the player engine is app-lifetime and fullscreen is state | [`player-architecture-research.md`](player-architecture-research.md), [`player-crash-repro.md`](player-crash-repro.md) |
 | Why the header is hoisted above the Navigator | [`header-architecture-audit.md`](header-architecture-audit.md) |
 | The duplication rules and where they came from | [`tech-debt-audit.md`](tech-debt-audit.md), [`maintainability-assessment.md`](maintainability-assessment.md) |
-| The app icon's source | [`app-icon.svg`](app-icon.svg) — rasterised with `qlmanage -t -s 1024`, resized with `sips` |
+| The app icon's source | [`brand/app-icon-source.png`](brand/app-icon-source.png) — the artwork as drawn, a full square, never cropped (Windows/Linux derive from it too); `tool/app_icon.py` derives the macOS rounded-square set |

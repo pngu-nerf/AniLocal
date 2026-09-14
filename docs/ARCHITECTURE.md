@@ -88,7 +88,7 @@ program and what is parked: **`docs/multi-source-plan.md`**.
 | **The app shell / persistent header** | `lib/ui/shell/` — `app_shell` (the ONE window chrome, mounted above the Navigator in `MaterialApp.builder`), `header_controller` (route-keyed spec stack + spinner grace), `header_scope` (`HeaderPublisher` mixin), `header_spec` |
 | **How a shipped feature works, and why** | `docs/feature-log.md` — one paragraph per feature, with the measurements behind each threshold |
 | **Tests** | `test/` — one file per subject, grouped; the shared doubles in `test/support/` (ONE fake in ONE place: `FakeLibraryRepository`, `FakeFixMatch`, `FakeSettings`/`RecorderSettings`, `FakeVolumeResolver`, `RecordingPlayer`); pixel goldens of the instrument look in `test/goldens/`; live harnesses OUTSIDE the gate in `test_live/` |
-| **Tooling** | `tool/check.sh` (the gate), `tool/coverage.sh` (a report), `tool/release.sh` (bump → build → sign → notarize → DMG), `tool/sqlite_version_check.sh` (the weekly vendored-SQLite watch) |
+| **Tooling** | `tool/check.sh` (the gate), `tool/coverage.sh` (a report), `tool/release.sh` (bump → build → sign → notarize → DMG), `tool/sqlite_version_check.sh` (the weekly vendored-SQLite watch), `tool/app_icon.py` (macOS icon set from the uncropped source in `docs/brand/`) |
 | **Shared UI shells/components** | `lib/ui/widgets/` — `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list`, `xp_reorderable_list` (the ONE priority-list widget — three users: library folders, metadata sources, skip sources) |
 
 ---
