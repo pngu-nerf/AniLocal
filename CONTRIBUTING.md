@@ -32,7 +32,9 @@ CI runs, and the one that must be green before a commit. There is no separate
 - Edited a Drift table? `dart run build_runner build --delete-conflicting-outputs`
   and commit the `.g.dart`; CI diffs it against a fresh build.
 - Changed anything the goldens draw? `flutter test --update-goldens test/goldens`
-  and commit the images with the change that caused them.
+  and commit the images with the change that caused them. The comparison
+  tolerates 0.1% of pixels (Intel and Apple-silicon machines antialias a few
+  pixels differently); a real design change is far above that.
 - Coverage is a report, not a gate: `./tool/coverage.sh`.
 - The Xcode `RunnerTests` target is the `flutter create` template's and is
   unused on purpose: the native window code is exercised through the Dart

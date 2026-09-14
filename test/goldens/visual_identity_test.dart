@@ -29,7 +29,9 @@ import '../support/recording_player.dart';
 ///
 /// Goldens are rasterised by the Flutter engine, so they are tied to the SDK
 /// version: CI pins the same `flutter-version` the images were generated with,
-/// and an SDK bump regenerates them in the same commit.
+/// and an SDK bump regenerates them in the same commit. Across CPU
+/// architectures the engine antialiases a handful of pixels differently, so
+/// `flutter_test_config.dart` beside this file compares with a 0.1% tolerance.
 void main() {
   setUpAll(() async {
     await (FontLoader(
