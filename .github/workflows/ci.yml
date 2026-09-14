@@ -14,7 +14,7 @@ jobs:
     name: format · analyze · test
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           # Pinned, not `stable`: test/goldens are rasterised by the engine,
@@ -47,7 +47,7 @@ jobs:
     name: build macOS (debug)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           # Pinned, not `stable`: test/goldens are rasterised by the engine,
