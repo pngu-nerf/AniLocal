@@ -80,14 +80,15 @@ you want your library back afterwards; §M restores it).
 Use the biggest library you have; the numbers in `docs/performance.md` were
 measured at 600 shows / 8,000 files.
 
-- [ ] **C1.** *(re-issued)* Start a scan of the external folder → the VFD
-      readout reads `IDENTIFYING 12/340` and the counter moves **per title**
-      (it used to move once per 25, and the line overflowed so the counter
-      never scrolled into view); then `METADATA…`, then `SKIPS 40/600`. The
-      Stop tooltip repeats the count. Placeholders paint as they are
-      discovered, and **shows fill in with title and art as each batch of 25
-      lands**, not in one sweep at the end. The grid stays scrollable and
-      responsive throughout.
+- [ ] **C1.** *(re-issued, round 2)* Start a scan of the external folder → the
+      VFD readout reads `IDENTIFYING 12/340` and the counter moves **per
+      title**; shows **fill in with title and art every ten titles**, while
+      the scan is still running; then the readout reads `SKIPS 40/600` and
+      counts through the episodes — the long part, and it comes AFTER every
+      show is already on screen (it used to run inside the first batch, so a
+      20-show library identified in seconds and then showed nothing for the
+      minute the skips took). The Stop tooltip repeats the count; the grid
+      stays scrollable and responsive throughout.
 - [ ] **C2.** *(re-issued)* Press **Stop** mid-`identifying` → the scan ends
       within a few seconds; the snackbar ends `· stopped early`; every batch
       already saved keeps its art and title; the rest stay named placeholders
@@ -135,19 +136,21 @@ Use the external folder from §C.
       greying are there **on first paint**, before you press anything.
 - [ ] **D5.** Plug the drive back in, press Scan → banner gone, greying gone,
       summary shows `N unchanged · 0 removed`. Nothing was re-identified.
-- [ ] **D6.** *(re-issued)* **Mid-scan:** start a scan of the external folder
-      and unplug the drive **within the first second or two**, while the
-      folders are still being walked → the scan ends with the red "not
-      connected" snackbar; the summary shows **`0 removed`**; the cards from
-      that drive are greyed at once. (Unplugging later, during `identifying`,
-      finds nothing wrong on that run — the file list was already taken while
-      the drive was there; the NEXT scan reports it. Both are correct.)
-- [ ] **D7.** **Mid-playback:** play an episode from the drive, unplug →
-      playback carries on from mpv's buffer for a while (tens of seconds, and
-      short seeks within it work); the first read past the buffer shows
-      *Couldn't play this episode* with mpv's line. Back returns to the show
-      page; the app does not quit or hang. Replug → the same episode resumes
-      from its saved position. *(Confirmed in round 1; kept as the reference.)*
+- [ ] **D6.** *(re-issued, round 2)* **Mid-scan:** start a scan of the external
+      folder and unplug the drive at any point while it runs → when the scan
+      ends, the cards from that drive are **greyed**, the reconnect banner is
+      up and Settings › Folders says **Not connected** — in the SAME scan, not
+      the next one (folder health is probed again when a scan finishes). The
+      summary shows `0 removed`. If the unplug came after the folders were
+      walked, the scan itself reports nothing wrong; that is correct — the
+      file list was taken while the drive was there — and the UI still tells
+      the truth at the end.
+- [ ] **D7.** *(re-issued, round 2)* **Mid-playback:** play an episode from the
+      drive, unplug → playback carries on from mpv's buffer for a while; the
+      first read past it shows *Couldn't play this episode* with mpv's line
+      **and a Retry button**. Replug, press **Retry** → the same episode
+      resumes where it was, with no click off and back. Back returns to the
+      show page; the app does not quit or hang.
 
 ## E. Quitting
 
@@ -279,13 +282,29 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 - [ ] **K3.** A 0-byte `.mkv` in a folder → it is listed (as an episode of its
       parsed show) and *Couldn't play this episode* when opened; it does not
       break the scan.
-- [ ] **K4.** *(new)* With a show that has the same episode in two folders,
-      play it → the player's ⚙ menu has a **Copy** section: *Automatic* plus
-      one entry per copy as `folder › file`, the playing one checked. Pick the
-      other copy → playback re-opens on that file **at the same position**
-      (also for an episode already marked watched — no restart from 0); the
-      rail follows; the show page's copy picker shows the pin. Pick
-      *Automatic* → back to the priority default.
+- [ ] **K4.** *(re-issued, round 2)* With a show that has the same episode in
+      two folders, play it → the player's ⚙ menu has a **Copy** section:
+      *Automatic* plus one entry **per file** as `folder › file`, the playing
+      one checked. Pick the other copy → playback re-opens on that file **at
+      the same position** (also for an episode already marked watched — no
+      restart from 0); the rail follows; the show page's copy picker shows the
+      pin on **that file only**. Put two copies of one episode in the SAME
+      folder → two entries; picking the second plays the second, and only it
+      reads as chosen. Pick *Automatic* → back to the priority default.
+- [ ] **K5.** *(new)* With an Automatic episode whose default copy is on the
+      external drive and another copy on the internal disk: unplug the drive,
+      open the show → the copy on the internal disk is the default now (no pin
+      needed). Replug → the drive's copy is the default again. Then, with the
+      drive plugged in, start the episode and unplug → the player switches to
+      the other copy at the same position and a line over the frame says
+      *Playing the copy in <folder> instead* for a few seconds; the pin picker
+      still says Automatic.
+- [ ] **K6.** *(new)* A 0-byte `.mkv` beside a good copy of the same episode →
+      Automatic plays the good copy; the 0-byte one is listed and pinnable but
+      never the default. Pin the 0-byte one on purpose → *Couldn't play this
+      episode* with Retry, **and the player stays on that episode** — it never
+      skips forward to episode 2 or 3 (it used to). Pick another copy from ⚙
+      › Copy → plays.
 
 ## L. Accessibility
 

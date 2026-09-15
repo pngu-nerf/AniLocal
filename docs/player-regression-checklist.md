@@ -102,6 +102,9 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 
 - [ ] **Cmd-Q commits the position, awaited.** Seek to a distinctive time, quit at once, relaunch → Continue watching shows that time. The runner asks Dart before terminating (`applicationShouldTerminate` → the quit hooks); the 1-second save timer and the `onInactive` save are no longer the only writers.
 - [ ] **A placeholder played mid-scan keeps its progress** once the scan identifies it — the save resolves the real series by file at write time.
+- [ ] **Nothing advances without playback.** A `completed` from a file that never played (0-byte, a vanished drive → EOF at 0) is a FAILED OPEN, never an auto-advance: the guard is a duration and a position past the phantom zero. The viewer stays on the episode.
+- [ ] **A failed open on an Automatic episode falls through** to the next copy at the same position, with *Playing the copy in <folder> instead* over the frame for a few seconds; each copy tried once. A PINNED episode is never switched — it shows the error.
+- [ ] **The error notice has Retry**, which re-opens the episode's OWN copy where it was (every copy fair again). An error mid-play is cleared by the next progress event.
 
 ## E. States
 - [ ] **Playing** — controls auto-hide after 3s; cursor hides with them.

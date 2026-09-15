@@ -97,7 +97,11 @@ optimised away, only made visible:
   8,000 episodes with a MAL id and no stored answer is ~27 minutes of pure
   spacing on a first scan, regardless of network speed. Answers are stored, so
   it is paid once; the progress readout counts episodes so the wait is
-  legible, and Stop keeps every batch already committed.
+  legible, and Stop keeps every chunk already committed. **Since round 2 of
+  the walkthrough this wait comes AFTER every show is on screen**: skips are
+  phase 3, run once the identity batches are committed and pruned, not inside
+  the first batch before its commit (where a 20-show library identified in
+  seconds and then painted nothing for a minute).
 - **Cover art downloads four at a time** (`kArtConcurrency`): 600 new shows at
   ~200 ms each is ~30 s instead of the two minutes one-at-a-time took, without
   hammering one CDN from one address.

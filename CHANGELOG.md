@@ -12,6 +12,16 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- **Automatic copies fail over.** When the copy an episode plays from cannot
+  be opened (an unplugged drive, a 0-byte download), an Automatic episode
+  plays the next copy at the same position and says which folder it came
+  from; a pinned episode shows the error instead. Automatic also prefers a
+  copy on a connected drive and a real file over a 0-byte one.
+- **Pins name the file, not just the folder** (cache schema v22): two copies
+  of one episode in the same folder are two choices, in the show page's
+  picker and the player's Copy menu. Existing pins keep working.
+- **Retry** on the "Couldn't play this episode" notice re-opens the episode
+  where it was — a replugged drive no longer needs a click off and back.
 - **Change copy from the player.** The ⚙ menu's Copy section lists an
   episode's copies for a show in several folders; switching re-opens at the
   same position and pins the choice, the same pin the show page offers.
@@ -38,6 +48,11 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   `tool/perf.sh`; `docs/runtime-walkthrough.md`.
 
 ### Changed
+- A scan identifies shows in batches of ten and shows them as each batch
+  lands; the skip lookups — the slow part — run as their own phase after
+  every show is on screen, with `Skips n/N` progress. Folder health is
+  probed again when a scan ends, so a drive pulled mid-scan is greyed by
+  that scan.
 - The header shows its title and tabs on the first frame (a notification
   raised during the very first build was thrown away, so the header stayed
   empty until the window was resized).
@@ -86,6 +101,9 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   rounded-square set from it.
 
 ### Fixed
+- A file that failed to open no longer skips the player forward an episode
+  (or two): a "completed" from a file that never played is a failed open.
+  An error mid-play clears when playback resumes.
 - Unplugging a drive mid-session now greys its shows and marks its Folders
   row on the next scan, not only after a relaunch: two session caches (the
   volume's mount point, a confirmed category root) kept a stale positive
