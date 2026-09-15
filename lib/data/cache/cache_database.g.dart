@@ -2564,6 +2564,17 @@ class $SourceOverridesTable extends SourceOverrides
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _relativePathMeta = const VerificationMeta(
+    'relativePath',
+  );
+  @override
+  late final GeneratedColumn<String> relativePath = GeneratedColumn<String>(
+    'relative_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
     'updatedAtMs',
   );
@@ -2581,6 +2592,7 @@ class $SourceOverridesTable extends SourceOverrides
     seriesId,
     episode,
     folderPath,
+    relativePath,
     updatedAtMs,
   ];
   @override
@@ -2619,6 +2631,15 @@ class $SourceOverridesTable extends SourceOverrides
     } else if (isInserting) {
       context.missing(_folderPathMeta);
     }
+    if (data.containsKey('relative_path')) {
+      context.handle(
+        _relativePathMeta,
+        relativePath.isAcceptableOrUnknown(
+          data['relative_path']!,
+          _relativePathMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at_ms')) {
       context.handle(
         _updatedAtMsMeta,
@@ -2649,6 +2670,10 @@ class $SourceOverridesTable extends SourceOverrides
         DriftSqlType.string,
         data['${effectivePrefix}folder_path'],
       )!,
+      relativePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}relative_path'],
+      ),
       updatedAtMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at_ms'],
@@ -2667,11 +2692,18 @@ class SourceOverrideRow extends DataClass
   final int seriesId;
   final int episode;
   final String folderPath;
+
+  /// v22: WHICH file in [folderPath] — two copies of one episode in the same
+  /// folder (a 0-byte download beside the good one) used to be one pin that
+  /// always played the alphabetically-first. Null = a legacy folder pin,
+  /// resolved as before (the folder's first copy).
+  final String? relativePath;
   final int updatedAtMs;
   const SourceOverrideRow({
     required this.seriesId,
     required this.episode,
     required this.folderPath,
+    this.relativePath,
     required this.updatedAtMs,
   });
   @override
@@ -2680,6 +2712,9 @@ class SourceOverrideRow extends DataClass
     map['series_id'] = Variable<int>(seriesId);
     map['episode'] = Variable<int>(episode);
     map['folder_path'] = Variable<String>(folderPath);
+    if (!nullToAbsent || relativePath != null) {
+      map['relative_path'] = Variable<String>(relativePath);
+    }
     map['updated_at_ms'] = Variable<int>(updatedAtMs);
     return map;
   }
@@ -2689,6 +2724,9 @@ class SourceOverrideRow extends DataClass
       seriesId: Value(seriesId),
       episode: Value(episode),
       folderPath: Value(folderPath),
+      relativePath: relativePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(relativePath),
       updatedAtMs: Value(updatedAtMs),
     );
   }
@@ -2702,6 +2740,7 @@ class SourceOverrideRow extends DataClass
       seriesId: serializer.fromJson<int>(json['seriesId']),
       episode: serializer.fromJson<int>(json['episode']),
       folderPath: serializer.fromJson<String>(json['folderPath']),
+      relativePath: serializer.fromJson<String?>(json['relativePath']),
       updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
     );
   }
@@ -2712,6 +2751,7 @@ class SourceOverrideRow extends DataClass
       'seriesId': serializer.toJson<int>(seriesId),
       'episode': serializer.toJson<int>(episode),
       'folderPath': serializer.toJson<String>(folderPath),
+      'relativePath': serializer.toJson<String?>(relativePath),
       'updatedAtMs': serializer.toJson<int>(updatedAtMs),
     };
   }
@@ -2720,11 +2760,13 @@ class SourceOverrideRow extends DataClass
     int? seriesId,
     int? episode,
     String? folderPath,
+    Value<String?> relativePath = const Value.absent(),
     int? updatedAtMs,
   }) => SourceOverrideRow(
     seriesId: seriesId ?? this.seriesId,
     episode: episode ?? this.episode,
     folderPath: folderPath ?? this.folderPath,
+    relativePath: relativePath.present ? relativePath.value : this.relativePath,
     updatedAtMs: updatedAtMs ?? this.updatedAtMs,
   );
   SourceOverrideRow copyWithCompanion(SourceOverridesCompanion data) {
@@ -2734,6 +2776,9 @@ class SourceOverrideRow extends DataClass
       folderPath: data.folderPath.present
           ? data.folderPath.value
           : this.folderPath,
+      relativePath: data.relativePath.present
+          ? data.relativePath.value
+          : this.relativePath,
       updatedAtMs: data.updatedAtMs.present
           ? data.updatedAtMs.value
           : this.updatedAtMs,
@@ -2746,13 +2791,15 @@ class SourceOverrideRow extends DataClass
           ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('folderPath: $folderPath, ')
+          ..write('relativePath: $relativePath, ')
           ..write('updatedAtMs: $updatedAtMs')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(seriesId, episode, folderPath, updatedAtMs);
+  int get hashCode =>
+      Object.hash(seriesId, episode, folderPath, relativePath, updatedAtMs);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2760,6 +2807,7 @@ class SourceOverrideRow extends DataClass
           other.seriesId == this.seriesId &&
           other.episode == this.episode &&
           other.folderPath == this.folderPath &&
+          other.relativePath == this.relativePath &&
           other.updatedAtMs == this.updatedAtMs);
 }
 
@@ -2767,12 +2815,14 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
   final Value<int> seriesId;
   final Value<int> episode;
   final Value<String> folderPath;
+  final Value<String?> relativePath;
   final Value<int> updatedAtMs;
   final Value<int> rowid;
   const SourceOverridesCompanion({
     this.seriesId = const Value.absent(),
     this.episode = const Value.absent(),
     this.folderPath = const Value.absent(),
+    this.relativePath = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2780,6 +2830,7 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
     required int seriesId,
     required int episode,
     required String folderPath,
+    this.relativePath = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : seriesId = Value(seriesId),
@@ -2789,6 +2840,7 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
     Expression<int>? seriesId,
     Expression<int>? episode,
     Expression<String>? folderPath,
+    Expression<String>? relativePath,
     Expression<int>? updatedAtMs,
     Expression<int>? rowid,
   }) {
@@ -2796,6 +2848,7 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
       if (seriesId != null) 'series_id': seriesId,
       if (episode != null) 'episode': episode,
       if (folderPath != null) 'folder_path': folderPath,
+      if (relativePath != null) 'relative_path': relativePath,
       if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2805,6 +2858,7 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
     Value<int>? seriesId,
     Value<int>? episode,
     Value<String>? folderPath,
+    Value<String?>? relativePath,
     Value<int>? updatedAtMs,
     Value<int>? rowid,
   }) {
@@ -2812,6 +2866,7 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
       seriesId: seriesId ?? this.seriesId,
       episode: episode ?? this.episode,
       folderPath: folderPath ?? this.folderPath,
+      relativePath: relativePath ?? this.relativePath,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
       rowid: rowid ?? this.rowid,
     );
@@ -2829,6 +2884,9 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
     if (folderPath.present) {
       map['folder_path'] = Variable<String>(folderPath.value);
     }
+    if (relativePath.present) {
+      map['relative_path'] = Variable<String>(relativePath.value);
+    }
     if (updatedAtMs.present) {
       map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
     }
@@ -2844,6 +2902,7 @@ class SourceOverridesCompanion extends UpdateCompanion<SourceOverrideRow> {
           ..write('seriesId: $seriesId, ')
           ..write('episode: $episode, ')
           ..write('folderPath: $folderPath, ')
+          ..write('relativePath: $relativePath, ')
           ..write('updatedAtMs: $updatedAtMs, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -5744,6 +5803,7 @@ typedef $$SourceOverridesTableCreateCompanionBuilder =
       required int seriesId,
       required int episode,
       required String folderPath,
+      Value<String?> relativePath,
       Value<int> updatedAtMs,
       Value<int> rowid,
     });
@@ -5752,6 +5812,7 @@ typedef $$SourceOverridesTableUpdateCompanionBuilder =
       Value<int> seriesId,
       Value<int> episode,
       Value<String> folderPath,
+      Value<String?> relativePath,
       Value<int> updatedAtMs,
       Value<int> rowid,
     });
@@ -5777,6 +5838,11 @@ class $$SourceOverridesTableFilterComposer
 
   ColumnFilters<String> get folderPath => $composableBuilder(
     column: $table.folderPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5810,6 +5876,11 @@ class $$SourceOverridesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAtMs => $composableBuilder(
     column: $table.updatedAtMs,
     builder: (column) => ColumnOrderings(column),
@@ -5833,6 +5904,11 @@ class $$SourceOverridesTableAnnotationComposer
 
   GeneratedColumn<String> get folderPath => $composableBuilder(
     column: $table.folderPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
     builder: (column) => column,
   );
 
@@ -5882,12 +5958,14 @@ class $$SourceOverridesTableTableManager
                 Value<int> seriesId = const Value.absent(),
                 Value<int> episode = const Value.absent(),
                 Value<String> folderPath = const Value.absent(),
+                Value<String?> relativePath = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SourceOverridesCompanion(
                 seriesId: seriesId,
                 episode: episode,
                 folderPath: folderPath,
+                relativePath: relativePath,
                 updatedAtMs: updatedAtMs,
                 rowid: rowid,
               ),
@@ -5896,12 +5974,14 @@ class $$SourceOverridesTableTableManager
                 required int seriesId,
                 required int episode,
                 required String folderPath,
+                Value<String?> relativePath = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SourceOverridesCompanion.insert(
                 seriesId: seriesId,
                 episode: episode,
                 folderPath: folderPath,
+                relativePath: relativePath,
                 updatedAtMs: updatedAtMs,
                 rowid: rowid,
               ),

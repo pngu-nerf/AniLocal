@@ -187,6 +187,12 @@ class SourceOverrides extends Table {
   IntColumn get seriesId => integer()();
   IntColumn get episode => integer()();
   TextColumn get folderPath => text()();
+
+  /// v22: WHICH file in [folderPath] — two copies of one episode in the same
+  /// folder (a 0-byte download beside the good one) used to be one pin that
+  /// always played the alphabetically-first. Null = a legacy folder pin,
+  /// resolved as before (the folder's first copy).
+  TextColumn get relativePath => text().nullable()();
   IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 
   @override
@@ -366,7 +372,7 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// The schema this build writes, readable without an instance (the startup
   /// log line and the diagnostics report want it before the database opens).
-  static const int currentSchemaVersion = 21;
+  static const int currentSchemaVersion = 22;
 
   @override
   int get schemaVersion => currentSchemaVersion;
@@ -389,7 +395,10 @@ class CacheDatabase extends _$CacheDatabase {
   // v17 per-window skip confidence; v18 skip_segments.resolved_key — the
   // resolution inputs a skip row came from (superseded a commit later); v19
   // skip_source_answers replaces skip_segments entirely (raw per-source
-  // answers, verdicts derived on read); v20 two indexes on file_cache.
+  // answers, verdicts derived on read); v20 two indexes on file_cache; v21
+  // watch_state(updated_at_ms) index; v22 source_overrides.relative_path —
+  // a pin names the FILE, not only its folder (additive, nullable: a null is
+  // the legacy folder pin and resolves exactly as before).
   //
   // v8 RECLAIMED: it was briefly scratch on an unshipped branch (series_relations,
   // the "Up Next" overshoot) then reverted — it never reached main and no DB sits
@@ -628,6 +637,16 @@ class CacheDatabase extends _$CacheDatabase {
           // for the install's lifetime by design (watch_state is never
           // pruned); the sort needs an index. No row changes.
           await m.createIndex(watchStateUpdated);
+        }
+        if (from < 22) {
+          // v22: a source pin names the file, not only its folder. Nullable
+          // and additive: every existing row keeps its meaning (folder pin).
+          // `from >= 7`: the v7 step emits source_overrides in its CURRENT
+          // shape, relative_path included — the same trap every additive
+          // column here guards against.
+          if (from >= 7) {
+            await m.addColumn(sourceOverrides, sourceOverrides.relativePath);
+          }
         }
       });
     },

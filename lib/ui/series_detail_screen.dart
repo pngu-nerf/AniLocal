@@ -494,7 +494,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                 for (final EpisodeSource s in e.sources)
                   ListTile(
                     leading: Icon(
-                      e.pinnedSourceFolder == s.folderPath
+                      e.isPinned(s)
                           ? Icons.radio_button_checked
                           : Icons.radio_button_unchecked,
                     ),
@@ -503,10 +503,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                         ? const Text('default')
                         : null,
                     onTap: () async {
-                      await _services.sourceSelection.selectSource(
-                        e,
-                        folderPath: s.folderPath,
-                      );
+                      await _services.sourceSelection.selectSource(e, s);
                       if (dialogContext.mounted) {
                         Navigator.of(dialogContext).pop(true);
                       }

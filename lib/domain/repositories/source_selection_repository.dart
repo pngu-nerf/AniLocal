@@ -1,4 +1,5 @@
 import '../models/episode.dart';
+import '../models/episode_source.dart';
 
 /// The UI's entry point for choosing which source a multi-source episode plays
 /// from. Writes a manual override keyed by the episode's identity
@@ -9,9 +10,9 @@ import '../models/episode.dart';
 /// auto-matcher's fill path never writes it, so a manual choice survives — even
 /// if a higher-priority folder later gains the episode.
 abstract interface class SourceSelectionRepository {
-  /// Pin [episode] to play from the copy in [folderPath]. Beats the
-  /// folder-priority default until cleared.
-  Future<void> selectSource(Episode episode, {required String folderPath});
+  /// Pin [episode] to play from [source] — that folder AND that file. Beats
+  /// the folder-priority default until cleared.
+  Future<void> selectSource(Episode episode, EpisodeSource source);
 
   /// Drop the manual choice — revert to the folder-priority default.
   Future<void> clearSource(Episode episode);

@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'support/finders.dart';
 import 'support/recording_player.dart';
 
 /// The player bar's VFD restyle. What's pinned here is what a later "tidy-up"
@@ -182,6 +183,57 @@ void main() {
       await openSettings(tester);
       expect(find.text('Playback speed'), findsOneWidget);
       expect(find.text('Copy'), findsNothing);
+    });
+  });
+
+  group('the error notice', () {
+    testWidgets('carries Retry, and the copy notice is a plain line', (
+      tester,
+    ) async {
+      var retries = 0;
+      final state = ValueNotifier(
+        PlayerControlsState(
+          episode: _ep(1),
+          errorMessage: 'Cannot open /usb/ep1.mkv',
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 900,
+              height: 300,
+              // The notice lives in the OVERLAY (PlayerControls), over the
+              // frame, not in the bar.
+              child: PlayerControls(
+                player: RecordingPlayer(),
+                state: state,
+                actions: PlayerControlsActions(
+                  skipIntro: () {},
+                  skipOutro: () {},
+                  playNext: () {},
+                  cancelPreRoll: () {},
+                  toggleFullscreen: () {},
+                  retry: () => retries++,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Couldn’t play this episode'), findsOneWidget);
+      await tester.tap(findXpLabel('Retry'));
+      await tester.pump();
+      expect(retries, 1);
+
+      state.value = PlayerControlsState(
+        episode: _ep(1),
+        notice: 'Playing the copy in nas instead',
+      );
+      await tester.pump();
+      expect(find.text('Playing the copy in nas instead'), findsOneWidget);
+      expect(find.text('Couldn’t play this episode'), findsNothing);
+      expect(findXpLabel('Retry'), findsNothing);
     });
   });
 

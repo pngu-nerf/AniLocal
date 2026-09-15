@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
+import 'package:anilocal/domain/models/episode_source.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/models/library_snapshot.dart';
@@ -164,10 +165,7 @@ class FakeLibraryRepository
   }
 
   @override
-  Future<void> selectSource(
-    Episode episode, {
-    required String folderPath,
-  }) async {}
+  Future<void> selectSource(Episode episode, EpisodeSource source) async {}
 
   @override
   Future<void> clearSource(Episode episode) async {}

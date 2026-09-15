@@ -42,6 +42,14 @@ Map<String, dynamic> _m(int id, String romaji) => {
   'coverImage': {'extraLarge': 'http://a/$id.jpg', 'large': 'http://a/$id.jpg'},
 };
 
+/// Pin the copy that lives in [folder] — the per-FILE pin, chosen the way the
+/// UI does: from the episode's own source list.
+Future<void> _pinFolder(
+  DriftLibraryRepository repo,
+  Episode e,
+  String folder,
+) => repo.selectSource(e, e.sources.firstWhere((s) => s.folderPath == folder));
+
 void main() {
   group('folder reorder re-resolves default sources', () {
     late Directory root;
@@ -133,7 +141,7 @@ void main() {
       await sync.sync([folderA.path, folderB.path]);
 
       // Pin to A (which also happens to be the current default).
-      await repo.selectSource(await ep3(), folderPath: folderA.path);
+      await _pinFolder(repo, await ep3(), folderA.path);
 
       // Promote B to the top. An Automatic episode would now prefer B — but the
       // pin to A must hold; a global reorder never clobbers a per-episode pin.
@@ -156,7 +164,7 @@ void main() {
 
       Future<Episode> ep(int n) async =>
           (await repo.episodesFor(1)).firstWhere((e) => e.number == n);
-      await repo.selectSource(await ep(3), folderPath: folderB.path);
+      await _pinFolder(repo, await ep(3), folderB.path);
 
       await reorder([folderB, folderA]); // B to the top
 

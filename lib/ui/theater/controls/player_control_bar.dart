@@ -374,7 +374,12 @@ class _PlayerControlsState extends State<PlayerControls> {
                 ),
               ),
               // The engine's failure, over the frame it failed to fill.
-              Center(child: PlaybackErrorNotice(state: widget.state)),
+              Center(
+                child: PlaybackErrorNotice(
+                  state: widget.state,
+                  onRetry: widget.actions.retry,
+                ),
+              ),
               Align(
                 alignment: Alignment.bottomCenter,
                 child: AnimatedOpacity(

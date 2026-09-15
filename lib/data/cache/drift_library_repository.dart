@@ -61,6 +61,7 @@ class _Logical {
     required this.sources,
     required this.activeFileRef,
     required this.pinnedFolder,
+    this.pinnedRelativePath,
   });
 
   final int seriesId;
@@ -69,6 +70,7 @@ class _Logical {
   final List<EpisodeSource> sources; // priority-ordered (default = first)
   final String activeFileRef;
   final String? pinnedFolder; // in-effect manual pin, else null (automatic)
+  final String? pinnedRelativePath; // the pinned FILE; null = legacy folder pin
 }
 
 /// The rows one read derives from, loaded once. A library-wide read holds
@@ -314,6 +316,11 @@ class DriftLibraryRepository
       // Build (source, effective) per file. The owning folder is STORED on the
       // row (file.folderPath, the folder's stable identity), so there's no
       // path-prefix matching; fileRef is resolved to the volume's current mount.
+      // Automatic's order: a copy whose folder is mounted before one whose
+      // folder is not, a real file before a 0-byte one, then folder priority,
+      // then path. The mount answer was computed for fileRef and then thrown
+      // away, so an unplugged drive's copy stayed the default and every play
+      // failed until the user pinned the other one by hand.
       final entries =
           [
             for (final e in files)
@@ -321,13 +328,17 @@ class DriftLibraryRepository
                 source: EpisodeSource(
                   fileRef: _fileRef(e.file, v.currentByFolder),
                   folderPath: e.file.folderPath,
+                  relativePath: e.file.relativePath,
                   folderSortOrder:
                       folderByPath[e.file.folderPath]?.sortOrder ??
                       _unfiledSortOrder,
                 ),
                 eff: e,
+                rank: _automaticRank(e.file, v.currentByFolder),
               ),
           ]..sort((a, b) {
+            final r = a.rank.compareTo(b.rank);
+            if (r != 0) return r;
             final c = a.source.folderSortOrder.compareTo(
               b.source.folderSortOrder,
             );
@@ -336,18 +347,25 @@ class DriftLibraryRepository
       final sources = [for (final e in entries) e.source];
 
       // Resolve the active source: a manual override wins, but only while its
-      // folder still holds the episode; otherwise fall back to priority. The
-      // pin is "in effect" only when it actually selects a present source.
+      // copy is still present; otherwise fall back to priority. The pin is
+      // "in effect" only when it actually selects a present source. A pin
+      // beats reachability on purpose — the user chose it; if it cannot play,
+      // the player falls through to another copy WITHOUT rewriting the pin.
       var activeIdx = 0;
       String? pinnedFolder;
+      String? pinnedRelativePath;
       final ov = overrides[key];
       if (ov != null) {
         final i = entries.indexWhere(
-          (e) => e.source.folderPath == ov.folderPath,
+          (e) =>
+              e.source.folderPath == ov.folderPath &&
+              (ov.relativePath == null ||
+                  ov.relativePath == e.source.relativePath),
         );
         if (i >= 0) {
           activeIdx = i;
           pinnedFolder = ov.folderPath;
+          pinnedRelativePath = ov.relativePath;
         }
       }
 
@@ -360,9 +378,24 @@ class DriftLibraryRepository
         sources: sources,
         activeFileRef: entries[activeIdx].source.fileRef,
         pinnedFolder: pinnedFolder,
+        pinnedRelativePath: pinnedRelativePath,
       );
     });
     return result;
+  }
+
+  /// 0 = a copy Automatic may pick; higher = demoted. A folder whose volume
+  /// is not mounted right now (its current path resolved to null) and a
+  /// 0-byte file (a download that never happened) sink below every real,
+  /// reachable copy. A folder the read knows nothing about is not demoted.
+  static int _automaticRank(
+    CachedFileRow f,
+    Map<String, String?> currentByFolder,
+  ) {
+    final unreachable =
+        currentByFolder.containsKey(f.folderPath) &&
+        currentByFolder[f.folderPath] == null;
+    return (unreachable ? 2 : 0) + (f.fileSize == 0 ? 1 : 0);
   }
 
   /// Every logical episode as a domain [Episode], grouped by series and
@@ -425,20 +458,31 @@ class DriftLibraryRepository
       result[placeholderId] = [
         for (final anchored in keys)
           () {
-            final sources =
+            final ranked =
                 [
                   for (final f in byKey[anchored]!)
-                    EpisodeSource(
-                      fileRef: _fileRef(f, v.currentByFolder),
-                      folderPath: f.folderPath,
-                      folderSortOrder:
-                          folderByPath[f.folderPath]?.sortOrder ??
-                          _unfiledSortOrder,
+                    (
+                      source: EpisodeSource(
+                        fileRef: _fileRef(f, v.currentByFolder),
+                        folderPath: f.folderPath,
+                        relativePath: f.relativePath,
+                        folderSortOrder:
+                            folderByPath[f.folderPath]?.sortOrder ??
+                            _unfiledSortOrder,
+                      ),
+                      rank: _automaticRank(f, v.currentByFolder),
                     ),
                 ]..sort((a, b) {
-                  final c = a.folderSortOrder.compareTo(b.folderSortOrder);
-                  return c != 0 ? c : a.fileRef.compareTo(b.fileRef);
+                  final r = a.rank.compareTo(b.rank);
+                  if (r != 0) return r;
+                  final c = a.source.folderSortOrder.compareTo(
+                    b.source.folderSortOrder,
+                  );
+                  return c != 0
+                      ? c
+                      : a.source.fileRef.compareTo(b.source.fileRef);
                 });
+            final sources = [for (final e in ranked) e.source];
             final number = anchored >= 0 ? anchored : 0;
             final w = v.watchByKey[(placeholderId, anchored)];
             return Episode(
@@ -764,7 +808,7 @@ class DriftLibraryRepository
   //     keyed by episode identity, never clobbered by a rescan (seam #5). ---
 
   @override
-  Future<void> selectSource(Episode episode, {required String folderPath}) {
+  Future<void> selectSource(Episode episode, EpisodeSource source) {
     // A pending placeholder (synthetic negative id) is NOT pinnable — pinning a
     // source for an unidentified show would persist the synthetic id into
     // source_overrides and strand it on identification. Pending episodes always
@@ -774,7 +818,10 @@ class DriftLibraryRepository
       SourceOverrideRow(
         seriesId: episode.seriesId,
         episode: episode.anchoredNumber,
-        folderPath: folderPath,
+        folderPath: source.folderPath,
+        // The FILE, so two copies in one folder are two distinct pins. An
+        // empty relative path (a source built without one) pins the folder.
+        relativePath: source.relativePath.isEmpty ? null : source.relativePath,
         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
       ),
     );
@@ -917,6 +964,7 @@ class DriftLibraryRepository
       duration: Duration(milliseconds: w?.durationMs ?? 0),
       sources: l.sources,
       pinnedSourceFolder: l.pinnedFolder,
+      pinnedSourceRelativePath: l.pinnedRelativePath,
       introSkip: intro,
       outroSkip: outro,
       introConfidence: intro == null

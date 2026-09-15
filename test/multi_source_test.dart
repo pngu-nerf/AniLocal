@@ -41,6 +41,14 @@ Map<String, dynamic> _m(int id, String romaji) => {
   'coverImage': {'extraLarge': 'http://a/$id.jpg', 'large': 'http://a/$id.jpg'},
 };
 
+/// Pin the copy that lives in [folder] — the per-FILE pin, chosen the way the
+/// UI does: from the episode's own source list.
+Future<void> _pinFolder(
+  DriftLibraryRepository repo,
+  Episode e,
+  String folder,
+) => repo.selectSource(e, e.sources.firstWhere((s) => s.folderPath == folder));
+
 void main() {
   group('multi-source episodes', () {
     late Directory root;
@@ -138,6 +146,85 @@ void main() {
       }
     });
 
+    test('Automatic skips a copy whose folder is not mounted', () async {
+      await dropEp3(folderA);
+      await dropEp3(folderB);
+      await sync.sync([folderA.path, folderB.path]);
+      expect((await ep3()).fileRef, contains('/A/'), reason: 'priority first');
+
+      // The drive holding A is pulled: its stored path no longer exists and
+      // it is bound to no volume, so it resolves to nothing. The default used
+      // to stay on it and every play failed until the user pinned B by hand.
+      await folderA.delete(recursive: true);
+      final e = await ep3();
+      expect(e.fileRef, '${folderB.path}/Cowboy Bebop - 03.mkv');
+      expect(e.sources, hasLength(2), reason: 'the copy is still listed');
+      expect(e.pinnedSourceFolder, isNull, reason: 'still Automatic');
+    });
+
+    test('Automatic skips a 0-byte copy', () async {
+      await dropEp3(folderA, size: 0); // a download that never happened
+      await dropEp3(folderB);
+      await sync.sync([folderA.path, folderB.path]);
+      expect((await ep3()).fileRef, '${folderB.path}/Cowboy Bebop - 03.mkv');
+    });
+
+    test('two copies in ONE folder are two pins, not one', () async {
+      await dropEp3(folderA);
+      final second = File(
+        '${folderA.path}/[Group] Cowboy Bebop - 03 [1080p].mkv',
+      );
+      await second.writeAsString('y' * 900);
+      await sync.sync([folderA.path, folderB.path]);
+      final e = await ep3();
+      final inA = e.sources.where((s) => s.folderPath == folderA.path).toList();
+      expect(inA, hasLength(2));
+      expect(inA.map((s) => s.relativePath).toSet(), {
+        'Cowboy Bebop - 03.mkv',
+        '[Group] Cowboy Bebop - 03 [1080p].mkv',
+      });
+
+      // Pin the SECOND one: it plays, and only it reads as pinned. A folder
+      // pin used to play the alphabetically-first file whichever was tapped
+      // and mark both as chosen.
+      final chosen = inA.firstWhere((s) => s.fileRef == second.path);
+      await repo.selectSource(e, chosen);
+      final pinned = await ep3();
+      expect(pinned.fileRef, second.path);
+      expect(pinned.isPinned(chosen), isTrue);
+      expect(
+        pinned.sources.where(pinned.isPinned).toList(),
+        hasLength(1),
+        reason: 'exactly one copy reads as pinned',
+      );
+    });
+
+    test(
+      'a legacy folder pin (no file) still resolves to that folder',
+      () async {
+        await dropEp3(folderA);
+        await dropEp3(folderB);
+        await sync.sync([folderA.path, folderB.path]);
+        // What a v21 cache holds after the v22 migration: relative_path null.
+        await db.upsertSourceOverride(
+          SourceOverrideRow(
+            seriesId: 1,
+            episode: 3,
+            folderPath: folderB.path,
+            updatedAtMs: 1,
+          ),
+        );
+        final e = await ep3();
+        expect(e.fileRef, '${folderB.path}/Cowboy Bebop - 03.mkv');
+        expect(e.pinnedSourceFolder, folderB.path);
+        expect(e.pinnedSourceRelativePath, isNull);
+        expect(
+          e.isPinned(e.sources.firstWhere((s) => s.folderPath == folderB.path)),
+          isTrue,
+        );
+      },
+    );
+
     test('default source is the highest-priority folder that has it', () async {
       await dropEp3(folderA);
       await dropEp3(folderB);
@@ -162,7 +249,7 @@ void main() {
       await sync.sync([folderA.path, folderB.path]);
       expect((await ep3()).fileRef, contains('/A/')); // priority default
 
-      await repo.selectSource(await ep3(), folderPath: folderB.path);
+      await _pinFolder(repo, await ep3(), folderB.path);
       expect((await ep3()).fileRef, '${folderB.path}/Cowboy Bebop - 03.mkv');
 
       // A rescan must never clobber the manual choice (seam #5, source dimension).
@@ -176,7 +263,7 @@ void main() {
         // Start with the episode ONLY in the lower-priority folder, pin it there.
         await dropEp3(folderB);
         await sync.sync([folderA.path, folderB.path]);
-        await repo.selectSource(await ep3(), folderPath: folderB.path);
+        await _pinFolder(repo, await ep3(), folderB.path);
 
         // Later, folder #1 gains the same episode. Without an override the default
         // would flip to #1 — but the pin to #2 wins.
@@ -197,7 +284,7 @@ void main() {
       await dropEp3(folderA);
       await dropEp3(folderB);
       await sync.sync([folderA.path, folderB.path]);
-      await repo.selectSource(await ep3(), folderPath: folderB.path);
+      await _pinFolder(repo, await ep3(), folderB.path);
       expect((await ep3()).fileRef, contains('/B/'));
 
       await repo.clearSource(await ep3());
@@ -219,7 +306,7 @@ void main() {
         );
 
         // Switch the source to folder B — same logical episode, same progress.
-        await repo.selectSource(await ep3(), folderPath: folderB.path);
+        await _pinFolder(repo, await ep3(), folderB.path);
         final e = await ep3();
         expect(e.fileRef, contains('/B/'), reason: 'now playing the B copy');
         expect(
@@ -235,7 +322,7 @@ void main() {
       final b = await dropEp3(folderB);
       await sync.sync([folderA.path, folderB.path]);
 
-      await repo.selectSource(await ep3(), folderPath: folderB.path);
+      await _pinFolder(repo, await ep3(), folderB.path);
       await repo.clearSource(await ep3());
 
       expect(a.existsSync(), isTrue);
@@ -246,7 +333,7 @@ void main() {
       await dropEp3(folderA);
       await dropEp3(folderB);
       await sync.sync([folderA.path, folderB.path]);
-      await repo.selectSource(await ep3(), folderPath: folderB.path);
+      await _pinFolder(repo, await ep3(), folderB.path);
       expect((await ep3()).fileRef, contains('/B/'));
 
       // Folder B is removed (its files drop out of the cache). The inert override

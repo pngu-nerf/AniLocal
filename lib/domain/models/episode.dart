@@ -29,6 +29,7 @@ class Episode extends Equatable {
     this.duration = Duration.zero,
     this.sources = const [],
     this.pinnedSourceFolder,
+    this.pinnedSourceRelativePath,
     this.introSkip,
     this.outroSkip,
     this.introConfidence = SkipConfidence.single,
@@ -62,6 +63,40 @@ class Episode extends Equatable {
   /// UI show "Automatic" vs a pinned source without guessing.
   final String? pinnedSourceFolder;
 
+  /// The pinned copy's path within its folder, or null for a legacy pin that
+  /// named only the folder (which then means that folder's first copy).
+  final String? pinnedSourceRelativePath;
+
+  /// Whether [s] is the copy the user pinned. ONE rule for the show page's
+  /// picker, the player's Copy menu and the session, so two copies in one
+  /// folder cannot both read as chosen.
+  bool isPinned(EpisodeSource s) =>
+      pinnedSourceFolder != null &&
+      pinnedSourceFolder == s.folderPath &&
+      (pinnedSourceRelativePath == null ||
+          pinnedSourceRelativePath == s.relativePath);
+
+  /// This episode, played from [s] instead of its resolved copy — same
+  /// identity, same watch state, another file. What the player opens when
+  /// the active copy fails and it falls through to the next one.
+  Episode playingFrom(EpisodeSource s) => Episode(
+    number: number,
+    fileRef: s.fileRef,
+    title: title,
+    seriesId: seriesId,
+    anchoredNumber: anchoredNumber,
+    watched: watched,
+    resumePosition: resumePosition,
+    duration: duration,
+    sources: sources,
+    pinnedSourceFolder: pinnedSourceFolder,
+    pinnedSourceRelativePath: pinnedSourceRelativePath,
+    introSkip: introSkip,
+    outroSkip: outroSkip,
+    introConfidence: introConfidence,
+    outroConfidence: outroConfidence,
+  );
+
   /// Cached intro (OP) / outro (ED) skip windows, or null when AniSkip has no
   /// data for this episode (partial coverage is normal). Read offline.
   final SkipRange? introSkip;
@@ -94,6 +129,7 @@ class Episode extends Equatable {
     duration,
     sources,
     pinnedSourceFolder,
+    pinnedSourceRelativePath,
     introSkip,
     outroSkip,
     introConfidence,

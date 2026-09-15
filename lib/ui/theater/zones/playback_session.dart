@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../data/paths.dart' show basenameOf;
 import '../../../diagnostics/app_log.dart';
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/episode_source.dart';
@@ -86,6 +87,7 @@ class PlaybackSession {
       selectSource: sourceSelection == null || refetchEpisode == null
           ? null
           : (source) => unawaited(switchSource(source)),
+      retry: () => unawaited(retry()),
     );
     // System media-remote (AirPods pinch / media keys / Bluetooth). Commands
     // route to the SAME paths the on-screen controls use — never a parallel
@@ -251,8 +253,7 @@ class PlaybackSession {
     final refetch = refetchEpisode;
     if (selection == null || refetch == null || _disposed) return;
     final current = _shown;
-    final alreadyPinned =
-        source != null && current.pinnedSourceFolder == source.folderPath;
+    final alreadyPinned = source != null && current.isPinned(source);
     final alreadyAutomatic =
         source == null && current.pinnedSourceFolder == null;
     if (alreadyPinned || alreadyAutomatic) return;
@@ -261,10 +262,11 @@ class PlaybackSession {
     if (source == null) {
       await selection.clearSource(current);
     } else {
-      await selection.selectSource(current, folderPath: source.folderPath);
+      await selection.selectSource(current, source);
     }
     final fresh = await refetch(current) ?? current;
     if (_disposed) return;
+    _failoverTried.clear(); // the user chose; every copy is fair again
     onEpisodeChanged?.call(fresh);
     if (fresh.fileRef == current.fileRef) {
       // The default was this file all along: nothing to re-open.
@@ -275,7 +277,66 @@ class PlaybackSession {
     await _open(fresh, startAt: at);
   }(), 'switchSource');
 
-  Future<void> _open(Episode episode, {Duration? startAt}) async {
+  /// Open the episode again where it was — the error notice's Retry. A
+  /// replugged drive used to need a click off the episode and back. Starts
+  /// from the episode's OWN copy (not the last one a fall-through tried) with
+  /// every copy fair again, at the last position the engine reported.
+  Future<void> retry() => _guard(() async {
+    if (_disposed) return;
+    _failoverTried.clear();
+    final at = _lastPos;
+    await _open(_origin, startAt: at > Duration.zero ? at : null);
+  }(), 'retry');
+
+  /// The copy that could not be opened: try the next one, or say so.
+  ///
+  /// Automatic means "play this episode", not "play this file": an unplugged
+  /// drive or a 0-byte download on the default copy used to be a dead end
+  /// until the user pinned another copy by hand. A PINNED episode is left
+  /// alone — the pin is the user's — and shows the error with Retry. Each
+  /// copy is tried once per episode, so two dead copies cannot ping-pong.
+  void _onOpenFailed(String message) {
+    if (_disposed || _transitioning) return;
+    final current = _shown;
+    _failoverTried.add(current.fileRef);
+    if (current.pinnedSourceFolder == null) {
+      for (final s in current.sources) {
+        if (_failoverTried.contains(s.fileRef)) continue;
+        _showNotice('Playing the copy in ${basenameOf(s.folderPath)} instead');
+        unawaited(
+          _open(current.playingFrom(s), startAt: _lastPos, failover: true),
+        );
+        return;
+      }
+    }
+    _setError(message);
+  }
+
+  /// Copies already tried for the CURRENT episode identity.
+  final Set<String> _failoverTried = {};
+
+  /// The episode as the host gave it — what Retry re-opens (a fall-through
+  /// replaces [_shown] with the same episode on another copy).
+  late Episode _origin = _shown;
+
+  String? _notice;
+  Timer? _noticeTimer;
+  void _showNotice(String text) {
+    _notice = text;
+    _noticeTimer?.cancel();
+    _noticeTimer = Timer(const Duration(seconds: 5), () {
+      _notice = null;
+      _publish();
+    });
+    _publish();
+  }
+
+  Future<void> _open(
+    Episode episode, {
+    Duration? startAt,
+    bool failover = false,
+  }) async {
+    if (!failover) _origin = episode;
     final gen = _resetForEpisode(episode);
     startAt ??= PlaybackController.resumeStartFor(episode);
     _awaitingStart = startAt > Duration.zero;
@@ -297,6 +358,13 @@ class PlaybackSession {
 
   /// Synchronous: from this line on, every event belongs to [episode].
   int _resetForEpisode(Episode episode) {
+    if (!_sameEpisode(episode, _shown)) {
+      // A different episode: the copies tried and the notice were about the
+      // last one. Within one episode (a fall-through) they carry over.
+      _failoverTried.clear();
+      _noticeTimer?.cancel();
+      _notice = null;
+    }
     _shown = episode;
     _position = Duration.zero;
     _lastPos = Duration.zero;
@@ -375,6 +443,12 @@ class PlaybackSession {
     final previous = _lastPos;
     _lastPos = pos;
     _position = pos;
+    // Progress after an error means the engine recovered (a transient decoder
+    // line, a network hiccup): the notice was about a moment that has passed.
+    if (_error != null && pos > Duration.zero) {
+      _error = null;
+      _publish();
+    }
     // Only continuous playback may cross the watched-threshold. A seek (paused
     // or a jump while playing) updates the resume position but never marks.
     if (playing &&
@@ -400,6 +474,18 @@ class PlaybackSession {
 
   Future<void> _onCompleted() async {
     if (_transitioning) return;
+    // "Completed" from a file that never PLAYED — a 0-byte download, a drive
+    // that is gone — is a failed open, not an ending. It used to advance:
+    // episode 2 failed the same way, then 3, and the viewer landed three
+    // episodes on with nothing having played. Evidence of playback is a
+    // duration and a position past the phantom zero.
+    if (_error != null ||
+        _awaitingStart ||
+        _duration <= Duration.zero ||
+        _position <= Duration.zero) {
+      _onOpenFailed('The file ended before it started playing.');
+      return;
+    }
     // "Played to the end" ≠ "crossed the watched mark": these are decoupled.
     // Marking watched obeys the threshold setting (off at 0:00) — reaching the
     // end via playback already crossed it in _onPosition; this is the safety
@@ -415,7 +501,13 @@ class PlaybackSession {
   void _onEngineError(String message) {
     AppLog.error('mpv: $message');
     if (_transitioning) return;
-    _setError(message);
+    // Nothing has played yet: the OPEN failed. Otherwise it is an error mid-
+    // play, shown until the engine reports progress again.
+    if (_position <= Duration.zero) {
+      _onOpenFailed(message);
+    } else {
+      _setError(message);
+    }
   }
 
   void _setError(String message) {
@@ -641,6 +733,7 @@ class PlaybackSession {
   void _publish() {
     if (_disposed) return;
     controls.value = PlayerControlsState(
+      notice: _notice,
       episode: _shown,
       skipMode: _skipMode,
       showSkipIntro: _showSkipIntro,
@@ -697,6 +790,7 @@ class PlaybackSession {
     // before the caller's frame ends and no event can land in between.
     _saveTimer?.cancel();
     _pausedSave?.cancel();
+    _noticeTimer?.cancel();
     unawaited(_posSub?.cancel());
     unawaited(_durSub?.cancel());
     unawaited(_completedSub?.cancel());

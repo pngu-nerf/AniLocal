@@ -118,8 +118,8 @@ final _intro = SkipRange(start: Duration.zero, end: _s(seconds: 90));
 class _SourceSelection implements SourceSelectionRepository {
   final pins = <String?>[];
   @override
-  Future<void> selectSource(Episode e, {required String folderPath}) async =>
-      pins.add(folderPath);
+  Future<void> selectSource(Episode e, EpisodeSource source) async =>
+      pins.add(source.folderPath);
   @override
   Future<void> clearSource(Episode e) async => pins.add(null);
 }
@@ -253,6 +253,127 @@ void main() {
         expect(rig.player.opened.last.uri, a.fileRef);
       },
     );
+
+    test('a "completed" from a file that never played does NOT advance', () {
+      final rig = _Rig(episodes: [_episode(1), _episode(2)]);
+      rig.session.start();
+      // mpv reports EOF at once for a 0-byte file or a vanished drive: no
+      // duration, no position, just "completed". This advanced to episode 2,
+      // which failed the same way, then 3.
+      rig.player.emitCompleted();
+      expect(rig.advanced, isEmpty);
+      expect(rig.player.opened, hasLength(1));
+      expect(rig.session.controls.value.errorMessage, isNotNull);
+    });
+
+    test('a failed open on Automatic falls through to the next copy, and says '
+        'so; when every copy failed, Retry starts over', () async {
+      const a = EpisodeSource(
+        fileRef: '/usb/ep1.mkv',
+        folderPath: '/usb',
+        folderSortOrder: 0,
+        relativePath: 'ep1.mkv',
+      );
+      const b = EpisodeSource(
+        fileRef: '/nas/ep1.mkv',
+        folderPath: '/nas',
+        folderSortOrder: 1,
+        relativePath: 'ep1.mkv',
+      );
+      final ep = Episode(
+        number: 1,
+        anchoredNumber: 1,
+        seriesId: 7,
+        fileRef: a.fileRef,
+        sources: const [a, b],
+        resumePosition: _s(minutes: 4),
+      );
+      final rig = _Rig(episodes: [ep], refetch: (_) async => ep);
+      rig.session.start();
+      expect(rig.player.opened.single.uri, a.fileRef);
+
+      rig.player.emitError('Cannot open /usb/ep1.mkv');
+      await Future<void>.delayed(Duration.zero);
+      expect(rig.player.opened, hasLength(2));
+      expect(rig.player.opened.last.uri, b.fileRef);
+      expect(
+        rig.player.opened.last.start,
+        _s(minutes: 4),
+        reason: 'the resume point survives the fall-through',
+      );
+      expect(rig.session.controls.value.notice, contains('nas'));
+      expect(rig.session.controls.value.errorMessage, isNull);
+      expect(rig.advanced, isEmpty, reason: 'same episode, not the next');
+
+      // The second copy fails too: nothing left to try, the error shows.
+      rig.player.emitError('Cannot open /nas/ep1.mkv');
+      await Future<void>.delayed(Duration.zero);
+      expect(rig.player.opened, hasLength(2));
+      expect(rig.session.controls.value.errorMessage, isNotNull);
+
+      // Retry: the episode's own copy again, every copy fair once more.
+      await rig.session.retry();
+      expect(rig.player.opened, hasLength(3));
+      expect(rig.player.opened.last.uri, a.fileRef);
+      expect(rig.session.controls.value.errorMessage, isNull);
+    });
+
+    test(
+      'a PINNED copy that fails is not switched behind the user\'s back',
+      () async {
+        const a = EpisodeSource(
+          fileRef: '/usb/ep1.mkv',
+          folderPath: '/usb',
+          folderSortOrder: 0,
+          relativePath: 'ep1.mkv',
+        );
+        const b = EpisodeSource(
+          fileRef: '/nas/ep1.mkv',
+          folderPath: '/nas',
+          folderSortOrder: 1,
+          relativePath: 'ep1.mkv',
+        );
+        final ep = Episode(
+          number: 1,
+          anchoredNumber: 1,
+          seriesId: 7,
+          fileRef: a.fileRef,
+          sources: const [a, b],
+          pinnedSourceFolder: '/usb',
+          pinnedSourceRelativePath: 'ep1.mkv',
+        );
+        final rig = _Rig(episodes: [ep], refetch: (_) async => ep);
+        rig.session.start();
+        rig.player.emitError('Cannot open /usb/ep1.mkv');
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          rig.player.opened,
+          hasLength(1),
+          reason: 'the pin is the user\'s',
+        );
+        expect(rig.session.controls.value.errorMessage, isNotNull);
+      },
+    );
+
+    test('an error mid-play is cleared by the next progress', () {
+      final rig = _Rig(episodes: [_episode(1)]);
+      rig.session.start();
+      rig.player.emitDuration(_s(minutes: 24));
+      rig.player.emitPosition(_s(minutes: 3));
+      rig.player.emitError('vd: dropped a frame');
+      expect(rig.session.controls.value.errorMessage, isNotNull);
+      rig.player.emitPosition(_s(minutes: 3, seconds: 1));
+      expect(
+        rig.session.controls.value.errorMessage,
+        isNull,
+        reason: 'the engine recovered; the notice was about a moment',
+      );
+      expect(
+        rig.player.opened,
+        hasLength(1),
+        reason: 'no re-open for a mid-play error',
+      );
+    });
 
     test('without a source repository the bar gets no Copy action', () {
       final rig = _Rig(episodes: [_episode(1)]);

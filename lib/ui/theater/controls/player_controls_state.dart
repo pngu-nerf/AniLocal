@@ -32,6 +32,7 @@ class PlayerControlsState {
     this.preRollSeconds = 0,
     this.fullscreen = false,
     this.errorMessage,
+    this.notice,
   });
 
   final Episode? episode;
@@ -56,6 +57,10 @@ class PlayerControlsState {
   /// silent black screen.
   final String? errorMessage;
 
+  /// A transient, non-error line over the frame — "Playing the copy in X
+  /// instead" after a fall-through. Cleared by the session a few seconds on.
+  final String? notice;
+
   /// The skip windows the timeline shades. Nothing in [SkipMode.off]: a viewer
   /// who turned skipping off asked not to be shown where the themes are.
   SkipRange? get introMarker =>
@@ -75,6 +80,8 @@ class PlayerControlsState {
     bool? fullscreen,
     String? errorMessage,
     bool clearError = false,
+    String? notice,
+    bool clearNotice = false,
   }) => PlayerControlsState(
     episode: episode ?? this.episode,
     skipMode: skipMode ?? this.skipMode,
@@ -85,6 +92,7 @@ class PlayerControlsState {
     preRollSeconds: preRollSeconds ?? this.preRollSeconds,
     fullscreen: fullscreen ?? this.fullscreen,
     errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+    notice: clearNotice ? null : (notice ?? this.notice),
   );
 }
 
@@ -102,6 +110,7 @@ class PlayerControlsActions {
     required this.cancelPreRoll,
     required this.toggleFullscreen,
     this.selectSource,
+    this.retry,
   });
 
   final VoidCallback skipIntro;
@@ -119,4 +128,8 @@ class PlayerControlsActions {
   /// folder-priority default), keeping the position. Absent when the host
   /// cannot pin sources; the bar then shows no Copy section.
   final void Function(EpisodeSource? source)? selectSource;
+
+  /// Re-open the current episode where it was, after a failure. Absent when
+  /// the host has no session (previews).
+  final VoidCallback? retry;
 }

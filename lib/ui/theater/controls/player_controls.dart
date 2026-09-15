@@ -7,6 +7,7 @@ import '../../../domain/format_duration.dart';
 import '../../../domain/models/episode.dart';
 import '../../theme/vfd_readout.dart';
 import '../../theme/xp_tokens.dart';
+import '../../theme/xp_widgets.dart';
 import 'player_controls_state.dart';
 import 'segmented_meter.dart';
 import 'vfd_control.dart';
@@ -290,7 +291,7 @@ class SettingsControl extends StatelessWidget {
                   // The pinned copy is checked; unpinned, the copy that is
                   // playing (the default) is.
                   leadingIcon:
-                      episode.pinnedSourceFolder == s.folderPath ||
+                      episode.isPinned(s) ||
                           (episode.pinnedSourceFolder == null &&
                               s.fileRef == episode.fileRef)
                       ? const Icon(Icons.check)
@@ -437,9 +438,14 @@ class UpNextControl extends StatelessWidget {
 /// viewer needs to know WHICH file libmpv refused — that line names it — and
 /// the same text is in the diagnostics ring for a report.
 class PlaybackErrorNotice extends StatelessWidget {
-  const PlaybackErrorNotice({super.key, required this.state});
+  const PlaybackErrorNotice({super.key, required this.state, this.onRetry});
 
   final ValueListenable<PlayerControlsState> state;
+
+  /// Re-open the episode where it was. A replugged drive used to need a
+  /// click off the episode and back; the error itself now carries the way
+  /// out. Null hides the button.
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -447,7 +453,22 @@ class PlaybackErrorNotice extends StatelessWidget {
       valueListenable: state,
       builder: (context, s, _) {
         final message = s.errorMessage;
-        if (message == null) return const SizedBox.shrink();
+        final notice = s.notice;
+        if (message == null && notice == null) return const SizedBox.shrink();
+        if (message == null) {
+          // A transient line — "Playing the copy in X instead" — not a failure.
+          return Padding(
+            padding: const EdgeInsets.all(Xp.spaceXl),
+            child: Text(
+              notice!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Xp.textDim,
+                fontSize: Xp.fontSizeBody,
+              ),
+            ),
+          );
+        }
         return Padding(
           padding: const EdgeInsets.all(Xp.spaceXl),
           child: Column(
@@ -472,6 +493,15 @@ class PlaybackErrorNotice extends StatelessWidget {
                   fontSize: Xp.fontSizeCaption,
                 ),
               ),
+              if (onRetry != null) ...[
+                const SizedBox(height: Xp.spaceM),
+                XpButton(
+                  lit: true,
+                  icon: Icons.refresh,
+                  label: 'Retry',
+                  onPressed: onRetry,
+                ),
+              ],
             ],
           ),
         );
