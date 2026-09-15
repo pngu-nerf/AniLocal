@@ -54,6 +54,12 @@ typedef EpisodeKey = (int seriesId, int episode);
 ///   cancel twenty minutes into a first scan keeps what was done. Removals
 ///   are applied last, only by a run that finished and saw every source
 ///   answer.
+/// - Skips are phase 3, AFTER identity is on disk: one serial lookup per
+///   episode (AniSkip at 200 ms, a chapter read per file) used to sit inside
+///   the identity batch before its commit, so a 20-show library identified in
+///   seconds and then showed nothing for the minute the skips took. Committed
+///   in chunks of 25 episodes with `skips n/N` progress; a Stop here keeps
+///   every identified show and every chunk already asked.
 /// - One run at a time: this is the cache's only writer and is not reentrant
 ///   ([SyncAlreadyRunning] if a second run is started).
 ///
@@ -72,7 +78,7 @@ class LibrarySync {
     this.loadSkipOrder,
     this.crossMap,
     VolumeResolver? resolver,
-    this.batchSize = 25,
+    this.batchSize = 10,
   }) : resolver = resolver ?? DiskutilVolumeResolver();
 
   final FolderScanner scanner;
@@ -238,6 +244,8 @@ class LibrarySync {
     final answered = await _answeredSources();
     final askable = await _askableSkipSources();
     final titles = deltaTitles.entries.toList();
+    // Every file row this run wrote, for the skips pass after identity.
+    final deltaRows = <CachedFileRow>[];
     try {
       for (var start = 0; start < titles.length; start += batchSize) {
         cancellation.throwIfCancelled();
@@ -282,19 +290,7 @@ class LibrarySync {
           resolved,
           run,
         );
-        final skipUpserts = await _fetchMissingSkipAnswers(
-          _episodeKeysOf(fileUpserts),
-          _pathsByEpisode(fileUpserts, mountByFolder),
-          externalIds,
-          answered,
-          askable,
-          // Every file here is new or CHANGED (that is why it is a delta), and
-          // a re-encode can move or remove its chapters, so a file-reading
-          // source is asked again and its row overwritten. A service keyed by
-          // show and episode has nothing new to say about a changed encode.
-          reaskFileSources: true,
-          cancellation: cancellation,
-        );
+        deltaRows.addAll(fileUpserts);
         // For every title that resolved to a real series id, carry any watch
         // progress recorded while it was a pending placeholder over to the
         // real id (rekeyed atomically in applySync). The placeholder id is the
@@ -313,7 +309,6 @@ class LibrarySync {
           seriesUpserts: seriesUpserts,
           fileUpserts: fileUpserts,
           removedKeys: const [],
-          skipUpserts: skipUpserts,
           promotions: promotions,
           prune: false,
         );
@@ -368,6 +363,31 @@ class LibrarySync {
         // an outage must never look like a library shrinking.
         final live = {for (final r in await cache.allSeriesRows()) r.seriesId};
         await art.deleteExcept(live);
+      }
+    }
+
+    // PHASE 3 (network + file reads): skip windows for every episode this run
+    // wrote. After the prune, so the answers are keyed to series that exist
+    // and to real ids (promotions have run). Every file here is new or
+    // CHANGED (that is why it is a delta), and a re-encode can move or remove
+    // its chapters, so a file-reading source is asked again and its row
+    // overwritten; a service keyed by show and episode has nothing new to say
+    // about a changed encode. Chunks of 25 are committed as they complete.
+    if (!run.cancelled && deltaRows.isNotEmpty) {
+      try {
+        await _fetchMissingSkipAnswers(
+          _episodeKeysOf(deltaRows),
+          _pathsByEpisode(deltaRows, mountByFolder),
+          externalIds,
+          answered,
+          askable,
+          reaskFileSources: true,
+          cancellation: cancellation,
+          onProgress: onProgress,
+          commit: cache.upsertSkipAnswers,
+        );
+      } on SyncCancelled {
+        run.cancelled = true;
       }
     }
 
@@ -979,10 +999,14 @@ class LibrarySync {
     required bool reaskFileSources,
     required SyncCancellation cancellation,
     void Function(SyncProgress progress)? onProgress,
+    Future<void> Function(List<SkipSourceAnswerRow> rows)? commit,
   }) async {
     if (askable.isEmpty || episodes.isEmpty) return const [];
     final malIds = await _resolveMalIds(externalIds, episodes.map((k) => k.$1));
     final rows = <SkipSourceAnswerRow>[];
+    // Rows not yet handed to [commit]; flushed every 25 episodes and at the
+    // end, so a Stop mid-pass keeps every chunk already asked.
+    final pending = <SkipSourceAnswerRow>[];
     var done = 0;
     for (final key in episodes) {
       cancellation.throwIfCancelled();
@@ -1004,11 +1028,16 @@ class LibrarySync {
           missing,
         );
         rows.addAll(answers);
+        pending.addAll(answers);
         (answered[key] ??= <String>{}).addAll(answers.map((r) => r.source));
       }
       done++;
-      if (onProgress != null && (done % 25 == 0 || done == episodes.length)) {
-        onProgress(
+      if (done % 25 == 0 || done == episodes.length) {
+        if (commit != null && pending.isNotEmpty) {
+          await commit(List.of(pending));
+          pending.clear();
+        }
+        onProgress?.call(
           SyncProgress(done: done, total: episodes.length, phase: 'skips'),
         );
       }

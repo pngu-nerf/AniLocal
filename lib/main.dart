@@ -453,6 +453,9 @@ Future<void> main() async {
       onProgress: onProgress,
       cancellation: cancellation,
     );
+    // Probed AGAIN at the end: a drive pulled during the run is greyed and
+    // bannered by this scan, not discovered by the next one.
+    await refreshFolderHealth();
     // The access banner tells the truth about THIS scan: a category stays
     // flagged only while a folder in it could not be read. Picking
     // ~/Downloads denies the folder-wide grant while the folder itself reads

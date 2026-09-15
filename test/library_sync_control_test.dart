@@ -7,8 +7,10 @@ import 'package:anilocal/data/metadata/metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
+import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/domain/models/external_ids.dart';
 import 'package:anilocal/domain/models/series.dart';
+import 'package:anilocal/domain/models/skip_range.dart';
 import 'package:anilocal/domain/models/sync_control.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/sync/library_sync.dart';
@@ -66,6 +68,39 @@ class _ScriptedProvider implements MetadataProvider {
       const [];
 }
 
+/// A skip source that records how far the scan had got when it was FIRST
+/// asked, and can stop the run from inside a lookup.
+class _WatchingSkip implements SkipProvider {
+  _WatchingSkip({this.onAsk});
+  final void Function()? onAsk;
+  int asks = 0;
+
+  @override
+  String get token => 'watching';
+  @override
+  String get displayName => token;
+  @override
+  bool get requiresClientId => false;
+  @override
+  String? get setupUrl => null;
+  @override
+  String? get setupInstructions => null;
+  @override
+  bool get readsFile => false;
+  @override
+  Future<bool> canAnswer(SkipLookup lookup) async => true;
+  @override
+  Future<bool> isConfigured() async => true;
+  @override
+  Future<EpisodeSkips?> fetchSkips(SkipLookup lookup) async {
+    asks++;
+    onAsk?.call();
+    return const EpisodeSkips(
+      intro: SkipRange(start: Duration.zero, end: Duration(seconds: 90)),
+    );
+  }
+}
+
 /// The scan's control flow: committed in batches, cancellable at every
 /// checkpoint, one run at a time, progress after each commit. Before this the
 /// scan was one 380-line method that wrote everything at the very end, could
@@ -87,21 +122,76 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    LibrarySync build(_ScriptedProvider provider, {int batchSize = 2}) =>
-        LibrarySync(
-          scanner: const FileSystemFolderScanner(),
-          parser: const HeuristicFilenameParser(),
-          matcher: SeriesMatcher(providers: [provider]),
-          cache: db,
-          art: ArtCache(
-            httpClient: MockClient(
-              (_) async => http.Response.bytes(kFakeJpeg, 200),
-            ),
-            directory: () async => Directory('${dir.path}/.art')..createSync(),
-          ),
-          skipProviders: const [],
-          batchSize: batchSize,
-        );
+    LibrarySync build(
+      _ScriptedProvider provider, {
+      int batchSize = 2,
+      List<SkipProvider> skipProviders = const [],
+    }) => LibrarySync(
+      scanner: const FileSystemFolderScanner(),
+      parser: const HeuristicFilenameParser(),
+      matcher: SeriesMatcher(providers: [provider]),
+      cache: db,
+      art: ArtCache(
+        httpClient: MockClient(
+          (_) async => http.Response.bytes(kFakeJpeg, 200),
+        ),
+        directory: () async => Directory('${dir.path}/.art')..createSync(),
+      ),
+      skipProviders: skipProviders,
+      batchSize: batchSize,
+    );
+
+    test('every show is identified and on disk BEFORE any skip source is '
+        'asked; skips are their own phase', () async {
+      var discovered = 0;
+      int? discoveredAtFirstAsk;
+      final skip = _WatchingSkip(
+        onAsk: () => discoveredAtFirstAsk ??= discovered,
+      );
+      final progress = <String>[];
+      await build(
+        _ScriptedProvider(),
+        batchSize: 4,
+        skipProviders: [skip],
+      ).sync(
+        [dir.path],
+        onDiscovered: () => discovered++,
+        onProgress: (p) => progress.add('$p'),
+      );
+      // 1 placeholder discovery + 2 committed identity batches, all before
+      // the first skip lookup. The skips used to run INSIDE the batch, before
+      // its commit, so a small library showed nothing until they were done.
+      expect(discoveredAtFirstAsk, 3);
+      expect(skip.asks, 6);
+      expect(progress, [
+        for (var i = 1; i <= 6; i++) 'identifying $i/6',
+        'skips 6/6',
+      ]);
+      expect(await db.allSkipAnswers(), hasLength(6), reason: 'committed');
+    });
+
+    test('Stop during the skips phase keeps every identified show and the '
+        'chunks already asked', () async {
+      final cancellation = SyncCancellation();
+      var asks = 0;
+      final skip = _WatchingSkip(
+        onAsk: () {
+          if (++asks == 2) cancellation.cancel();
+        },
+      );
+      final summary = await build(
+        _ScriptedProvider(),
+        batchSize: 6,
+        skipProviders: [skip],
+      ).sync([dir.path], cancellation: cancellation);
+      expect(summary.cancelled, isTrue);
+      final rows = await db.allFileRows();
+      expect(
+        rows.where((f) => f.seriesId != null).length,
+        6,
+        reason: 'identity was committed before the skips began',
+      );
+    });
 
     test('each batch is COMMITTED before the next starts', () async {
       final seenCommitted = <int, int>{}; // nth lookup -> matched rows so far
