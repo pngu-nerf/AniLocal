@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../domain/models/episode.dart';
+import '../../../domain/models/episode_source.dart';
 import '../../../domain/models/skip_mode.dart';
 import '../../../domain/models/skip_range.dart';
 
@@ -100,6 +101,7 @@ class PlayerControlsActions {
     required this.playNext,
     required this.cancelPreRoll,
     required this.toggleFullscreen,
+    this.selectSource,
   });
 
   final VoidCallback skipIntro;
@@ -112,4 +114,9 @@ class PlayerControlsActions {
   /// window directly. Both the ⛶ button and the Escape shortcut call it, so
   /// there is still exactly ONE fullscreen path.
   final VoidCallback toggleFullscreen;
+
+  /// Play this episode from another of its copies (null = back to the
+  /// folder-priority default), keeping the position. Absent when the host
+  /// cannot pin sources; the bar then shows no Copy section.
+  final void Function(EpisodeSource? source)? selectSource;
 }

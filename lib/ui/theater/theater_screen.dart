@@ -176,6 +176,16 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     });
   });
 
+  /// The episode as the library now has it — after a copy switch wrote a
+  /// pin, its `fileRef` is the chosen copy. Null when it left the library.
+  Future<Episode?> _refetch(Episode e) async {
+    final eps = await widget.services.repository.episodesFor(e.seriesId);
+    for (final x in eps) {
+      if (x.anchoredNumber == e.anchoredNumber) return x;
+    }
+    return null;
+  }
+
   /// Enter/exit fullscreen. The ONE fullscreen path — the ⛶ button and the
   /// Escape shortcut both land here via [PlayerControlsActions.toggleFullscreen].
   ///
@@ -285,6 +295,8 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
         settingsRevision: _settingsRevision,
         obscured: obscured,
         onEpisodeChanged: _onAdvanced,
+        sourceSelection: widget.services.sourceSelection,
+        refetchEpisode: _refetch,
       ),
       TheaterZone.seriesInfo: SeriesInfoZone(
         series: _series,

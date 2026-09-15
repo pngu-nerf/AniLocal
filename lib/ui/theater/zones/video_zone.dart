@@ -5,6 +5,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../domain/models/episode.dart';
 import '../../../domain/repositories/settings_repository.dart';
+import '../../../domain/repositories/source_selection_repository.dart';
 import '../../../domain/repositories/watch_order_repository.dart';
 import '../../../domain/repositories/watch_state_repository.dart';
 import '../../../playback/playback_controller.dart';
@@ -47,9 +48,16 @@ class VideoZone extends StatefulWidget {
     this.settingsRevision = 0,
     this.obscured = false,
     this.onEpisodeChanged,
+    this.sourceSelection,
+    this.refetchEpisode,
   });
 
   final Episode episode;
+
+  /// Source pins and the re-read behind the bar's Copy section; both
+  /// optional (see `PlaybackSession.switchSource`).
+  final SourceSelectionRepository? sourceSelection;
+  final Future<Episode?> Function(Episode episode)? refetchEpisode;
 
   /// The app-lifetime playback engine, injected — see the class doc.
   final PlaybackController playback;
@@ -112,6 +120,8 @@ class _VideoZoneState extends State<VideoZone> {
       fullscreen: widget.fullscreen,
       onToggleFullscreen: () => widget.onToggleFullscreen(),
       onEpisodeChanged: (e) => widget.onEpisodeChanged?.call(e),
+      sourceSelection: widget.sourceSelection,
+      refetchEpisode: widget.refetchEpisode,
     )..start();
     _lifecycle = AppLifecycleListener(onInactive: _session.persist);
   }

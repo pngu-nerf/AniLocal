@@ -1,4 +1,5 @@
 import 'package:anilocal/domain/models/episode.dart';
+import 'package:anilocal/domain/models/episode_source.dart';
 import 'package:anilocal/ui/theater/controls/control_bar_config.dart';
 import 'package:anilocal/ui/theater/controls/player_control_bar.dart';
 import 'package:anilocal/ui/theater/controls/player_controls.dart';
@@ -78,6 +79,112 @@ Widget _bar({
 Finder _readout(String label) => find.bySemanticsLabel(label);
 
 void main() {
+  group('the Copy section of the settings menu', () {
+    const a = EpisodeSource(
+      fileRef: '/usb/ep1.mkv',
+      folderPath: '/usb',
+      folderSortOrder: 0,
+    );
+    const b = EpisodeSource(
+      fileRef: '/nas/ep1.mkv',
+      folderPath: '/nas',
+      folderSortOrder: 1,
+    );
+    Future<void> openSettings(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('appears for a multi-copy episode when the host can pin', (
+      tester,
+    ) async {
+      EpisodeSource? chosen;
+      var cleared = 0;
+      final actions = PlayerControlsActions(
+        skipIntro: () {},
+        skipOutro: () {},
+        playNext: () {},
+        cancelPreRoll: () {},
+        toggleFullscreen: () {},
+        selectSource: (s) => s == null ? cleared++ : chosen = s,
+      );
+      final episode = Episode(
+        number: 1,
+        anchoredNumber: 1,
+        seriesId: 7,
+        fileRef: a.fileRef,
+        sources: const [a, b],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 900,
+              height: 300,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: PlayerControlBar(
+                  player: RecordingPlayer(),
+                  state: ValueNotifier(PlayerControlsState(episode: episode)),
+                  actions: actions,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await openSettings(tester);
+      expect(find.text('Copy'), findsOneWidget);
+      await tester.tap(find.text('Copy'));
+      await tester.pumpAndSettle();
+      expect(find.text('usb › ep1.mkv'), findsOneWidget);
+      await tester.tap(find.text('nas › ep1.mkv'));
+      await tester.pumpAndSettle();
+      expect(chosen, b);
+      expect(cleared, 0);
+    });
+
+    testWidgets('is absent for a single-copy episode', (tester) async {
+      final episode = Episode(
+        number: 1,
+        anchoredNumber: 1,
+        seriesId: 7,
+        fileRef: a.fileRef,
+        sources: const [a],
+      );
+      // The host CAN pin — the section is absent because there is only one
+      // copy, not because the action is missing.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 900,
+              height: 300,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: PlayerControlBar(
+                  player: RecordingPlayer(),
+                  state: ValueNotifier(PlayerControlsState(episode: episode)),
+                  actions: PlayerControlsActions(
+                    skipIntro: () {},
+                    skipOutro: () {},
+                    playNext: () {},
+                    cancelPreRoll: () {},
+                    toggleFullscreen: () {},
+                    selectSource: (_) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await openSettings(tester);
+      expect(find.text('Playback speed'), findsOneWidget);
+      expect(find.text('Copy'), findsNothing);
+    });
+  });
+
   group('the EP readout is one control in the shared config', () {
     test('it sits in the centre slot, and both modes get the SAME set', () {
       expect(ControlBarConfig.windowedDefault.controlsIn(ControlSlot.center), [

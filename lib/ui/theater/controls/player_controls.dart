@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../data/paths.dart' show basenameOf;
 import '../../../domain/format_duration.dart';
 import '../../../domain/models/episode.dart';
 import '../../theme/vfd_readout.dart';
@@ -219,17 +220,36 @@ class SubtitlesControl extends StatelessWidget {
 }
 
 /// The "settings" hub — a small menu, not a single-purpose button. Playback
-/// speed is one NESTED subsection (a submenu); more sections slot in beside it
-/// later without changing the bar. The slot/config system treats it like any
-/// other control.
+/// speed is one NESTED subsection (a submenu); **Copy** is another, shown
+/// only for an episode that exists in more than one folder and only when the
+/// host can pin sources — the walkthrough found that switching copies meant
+/// leaving the player for the show page and back. More sections slot in
+/// beside these without changing the bar.
 class SettingsControl extends StatelessWidget {
-  const SettingsControl({super.key, required this.player});
+  const SettingsControl({
+    super.key,
+    required this.player,
+    this.state,
+    this.actions,
+  });
   final Player player;
+  final ValueListenable<PlayerControlsState>? state;
+  final PlayerControlsActions? actions;
 
   static const _rates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
   @override
   Widget build(BuildContext context) {
+    final state = this.state;
+    if (state == null) return _menu(context, null);
+    return ValueListenableBuilder<PlayerControlsState>(
+      valueListenable: state,
+      builder: (context, s, _) => _menu(context, s.episode),
+    );
+  }
+
+  Widget _menu(BuildContext context, Episode? episode) {
+    final selectSource = actions?.selectSource;
     return MenuAnchor(
       builder: (context, controller, child) => VfdIconButton(
         tooltip: 'Settings',
@@ -252,6 +272,37 @@ class SettingsControl extends StatelessWidget {
           ],
           child: const Text('Playback speed'),
         ),
+        if (episode != null &&
+            episode.hasMultipleSources &&
+            selectSource != null)
+          SubmenuButton(
+            leadingIcon: const Icon(Icons.folder_copy_outlined),
+            menuChildren: [
+              MenuItemButton(
+                leadingIcon: episode.pinnedSourceFolder == null
+                    ? const Icon(Icons.check)
+                    : const SizedBox(width: 24),
+                onPressed: () => selectSource(null),
+                child: const Text('Automatic (highest priority)'),
+              ),
+              for (final s in episode.sources)
+                MenuItemButton(
+                  // The pinned copy is checked; unpinned, the copy that is
+                  // playing (the default) is.
+                  leadingIcon:
+                      episode.pinnedSourceFolder == s.folderPath ||
+                          (episode.pinnedSourceFolder == null &&
+                              s.fileRef == episode.fileRef)
+                      ? const Icon(Icons.check)
+                      : const SizedBox(width: 24),
+                  onPressed: () => selectSource(s),
+                  child: Text(
+                    '${basenameOf(s.folderPath)} › ${basenameOf(s.fileRef)}',
+                  ),
+                ),
+            ],
+            child: const Text('Copy'),
+          ),
       ],
     );
   }

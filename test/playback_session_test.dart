@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:anilocal/diagnostics/app_log.dart';
 import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
+import 'package:anilocal/domain/models/episode_source.dart';
 import 'package:anilocal/domain/models/next_result.dart';
 import 'package:anilocal/domain/models/skip_mode.dart';
 import 'package:anilocal/domain/models/skip_range.dart';
+import 'package:anilocal/domain/repositories/source_selection_repository.dart';
 import 'package:anilocal/domain/repositories/watch_order_repository.dart';
 import 'package:anilocal/domain/repositories/watch_state_repository.dart';
 import 'package:anilocal/domain/skip_corroboration.dart';
@@ -112,11 +114,22 @@ Episode _episode(
 
 final _intro = SkipRange(start: Duration.zero, end: _s(seconds: 90));
 
+/// Records pins (null = cleared).
+class _SourceSelection implements SourceSelectionRepository {
+  final pins = <String?>[];
+  @override
+  Future<void> selectSource(Episode e, {required String folderPath}) async =>
+      pins.add(folderPath);
+  @override
+  Future<void> clearSource(Episode e) async => pins.add(null);
+}
+
 class _Rig {
   _Rig({
     required List<Episode> episodes,
     _Settings? settings,
     Duration saveCadence = const Duration(seconds: 1),
+    Future<Episode?> Function(Episode)? refetch,
   }) : settings = settings ?? _Settings(),
        watchOrder = _WatchOrder(episodes) {
     playback = PlaybackController.withPlayer(player, resolver: watchOrder);
@@ -130,8 +143,12 @@ class _Rig {
       onEpisodeChanged: advanced.add,
       remoteFactory: _silentRemote,
       saveCadence: saveCadence,
+      sourceSelection: refetch == null ? null : sources,
+      refetchEpisode: refetch,
     );
   }
+
+  final sources = _SourceSelection();
 
   final player = RecordingPlayer();
   final watchState = _WatchState();
@@ -169,6 +186,77 @@ void main() {
       rig.session.pauseForObscured();
       rig.session.resumeIfObscurePaused();
       expect(rig.player.callCount(#play), 1, reason: 'not resumed');
+    });
+
+    test(
+      'a copy switch pins, re-reads, and re-opens at the SAME position',
+      () async {
+        const a = EpisodeSource(
+          fileRef: '/usb/ep1.mkv',
+          folderPath: '/usb',
+          folderSortOrder: 0,
+        );
+        const b = EpisodeSource(
+          fileRef: '/nas/ep1.mkv',
+          folderPath: '/nas',
+          folderSortOrder: 1,
+        );
+        Episode ep({String? pinned}) => Episode(
+          number: 1,
+          anchoredNumber: 1,
+          seriesId: 7,
+          fileRef: pinned == '/nas' ? b.fileRef : a.fileRef,
+          sources: const [a, b],
+          pinnedSourceFolder: pinned,
+          watched: true, // a re-watch would start from zero — a switch must not
+        );
+        String? pinnedNow;
+        final rig = _Rig(
+          episodes: [ep()],
+          refetch: (_) async => ep(pinned: pinnedNow),
+        );
+        rig.session.start();
+        rig.player.emitDuration(_s(minutes: 24));
+        rig.player.emitPosition(_s(minutes: 9));
+        expect(rig.player.opened, hasLength(1));
+
+        pinnedNow = '/nas';
+        await rig.session.switchSource(b);
+        expect(rig.sources.pins, ['/nas']);
+        expect(rig.player.opened, hasLength(2));
+        expect(rig.player.opened.last.uri, b.fileRef);
+        expect(
+          rig.player.opened.last.start,
+          _s(minutes: 9),
+          reason: 'kept the position, despite the watched flag',
+        );
+        expect(
+          rig.advanced.last.fileRef,
+          b.fileRef,
+          reason: 'the rail follows',
+        );
+        expect(
+          rig.watchState.saved,
+          isNotEmpty,
+          reason: 'position persisted first',
+        );
+
+        // Same pin again: nothing happens.
+        await rig.session.switchSource(b);
+        expect(rig.sources.pins, ['/nas']);
+        expect(rig.player.opened, hasLength(2));
+
+        // Back to automatic, whose default is a different file: re-opened.
+        pinnedNow = null;
+        await rig.session.switchSource(null);
+        expect(rig.sources.pins, ['/nas', null]);
+        expect(rig.player.opened.last.uri, a.fileRef);
+      },
+    );
+
+    test('without a source repository the bar gets no Copy action', () {
+      final rig = _Rig(episodes: [_episode(1)]);
+      expect(rig.session.actions.selectSource, isNull);
     });
 
     test('Cmd-Q commits the position through the quit hook, awaited', () async {

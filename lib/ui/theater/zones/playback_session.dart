@@ -4,10 +4,12 @@ import 'package:flutter/foundation.dart';
 
 import '../../../diagnostics/app_log.dart';
 import '../../../domain/models/episode.dart';
+import '../../../domain/models/episode_source.dart';
 import '../../../domain/models/next_result.dart';
 import '../../../domain/models/skip_mode.dart';
 import '../../../domain/models/skip_range.dart';
 import '../../../domain/repositories/settings_repository.dart';
+import '../../../domain/repositories/source_selection_repository.dart';
 import '../../../domain/repositories/watch_order_repository.dart';
 import '../../../domain/repositories/watch_state_repository.dart';
 import '../../../playback/media_remote.dart';
@@ -62,6 +64,8 @@ class PlaybackSession {
     required Episode episode,
     required VoidCallback onToggleFullscreen,
     this.onEpisodeChanged,
+    this.sourceSelection,
+    this.refetchEpisode,
     bool fullscreen = false,
     MediaRemoteFactory remoteFactory = MediaRemote.new,
     this.saveCadence = const Duration(seconds: 1),
@@ -79,6 +83,9 @@ class PlaybackSession {
       // CALL time, so this bundle can't pin a stale one if the host rebuilds
       // with a different closure.
       toggleFullscreen: () => onToggleFullscreen(),
+      selectSource: sourceSelection == null || refetchEpisode == null
+          ? null
+          : (source) => unawaited(switchSource(source)),
     );
     // System media-remote (AirPods pinch / media keys / Bluetooth). Commands
     // route to the SAME paths the on-screen controls use — never a parallel
@@ -111,6 +118,14 @@ class PlaybackSession {
 
   /// Told when the session advanced on its own, so the host's list can follow.
   final ValueChanged<Episode>? onEpisodeChanged;
+
+  /// Per-episode source pins, for [switchSource]. Optional: a host without
+  /// it gets no Copy section in the bar.
+  final SourceSelectionRepository? sourceSelection;
+
+  /// Re-read an episode from the library after a pin changed, so its
+  /// `fileRef` reflects the new choice. Null when the show has gone.
+  final Future<Episode?> Function(Episode episode)? refetchEpisode;
 
   /// How often steady playback commits its position. Short so progress feels
   /// live; the write is skipped when the position has not moved.
@@ -226,9 +241,43 @@ class PlaybackSession {
 
   // ---- opening --------------------------------------------------------
 
-  Future<void> _open(Episode episode) async {
+  /// Play the same episode from another copy — [source] — or, with null,
+  /// from the folder-priority default again. The pin is written, the
+  /// episode re-read (its `fileRef` now reflects the choice), and playback
+  /// re-opened at the CURRENT position: a copy switch is not a re-watch, so
+  /// the watched-episode rule that would start from zero does not apply.
+  Future<void> switchSource(EpisodeSource? source) => _guard(() async {
+    final selection = sourceSelection;
+    final refetch = refetchEpisode;
+    if (selection == null || refetch == null || _disposed) return;
+    final current = _shown;
+    final alreadyPinned =
+        source != null && current.pinnedSourceFolder == source.folderPath;
+    final alreadyAutomatic =
+        source == null && current.pinnedSourceFolder == null;
+    if (alreadyPinned || alreadyAutomatic) return;
+    final at = _position;
+    await persistNow();
+    if (source == null) {
+      await selection.clearSource(current);
+    } else {
+      await selection.selectSource(current, folderPath: source.folderPath);
+    }
+    final fresh = await refetch(current) ?? current;
+    if (_disposed) return;
+    onEpisodeChanged?.call(fresh);
+    if (fresh.fileRef == current.fileRef) {
+      // The default was this file all along: nothing to re-open.
+      _shown = fresh;
+      _publish();
+      return;
+    }
+    await _open(fresh, startAt: at);
+  }(), 'switchSource');
+
+  Future<void> _open(Episode episode, {Duration? startAt}) async {
     final gen = _resetForEpisode(episode);
-    final startAt = PlaybackController.resumeStartFor(episode);
+    startAt ??= PlaybackController.resumeStartFor(episode);
     _awaitingStart = startAt > Duration.zero;
     _lastPos = startAt;
     _pushNowPlaying(); // new title to the OS now-playing center

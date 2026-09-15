@@ -50,7 +50,11 @@ class PlayerControlBar extends StatelessWidget {
     PlayerControl.episode => EpisodeReadout(state: state, compact: compact),
     PlayerControl.volume => VolumeControl(player: player, compact: compact),
     PlayerControl.subtitles => SubtitlesControl(player: player),
-    PlayerControl.settings => SettingsControl(player: player),
+    PlayerControl.settings => SettingsControl(
+      player: player,
+      state: state,
+      actions: actions,
+    ),
     PlayerControl.fullscreen => FullscreenButton(
       state: state,
       onPressed: actions.toggleFullscreen,
