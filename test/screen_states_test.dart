@@ -4,6 +4,7 @@ import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/source_preference.dart';
+import 'package:anilocal/domain/models/sync_control.dart';
 import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
 import 'package:anilocal/playback/playback_controller.dart';
@@ -178,6 +179,46 @@ void main() {
         tester.widget<HeaderReadout>(find.byType(HeaderReadout)).title,
         'Dragon Ball Z',
       );
+    });
+
+    testWidgets('the show page follows the scan: a reload per progress burst '
+        'and one when it ends', (tester) async {
+      _wide(tester);
+      final repo = FakeLibraryRepository(
+        series: [_show],
+        episodes: {7: _plainEpisodes()},
+      );
+      final services = _services(repo);
+      final h = ShellHarness();
+      await tester.pumpWidget(
+        h.app(
+          home: SeriesDetailScreen(
+            series: _show,
+            services: services,
+            header: const HeaderHooks(onScan: _noScan, onUnmatched: _noop),
+          ),
+        ),
+      );
+      await _settle(tester);
+      int reads() => repo.calls.where((c) => c == 'episodesFor').length;
+      final before = reads();
+
+      // A scan starts and reports per title: three reports in one burst.
+      services.scan.begin();
+      for (var i = 1; i <= 3; i++) {
+        services.scan.report(
+          SyncProgress(done: i, total: 10, phase: 'identifying'),
+        );
+        await tester.pump();
+      }
+      expect(reads(), before, reason: 'debounced — not one read per report');
+      await tester.pump(kScanReloadDebounce + const Duration(milliseconds: 50));
+      await _settle(tester);
+      expect(reads(), before + 1, reason: 'one reload for the burst');
+
+      services.scan.end();
+      await _settle(tester);
+      expect(reads(), before + 2, reason: 'and one when the scan ends');
     });
 
     testWidgets('a missing drive and a denied folder get DIFFERENT banners, '

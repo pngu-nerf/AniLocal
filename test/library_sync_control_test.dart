@@ -163,14 +163,26 @@ void main() {
       },
     );
 
-    test('progress is reported after each committed batch', () async {
-      final progress = <String>[];
-      await build(
-        _ScriptedProvider(),
-        batchSize: 4,
-      ).sync([dir.path], onProgress: (p) => progress.add('$p'));
-      expect(progress, ['identifying 4/6', 'identifying 6/6']);
-    });
+    test(
+      'progress is reported per title; the library is told per batch',
+      () async {
+        final progress = <String>[];
+        var discovered = 0;
+        await build(_ScriptedProvider(), batchSize: 4).sync(
+          [dir.path],
+          onProgress: (p) => progress.add('$p'),
+          onDiscovered: () => discovered++,
+        );
+        expect(progress, [
+          for (var i = 1; i <= 6; i++) 'identifying $i/6',
+        ], reason: 'a counter that moves per title, not per 25');
+        expect(
+          discovered,
+          3,
+          reason: 'once after the placeholders, once per committed batch (2)',
+        );
+      },
+    );
 
     test('a second run while one is in flight is refused loudly', () async {
       final gate = Completer<void>();

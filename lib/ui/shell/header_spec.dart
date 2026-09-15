@@ -17,12 +17,19 @@ import '../../domain/models/sync_control.dart';
 /// navigator's real `canPop()`, never from a spec, so a stale or missing spec
 /// can't strand the user without a way back. See CLAUDE.md, "Fail toward
 /// user-in-control".
-/// The readout line while a scan runs: the page's own title with the scan's
-/// progress beside it, so the VFD screen says what is happening rather than
-/// leaving an indeterminate spinner as the only cue. Same on every page.
-String scanningTitle(String title, SyncProgress? progress) => progress == null
-    ? '$title · scanning'
-    : '$title · ${progress.phase} ${progress.done}/${progress.total}';
+/// The readout line while a scan runs — the scan's STATUS, short enough to
+/// fit the VFD screen without scrolling: `Identifying 12/340`, `Metadata…`,
+/// `Skips 120/600`. It used to be the page title with the status appended;
+/// that overflowed, and the marquee restarts on every change, so the counter
+/// never scrolled into view. Same on every page.
+String scanningTitle(SyncProgress? progress) {
+  if (progress == null) return 'Scanning…';
+  final phase = progress.phase;
+  final label = phase[0].toUpperCase() + phase.substring(1);
+  // The metadata pass reports once, as a whole; a count would read 12/12.
+  if (phase == 'metadata' || progress.total <= 0) return '$label…';
+  return '$label ${progress.done}/${progress.total}';
+}
 
 class HeaderSpec extends Equatable {
   const HeaderSpec({this.title, this.actions = const NoActions()});

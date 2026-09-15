@@ -136,8 +136,13 @@ class _SeriesCardState extends State<SeriesCard> {
       );
     }
     if (series.pending) {
-      return const Text(
-        'Identifying…',
+      // "Identifying…" only while a scan is actually running. A placeholder
+      // left by Stop, an outage or a cancelled run used to promise progress
+      // that nothing was making.
+      return Text(
+        widget.services.scanning.value
+            ? 'Identifying…'
+            : 'Not identified yet — scan to retry',
         maxLines: 1,
         overflow: one,
         style: style,
@@ -279,7 +284,9 @@ class _SeriesCardState extends State<SeriesCard> {
                           pictureMode: series.pictureMode,
                           // Pending reads as "identifying", not a broken image.
                           placeholderIcon: series.pending
-                              ? Icons.hourglass_empty
+                              ? (widget.services.scanning.value
+                                    ? Icons.hourglass_empty
+                                    : Icons.help_outline)
                               : Icons.image_not_supported,
                         ),
                         if (unavailable)

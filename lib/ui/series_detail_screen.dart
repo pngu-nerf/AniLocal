@@ -17,6 +17,7 @@ import 'library/library_search_bar.dart';
 import 'library_services.dart';
 import 'metadata_failure_message.dart';
 import 'routes.dart';
+import 'scan_control.dart';
 import 'series_detail/missing_episode_tiles.dart';
 import 'settings/settings_window.dart';
 import 'shell/header_scope.dart';
@@ -214,13 +215,32 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     _services.unmatchedCount.removeListener(_onScanningChanged);
     _services.missingFolderPaths.removeListener(_onFolderHealthChanged);
     _services.accessIssues.removeListener(_onFolderHealthChanged);
+    _scanReload?.cancel();
     _scroll.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onScanningChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    _scheduleScanReload();
+  }
+
+  /// The page follows the scan: a reload shortly after each progress report
+  /// (debounced — reports arrive per title) and one when the scan ends. It
+  /// used to repaint only its header, so a show identified while its page
+  /// was open kept the placeholder until the user navigated away and back.
+  Timer? _scanReload;
+  void _scheduleScanReload() {
+    _scanReload?.cancel();
+    if (_services.scanning.value) {
+      _scanReload = Timer(kScanReloadDebounce, () {
+        if (mounted) unawaited(_reload());
+      });
+    } else {
+      unawaited(_reload());
+    }
   }
 
   /// Monotonic run counter: `_reload` is called from ten places (return from
@@ -673,7 +693,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     title: _series == null
         ? 'Not in library'
         : _services.scanning.value
-        ? scanningTitle(_series!.displayTitle, _services.scan.progress.value)
+        ? scanningTitle(_services.scan.progress.value)
         : _series!.displayTitle,
     actions: AppActions(
       scanning: _services.scanning.value,

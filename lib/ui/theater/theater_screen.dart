@@ -8,6 +8,7 @@ import '../../domain/models/episode.dart';
 import '../../domain/models/series.dart';
 import '../library_services.dart';
 import '../routes.dart';
+import '../scan_control.dart';
 import '../shell/header_scope.dart';
 import '../shell/header_spec.dart';
 import '../widgets/guarded.dart';
@@ -118,6 +119,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     widget.services.scanning.removeListener(_onScanningChanged);
     widget.services.scan.progress.removeListener(_onScanningChanged);
     widget.services.unmatchedCount.removeListener(_onScanningChanged);
+    _scanReload?.cancel();
     WindowChrome.fullscreen.removeListener(_onWindowFullscreenChanged);
     unawaited(WindowChrome.setFullscreenAllowed(false));
     super.dispose();
@@ -132,8 +134,22 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   }
 
   void _onScanningChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    // Follow the scan like the show page does (see
+    // `_SeriesDetailScreenState._scheduleScanReload`): the rail and the info
+    // zone pick up episodes identified while the player is open.
+    _scanReload?.cancel();
+    if (widget.services.scanning.value) {
+      _scanReload = Timer(kScanReloadDebounce, () {
+        if (mounted) unawaited(_loadEpisodes());
+      });
+    } else {
+      unawaited(_loadEpisodes());
+    }
   }
+
+  Timer? _scanReload;
 
   /// Already clamped by the repository (every setting is, on load).
   Future<void> _loadRailFraction() => guarded('rail fraction', () async {
@@ -141,12 +157,17 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     if (mounted) setState(() => _railFraction = stored);
   });
 
+  /// Overlapping loads (a scan report landing while a return-from-settings
+  /// load is in flight): the older one finishing last must not win.
+  int _loadGeneration = 0;
+
   Future<void> _loadEpisodes() => guarded('theater episodes', () async {
+    final generation = ++_loadGeneration;
     final (eps, series) = await (
       widget.services.repository.episodesFor(widget.series.seriesId),
       widget.services.repository.seriesById(widget.series.seriesId),
     ).wait;
-    if (!mounted) return;
+    if (!mounted || generation != _loadGeneration) return;
     setState(() {
       _episodes = eps;
       // The show may have left the library mid-session; keep the last known
@@ -219,10 +240,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   @override
   HeaderSpec buildHeaderSpec() => HeaderSpec(
     title: widget.services.scanning.value
-        ? scanningTitle(
-            _series.displayTitle,
-            widget.services.scan.progress.value,
-          )
+        ? scanningTitle(widget.services.scan.progress.value)
         : _series.displayTitle,
     actions: AppActions(
       scanning: widget.services.scanning.value,

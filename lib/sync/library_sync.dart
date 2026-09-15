@@ -43,7 +43,7 @@ typedef EpisodeKey = (int seriesId, int episode);
 ///   series reuses it (no metadata lookup).
 /// - Immediate population: a newly-seen, titled file is written as a PENDING
 ///   placeholder up front (phase 1, no network) and surfaced via `sync`'s
-///   `onDiscovered` BEFORE identification runs — so the library shows it
+///   `onDiscovered` BEFORE identification runs, and again after every committed batch — so the library shows it
 ///   (named, blank art) instantly, even offline. Identification (phase 2) then
 ///   upgrades the row in place: a match sets its seriesId; a genuine no-match
 ///   flips it to confirmed-unmatched; a transient lookup error LEAVES it
@@ -246,6 +246,13 @@ class LibrarySync {
           start + batchSize > titles.length ? titles.length : start + batchSize,
         );
         final resolved = await _identify(
+          onTitle: (i) => onProgress?.call(
+            SyncProgress(
+              done: run.titlesDone + i,
+              total: titles.length,
+              phase: 'identifying',
+            ),
+          ),
           batch,
           knownTitleToId,
           cachedSeries,
@@ -311,13 +318,9 @@ class LibrarySync {
           prune: false,
         );
         run.titlesDone += batch.length;
-        onProgress?.call(
-          SyncProgress(
-            done: run.titlesDone,
-            total: titles.length,
-            phase: 'identifying',
-          ),
-        );
+        // The batch is on disk: the library repaints it now, not at the end
+        // of the run (600 shows used to arrive in one sweep minutes later).
+        onDiscovered?.call();
       }
     } on SyncCancelled {
       run.cancelled = true;
@@ -579,11 +582,17 @@ class LibrarySync {
     Map<int, CachedSeriesRow> cachedSeries,
     List<MetadataProvider> providers,
     _ScanRun run,
-    SyncCancellation cancellation,
-  ) async {
+    SyncCancellation cancellation, {
+    void Function(int doneInBatch)? onTitle,
+  }) async {
     final resolved = <String, _Resolved>{};
+    var i = 0;
     for (final MapEntry(key: norm, value: sample) in titles) {
       cancellation.throwIfCancelled();
+      // Reported per TITLE, not per committed batch: a batch is 25 network
+      // round trips, and a counter that moves every half minute reads as
+      // stuck. The commit still happens per batch (see the caller).
+      onTitle?.call(++i);
       final knownId = knownTitleToId[norm];
       if (knownId != null) {
         final row = cachedSeries[knownId];

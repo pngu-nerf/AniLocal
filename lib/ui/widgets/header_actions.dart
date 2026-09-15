@@ -76,9 +76,9 @@ class HeaderActionsBar extends StatelessWidget {
             icon: Icons.stop_circle_outlined,
             label: 'Stop',
             tooltip: progress == null
-                ? 'Stop scanning (keeps what has been identified so far)'
+                ? 'Stop scanning (keeps every batch already saved)'
                 : 'Stop scanning — ${progress!.phase} ${progress!.done} of '
-                      '${progress!.total} (keeps what has been identified)',
+                      '${progress!.total} (keeps every batch already saved)',
             showLabel: showLabel,
             onPressed: onStopScan,
           )

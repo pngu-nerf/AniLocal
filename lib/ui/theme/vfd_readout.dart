@@ -49,7 +49,7 @@ class VfdReadout extends StatelessWidget {
   /// a parent (e.g. the header marquee) measure and lay out around a readout.
   /// Each glyph is 5 dots wide with a 1-dot gap between glyphs.
   static double widthFor(String text, {double dotPitch = 3}) {
-    final n = text.length;
+    final n = vfdNormalize(text).length;
     if (n == 0) return 0;
     return (n * 5 + (n - 1)) * dotPitch;
   }
@@ -75,7 +75,7 @@ class VfdReadout extends StatelessWidget {
           height: s.height,
           child: CustomPaint(
             painter: _DotMatrixPainter(
-              text: text.toUpperCase(),
+              text: vfdNormalize(text).toUpperCase(),
               color: color,
               dotPitch: dotPitch,
               glow: glow,
@@ -155,8 +155,10 @@ class _DotMatrixPainter extends CustomPainter {
 const List<int> _blank = [0, 0, 0, 0, 0, 0, 0];
 
 /// 5×7 dot-matrix glyphs. Each entry is 7 rows top→bottom; each row is a 5-bit
-/// mask where bit 4 (0x10) is the leftmost column. Covers exactly what the
-/// readouts need: digits, A–Z, and `: . - + /` and space.
+/// mask where bit 4 (0x10) is the leftmost column. Digits, A–Z, space and the
+/// punctuation titles and status lines actually carry. A character not here
+/// paints as a blank of full width, so `vfdHasGlyphs` is tested against every
+/// string the readouts are known to show.
 const Map<String, List<int>> _font = {
   ' ': _blank,
   '0': [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
@@ -205,4 +207,45 @@ const Map<String, List<int>> _font = {
   // two of its four frames as blanks and read as a stutter, not a rotation.
   '|': [0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
   '\\': [0x10, 0x08, 0x08, 0x04, 0x02, 0x02, 0x01],
+  // Punctuation. The apostrophe was the first one a real title exposed
+  // ("Frieren: Beyond Journey's End" painted a hole where the ' should be);
+  // the middle dot is the separator the status lines use.
+  "'": [0x06, 0x04, 0x08, 0x00, 0x00, 0x00, 0x00],
+  '"': [0x0A, 0x0A, 0x0A, 0x00, 0x00, 0x00, 0x00],
+  ',': [0x00, 0x00, 0x00, 0x00, 0x0C, 0x04, 0x08],
+  ';': [0x00, 0x04, 0x04, 0x00, 0x0C, 0x04, 0x08],
+  '!': [0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04],
+  '?': [0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04],
+  '&': [0x0C, 0x12, 0x14, 0x08, 0x15, 0x12, 0x0D],
+  '(': [0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02],
+  ')': [0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08],
+  '_': [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F],
+  '=': [0x00, 0x00, 0x1F, 0x00, 0x1F, 0x00, 0x00],
+  '*': [0x00, 0x04, 0x15, 0x0E, 0x15, 0x04, 0x00],
+  '#': [0x0A, 0x0A, 0x1F, 0x0A, 0x1F, 0x0A, 0x0A],
+  '%': [0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03],
+  '@': [0x0E, 0x11, 0x01, 0x0D, 0x15, 0x15, 0x0E],
+  '~': [0x00, 0x00, 0x08, 0x15, 0x02, 0x00, 0x00],
+  '<': [0x02, 0x04, 0x08, 0x10, 0x08, 0x04, 0x02],
+  '>': [0x08, 0x04, 0x02, 0x01, 0x02, 0x04, 0x08],
+  '·': [0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00],
 };
+
+/// Fold the typographic variants a title or a status line may carry onto the
+/// glyphs the font has: curly quotes, dashes, the ellipsis. Applied to both
+/// the measurement and the paint, so they agree.
+String vfdNormalize(String text) => text
+    .replaceAll('’', "'")
+    .replaceAll('‘', "'")
+    .replaceAll('“', '"')
+    .replaceAll('”', '"')
+    .replaceAll('–', '-')
+    .replaceAll('—', '-')
+    .replaceAll('…', '...');
+
+/// Whether every character of [text] paints as a glyph (after
+/// [vfdNormalize] and upper-casing), rather than as a blank.
+@visibleForTesting
+bool vfdHasGlyphs(String text) => vfdNormalize(
+  text,
+).toUpperCase().split('').every((ch) => _font.containsKey(ch));

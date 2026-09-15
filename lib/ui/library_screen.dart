@@ -659,7 +659,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   @override
   HeaderSpec buildHeaderSpec() => HeaderSpec(
     title: _services.scanning.value
-        ? scanningTitle('Library', _services.scan.progress.value)
+        ? scanningTitle(_services.scan.progress.value)
         : 'Library',
     actions: AppActions(
       scanning: _services.scanning.value,

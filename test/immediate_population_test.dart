@@ -183,7 +183,10 @@ void main() {
         Future<List<CachedFileRow>>? rowsAtDiscovery;
         await ordered.sync(
           [dir.path],
+          // Fires after the placeholder write AND after each committed
+          // batch; the FIRST is the one this test is about.
           onDiscovered: () {
+            if (discoveredAt != null) return;
             discoveredAt = step++;
             rowsAtDiscovery = db.allFileRows();
           },

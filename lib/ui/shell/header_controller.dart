@@ -90,23 +90,38 @@ class HeaderController extends ChangeNotifier {
   /// publishes in one frame produces a single rebuild.
   bool _notifyScheduled = false;
 
+  /// NEVER notifies synchronously.
+  ///
+  /// The scheduler phase cannot tell "inside a build" from "idle": the app's
+  /// FIRST tree is built from `runApp`'s timer callback, in
+  /// [SchedulerPhase.idle], while the BuildOwner is building. A synchronous
+  /// notify there marked the header dirty during a descendant's build — the
+  /// framework throws, `ChangeNotifier` reports and swallows the throw, and no
+  /// retry was queued. The header then showed no title and no actions until
+  /// a window resize happened to rebuild it. So: mid-frame → the next
+  /// post-frame callback; otherwise → a microtask, which runs after the
+  /// current build scope returns and before the next frame.
   void _notifySafely() {
+    if (_notifyScheduled) return;
+    _notifyScheduled = true;
     final phase = SchedulerBinding.instance.schedulerPhase;
     final midFrame =
         phase == SchedulerPhase.persistentCallbacks ||
         phase == SchedulerPhase.midFrameMicrotasks ||
         phase == SchedulerPhase.transientCallbacks;
-    if (!midFrame) {
-      notifyListeners();
-      return;
-    }
-    if (_notifyScheduled) return;
-    _notifyScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void fire() {
       _notifyScheduled = false;
-      notifyListeners();
-    });
+      if (!_disposed) notifyListeners();
+    }
+
+    if (midFrame) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => fire());
+    } else {
+      scheduleMicrotask(fire);
+    }
   }
+
+  bool _disposed = false;
 
   /// Restart the grace clock whenever what we'd display changes.
   void _onContentChanged() {
@@ -127,6 +142,7 @@ class HeaderController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _graceTimer?.cancel();
     super.dispose();
   }

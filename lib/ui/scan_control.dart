@@ -11,6 +11,10 @@ import '../domain/models/sync_control.dart';
 /// were built and tested in the pipeline but nothing in the UI ever
 /// constructed one, so a 500-title scan against a dead network — hours of
 /// timeouts — could not be stopped, and its only cue was a spinner.
+/// How long a page waits after a progress report before re-reading its data
+/// while a scan runs — reports arrive per title, reloads are per-show reads.
+const Duration kScanReloadDebounce = Duration(milliseconds: 500);
+
 class ScanControl {
   ScanControl({ValueNotifier<bool>? scanning})
     : scanning = scanning ?? ValueNotifier<bool>(false);

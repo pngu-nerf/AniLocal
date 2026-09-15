@@ -61,9 +61,11 @@ class SyncAlreadyRunning implements Exception, UserFacingFailure {
 
 /// How far a scan or refresh has got, for a progress affordance.
 ///
-/// [done] and [total] count the units of the current [phase] — titles being
-/// identified, or series being refreshed — and are only ever reported after a
-/// batch has been COMMITTED, so what the user sees as done is on disk.
+/// [done] and [total] count the units of the current [phase] — titles
+/// identified so far, episodes asked for skips, series refreshed. Reported
+/// per unit so the counter moves; writes land per BATCH, so on Stop the
+/// unfinished batch's titles are re-identified next scan (nothing is lost:
+/// their placeholders are already on disk).
 class SyncProgress {
   const SyncProgress({
     required this.done,

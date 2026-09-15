@@ -136,7 +136,7 @@ void main() {
       expect(stop, findsOneWidget);
       expect(
         find.byTooltip(
-          'Stop scanning — identifying 120 of 600 (keeps what has been identified)',
+          'Stop scanning — identifying 120 of 600 (keeps every batch already saved)',
         ),
         findsOneWidget,
       );
@@ -184,7 +184,7 @@ void main() {
       // The readout is dot-matrix (painted, not Text), so read its title.
       expect(
         tester.widget<HeaderReadout>(find.byType(HeaderReadout)).title,
-        contains('identifying 1/4'),
+        'Identifying 1/4',
         reason: 'the readout carries the progress',
       );
 

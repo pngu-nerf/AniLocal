@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:anilocal/domain/models/folder_refused.dart';
 import 'package:anilocal/domain/models/library_snapshot.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
+import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/sync_summary.dart';
+import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/playback/playback_controller.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:anilocal/ui/library_screen.dart';
@@ -285,6 +287,58 @@ void main() {
         findsNothing,
         reason: 'one reset per broken cache',
       );
+    });
+
+    testWidgets('a pending card says "Identifying…" only while a scan runs', (
+      tester,
+    ) async {
+      _wide(tester);
+      const pending = Series(
+        seriesId: -42,
+        titles: Titles(romaji: 'Mystery Show'),
+        pending: true,
+      );
+      final scanStarted = Completer<void>();
+      final scanDone = Completer<SyncSummary>();
+      final repo = FakeLibraryRepository(series: [pending], folders: ['/a']);
+      await tester.pumpWidget(
+        AniLocalApp(
+          repository: repo,
+          fixMatch: const FakeFixMatch(),
+          watchState: repo,
+          sourceSelection: repo,
+          watchOrder: repo,
+          playback: PlaybackController(resolver: repo),
+          missing: repo,
+          showPreferences: repo,
+          settings: const FakeSettings(),
+          onScan: (_, {onProgress, cancellation}) {
+            scanStarted.complete();
+            return scanDone.future;
+          },
+          onRefreshMetadata: () async =>
+              const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+          onAddFolder: () async => (added: false, deniedLabel: null),
+          accessIssues: ValueNotifier<List<String>>(const []),
+          missingFolders: ValueNotifier<List<String>>(const []),
+          missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+          categoryLabelOf: (_) => null,
+          onOpenAccessSettings: () async => true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Not identified yet — scan to retry'), findsOneWidget);
+      expect(find.text('Identifying…'), findsNothing);
+
+      await tester.tap(find.byTooltip('Scan library folders'));
+      await tester.pump();
+      await scanStarted.future;
+      await tester.pump();
+      expect(find.text('Identifying…'), findsOneWidget);
+
+      scanDone.complete(_emptySummary);
+      await tester.pumpAndSettle();
+      expect(find.text('Not identified yet — scan to retry'), findsOneWidget);
     });
 
     testWidgets('with no folders the header\'s Scan is disabled', (
