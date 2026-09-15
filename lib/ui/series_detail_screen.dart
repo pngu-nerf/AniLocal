@@ -177,12 +177,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   void initState() {
     super.initState();
     _services.scanning.addListener(_onScanningChanged);
+    _services.scan.progress.addListener(_onScanningChanged);
     unawaited(_reload());
   }
 
   @override
   void dispose() {
     _services.scanning.removeListener(_onScanningChanged);
+    _services.scan.progress.removeListener(_onScanningChanged);
     _scroll.dispose();
     _searchController.dispose();
     super.dispose();
@@ -574,13 +576,20 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
 
   @override
   HeaderSpec buildHeaderSpec() => HeaderSpec(
-    title: widget.series.displayTitle,
+    title: _services.scanning.value
+        ? scanningTitle(
+            widget.series.displayTitle,
+            _services.scan.progress.value,
+          )
+        : widget.series.displayTitle,
     actions: AppActions(
       scanning: _services.scanning.value,
       unmatchedCount: _unmatchedCount,
       onScan: _scan,
       onUnmatched: widget.header.onUnmatched,
       onSettings: _openSettings,
+      progress: _services.scan.progress.value,
+      onStopScan: _services.scanning.value ? _services.scan.stop : null,
     ),
   );
 

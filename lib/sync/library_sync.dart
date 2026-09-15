@@ -420,26 +420,25 @@ class LibrarySync {
   }
 
   /// Every video file under each mounted folder, keyed by identity, with its
-  /// stat. A folder that fails to list is added to [unreadable] and its cached
-  /// files are preserved (access lapsed, not deleted).
-  Future<Map<FileKey, FileStat>> _scanFolders(
+  /// fingerprint. The walk and the stats run off the UI isolate (see
+  /// [FolderScanner.statVideoFiles]). A folder that fails to list is added to
+  /// [unreadable] and its cached files are preserved (access lapsed, not
+  /// deleted).
+  Future<Map<FileKey, FileSig>> _scanFolders(
     Map<String, String> mountByFolder,
     Set<String> unreadable,
   ) async {
-    final stats = <FileKey, FileStat>{};
+    final stats = <FileKey, FileSig>{};
     for (final MapEntry(key: folderPath, value: current)
         in mountByFolder.entries) {
       try {
-        for (final abs in await scanner.findVideoFiles(current)) {
-          final stat = await File(abs).stat();
-          // Listed a moment ago, gone now — a download finishing, a Finder
-          // move. `stat()` does not throw for that; it reports notFound with
-          // size -1, which would otherwise be cached as a real fingerprint.
-          if (stat.type == FileSystemEntityType.notFound) continue;
+        final found = await scanner.statVideoFiles(current);
+        for (final MapEntry(key: abs, value: sig) in found.entries) {
           final key = rebaseToFolderRelative(abs, [current]);
-          stats[(folderPath, key.relativePath)] = stat;
+          stats[(folderPath, key.relativePath)] = sig;
         }
-      } on FileSystemException {
+      } on FileSystemException catch (e) {
+        AppLog.warn('Scan: could not read $folderPath', error: e);
         unreadable.add(folderPath);
       }
     }
@@ -468,7 +467,7 @@ class LibrarySync {
   /// cached files not found this scan, EXCEPT those under a folder we couldn't
   /// read/resolve (preserve those — access lapsed or volume unplugged).
   _Deltas _classifyDeltas(
-    Map<FileKey, FileStat> stats,
+    Map<FileKey, FileSig> stats,
     Map<FileKey, CachedFileRow> cachedFiles,
     Set<String> unreadableFolders,
   ) {
@@ -477,9 +476,7 @@ class LibrarySync {
     for (final MapEntry(key: key, value: s) in stats.entries) {
       final c = cachedFiles[key];
       final bytesUnchanged =
-          c != null &&
-          c.fileSize == s.size &&
-          c.modifiedAtMs == s.modified.millisecondsSinceEpoch;
+          c != null && c.fileSize == s.size && c.modifiedAtMs == s.modifiedMs;
       final isPending =
           c != null && c.seriesId == null && c.pendingIdentification;
       if (bytesUnchanged && !isPending) {
@@ -510,7 +507,7 @@ class LibrarySync {
     List<FileKey> toIdentify,
     Map<FileKey, CachedFileRow> cachedFiles,
     Map<FileKey, ParsedFilename> parsed,
-    Map<FileKey, FileStat> stats,
+    Map<FileKey, FileSig> stats,
   ) async {
     final rows = <CachedFileRow>[];
     for (final key in toIdentify) {
@@ -522,7 +519,7 @@ class LibrarySync {
           folderPath: key.$1,
           relativePath: key.$2,
           fileSize: s.size,
-          modifiedAtMs: s.modified.millisecondsSinceEpoch,
+          modifiedAtMs: s.modifiedMs,
           seriesId: null,
           episodeNumber: pf.episodeNumber,
           parsedTitle: pf.title,
@@ -600,23 +597,28 @@ class LibrarySync {
     Iterable<_Resolved> resolved,
     Map<int, CachedSeriesRow> cachedSeries,
   ) async {
-    final rows = <CachedSeriesRow>[];
-    for (final r in resolved) {
-      final fresh = r.freshSeries;
-      final seriesId = r.seriesId;
-      if (fresh == null || seriesId == null) continue;
+    final wanted = [
+      for (final r in resolved)
+        if (r.freshSeries != null && r.seriesId != null) r,
+    ];
+    // Covers download [kArtConcurrency] at a time. One at a time, 600 new
+    // shows were two minutes of serial round trips holding up the batch
+    // commit; unbounded would hammer one CDN from one address.
+    final artPaths = await mapLimited(wanted, kArtConcurrency, (r) {
       // The previous cover travels along on EVERY path (this one used not to),
       // so a show re-identified by a different source replaces its picture.
-      final prior = cachedSeries[seriesId];
-      final artPath = await art.ensureCover(
-        seriesId,
-        fresh.coverImageRef,
+      final prior = cachedSeries[r.seriesId!];
+      return art.ensureCover(
+        r.seriesId!,
+        r.freshSeries!.coverImageRef,
         cachedUrl: prior?.coverImageUrl,
         cachedPath: prior?.coverImagePath,
       );
-      rows.add(_seriesRow(fresh, artPath, seriesId));
-    }
-    return rows;
+    });
+    return [
+      for (var i = 0; i < wanted.length; i++)
+        _seriesRow(wanted[i].freshSeries!, artPaths[i], wanted[i].seriesId!),
+    ];
   }
 
   /// Final (identified) file rows for [files]. A file whose title errored this
@@ -628,7 +630,7 @@ class LibrarySync {
   List<CachedFileRow> _fileRowsFor(
     List<FileKey> files,
     Map<FileKey, ParsedFilename> parsed,
-    Map<FileKey, FileStat> stats,
+    Map<FileKey, FileSig> stats,
     Map<String, _Resolved> resolved,
     _ScanRun run,
   ) {
@@ -648,7 +650,7 @@ class LibrarySync {
           folderPath: key.$1,
           relativePath: key.$2,
           fileSize: s.size,
-          modifiedAtMs: s.modified.millisecondsSinceEpoch,
+          modifiedAtMs: s.modifiedMs,
           seriesId: seriesId,
           episodeNumber: pf.episodeNumber,
           parsedTitle: pf.title,
@@ -1162,4 +1164,29 @@ class _Resolved {
 
   /// Non-null only when freshly fetched from a source (needs caching + art).
   final Series? freshSeries;
+}
+
+/// How many cover downloads run at once during a scan.
+const int kArtConcurrency = 4;
+
+/// [items] mapped through [f] with at most [limit] in flight, results in
+/// input order. A small bounded pool, not `Future.wait` over everything.
+Future<List<T>> mapLimited<S, T>(
+  List<S> items,
+  int limit,
+  Future<T> Function(S item) f,
+) async {
+  final results = List<T?>.filled(items.length, null);
+  var next = 0;
+  Future<void> worker() async {
+    while (next < items.length) {
+      final i = next++;
+      results[i] = await f(items[i]);
+    }
+  }
+
+  await Future.wait([
+    for (var w = 0; w < limit && w < items.length; w++) worker(),
+  ]);
+  return [for (final r in results) r as T];
 }

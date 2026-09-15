@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../diagnostics/app_log.dart';
@@ -25,7 +26,12 @@ class SettingsActions {
     required this.metadataSources,
     required this.skipSources,
     required this.onRefreshMetadata,
+    required this.scanning,
   });
+
+  /// True while a scan runs; Refresh metadata is disabled then (the fill path
+  /// would refuse it anyway — this makes the row say so instead of failing).
+  final ValueListenable<bool> scanning;
 
   /// Everything the Sources tab needs. One object rather than three more
   /// threaded callbacks — see [SourcesActions].
@@ -54,6 +60,7 @@ class SettingsActions {
     onRefreshed: onRefreshed,
     loadUnmatchedCount: loadUnmatchedCount,
     onOpenUnmatched: onOpenUnmatched,
+    scanning: scanning,
   );
 }
 
@@ -70,7 +77,11 @@ class SettingsDialogActions {
     required this.onRefreshed,
     required this.loadUnmatchedCount,
     required this.onOpenUnmatched,
+    required this.scanning,
   });
+
+  /// See [SettingsActions.scanning].
+  final ValueListenable<bool> scanning;
 
   /// Everything the Sources tab needs. One object rather than three more
   /// threaded callbacks — see [SourcesActions].

@@ -17,6 +17,7 @@ SettingsDialogActions _actions(RefreshSummary result) =>
       metadataSources: const [],
       skipSources: const [],
       onRefreshMetadata: () async => result,
+      scanning: ValueNotifier<bool>(false),
     ).forScreen(
       onRefreshed: () {},
       loadUnmatchedCount: () async => 0,

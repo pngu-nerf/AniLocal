@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../domain/models/sync_control.dart';
+
 /// What a page wants the ONE hoisted header to show while it is the top route.
 ///
 /// **Data, never widgets.** The header is published from every page rebuild
@@ -15,6 +17,13 @@ import 'package:flutter/widgets.dart';
 /// navigator's real `canPop()`, never from a spec, so a stale or missing spec
 /// can't strand the user without a way back. See CLAUDE.md, "Fail toward
 /// user-in-control".
+/// The readout line while a scan runs: the page's own title with the scan's
+/// progress beside it, so the VFD screen says what is happening rather than
+/// leaving an indeterminate spinner as the only cue. Same on every page.
+String scanningTitle(String title, SyncProgress? progress) => progress == null
+    ? '$title · scanning'
+    : '$title · ${progress.phase} ${progress.done}/${progress.total}';
+
 class HeaderSpec extends Equatable {
   const HeaderSpec({this.title, this.actions = const NoActions()});
 
@@ -59,6 +68,8 @@ class AppActions extends HeaderActions {
     required this.onScan,
     required this.onUnmatched,
     required this.onSettings,
+    this.progress,
+    this.onStopScan,
   });
 
   final bool scanning;
@@ -67,10 +78,22 @@ class AppActions extends HeaderActions {
   final VoidCallback onUnmatched;
   final VoidCallback onSettings;
 
+  /// The running scan's last report, for the Stop button's tooltip and the
+  /// readout; null when idle or before the first batch commits.
+  final SyncProgress? progress;
+
+  /// Stops the running scan at its next checkpoint, keeping what was
+  /// committed. Null when no scan is running (the button is then Scan).
+  final VoidCallback? onStopScan;
+
   @override
   List<Object?> get props => [
     scanning,
     unmatchedCount,
+    progress?.done,
+    progress?.total,
+    progress?.phase,
+    onStopScan,
     // Callbacks are stable method tear-offs on the page's State, so they
     // participate in equality without defeating it.
     onScan,

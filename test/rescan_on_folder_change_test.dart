@@ -50,7 +50,7 @@ void main() {
           missing: repo,
           showPreferences: repo,
           settings: const FakeSettings(),
-          onScan: (_) async {
+          onScan: (_, {onProgress, cancellation}) async {
             scans++;
             return _emptySummary;
           },

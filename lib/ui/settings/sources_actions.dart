@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../domain/repositories/library_repository.dart';
 
 /// Everything the Sources tab needs, as ONE injected object.
@@ -15,6 +17,7 @@ class SourcesActions {
     required this.repository,
     required this.onAddFolder,
     required this.onOpenAccessSettings,
+    required this.scanning,
   });
 
   /// Lists, removes and REORDERS folders. Reordering rewrites
@@ -28,4 +31,10 @@ class SourcesActions {
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;
 
   final Future<bool> Function() onOpenAccessSettings;
+
+  /// True while a scan runs. Add / Remove / reorder are disabled then: the
+  /// running scan holds the folder list it started with, so a folder added
+  /// mid-scan would silently never be walked and a removed one would be
+  /// written back by the next batch.
+  final ValueListenable<bool> scanning;
 }

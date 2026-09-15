@@ -1,5 +1,17 @@
 import 'metadata_failure.dart';
+import 'sync_summary.dart';
 import 'user_facing_failure.dart';
+
+/// How the UI runs a scan: the composition root supplies one of these.
+/// `onDiscovered` fires once phase 1 has written placeholders; `onProgress`
+/// after each committed batch; `cancellation` stops the run at its next
+/// checkpoint, keeping everything committed so far.
+typedef ScanRunner =
+    Future<SyncSummary> Function(
+      void Function() onDiscovered, {
+      void Function(SyncProgress progress)? onProgress,
+      SyncCancellation? cancellation,
+    });
 
 /// Cooperative cancellation for a scan or a metadata refresh.
 ///

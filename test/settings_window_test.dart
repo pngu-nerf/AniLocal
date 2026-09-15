@@ -30,6 +30,7 @@ SettingsDialogActions _actions({
       skipSources: const [],
       onRefreshMetadata: () async =>
           const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+      scanning: ValueNotifier<bool>(false),
     ).forScreen(
       onRefreshed: () {},
       loadUnmatchedCount: () async => 3,

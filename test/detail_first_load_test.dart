@@ -9,6 +9,7 @@ import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
 import 'package:anilocal/playback/playback_controller.dart';
 import 'package:anilocal/ui/library_services.dart';
 import 'package:anilocal/ui/routes.dart';
+import 'package:anilocal/ui/scan_control.dart';
 import 'package:anilocal/ui/series_detail_screen.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:anilocal/ui/settings/sources_actions.dart';
@@ -93,17 +94,19 @@ LibraryServices _services(
   showPreferences: _NoPrefs(),
   settings: const FakeSettings(),
   playback: PlaybackController(resolver: repo),
-  scanning: ValueNotifier<bool>(false),
+  scan: ScanControl(),
   settingsActions: SettingsActions(
     sources: SourcesActions(
       repository: repo,
       onAddFolder: () async => (added: false, deniedLabel: null),
       onOpenAccessSettings: () async => false,
+      scanning: ValueNotifier<bool>(false),
     ),
     metadataSources: metadata,
     skipSources: skip,
     onRefreshMetadata: () async =>
         const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
+    scanning: ValueNotifier<bool>(false),
   ),
 );
 

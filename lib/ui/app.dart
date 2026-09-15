@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/source_descriptor.dart';
-import '../domain/models/sync_summary.dart';
+import '../domain/models/sync_control.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/missing_episodes_repository.dart';
@@ -17,6 +17,7 @@ import '../domain/repositories/watch_state_repository.dart';
 import '../playback/playback_controller.dart';
 import 'library_screen.dart';
 import 'library_services.dart';
+import 'scan_control.dart';
 import 'settings/settings_actions.dart';
 import 'settings/sources_actions.dart';
 import 'shell/app_shell.dart';
@@ -78,7 +79,7 @@ class AniLocalApp extends StatelessWidget {
   /// Fill path. The `onDiscovered` callback fires mid-scan once newly-seen
   /// files have been written as pending placeholders (before identification),
   /// so the UI can reload and paint them immediately.
-  final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
+  final ScanRunner onScan;
 
   /// Re-fetch metadata (ids + skip data) for already-cached series, without
   /// scanning files or touching overrides/watch-state. Returns counts.
@@ -149,8 +150,9 @@ class _AppLifetimeState extends State<_AppLifetime> {
   late final _headerController = HeaderController(navigatorKey: _navigatorKey);
   late final _headerRouteObserver = HeaderRouteObserver(_headerController);
 
-  /// Whether a scan is running, for every header (see `LibraryServices`).
-  final _scanning = ValueNotifier<bool>(false);
+  /// Scan state for every header — the running flag, progress and Stop (see
+  /// `ScanControl`).
+  final _scan = ScanControl();
 
   late final LibraryServices _services = LibraryServices(
     repository: widget.app.repository,
@@ -162,7 +164,7 @@ class _AppLifetimeState extends State<_AppLifetime> {
     showPreferences: widget.app.showPreferences,
     settings: widget.app.settings,
     playback: widget.app.playback,
-    scanning: _scanning,
+    scan: _scan,
     // The ONE place the app-wide settings bundle is built; each screen's ⚙
     // completes it with its own hooks via `SettingsActions.forScreen`.
     settingsActions: SettingsActions(
@@ -170,10 +172,12 @@ class _AppLifetimeState extends State<_AppLifetime> {
         repository: widget.app.repository,
         onAddFolder: widget.app.onAddFolder,
         onOpenAccessSettings: widget.app.onOpenAccessSettings,
+        scanning: _scan.scanning,
       ),
       metadataSources: widget.app.metadataSources,
       skipSources: widget.app.skipSources,
       onRefreshMetadata: widget.app.onRefreshMetadata,
+      scanning: _scan.scanning,
     ),
   );
 
@@ -183,7 +187,7 @@ class _AppLifetimeState extends State<_AppLifetime> {
     // never reach this — it calls stop() instead (see VideoZone.dispose).
     unawaited(widget.app.playback.dispose());
     _headerController.dispose();
-    _scanning.dispose();
+    _scan.dispose();
     super.dispose();
   }
 

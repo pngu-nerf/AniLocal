@@ -1,6 +1,7 @@
 import 'package:anilocal/domain/models/library_folder.dart';
 import 'package:anilocal/domain/repositories/library_repository.dart';
 import 'package:anilocal/ui/settings/sources_actions.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// An in-memory stand-in for the folder side of [LibraryRepository].
@@ -38,8 +39,10 @@ class FakeSourcesRepository extends Fake implements LibraryRepository {
 SourcesActions fakeSourcesActions(
   FakeSourcesRepository repository, {
   Future<({bool added, String? deniedLabel})> Function()? onAddFolder,
+  ValueListenable<bool>? scanning,
 }) => SourcesActions(
   repository: repository,
   onAddFolder: onAddFolder ?? () async => (added: false, deniedLabel: null),
   onOpenAccessSettings: () async => false,
+  scanning: scanning ?? ValueNotifier<bool>(false),
 );

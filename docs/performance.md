@@ -87,3 +87,21 @@ The statement counts above are pinned in `test/read_path_shape_test.dart`
 (in the gate): ten selects per snapshot whatever the pending ratio, and a
 per-series read whose statements AND rows read are the same at ten times the
 library. Both guards go red when the optimisation is reverted (mutation-checked).
+
+## The scan's floors (stated, not discovered)
+
+Two costs in a scan are set by other people's services and cannot be
+optimised away, only made visible:
+
+- **AniSkip is asked once per EPISODE, 200 ms apart** (its documented rate).
+  8,000 episodes with a MAL id and no stored answer is ~27 minutes of pure
+  spacing on a first scan, regardless of network speed. Answers are stored, so
+  it is paid once; the progress readout counts episodes so the wait is
+  legible, and Stop keeps every batch already committed.
+- **Cover art downloads four at a time** (`kArtConcurrency`): 600 new shows at
+  ~200 ms each is ~30 s instead of the two minutes one-at-a-time took, without
+  hammering one CDN from one address.
+
+The walk and the stats now run off the UI isolate (`FolderScanner.statVideoFiles`),
+as do the chapter reads (`ChapterReader.read`), so on a network mount the
+per-file round trips cost time but not frames.

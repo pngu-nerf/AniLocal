@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../diagnostics/app_log.dart';
@@ -26,9 +27,15 @@ class FixMatchScreen extends StatefulWidget {
     required this.prefillQuery,
     this.isSplit = false,
     this.priorEpisodeCount = 0,
+    this.scanning,
   });
 
   final FixMatchRepository fixMatch;
+
+  /// True while a scan runs. Assign is disabled then: the scan is rewriting
+  /// the same file rows, and an override written under it could bind to a
+  /// row the next batch replaces. Null (tests) means never scanning.
+  final ValueListenable<bool>? scanning;
 
   /// One path = assign/reassign a single file; many (ordered) = a split range.
   final List<String> filePaths;
@@ -41,6 +48,9 @@ class FixMatchScreen extends StatefulWidget {
   @override
   State<FixMatchScreen> createState() => _FixMatchScreenState();
 }
+
+/// The stand-in listenable when no scan state is wired (tests).
+final ValueNotifier<bool> _never = ValueNotifier<bool>(false);
 
 class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
   late final TextEditingController _query = TextEditingController(
@@ -173,13 +183,19 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(Xp.spaceL),
-            child: XpButton(
-              lit: _selected != null && !_busy,
-              // One label. The instruction ("pick a match") lives in the
-              // candidate pane's empty state, not on a button that renamed
-              // itself whenever it could not be pressed.
-              label: _busy ? 'Assigning…' : 'Assign',
-              onPressed: (_selected == null || _busy) ? null : _assign,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: widget.scanning ?? _never,
+              builder: (context, scanning, _) => XpButton(
+                lit: _selected != null && !_busy && !scanning,
+                // One label. The instruction ("pick a match") lives in the
+                // candidate pane's empty state, not on a button that renamed
+                // itself whenever it could not be pressed.
+                label: _busy ? 'Assigning…' : 'Assign',
+                tooltip: scanning ? 'Wait for the scan to finish' : null,
+                onPressed: (_selected == null || _busy || scanning)
+                    ? null
+                    : _assign,
+              ),
             ),
           ),
         ),

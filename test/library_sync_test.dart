@@ -310,7 +310,7 @@ void main() {
 
 /// A scanner that lists one path that does not exist, standing in for a file
 /// deleted or moved in the instant between the directory walk and its stat.
-class _GhostScanner implements FolderScanner {
+class _GhostScanner extends FolderScanner {
   const _GhostScanner(this.inner, {required this.extra});
 
   final FolderScanner inner;

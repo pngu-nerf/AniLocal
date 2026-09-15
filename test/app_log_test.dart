@@ -85,6 +85,23 @@ void main() {
       },
     );
 
+    test('warnRepeated: the first in full, then only at 10, 100, 1000', () {
+      AppLog.reset();
+      for (var i = 1; i <= 120; i++) {
+        AppLog.warnRepeated('k', 'Chapters: could not read /f$i.mkv');
+      }
+      final lines = AppLog.recent()
+          .where((l) => l.contains('Chapters'))
+          .toList();
+      expect(lines, hasLength(3), reason: '1st, 10th, 100th — not 120 lines');
+      expect(lines[0], contains('/f1.mkv'));
+      expect(lines[0], isNot(contains('so far')));
+      expect(lines[1], contains('(10 so far under "k")'));
+      expect(lines[2], contains('(100 so far under "k")'));
+      expect(AppLog.repeatCount('k'), 120);
+      expect(AppLog.repeatCount('other'), 0);
+    });
+
     test('dump() is the ring, joined — what Copy diagnostics pastes', () {
       AppLog.info('one');
       AppLog.error('two');

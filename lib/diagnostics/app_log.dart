@@ -77,12 +77,34 @@ abstract final class AppLog {
   static void error(String message, {Object? error, StackTrace? stack}) =>
       _write(LogLevel.error, message, error: error, stack: stack);
 
+  static final Map<String, int> _repeats = {};
+
+  /// A warning that can happen once per FILE: the first occurrence is logged
+  /// in full, then only the 10th, 100th, 1,000th… with the running count. A
+  /// scan over a volume with a permission problem used to write one line per
+  /// file — hundreds of lines that evicted everything else "Copy diagnostics"
+  /// exists to capture, and a synchronous disk write each. [key] groups the
+  /// repeats; [message] is the specific instance (path included).
+  static void warnRepeated(String key, String message, {Object? error}) {
+    final n = (_repeats[key] ?? 0) + 1;
+    _repeats[key] = n;
+    if (n == 1) {
+      _write(LogLevel.warn, message, error: error);
+    } else if (n == 10 || n == 100 || n == 1000 || n % 10000 == 0) {
+      _write(LogLevel.warn, '$message ($n so far under "$key")', error: error);
+    }
+  }
+
+  /// How many times [key] has been reported this run.
+  static int repeatCount(String key) => _repeats[key] ?? 0;
+
   /// Everything the ring holds, joined — what "Copy diagnostics" pastes.
   static String dump() => _ring.join('\n');
 
   /// Forget everything. Tests only; production never resets.
   static void reset() {
     _debug = false;
+    _repeats.clear();
     _ring.clear();
     _file = null;
     _fileBytes = 0;

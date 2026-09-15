@@ -25,7 +25,12 @@ class XpReorderableList<T> extends StatelessWidget {
     this.leadingBuilder,
     this.trailingBuilder,
     this.dimmed,
+    this.enabled = true,
   });
+
+  /// False while the list must not be reordered (a scan holds the folder
+  /// order it started with); the handles stay visible but inert.
+  final bool enabled;
 
   final List<T> items;
 
@@ -81,6 +86,7 @@ class XpReorderableList<T> extends StatelessWidget {
           children: [
             ReorderableDragStartListener(
               index: index,
+              enabled: enabled,
               child: const MouseRegion(
                 cursor: SystemMouseCursors.grab,
                 child: Icon(Icons.drag_handle, color: Xp.textDim),

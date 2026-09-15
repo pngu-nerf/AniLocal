@@ -54,6 +54,7 @@ Future<_Closed> _open(
                       seriesRefreshed: 0,
                       skipsFetched: 0,
                     ),
+                    scanning: ValueNotifier<bool>(false),
                   ).forScreen(
                     onRefreshed: () {},
                     loadUnmatchedCount: () async => 0,

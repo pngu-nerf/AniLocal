@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import '../../diagnostics/app_log.dart';
@@ -39,28 +40,47 @@ class ChapterReader {
   const ChapterReader();
 
   Future<FileChapters> read(String path) async {
+    // On another isolate: a handful of seeks and reads per file, but the EBML
+    // and atom parsing is synchronous CPU and the reads are round trips on a
+    // network mount — one per element — and this runs once per episode during
+    // a scan. Nothing but the path goes in; marks, duration and an error
+    // string come out. The log line is written HERE, on the UI isolate, where
+    // the diagnostics ring lives.
+    final (chapters, error) = await Isolate.run(() => _readIsolated(path));
+    if (error != null) {
+      // Unreadable or malformed -> simply no chapters. Logged with the PATH
+      // (a permission denial — macOS TCC on a removable volume — lands here
+      // too and looked exactly like "no chapters"), but once per RUN, not
+      // once per file: a whole volume failing wrote hundreds of lines.
+      AppLog.warnRepeated(
+        'chapters-unreadable',
+        'Chapters: could not read $path — $error',
+      );
+    }
+    return chapters;
+  }
+
+  /// The read itself. Every failure is a returned string, never a throw, so
+  /// nothing non-sendable has to cross back.
+  Future<(FileChapters, String?)> _readIsolated(String path) async {
     final file = File(path);
     RandomAccessFile? handle;
     try {
-      if (!await file.exists()) return FileChapters.none;
+      if (!await file.exists()) return (FileChapters.none, null);
       handle = await file.open();
       final length = await handle.length();
       final lower = path.toLowerCase();
       if (lower.endsWith('.mkv') || lower.endsWith('.webm')) {
-        return await _readMatroska(handle, length);
+        return (await _readMatroska(handle, length), null);
       }
       if (lower.endsWith('.mp4') ||
           lower.endsWith('.m4v') ||
           lower.endsWith('.mov')) {
-        return await _readMp4(handle, length);
+        return (await _readMp4(handle, length), null);
       }
-      return FileChapters.none;
+      return (FileChapters.none, null);
     } on Exception catch (e) {
-      // Unreadable or malformed -> simply no chapters. Logged with the PATH:
-      // a permission denial (macOS TCC on a removable volume) lands here too,
-      // and looked exactly like "this file has no chapters" until it was.
-      AppLog.warn('Chapters: could not read $path', error: e);
-      return FileChapters.none;
+      return (FileChapters.none, '$e');
     } finally {
       await handle?.close();
     }

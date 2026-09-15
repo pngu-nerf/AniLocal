@@ -57,19 +57,26 @@ class LibraryPanel extends StatelessWidget {
             },
             control: const _Chevron(),
           ),
-          SettingRow(
-            label: 'Refresh metadata',
-            subtitle: 'Re-fetch ids and skip data',
-            info:
-                'Re-fetches metadata for shows already in the cache, by id, '
-                'and fills in any missing intro/outro skip data.\n\n'
-                'This is not a rescan: no files are read, and it never touches '
-                'your fix-matches or watch progress.',
-            onTap: () => refreshMetadata(context, actions),
-            control: const Icon(
-              Icons.cloud_sync_outlined,
-              size: 16,
-              color: Xp.textDim,
+          ValueListenableBuilder<bool>(
+            valueListenable: actions.scanning,
+            builder: (context, scanning, _) => SettingRow(
+              label: 'Refresh metadata',
+              // A scan and a refresh share the fill path and cannot overlap;
+              // the row says so instead of failing with an error.
+              subtitle: scanning
+                  ? 'Wait for the scan to finish'
+                  : 'Re-fetch ids and skip data',
+              info:
+                  'Re-fetches metadata for shows already in the cache, by id, '
+                  'and fills in any missing intro/outro skip data.\n\n'
+                  'This is not a rescan: no files are read, and it never touches '
+                  'your fix-matches or watch progress.',
+              onTap: scanning ? null : () => refreshMetadata(context, actions),
+              control: Icon(
+                Icons.cloud_sync_outlined,
+                size: 16,
+                color: scanning ? Xp.textFaint : Xp.textDim,
+              ),
             ),
           ),
           SettingRow(

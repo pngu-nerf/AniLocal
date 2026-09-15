@@ -69,6 +69,7 @@ abstract final class AppRoutes {
     InstantPageRoute<bool>(
       builder: (_) => FixMatchScreen(
         fixMatch: services.fixMatch,
+        scanning: services.scanning,
         filePaths: filePaths,
         prefillQuery: prefillQuery,
         isSplit: isSplit,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/models/sync_control.dart';
+
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 
@@ -14,6 +16,8 @@ class HeaderActionsBar extends StatelessWidget {
   const HeaderActionsBar({
     super.key,
     required this.scanning,
+    this.progress,
+    this.onStopScan,
     required this.unmatchedCount,
     required this.onUnmatched,
     required this.onScan,
@@ -21,6 +25,12 @@ class HeaderActionsBar extends StatelessWidget {
   });
 
   final bool scanning;
+
+  /// The running scan's last report (for the Stop tooltip); null when idle.
+  final SyncProgress? progress;
+
+  /// Stops the running scan; null when none is running.
+  final VoidCallback? onStopScan;
   final int unmatchedCount;
   final VoidCallback onUnmatched;
   final Future<void> Function() onScan;
@@ -55,13 +65,27 @@ class HeaderActionsBar extends StatelessWidget {
         // "Scan": it walks the library folders. "Refresh metadata", in
         // Settings, is the OTHER operation (network only, no files) — the two
         // used to share the word "sync" and users could not tell them apart.
-        XpTitleTab(
-          icon: Icons.sync,
-          label: 'Scan',
-          tooltip: scanning ? 'Scanning…' : 'Scan library folders',
-          showLabel: showLabel,
-          onPressed: scanning ? null : onScan,
-        ),
+        // While a scan runs the same tab is STOP: everything committed so far
+        // is kept, the run ends at its next checkpoint.
+        if (scanning)
+          XpTitleTab(
+            icon: Icons.stop_circle_outlined,
+            label: 'Stop',
+            tooltip: progress == null
+                ? 'Stop scanning (keeps what has been identified so far)'
+                : 'Stop scanning — ${progress!.phase} ${progress!.done} of '
+                      '${progress!.total} (keeps what has been identified)',
+            showLabel: showLabel,
+            onPressed: onStopScan,
+          )
+        else
+          XpTitleTab(
+            icon: Icons.sync,
+            label: 'Scan',
+            tooltip: 'Scan library folders',
+            showLabel: showLabel,
+            onPressed: onScan,
+          ),
         if (unmatchedCount > 0)
           XpTitleTab(
             icon: Icons.help_outline,

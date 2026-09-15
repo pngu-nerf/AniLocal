@@ -67,7 +67,7 @@ Widget _app() {
     settings: const FakeSettings(),
     watchOrder: repo,
     playback: PlaybackController(resolver: repo),
-    onScan: (_) async => const SyncSummary(
+    onScan: (_, {onProgress, cancellation}) async => const SyncSummary(
       filesScanned: 0,
       unchanged: 0,
       processed: 0,

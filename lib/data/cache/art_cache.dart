@@ -110,7 +110,11 @@ class ArtCache {
     } on Exception catch (e) {
       // Metadata still cached; art retried next scan. Logged, because a cover
       // that fails forever used to be invisible — a grey box with no trail.
-      AppLog.warn('Cover: download failed for $url', error: e);
+      AppLog.warnRepeated(
+        'cover-download',
+        'Cover: download failed for $url',
+        error: e,
+      );
       return null;
     }
   }

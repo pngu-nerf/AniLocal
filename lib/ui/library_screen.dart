@@ -14,6 +14,7 @@ import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
 import '../domain/models/library_snapshot.dart';
 import '../domain/models/series.dart';
+import '../domain/models/sync_control.dart';
 import '../domain/models/sync_summary.dart';
 import 'access_recovery.dart';
 import 'library/continue_watching_panel.dart';
@@ -102,7 +103,7 @@ class LibraryScreen extends StatefulWidget {
   /// Fill path. The `onDiscovered` callback fires mid-scan, after newly-seen
   /// files are written as pending placeholders but before identification — the
   /// screen wires it to a reload so the grid paints placeholders immediately.
-  final Future<SyncSummary> Function(void Function() onDiscovered) onScan;
+  final ScanRunner onScan;
 
   /// Shared denied-state (category labels) — drives the banner; the add-dialog
   /// reads the same source via `SourcesActions.onAddFolder`'s result.
@@ -171,6 +172,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     // The scan flag lives in the services so every header shows it; this
     // screen republishes its header when it flips.
     _services.scanning.addListener(_onScanningChanged);
+    _services.scan.progress.addListener(_onScanningChanged);
     _reload();
     unawaited(_loadHomepageToggles());
     _background(
@@ -212,6 +214,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   @override
   void dispose() {
     _services.scanning.removeListener(_onScanningChanged);
+    _services.scan.progress.removeListener(_onScanningChanged);
     _searchController.dispose();
     _gridScroll.dispose();
     super.dispose();
@@ -395,14 +398,20 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     // same database is refused by the fill path anyway — this just makes the
     // second tap a no-op instead of an error snackbar.
     if (_services.scanning.value) return;
-    _services.scanning.value = true;
+    final cancellation = _services.scan.begin();
     try {
       // The mid-scan callback paints placeholders the instant they're written
       // (before identification / network), so an offline add shows its anime
       // immediately; the post-scan reload below then shows the upgraded matches.
-      final summary = await widget.onScan(() {
-        if (mounted) _reload();
-      });
+      // Progress reaches every header through the shared control; Stop
+      // cancels through the same token.
+      final summary = await widget.onScan(
+        () {
+          if (mounted) _reload();
+        },
+        onProgress: _services.scan.report,
+        cancellation: cancellation,
+      );
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
       messenger.showSnackBar(
@@ -444,7 +453,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         ),
       );
     } finally {
-      _services.scanning.value = false;
+      _services.scan.end();
     }
   }
 
@@ -593,13 +602,17 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   @override
   HeaderSpec buildHeaderSpec() => HeaderSpec(
-    title: 'Library',
+    title: _services.scanning.value
+        ? scanningTitle('Library', _services.scan.progress.value)
+        : 'Library',
     actions: AppActions(
       scanning: _services.scanning.value,
       unmatchedCount: _unmatchedCount,
       onUnmatched: _openUnmatched,
       onScan: _scan,
       onSettings: _openSettings,
+      progress: _services.scan.progress.value,
+      onStopScan: _services.scanning.value ? _services.scan.stop : null,
     ),
   );
 

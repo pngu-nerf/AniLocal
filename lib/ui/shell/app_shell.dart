@@ -238,6 +238,8 @@ class _TitleBar extends StatelessWidget {
       :final onScan,
       :final onUnmatched,
       :final onSettings,
+      :final progress,
+      :final onStopScan,
     ) =>
       HeaderActionsBar(
         scanning: scanning,
@@ -245,6 +247,8 @@ class _TitleBar extends StatelessWidget {
         onScan: onScan,
         onUnmatched: onUnmatched,
         onSettings: onSettings,
+        progress: progress,
+        onStopScan: onStopScan,
       ),
   };
 }

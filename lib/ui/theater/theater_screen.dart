@@ -98,6 +98,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     _fullscreen = WindowChrome.fullscreen.value;
     WindowChrome.fullscreen.addListener(_onWindowFullscreenChanged);
     widget.services.scanning.addListener(_onScanningChanged);
+    widget.services.scan.progress.addListener(_onScanningChanged);
     // The player is the ONLY place fullscreen has an exit (⛶ / Escape), so it
     // is the only place the window is allowed to enter it. Scoped to exactly
     // this screen's lifetime; the runner force-exits when it goes away.
@@ -109,6 +110,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   @override
   void dispose() {
     widget.services.scanning.removeListener(_onScanningChanged);
+    widget.services.scan.progress.removeListener(_onScanningChanged);
     WindowChrome.fullscreen.removeListener(_onWindowFullscreenChanged);
     unawaited(WindowChrome.setFullscreenAllowed(false));
     super.dispose();
@@ -202,13 +204,22 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
 
   @override
   HeaderSpec buildHeaderSpec() => HeaderSpec(
-    title: widget.series.displayTitle,
+    title: widget.services.scanning.value
+        ? scanningTitle(
+            widget.series.displayTitle,
+            widget.services.scan.progress.value,
+          )
+        : widget.series.displayTitle,
     actions: AppActions(
       scanning: widget.services.scanning.value,
       unmatchedCount: widget.header.unmatchedCount,
       onScan: widget.header.onScan,
       onUnmatched: widget.header.onUnmatched,
       onSettings: _openSettings,
+      progress: widget.services.scan.progress.value,
+      onStopScan: widget.services.scanning.value
+          ? widget.services.scan.stop
+          : null,
     ),
   );
 

@@ -9,6 +9,7 @@ import '../domain/repositories/source_selection_repository.dart';
 import '../domain/repositories/watch_order_repository.dart';
 import '../domain/repositories/watch_state_repository.dart';
 import '../playback/playback_controller.dart';
+import 'scan_control.dart';
 import 'settings/settings_actions.dart';
 
 /// Everything a library screen reads and writes, as ONE object.
@@ -35,7 +36,7 @@ class LibraryServices {
     required this.settings,
     required this.settingsActions,
     required this.playback,
-    required this.scanning,
+    required this.scan,
   });
 
   final LibraryRepository repository;
@@ -57,9 +58,12 @@ class LibraryServices {
   /// The app-lifetime playback engine.
   final PlaybackController playback;
 
-  /// Whether a scan is in flight, LIVE, for every header that shows the
-  /// spinner and disables Scan. The show page and the theater used to
-  /// hardcode `false`, so two taps from there started two scans over one
-  /// database.
-  final ValueNotifier<bool> scanning;
+  /// Scan state for every header — the running flag, the progress readout and
+  /// Stop. One object, app-lifetime, so the show page and the theater see the
+  /// same scan the library started (they used to hardcode `false`, so two
+  /// taps from there started two scans over one database).
+  final ScanControl scan;
+
+  /// True while a scan runs — the flag every header disables its Scan on.
+  ValueNotifier<bool> get scanning => scan.scanning;
 }

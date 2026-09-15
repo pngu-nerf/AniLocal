@@ -42,6 +42,7 @@ import 'diagnostics/diagnostics.dart';
 import 'domain/models/external_ids.dart';
 import 'domain/models/source_descriptor.dart';
 import 'domain/models/source_preference.dart';
+import 'domain/models/sync_control.dart';
 import 'domain/models/sync_summary.dart';
 import 'playback/playback_controller.dart';
 import 'sync/fix_match_service.dart';
@@ -402,7 +403,11 @@ Future<void> main() async {
     );
   }
 
-  Future<SyncSummary> scan(void Function() onDiscovered) async {
+  Future<SyncSummary> scan(
+    void Function() onDiscovered, {
+    void Function(SyncProgress progress)? onProgress,
+    SyncCancellation? cancellation,
+  }) async {
     // Folder ROWS (not just paths) carry each folder's volume binding, so we can
     // resolve its CURRENT mount before checking access.
     final folders = await database.allFolderRows();
@@ -426,9 +431,12 @@ Future<void> main() async {
       if (current == null || result.isMissing) missingPaths.add(f.path);
     }
     missingFolderPaths.value = missingPaths;
-    return sync.sync([
-      for (final f in folders) f.path,
-    ], onDiscovered: onDiscovered);
+    return sync.sync(
+      [for (final f in folders) f.path],
+      onDiscovered: onDiscovered,
+      onProgress: onProgress,
+      cancellation: cancellation,
+    );
   }
 
   // The playback engine is APP-LIFETIME: built once here, injected, and kept

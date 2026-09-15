@@ -72,18 +72,31 @@ class _SourcesPanelState extends State<SourcesPanel> {
     await widget.sources.repository.reorderFolders(list);
   }
 
+  static const _waitTooltip = 'Wait for the scan to finish';
+
   @override
   Widget build(BuildContext context) {
     final folders = _folders;
     if (folders == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    // Add / Remove / reorder are OFF while a scan runs: the scan holds the
+    // folder list it started with, so a folder added now would silently never
+    // be walked and a removed one would be written back by the next batch.
+    return ValueListenableBuilder<bool>(
+      valueListenable: widget.sources.scanning,
+      builder: (context, scanning, _) => _body(folders, scanning: scanning),
+    );
+  }
+
+  Widget _body(List<LibraryFolder> folders, {required bool scanning}) {
     if (folders.isEmpty) {
       return Center(
         child: XpButton(
           icon: Icons.add,
           label: 'Add a folder',
-          onPressed: _add,
+          tooltip: scanning ? _waitTooltip : null,
+          onPressed: scanning ? null : _add,
         ),
       );
     }
@@ -107,8 +120,8 @@ class _SourcesPanelState extends State<SourcesPanel> {
               dense: true,
               icon: Icons.create_new_folder_outlined,
               label: 'Add',
-              tooltip: 'Add folder',
-              onPressed: _add,
+              tooltip: scanning ? _waitTooltip : 'Add folder',
+              onPressed: scanning ? null : _add,
             ),
           ],
         ),
@@ -120,11 +133,14 @@ class _SourcesPanelState extends State<SourcesPanel> {
             titleOf: (f) => f.path,
             firstCaption: 'Preferred source',
             onReorder: _onReorder,
+            enabled: !scanning,
             trailingBuilder: (f) => XpButton(
               dense: true,
               icon: Icons.delete_outline,
-              tooltip: 'Remove (drops its cached files)',
-              onPressed: () => _remove(f),
+              tooltip: scanning
+                  ? _waitTooltip
+                  : 'Remove (drops its cached files)',
+              onPressed: scanning ? null : () => _remove(f),
             ),
           ),
         ),

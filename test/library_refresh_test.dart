@@ -53,7 +53,7 @@ void main() {
           settings: const FakeSettings(),
           watchOrder: repo,
           playback: PlaybackController(resolver: repo),
-          onScan: (_) async {
+          onScan: (_, {onProgress, cancellation}) async {
             // A scan that adds a new series to the cache.
             repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];
             return _summary;
@@ -106,7 +106,7 @@ void main() {
           settings: const FakeSettings(),
           watchOrder: repo,
           playback: PlaybackController(resolver: repo),
-          onScan: (_) async {
+          onScan: (_, {onProgress, cancellation}) async {
             repo.series = [_s(1, 'Alpha'), _s(2, 'Bravo')];
             return _summary;
           },
