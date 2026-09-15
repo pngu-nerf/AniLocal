@@ -11,6 +11,8 @@ Which document to read, by question.
 | Metadata and skip sources: what shipped, what is parked, how to un-park | [`multi-source-plan.md`](multi-source-plan.md) |
 | Registering a MyAnimeList client ID (the parked source) | [`myanimelist-registration.md`](myanimelist-registration.md) |
 | Changing the player: what to verify by hand | [`player-regression-checklist.md`](player-regression-checklist.md) |
+| Runtime behaviour a test cannot settle — unplugging, quitting, offline, scale — to verify by hand | [`runtime-walkthrough.md`](runtime-walkthrough.md) |
+| How fast is the read path, what does a scan cost, and what was it before | [`performance.md`](performance.md) |
 | Which player behaviours are under test, which are manual-verify, and why | [`player-test-coverage.md`](player-test-coverage.md) |
 | Why the player engine is app-lifetime and fullscreen is state | [`player-architecture-research.md`](player-architecture-research.md), [`player-crash-repro.md`](player-crash-repro.md) |
 | Why the header is hoisted above the Navigator | [`header-architecture-audit.md`](header-architecture-audit.md) |

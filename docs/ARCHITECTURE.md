@@ -68,6 +68,13 @@ program and what is parked: **`docs/multi-source-plan.md`**.
 | **Repository interfaces** (the UI's whole API surface) | `lib/domain/repositories/` (8: library, watch-state, source-selection, watch-order, missing-episodes, show-preferences, settings, fix-match) |
 | **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v21**; 11 tables + 3 indexes; migration comments narrate v2→v21) |
 | **Cache → domain mapping + all reads/writes** | `lib/data/cache/drift_library_repository.dart` (one class implements six of the interfaces — see below) |
+| **The read path** (what a screen loads) | `LibraryRepository.snapshot()` → `LibrarySnapshot` (`lib/domain/models/library_snapshot.dart`): ONE materialisation per library reload — series, episodes, continue-watching, up-next, unmatched count, hidden, folder count. Single-show reads (`episodesFor`, `nextEpisode`, `seriesById`) are indexed per-series queries, independent of library size. Numbers in `docs/performance.md` |
+| **Scan progress, Stop, "is a scan running"** | `lib/ui/scan_control.dart` (`ScanControl`, one per app, read by every header) ← `SyncProgress`/`SyncCancellation` in `lib/domain/models/sync_control.dart` |
+| **What runs off the UI isolate** | The folder walk + stats (`FileSystemFolderScanner.statVideoFiles`, `Isolate.run`) and the chapter reads (`ChapterReader.read`). Plain `dart:io` crosses the boundary; nothing else in the pipeline is isolated, by measurement (`docs/performance.md` → "The scan's floors") |
+| **A source that cannot be reached** | `lib/sync/source_health.dart` — the per-run circuit breaker (two transport failures → not asked again this run); `SyncSummary.sourcesDown` names it |
+| **Folder health** (missing vs denied), **folder refusal** | `lib/domain/folder_health.dart` (`seriesUnavailable`), `lib/domain/models/folder_refused.dart` (`folderRefusal`, `normalizeFolderPath` — duplicates and nesting are refused at add time); the three-state `FolderAccess` in `lib/data/folders/` |
+| **Quitting** | `WindowChrome.addQuitHook` (`lib/ui/window_chrome.dart`) ← the runner's `applicationShouldTerminate` (`.terminateLater`, asks Dart, 2.5 s fallback). Hooks today: the player's position (awaited), scan cancellation, the log flush. The runner is also the single-instance guard |
+| **Errors the user sees** | ONE renderer: `userFacingMessage` (`lib/ui/metadata_failure_message.dart`) over `UserFacingFailure`; dropped futures go through `guarded`/`fireAndForget` (`lib/ui/widgets/guarded.dart`) |
 | **Settings** (auto-play, skip mode, watched threshold, layout fractions, the two source orders, the minimum skip length, cross-checking, …) | `lib/domain/repositories/settings_repository.dart` + `lib/data/cache/drift_settings_repository.dart` — ONE injected object |
 | **Watched / resume state** | `WatchStateRepository` (impl in `drift_library_repository.dart`); the single write path is the player's `PlaybackSession` (`lib/ui/theater/zones/playback_session.dart`) |
 | **Metadata sources** ("what is this show") | `lib/data/metadata/` — the `MetadataProvider` seam + one adapter per source. The composition root holds ONE ordered list, shared by scan and fix-match |
@@ -87,8 +94,8 @@ program and what is parked: **`docs/multi-source-plan.md`**.
 | **The instrument look** (VFD "fine-instrument" theme, Technics SC-CH900) | `lib/ui/theme/` — tokens (`xp_tokens`), widgets (`xp_widgets`), theme (`xp_theme`), readouts (`vfd_readout`, `header_readout`), brand mark (`brand_wordmark`) |
 | **The app shell / persistent header** | `lib/ui/shell/` — `app_shell` (the ONE window chrome, mounted above the Navigator in `MaterialApp.builder`), `header_controller` (route-keyed spec stack + spinner grace), `header_scope` (`HeaderPublisher` mixin), `header_spec` |
 | **How a shipped feature works, and why** | `docs/feature-log.md` — one paragraph per feature, with the measurements behind each threshold |
-| **Tests** | `test/` — one file per subject, grouped; the shared doubles in `test/support/` (ONE fake in ONE place: `FakeLibraryRepository`, `FakeFixMatch`, `FakeSettings`/`RecorderSettings`, `FakeVolumeResolver`, `RecordingPlayer`); pixel goldens of the instrument look in `test/goldens/`; live harnesses OUTSIDE the gate in `test_live/` |
-| **Tooling** | `tool/check.sh` (the gate), `tool/coverage.sh` (a report), `tool/release.sh` (bump → build → sign → notarize → DMG), `tool/sqlite_version_check.sh` (the weekly vendored-SQLite watch), `tool/app_icon.py` (macOS icon set from the uncropped source in `docs/brand/`) |
+| **Tests** | `test/` — one file per subject, grouped; the shared doubles in `test/support/` (ONE fake in ONE place: `FakeLibraryRepository`, `FakeFixMatch`, `FakeSettings`/`RecorderSettings`, `FakeVolumeResolver`, `RecordingPlayer`, `SyntheticLibrary` + `CountingInterceptor` for scale, `kFakeJpeg` for art); pixel goldens of the instrument look in `test/goldens/`; the perf table in `test/perf/` (tagged `perf`, outside the gate, run by `tool/perf.sh`); live harnesses OUTSIDE the gate in `test_live/` |
+| **Tooling** | `tool/check.sh` (the gate), `tool/perf.sh` (the read-path table at 600 shows / 8,000 files — prints, asserts only statement counts), `tool/coverage.sh` (a report), `tool/release.sh` (bump → build → sign → notarize → DMG), `tool/sqlite_version_check.sh` (the weekly vendored-SQLite watch), `tool/app_icon.py` (macOS icon set from the uncropped source in `docs/brand/`) |
 | **Shared UI shells/components** | `lib/ui/widgets/` — `xp_dialog`, `episode_tile`, `episode_row`, `show_cover`, `multi_select_list`, `xp_reorderable_list` (the ONE priority-list widget — three users: library folders, metadata sources, skip sources) |
 
 ---
@@ -125,6 +132,20 @@ The governing test for any change: **"to change X, how many places must I edit?"
 - **One getter for a shared value:** e.g. `Series.displayTitle` (title fallback
   policy in one place). New shared value/format → one getter/util, not inlined
   twice.
+- **One materialisation per reload.** A screen loads through `snapshot()` (or
+  one per-series read), never five parallel full-table reads; a new thing the
+  library page needs is a field on `LibrarySnapshot`, built in the same pass.
+  Every reload carries a generation guard, so an older read landing later
+  cannot overwrite a newer one.
+- **The UI isolate waits on nothing slow.** File walks, stats and chapter reads
+  cross to `Isolate.run`; network waits are bounded by `TimeoutClient` and cut
+  short by `SourceHealth`; the log writes in batches. A new per-file cost in the
+  scan goes in the isolate pass, not in the loop.
+- **Fail toward user-in-control** (the role rule from `CLAUDE.md`): navigation
+  fails AVAILABLE, information NEUTRAL (a spinner, never a stale specific),
+  actions ABSENT (disabled while a scan runs, gone when the file is gone). The
+  screen-state tests (`test/screen_states_test.dart`, `boundaries_ui_test.dart`)
+  pin the cases the third audit found.
 - **The five seams** (UI↔repository, cache-is-read-path, each-source-in-one-module,
   identification-behind-an-interface, **user overrides are sacred**) are spelled
   out in `CLAUDE.md` → "Architecture — the seams." **Seam #5** especially: a
@@ -202,6 +223,11 @@ at the code site with the exact crash/symptom):
   principled theater exception.
 - **`docs/player-regression-checklist.md`** / **`docs/player-test-coverage.md`**
   — player behavior + its test coverage.
+- **`docs/performance.md`** — the read-path and scan numbers before and after
+  the third audit, the machine they were taken on, and the scan's floors.
+- **`docs/runtime-walkthrough.md`** — the scripted walkthrough of runtime
+  behaviour a human runs against a built app: unplugging, quitting, offline,
+  large libraries, VoiceOver, a broken cache.
 
 ---
 
@@ -209,7 +235,9 @@ at the code site with the exact crash/symptom):
 
 - Run: `flutter run -d macos`
 - Check: `tool/check.sh` = `dart format --output=none --set-exit-if-changed` +
-  `flutter analyze` + `flutter test`. CI (`.github/workflows/ci.yml`) runs exactly
+  `flutter analyze` + `flutter test --exclude-tags perf`. `tool/perf.sh` runs
+  the perf-tagged table separately (it prints numbers; only statement counts
+  are asserted). CI (`.github/workflows/ci.yml`) runs exactly
   this script, so green here is green there. The lint set (`analysis_options.yaml`)
   is strict-mode plus the rules for the failure modes this codebase has had —
   dropped futures, uncancelled subscriptions, `dynamic` reaching a cast.

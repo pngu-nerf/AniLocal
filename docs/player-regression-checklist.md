@@ -24,7 +24,8 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 ## B. Visible elements
 **Video zone** (`video_zone.dart`, behaviour in `playback_session.dart`)
 - [ ] Video renders via media_kit `Video` — **no tint/effect/overlay on the texture**.
-- [ ] **A file that cannot be opened says so** — "Couldn't play this episode" with mpv's line under it, centred over the frame; the line is also in Copy diagnostics. Never a silent black frame.
+- [ ] **A file that cannot be opened says so** — "Couldn't play this episode" with mpv's line under it, centred over the frame; the line is also in Copy diagnostics. Never a silent black frame. A drive unplugged mid-playback lands here too, and Back still works.
+- [ ] **Anything pushed over the player pauses it** — Settings, a dialog, Unmatched files, Licences (the two pages that used to land on top of the theater now pop it first; the pause is the backstop). Playback resumes where it was when the overlay closes, and the header is intact.
 - [ ] Controls overlay drawn by media_kit's `Video(controls:)` builder (same builder windowed **and** fullscreen).
 
 **Series-info zone** (`series_info_zone.dart`)
@@ -33,7 +34,7 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 **Episode rail** (`episode_list_zone.dart`)
 - [ ] "EPISODES" eyebrow + count; rows with number chip, title, resume-progress bar.
 - [ ] Now-playing row highlighted (fill + accent left border).
-- [ ] Empty-episode state renders ("No episodes here yet.").
+- [ ] Empty-episode state renders ("No episodes here yet.") — only for a show with NO episodes. **While the list is still loading the rail shows a spinner, never the empty copy** (information fails neutral). The info zone likewise shows no episode count until it knows one.
 
 **Control bar + every control** (`player_control_bar.dart`, `player_controls.dart`, `vfd_control.dart`)
 - [ ] **The bar is ONE VFD display**: a solid true-black panel edge-to-edge (top bezel hairline), phosphor glyphs and dot-matrix legends throughout — no bone-white Material icons, no chassis keys, no gradient ramp. Styling lives in `vfd_control.dart` only; meter cells in `segmented_meter.dart` only.
@@ -97,6 +98,9 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] **Resume position** (`open(startAt: resumePosition)`; persists on a 1s tick ONLY when the position moved, on pause, 250ms after a paused scrub settles, on episode switch / dispose / app-inactive; skips saving once watched or at zero; watched once within the watched-threshold of the end — default 90s, Settings → Playback). **A manually-unwatched episode keeps saving progress** past the threshold — the auto mark reports that it did not apply.
 - [ ] **Swap-in-place** (`ValueKey(widget.series.seriesId)`, in `theater_screen.dart`) — episodes swap on the same controller; a different series gets a fresh frame.
 - [ ] **Bar surface fades WITH the controls** — the solid VFD panel is inside the same `AnimatedOpacity` (200ms) + `IgnorePointer` as the bar, so idle-while-playing clears panel *and* controls and the picture is left pristine. It must never become a permanent strip over the video.
+
+- [ ] **Cmd-Q commits the position, awaited.** Seek to a distinctive time, quit at once, relaunch → Continue watching shows that time. The runner asks Dart before terminating (`applicationShouldTerminate` → the quit hooks); the 1-second save timer and the `onInactive` save are no longer the only writers.
+- [ ] **A placeholder played mid-scan keeps its progress** once the scan identifies it — the save resolves the real series by file at write time.
 
 ## E. States
 - [ ] **Playing** — controls auto-hide after 3s; cursor hides with them.

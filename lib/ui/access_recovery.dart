@@ -12,7 +12,10 @@ import 'widgets/xp_dialog.dart';
 const String kFilesAndFoldersPath =
     'System Settings › Privacy & Security › Files and Folders';
 
-/// Contextual recovery, shown right after an add hits a denied category.
+/// Contextual recovery, shown right after an add hits a denied CATEGORY
+/// grant. The folder itself still reads — the panel selection carries its
+/// own consent — so the copy says exactly that, and the ambient banner is
+/// NOT raised here: it is for a scan that actually failed to read a folder.
 Future<void> showAccessDeniedDialog(
   BuildContext context,
   String label,
@@ -43,8 +46,10 @@ Future<void> showAccessDeniedDialog(
   );
 }
 
-/// Ambient recovery, shown while any watched folder's category is denied
-/// (including a relaunch into a denied state) — never a silently-empty library.
+/// Ambient recovery, shown while a scan has FAILED to read a folder whose
+/// category is denied (including a relaunch into that state — folder health
+/// is refreshed at launch). A scan that reads every folder in the category
+/// clears it, so it never contradicts a working library.
 class AccessBanner extends StatelessWidget {
   const AccessBanner({
     super.key,

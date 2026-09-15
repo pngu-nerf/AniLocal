@@ -105,3 +105,23 @@ optimised away, only made visible:
 The walk and the stats now run off the UI isolate (`FolderScanner.statVideoFiles`),
 as do the chapter reads (`ChapterReader.read`), so on a network mount the
 per-file round trips cost time but not frames.
+
+## After the interruptions pass (2026-09-14)
+
+Nothing above changed — the read path was not touched — but two costs the
+first table could not show are now bounded:
+
+- **A blackholed network.** Each unreachable source cost a full
+  `TimeoutClient` wait per title (three sources ≈ 90 s a title; 500 new titles
+  ≈ 12 hours). `SourceHealth` takes a source out of the run after two
+  consecutive transport failures, so the same scan is two timeouts per source
+  plus the local work — minutes. Skip lookups get the same breaker. The
+  summary names what was unreachable so the wait is legible.
+- **Quit.** Cmd-Q used to run no Dart; it now waits for the hooks (the
+  player's position, the log flush, scan cancellation) up to 2 s, with the
+  runner's own 2.5 s fallback. The cost is that ceiling, paid only when a
+  hook is slow.
+
+Re-running `tool/perf.sh` after this pass gives the "After" table within
+noise (snapshot 106 ms, single-show reads 1–2 ms, the binge 20 ms), with the
+statement counts identical.
