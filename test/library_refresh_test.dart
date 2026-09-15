@@ -40,7 +40,10 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final repo = FakeLibraryRepository(series: [_s(1, 'Alpha')]);
+      final repo = FakeLibraryRepository(
+        series: [_s(1, 'Alpha')],
+        folders: ['/a'],
+      );
 
       await tester.pumpWidget(
         AniLocalApp(
@@ -95,7 +98,10 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      final repo = FakeLibraryRepository(series: [_s(1, 'Alpha')]);
+      final repo = FakeLibraryRepository(
+        series: [_s(1, 'Alpha')],
+        folders: ['/a'],
+      );
       await tester.pumpWidget(
         AniLocalApp(
           repository: repo,

@@ -24,6 +24,7 @@ import '../domain/models/source_preference.dart';
 import '../domain/models/sync_control.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/models/titles.dart';
+import 'source_health.dart';
 
 /// A file's identity in the cache: the owning folder's STABLE identity (the
 /// path it was added under) plus the file's path within it. Never an absolute
@@ -189,6 +190,19 @@ class LibrarySync {
     };
     final knownTitleToId = _knownTitles(cachedFiles.values);
     final deltas = _classifyDeltas(stats, cachedFiles, unreadableFolders);
+    // A file whose bytes changed at the SAME path keeps its fix-match: the
+    // override is keyed by fingerprint, so it is moved to the new one before
+    // anything else runs. A `touch` used to delete the user's correction at
+    // the next prune.
+    final rekeys =
+        <(({int size, int modifiedMs}), ({int size, int modifiedMs}))>[
+          for (final key in deltas.toIdentify)
+            if (cachedFiles[key] case final c?)
+              if (stats[key] case final s?)
+                if (c.fileSize != s.size || c.modifiedAtMs != s.modifiedMs)
+                  ((size: c.fileSize, modifiedMs: c.modifiedAtMs), s),
+        ];
+    if (rekeys.isNotEmpty) await cache.rekeyOverrides(rekeys);
 
     // Parse the deltas and collect distinct titles (parse the file's basename,
     // the last segment of its relative path).
@@ -366,6 +380,8 @@ class LibrarySync {
       unreadableFolders: unreadableFolders.toList(),
       apiFailure: reportedFailure,
       cancelled: run.cancelled,
+      skipLookupsFailed: _skipFailureCount,
+      sourcesDown: [...run.health.down, ..._skipHealth.down],
     );
   }
 
@@ -429,12 +445,25 @@ class LibrarySync {
     Set<String> unreadable,
   ) async {
     final stats = <FileKey, FileSig>{};
+    // Every mount, so a file under a NESTED folder rebases against the most
+    // specific one and is written once, not once per enclosing folder.
+    final mounts = mountByFolder.values.toList();
     for (final MapEntry(key: folderPath, value: current)
         in mountByFolder.entries) {
       try {
         final found = await scanner.statVideoFiles(current);
+        // A drive pulled DURING the walk leaves a partial listing behind. A
+        // partial listing would classify every unlisted file as removed and
+        // delete it at the end of the run; a root that is gone now says the
+        // folder was unreadable, which preserves its files.
+        if (!await Directory(current).exists()) {
+          AppLog.warn('Scan: $folderPath vanished during the walk');
+          unreadable.add(folderPath);
+          continue;
+        }
         for (final MapEntry(key: abs, value: sig) in found.entries) {
-          final key = rebaseToFolderRelative(abs, [current]);
+          final key = rebaseToFolderRelative(abs, mounts);
+          if (key.folderPath != current) continue; // a nested folder's file
           stats[(folderPath, key.relativePath)] = sig;
         }
       } on FileSystemException catch (e) {
@@ -566,7 +595,11 @@ class LibrarySync {
       }
       try {
         run.attemptedLookups++;
-        final result = await matcher.match(sample, providers: providers);
+        final result = await matcher.match(
+          sample,
+          providers: providers,
+          health: run.health,
+        );
         final found = result.series;
         final seriesId = found == null || found.externalIds.isEmpty
             ? null
@@ -1004,6 +1037,9 @@ class LibrarySync {
   /// written to the log as one line each by `_flushSkipFailures`.
   final _skipFailures = <(String, MetadataFailure), int>{};
 
+  /// Per-run circuit breaker for skip sources — see [SourceHealth].
+  var _skipHealth = SourceHealth();
+
   int get _skipFailureCount =>
       _skipFailures.values.fold(0, (sum, n) => sum + n);
 
@@ -1016,6 +1052,7 @@ class LibrarySync {
       );
     }
     _skipFailures.clear();
+    _skipHealth = SourceHealth();
   }
 
   /// Ask each source and record WHAT IT SAID — no reconciliation here.
@@ -1042,10 +1079,15 @@ class LibrarySync {
       // carries what this source needs — an AniSkip id the cross-map supplies
       // later, say. Only a real answer, including "I have nothing", is stored.
       if (!await provider.canAnswer(lookup)) continue;
+      // The run's breaker: a source that could not be reached twice in a row
+      // is not asked again this run (each ask is a full timeout).
+      if (_skipHealth.isDown(provider.token)) continue;
       final EpisodeSkips? found;
       try {
         found = await provider.fetchSkips(lookup);
+        _skipHealth.succeeded(provider.token);
       } on SkipException catch (e) {
+        _skipHealth.failed(provider.token, e.failure);
         // Transient — no row, so it is retried. Tallied, not logged here: a
         // source failing for 400 episodes in a row used to look identical to
         // one that had nothing, and then, once logged per episode, it evicted
@@ -1144,6 +1186,8 @@ class _Deltas {
 
 /// Counters and outcomes accumulated across a scan's batches.
 class _ScanRun {
+  /// The run's circuit breaker for metadata sources — see [SourceHealth].
+  final health = SourceHealth();
   final erroredTitles = <String>{};
   final lookupsBySource = <String, int>{};
   int attemptedLookups = 0;

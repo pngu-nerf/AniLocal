@@ -16,6 +16,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'support/fake_art.dart';
 import 'support/graphql_request.dart';
 
 /// `refreshMetadata` is the "backfill without a wipe" path. These tests pin
@@ -94,7 +95,7 @@ void main() {
         }
         // Art download.
         if (artDown) return http.Response('', 500);
-        return http.Response.bytes([1, 2, 3], 200);
+        return http.Response.bytes(kFakeJpeg, 200);
       });
 
       sync = LibrarySync(

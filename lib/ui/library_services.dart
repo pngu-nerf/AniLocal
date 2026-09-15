@@ -41,6 +41,8 @@ class LibraryServices {
     required this.accessIssues,
     required this.categoryLabelOf,
     required this.unmatchedCount,
+    this.cachePath,
+    this.onResetCache,
   });
 
   final LibraryRepository repository;
@@ -90,4 +92,9 @@ class LibraryServices {
   /// snapshot; every header reads it. It used to travel as a push-time
   /// integer, so a scan from the player left the Unmatched tab wrong.
   final ValueNotifier<int> unmatchedCount;
+
+  /// The cache database's path and the reset that sets it aside — for the
+  /// load-error panel only. See `AniLocalApp.cachePath`.
+  final String? cachePath;
+  final Future<String> Function()? onResetCache;
 }

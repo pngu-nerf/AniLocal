@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../diagnostics/app_log.dart';
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/source_descriptor.dart';
 import '../domain/models/sync_control.dart';
@@ -25,6 +26,7 @@ import 'shell/header_controller.dart';
 import 'shell/header_scope.dart';
 import 'theme/xp_theme.dart';
 import 'tooltip_dismiss_observer.dart';
+import 'window_chrome.dart';
 
 /// Root of the AniLocal UI.
 ///
@@ -53,6 +55,8 @@ class AniLocalApp extends StatelessWidget {
     required this.onOpenAccessSettings,
     this.metadataSources = const [],
     this.skipSources = const [],
+    this.cachePath,
+    this.onResetCache,
   });
 
   final LibraryRepository repository;
@@ -112,6 +116,15 @@ class AniLocalApp extends StatelessWidget {
   /// Opens the privacy settings pane (best-effort); the message always also
   /// shows the written path, so a stale link never strands the user.
   final Future<bool> Function() onOpenAccessSettings;
+
+  /// Where the cache database lives, named by the library's load-error panel
+  /// so "couldn't open the library cache" says WHICH file. Null in tests.
+  final String? cachePath;
+
+  /// Set the unopenable cache aside (returning where it went); the panel then
+  /// quits the app so the next launch starts empty. Null when there is
+  /// nothing to reset (tests).
+  final Future<String> Function()? onResetCache;
 
   @override
   Widget build(BuildContext context) => _AppLifetime(app: this);
@@ -176,6 +189,8 @@ class _AppLifetimeState extends State<_AppLifetime> {
     accessIssues: widget.app.accessIssues,
     categoryLabelOf: widget.app.categoryLabelOf,
     unmatchedCount: _unmatchedCount,
+    cachePath: widget.app.cachePath,
+    onResetCache: widget.app.onResetCache,
     // The ONE place the app-wide settings bundle is built; each screen's ⚙
     // completes it with its own hooks via `SettingsActions.forScreen`.
     settingsActions: SettingsActions(
@@ -195,8 +210,23 @@ class _AppLifetimeState extends State<_AppLifetime> {
     ),
   );
 
+  /// Cmd-Q: stop a running scan at its next checkpoint (every committed batch
+  /// is kept) and get the log's buffered lines to disk. The player's own hook
+  /// commits its position (see `PlaybackSession`).
+  late final VoidCallback _removeQuitHook;
+
+  @override
+  void initState() {
+    super.initState();
+    _removeQuitHook = WindowChrome.addQuitHook(() async {
+      _scan.stop();
+      AppLog.flush();
+    });
+  }
+
   @override
   void dispose() {
+    _removeQuitHook();
     // The ONLY PlaybackController.dispose() call in the app. A route pop must
     // never reach this — it calls stop() instead (see VideoZone.dispose).
     unawaited(widget.app.playback.dispose());

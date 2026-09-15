@@ -18,6 +18,7 @@ class HeaderActionsBar extends StatelessWidget {
     required this.scanning,
     this.progress,
     this.onStopScan,
+    this.canScan = true,
     required this.unmatchedCount,
     required this.onUnmatched,
     required this.onScan,
@@ -31,6 +32,9 @@ class HeaderActionsBar extends StatelessWidget {
 
   /// Stops the running scan; null when none is running.
   final VoidCallback? onStopScan;
+
+  /// See `AppActions.canScan`.
+  final bool canScan;
   final int unmatchedCount;
   final VoidCallback onUnmatched;
   final Future<void> Function() onScan;
@@ -82,9 +86,11 @@ class HeaderActionsBar extends StatelessWidget {
           XpTitleTab(
             icon: Icons.sync,
             label: 'Scan',
-            tooltip: 'Scan library folders',
+            tooltip: canScan
+                ? 'Scan library folders'
+                : 'Add a folder first (Settings › Folders)',
             showLabel: showLabel,
-            onPressed: onScan,
+            onPressed: canScan ? onScan : null,
           ),
         if (unmatchedCount > 0)
           XpTitleTab(

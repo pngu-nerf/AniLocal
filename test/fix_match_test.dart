@@ -25,6 +25,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
 import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
@@ -79,7 +80,7 @@ void main() {
         }
         return _page(media);
       }
-      return http.Response.bytes([1, 2, 3], 200); // art
+      return http.Response.bytes(kFakeJpeg, 200); // art
     });
     final anilist = AniListClient(httpClient: mock);
     sync = LibrarySync(

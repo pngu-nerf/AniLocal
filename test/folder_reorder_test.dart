@@ -21,6 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
 import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
@@ -78,7 +79,7 @@ void main() {
             q.contains('cowboy') ? [_m(1, 'Cowboy Bebop')] : const [],
           );
         }
-        return http.Response.bytes([1, 2, 3], 200);
+        return http.Response.bytes(kFakeJpeg, 200);
       });
       sync = LibrarySync(
         scanner: const FileSystemFolderScanner(),

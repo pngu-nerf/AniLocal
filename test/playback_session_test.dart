@@ -13,6 +13,7 @@ import 'package:anilocal/playback/media_remote.dart';
 import 'package:anilocal/playback/playback_controller.dart';
 import 'package:anilocal/playback/playback_rules.dart';
 import 'package:anilocal/ui/theater/zones/playback_session.dart';
+import 'package:anilocal/ui/window_chrome.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -153,6 +154,22 @@ class _Rig {
 void main() {
   group('PlaybackSession', () {
     setUp(AppLog.reset);
+
+    test('Cmd-Q commits the position through the quit hook, awaited', () async {
+      // The 1-second save timer has not fired; the runner asks to quit.
+      final rig = _Rig(episodes: [_episode(1)]);
+      rig.session.start();
+      rig.player.emitDuration(_s(minutes: 24));
+      rig.player.emitPosition(_s(minutes: 7));
+      expect(rig.watchState.saved, isEmpty, reason: 'nothing saved yet');
+      await WindowChrome.runQuitHooks();
+      expect(rig.watchState.saved.single.position, _s(minutes: 7));
+      await rig.session.dispose();
+      // Removed with the session: a later quit must not touch a dead one.
+      rig.watchState.saved.clear();
+      await WindowChrome.runQuitHooks();
+      expect(rig.watchState.saved, isEmpty);
+    });
 
     test(
       'the phantom zero after open() cannot auto-skip over the resume point',

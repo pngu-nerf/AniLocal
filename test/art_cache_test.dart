@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
+
 /// The cover store had no unit test of its own: reuse, replacement on a
 /// changed URL, the partial-write hole, concurrent callers, the extension
 /// rule and the sweep were all untested.
@@ -29,19 +31,19 @@ void main() {
 
     test('downloads once, then reuses the file', () async {
       var calls = 0;
-      final art = cache(serving([1, 2, 3], onCall: (_) => calls++));
+      final art = cache(serving(kFakeJpeg, onCall: (_) => calls++));
       final a = await art.ensureCover(7, 'https://cdn.test/7.jpg');
       final b = await art.ensureCover(7, 'https://cdn.test/7.jpg');
       expect(a, '${dir.path}/7.jpg');
       expect(b, a);
       expect(calls, 1);
-      expect(File(a!).readAsBytesSync(), [1, 2, 3]);
+      expect(File(a!).readAsBytesSync(), kFakeJpeg);
     });
 
     test(
       'a changed source URL replaces the file and drops the old one',
       () async {
-        final art = cache(serving([9]));
+        final art = cache(serving(kFakeJpeg));
         final first = await art.ensureCover(7, 'https://a.test/7.jpg');
         final second = await art.ensureCover(
           7,
@@ -68,7 +70,7 @@ void main() {
 
     test('two callers wanting the same cover share ONE download', () async {
       var calls = 0;
-      final art = cache(serving([1], onCall: (_) => calls++));
+      final art = cache(serving(kFakeJpeg, onCall: (_) => calls++));
       final paths = await Future.wait([
         art.ensureCover(7, 'https://cdn.test/7.jpg'),
         art.ensureCover(7, 'https://cdn.test/7.jpg'),
@@ -80,7 +82,7 @@ void main() {
     test(
       'only a known image extension is kept; anything else is .jpg',
       () async {
-        final art = cache(serving([1]));
+        final art = cache(serving(kFakeJpeg));
         expect(
           await art.ensureCover(1, 'https://cdn.test/x.WEBP?size=large'),
           '${dir.path}/1.webp',
@@ -96,14 +98,14 @@ void main() {
     test('every request carries a User-Agent', () async {
       String? ua;
       final art = cache(
-        serving([1], onCall: (r) => ua = r.headers['User-Agent']),
+        serving(kFakeJpeg, onCall: (r) => ua = r.headers['User-Agent']),
       );
       await art.ensureCover(1, 'https://cdn.test/1.jpg');
       expect(ua, startsWith('AniLocal/'));
     });
 
     test('deleteExcept removes covers for series no longer cached', () async {
-      final art = cache(serving([1]));
+      final art = cache(serving(kFakeJpeg));
       await art.ensureCover(1, 'https://cdn.test/1.jpg');
       await art.ensureCover(2, 'https://cdn.test/2.jpg');
       File('${dir.path}/.DS_Store').writeAsStringSync('x'); // not ours

@@ -103,7 +103,12 @@ class FileSystemFolderScanner extends FolderScanner {
 
     // The root's listing errors propagate (an unreadable root is a real "lost
     // access" the sync surfaces loudly and preserves cached files for).
-    _collect(await root.list(followLinks: false).toList(), files, pending);
+    _collect(
+      await root.list(followLinks: false).toList(),
+      files,
+      pending,
+      skipped,
+    );
 
     // Descendant listings are tolerant: skip an unreadable subdir and keep
     // walking, rather than failing the whole scan.
@@ -116,7 +121,7 @@ class FileSystemFolderScanner extends FolderScanner {
         skipped.add(dir.path);
         continue;
       }
-      _collect(entries, files, pending);
+      _collect(entries, files, pending, skipped);
     }
 
     files.sort();
@@ -149,6 +154,7 @@ class FileSystemFolderScanner extends FolderScanner {
     List<FileSystemEntity> entries,
     List<String> files,
     List<Directory> pending,
+    List<String> skipped,
   ) {
     for (final entity in entries) {
       final name = basenameOf(entity.path);
@@ -156,12 +162,26 @@ class FileSystemFolderScanner extends FolderScanner {
       if (entity is Directory) {
         pending.add(entity);
       } else if (entity is File) {
-        final dot = name.lastIndexOf('.');
-        if (dot < 0) continue;
-        if (videoExtensions.contains(name.substring(dot).toLowerCase())) {
+        if (_isVideoName(name)) files.add(entity.path);
+      } else if (entity is Link) {
+        // A symlink was neither a File nor a Directory to the walk, so it was
+        // skipped without a word. A link TO a file is a file the player can
+        // open (mpv follows it) — included under the link's own path, so the
+        // library shows the name the user gave it. A link to a folder is not
+        // followed (a cycle would never end) but is reported, not swallowed.
+        final target = FileSystemEntity.typeSync(entity.path);
+        if (target == FileSystemEntityType.file && _isVideoName(name)) {
           files.add(entity.path);
+        } else if (target == FileSystemEntityType.directory) {
+          skipped.add('${entity.path} (a link to a folder — not followed)');
         }
       }
     }
+  }
+
+  static bool _isVideoName(String name) {
+    final dot = name.lastIndexOf('.');
+    return dot >= 0 &&
+        videoExtensions.contains(name.substring(dot).toLowerCase());
   }
 }

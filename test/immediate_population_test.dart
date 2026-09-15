@@ -19,6 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
 import 'support/graphql_request.dart';
 
 /// Immediate library population + the pending -> identified lifecycle.
@@ -81,7 +82,7 @@ void main() {
           if (q.contains('cowboy')) return _page([_m(1, 'Cowboy Bebop')]);
           return _page(const []);
         }
-        return http.Response.bytes([1, 2, 3], 200); // art bytes
+        return http.Response.bytes(kFakeJpeg, 200); // art bytes
       });
       sync = LibrarySync(
         scanner: const FileSystemFolderScanner(),
@@ -154,7 +155,7 @@ void main() {
                       lookupAt ??= step++;
                       return _page([_m(1, 'Cowboy Bebop')]);
                     }
-                    return http.Response.bytes([1, 2, 3], 200);
+                    return http.Response.bytes(kFakeJpeg, 200);
                   }),
                 ),
               ),
@@ -162,7 +163,9 @@ void main() {
           ),
           cache: db,
           art: ArtCache(
-            httpClient: MockClient((_) async => http.Response.bytes([1], 200)),
+            httpClient: MockClient(
+              (_) async => http.Response.bytes(kFakeJpeg, 200),
+            ),
             directory: () async =>
                 Directory('${dir.path}/.art2')..createSync(recursive: true),
           ),

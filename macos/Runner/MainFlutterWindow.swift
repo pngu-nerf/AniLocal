@@ -82,6 +82,10 @@ class MainFlutterWindow: NSWindow {
       case "setFullscreenAllowed":
         self?.setFullscreenAllowed((call.arguments as? Bool) ?? false)
         result(nil)
+      case "quit":
+        // The same path as Cmd-Q, so the Dart quit hooks run first.
+        result(nil)
+        NSApp.terminate(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -97,6 +101,22 @@ class MainFlutterWindow: NSWindow {
       messenger: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
+  }
+
+  // MARK: - Quitting
+
+  /// Ask Dart to finish what must not be lost (the player's last position, the
+  /// log, a scan's cancellation) and call `completion` when it has replied —
+  /// success, error or "not implemented" alike, since any reply means Dart is
+  /// done with the request. See `AppDelegate.applicationShouldTerminate`.
+  func prepareToQuit(completion: @escaping () -> Void) {
+    guard let channel = windowChannel else {
+      completion()
+      return
+    }
+    channel.invokeMethod("quitRequested", arguments: nil) { _ in
+      completion()
+    }
   }
 
   // MARK: - Borderless "presentation" fullscreen

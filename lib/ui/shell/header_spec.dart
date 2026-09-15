@@ -70,10 +70,16 @@ class AppActions extends HeaderActions {
     required this.onSettings,
     this.progress,
     this.onStopScan,
+    this.canScan = true,
   });
 
   final bool scanning;
   final int unmatchedCount;
+
+  /// False when there is nothing to scan (no folders yet): the tab reads
+  /// disabled and says to add a folder first, instead of running a scan of
+  /// nothing that ends in a "0 scanned" snackbar.
+  final bool canScan;
   final Future<void> Function() onScan;
   final VoidCallback onUnmatched;
   final VoidCallback onSettings;
@@ -94,6 +100,7 @@ class AppActions extends HeaderActions {
     progress?.total,
     progress?.phase,
     onStopScan,
+    canScan,
     // Callbacks are stable method tear-offs on the page's State, so they
     // participate in equality without defeating it.
     onScan,

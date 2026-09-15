@@ -24,6 +24,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
 import 'support/fake_volume_resolver.dart';
 
 /// A skip source whose behaviour each test dictates.
@@ -209,7 +210,7 @@ void main() {
     }) async {
       final mock = MockClient((req) async {
         if (req.method == 'POST') return _anilistPage();
-        return http.Response.bytes([1, 2, 3], 200);
+        return http.Response.bytes(kFakeJpeg, 200);
       });
       await LibrarySync(
         scanner: const FileSystemFolderScanner(),
@@ -236,7 +237,7 @@ void main() {
     }) async {
       final mock = MockClient((req) async {
         if (req.method == 'POST') return _anilistPage();
-        return http.Response.bytes([1, 2, 3], 200);
+        return http.Response.bytes(kFakeJpeg, 200);
       });
       await LibrarySync(
         scanner: const FileSystemFolderScanner(),
@@ -569,7 +570,7 @@ void main() {
     Future<int> seed() async {
       final mock = MockClient((req) async {
         if (req.method == 'POST') return _anilistPage();
-        return http.Response.bytes([1, 2, 3], 200);
+        return http.Response.bytes(kFakeJpeg, 200);
       });
       await LibrarySync(
         scanner: const FileSystemFolderScanner(),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../diagnostics/app_log.dart';
 import '../../../domain/models/library_folder.dart';
 import '../../access_recovery.dart';
 import '../../metadata_failure_message.dart';
@@ -69,7 +70,22 @@ class _SourcesPanelState extends State<SourcesPanel> {
   }
 
   Future<void> _add() async {
-    final result = await widget.sources.onAddFolder();
+    final ({bool added, String? deniedLabel}) result;
+    try {
+      result = await widget.sources.onAddFolder();
+    } catch (e, stack) {
+      // A refused folder (already added, or nested with one that is) says
+      // why; anything else says it did not take.
+      AppLog.warn('Add folder refused or failed', error: e, stack: stack);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(userFacingMessage(e)),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     if (result.deniedLabel != null) {
       await showAccessDeniedDialog(

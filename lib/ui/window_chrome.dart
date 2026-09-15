@@ -73,12 +73,51 @@ abstract final class WindowChrome {
     if (_initialized) return;
     _initialized = true;
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'fullscreenChanged') {
-        _fullscreen.value = call.arguments as bool? ?? false;
+      switch (call.method) {
+        case 'fullscreenChanged':
+          _fullscreen.value = call.arguments as bool? ?? false;
+        case 'quitRequested':
+          await runQuitHooks();
       }
       return null;
     });
   }
+
+  // ---- quitting ----------------------------------------------------------
+
+  /// Work that must finish before the process ends: the player's last
+  /// position, the log's buffered lines, a scan's cancellation.
+  ///
+  /// Cmd-Q used to run NO Dart at all — the runner terminated, the tree was
+  /// never unmounted, and whatever the 1-second save timer had not yet written
+  /// was gone. Now the runner asks first (`applicationShouldTerminate` →
+  /// `quitRequested`), waits for the reply, and terminates; every hook gets
+  /// [quitHookBudget] in total, so a hook that hangs cannot hold the quit.
+  /// Returns a function that removes the hook (call it on dispose).
+  static VoidCallback addQuitHook(Future<void> Function() hook) {
+    _quitHooks.add(hook);
+    return () => _quitHooks.remove(hook);
+  }
+
+  static final List<Future<void> Function()> _quitHooks = [];
+
+  /// The longest a quit waits for its hooks — matched by the runner's own
+  /// fallback timer, so an unresponsive Dart side never blocks Cmd-Q.
+  static const Duration quitHookBudget = Duration(seconds: 2);
+
+  /// Run every quit hook, all at once, bounded by [quitHookBudget]. A hook
+  /// that throws is logged by its owner and does not stop the others.
+  static Future<void> runQuitHooks() async {
+    final hooks = List.of(_quitHooks); // hooks may remove themselves
+    await Future.wait([
+      for (final hook in hooks) hook().catchError((Object _) {}),
+    ]).timeout(quitHookBudget, onTimeout: () => const []);
+  }
+
+  /// Quit the app the way Cmd-Q does: through the runner, so the quit hooks
+  /// run first. Used by the library's "reset cache" flow, which needs the
+  /// database closed and the process gone before it can reopen empty.
+  static Future<void> quit() => _channel.invokeMethod<void>('quit');
 }
 
 /// Wraps [child] so a click-drag inside it moves the window and a double-click

@@ -19,6 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
 import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
@@ -68,7 +69,7 @@ void main() {
           }
           return _page(const []); // no match
         }
-        return http.Response.bytes([0, 1, 2, 3], 200); // art bytes
+        return http.Response.bytes(kFakeJpeg, 200); // art bytes
       });
 
       sync = LibrarySync(
@@ -242,7 +243,9 @@ void main() {
           ),
           cache: db,
           art: ArtCache(
-            httpClient: MockClient((_) async => http.Response.bytes([0], 200)),
+            httpClient: MockClient(
+              (_) async => http.Response.bytes(kFakeJpeg, 200),
+            ),
             directory: () async => dir,
           ),
           skipProviders: [

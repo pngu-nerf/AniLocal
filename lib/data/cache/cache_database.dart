@@ -1069,6 +1069,53 @@ class CacheDatabase extends _$CacheDatabase {
   Future<void> upsertOverride(MatchOverrideRow row) =>
       into(matchOverrides).insertOnConflictUpdate(row);
 
+  /// A fix-match's series row and its override in ONE transaction. Written
+  /// as two, a scan batch's prune landing between them deleted the series
+  /// referenced by neither table — the hazard `upsertSeries`'s doc named.
+  Future<void> upsertSeriesWithOverrides(
+    CachedSeriesRow series,
+    List<MatchOverrideRow> overrides,
+  ) => transaction(() async {
+    await upsertSeries(series);
+    for (final o in overrides) {
+      await into(matchOverrides).insertOnConflictUpdate(o);
+    }
+  });
+
+  /// Move fix-match overrides from an old fingerprint to a new one: the file
+  /// at the same path changed bytes (a `touch`, a re-download, an in-place
+  /// tag edit, a backup restore). Overrides are keyed by fingerprint, so
+  /// without this the user's correction matched no file and the next prune
+  /// deleted it. `OR IGNORE`: if the new fingerprint already carries an
+  /// override, that one stands.
+  Future<void> rekeyOverrides(
+    List<(({int size, int modifiedMs}), ({int size, int modifiedMs}))> pairs,
+  ) => transaction(() async {
+    for (final (from, to) in pairs) {
+      await customStatement(
+        'UPDATE OR IGNORE match_overrides SET file_size = ?, modified_at_ms = ? '
+        'WHERE file_size = ? AND modified_at_ms = ?',
+        [to.size, to.modifiedMs, from.size, from.modifiedMs],
+      );
+    }
+  });
+
+  /// The series a file is identified under RIGHT NOW, by its owning folder
+  /// and current path — null when it is still pending or unknown. For a
+  /// write that arrives carrying a placeholder id after the scan has
+  /// identified the file: the row must go under the real id or it is
+  /// stranded on a dead placeholder.
+  Future<int?> seriesIdForFile(String folderPath, String fileRef) async {
+    final row = await customSelect(
+      'SELECT series_id FROM file_cache WHERE folder_path = ? '
+      "AND series_id IS NOT NULL AND substr(?, -length(relative_path)) = relative_path "
+      'LIMIT 1',
+      variables: [Variable<String>(folderPath), Variable<String>(fileRef)],
+      readsFrom: {fileCache},
+    ).getSingleOrNull();
+    return row?.read<int?>('series_id');
+  }
+
   Future<void> deleteOverride(int fileSize, int modifiedAtMs) =>
       (delete(matchOverrides)..where(
             (o) =>

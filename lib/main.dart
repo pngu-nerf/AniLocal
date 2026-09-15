@@ -40,6 +40,7 @@ import 'data/user_agent.dart';
 import 'diagnostics/app_log.dart';
 import 'diagnostics/diagnostics.dart';
 import 'domain/models/external_ids.dart';
+import 'domain/models/folder_refused.dart';
 import 'domain/models/source_descriptor.dart';
 import 'domain/models/source_preference.dart';
 import 'domain/models/sync_control.dart';
@@ -394,13 +395,32 @@ Future<void> main() async {
   Future<({bool added, String? deniedLabel})> addFolder() async {
     final token = await picker.pickFolder();
     if (token == null) return (added: false, deniedLabel: null);
-    await repository.addFolder(token.path);
-    final result = await folderAccess.ensureAccess(token.path);
-    applyAccess(result);
+    final path = normalizeFolderPath(token.path);
+    final existing = await database.allFolderRows();
+    // Already there, or nested with one that is: refused with the reason,
+    // never accepted and quietly re-ranked.
+    final refusal = folderRefusal(path, [for (final f in existing) f.path]);
+    if (refusal != null) throw refusal;
+    await repository.addFolder(path);
+    final result = await folderAccess.ensureAccess(path);
+    // The CATEGORY grant is reported to the caller (its dialog explains what
+    // the folder-wide prompt was about) but not made ambient here: the folder
+    // itself reads through the panel's inferred consent, and the banner is
+    // for a scan that actually could not read — see [scan].
+    if (!result.isDenied) applyAccess(result);
     return (
       added: true,
       deniedLabel: result.isDenied ? result.categoryLabel : null,
     );
+  }
+
+  /// The cache could not be opened: set it aside and quit, so the next
+  /// launch starts empty. Returns where the broken file went.
+  Future<String> resetCache() async {
+    await database.close();
+    final moved = await quarantineCacheDatabase();
+    AppLog.error('Cache reset: moved to $moved');
+    return moved;
   }
 
   /// Which folders are reachable RIGHT NOW: resolve each folder's current
@@ -442,12 +462,27 @@ Future<void> main() async {
     SyncCancellation? cancellation,
   }) async {
     final folders = await refreshFolderHealth();
-    return sync.sync(
+    final summary = await sync.sync(
       [for (final f in folders) f.path],
       onDiscovered: onDiscovered,
       onProgress: onProgress,
       cancellation: cancellation,
     );
+    // The access banner tells the truth about THIS scan: a category stays
+    // flagged only while a folder in it could not be read. Picking
+    // ~/Downloads denies the folder-wide grant while the folder itself reads
+    // fine through the panel's consent, and the scan used to succeed under a
+    // red "Can't access Downloads" that nothing cleared.
+    final home = Platform.environment['HOME'] ?? '';
+    final failedLabels = {
+      for (final path in summary.unreadableFolders)
+        ?tccCategoryRoot(path, home)?.label,
+    };
+    accessIssues.value = [
+      for (final label in accessIssues.value)
+        if (failedLabels.contains(label)) label,
+    ];
+    return summary;
   }
 
   // The playback engine is APP-LIFETIME: built once here, injected, and kept
@@ -468,8 +503,14 @@ Future<void> main() async {
     }),
   );
 
+  // Where the cache lives, for the load-error panel — the one failure that
+  // needs to name a file.
+  final cachePath = (await cacheDatabaseFile()).path;
+
   runApp(
     AniLocalApp(
+      cachePath: cachePath,
+      onResetCache: resetCache,
       repository: repository,
       fixMatch: fixMatch,
       // DriftLibraryRepository implements WatchStateRepository +

@@ -103,8 +103,11 @@ class FixMatchService implements FixMatchRepository {
     if (file == null) {
       throw FixMatchException('File not in cache (scan first): $filePath');
     }
-    final seriesId = await _cacheSeries(chosen);
-    await cache.upsertOverride(
+    final (seriesId, row) = await _seriesRowFor(chosen);
+    // ONE transaction for the series and its override: a scan batch landing
+    // between two separate writes could prune the series before the
+    // override referenced it.
+    await cache.upsertSeriesWithOverrides(row, [
       MatchOverrideRow(
         fileSize: stat.size,
         modifiedAtMs: modifiedAtMs,
@@ -113,7 +116,7 @@ class FixMatchService implements FixMatchRepository {
         continuousOffset: continuousOffset,
         displayContinuous: displayContinuous,
       ),
-    );
+    ]);
   }
 
   /// Split: assign an ordered run of [filePaths] to [chosen], anchoring the
@@ -150,22 +153,20 @@ class FixMatchService implements FixMatchRepository {
         'nothing was assigned. First: ${missing.first}',
       );
     }
-    final seriesId = await _cacheSeries(chosen);
-    // All or nothing: a split is one decision, written in one transaction.
-    await cache.transaction(() async {
-      for (var i = 0; i < stats.length; i++) {
-        await cache.upsertOverride(
-          MatchOverrideRow(
-            fileSize: stats[i].size,
-            modifiedAtMs: stats[i].modified.millisecondsSinceEpoch,
-            seriesId: seriesId,
-            anchoredEpisode: anchorStart + i,
-            continuousOffset: continuousOffset,
-            displayContinuous: displayContinuous,
-          ),
-        );
-      }
-    });
+    final (seriesId, row) = await _seriesRowFor(chosen);
+    // All or nothing: a split is one decision — the series and every override
+    // — written in one transaction.
+    await cache.upsertSeriesWithOverrides(row, [
+      for (var i = 0; i < stats.length; i++)
+        MatchOverrideRow(
+          fileSize: stats[i].size,
+          modifiedAtMs: stats[i].modified.millisecondsSinceEpoch,
+          seriesId: seriesId,
+          anchoredEpisode: anchorStart + i,
+          continuousOffset: continuousOffset,
+          displayContinuous: displayContinuous,
+        ),
+    ]);
   }
 
   /// Remove a file's override, reverting it to whatever the auto-matcher says.
@@ -195,7 +196,11 @@ class FixMatchService implements FixMatchRepository {
   /// the resulting external-id collision could surface as a raw UNIQUE
   /// constraint error on screen. Resolving first and writing the answer is the
   /// same rule the scan uses — one identity rule, not two.
-  Future<int> _cacheSeries(Series s) async {
+  /// The local identity for [s] and the cache row to write for it — the art
+  /// downloaded here, OUTSIDE any transaction (a network round trip must not
+  /// hold the write lock). The caller writes the row with whatever else must
+  /// land atomically alongside it.
+  Future<(int, CachedSeriesRow)> _seriesRowFor(Series s) async {
     if (s.externalIds.isEmpty) {
       throw const FixMatchException(
         'This entry carries no external id, so it cannot be given a local '
@@ -215,7 +220,8 @@ class FixMatchService implements FixMatchRepository {
       cachedUrl: prior?.coverImageUrl,
       cachedPath: prior?.coverImagePath,
     );
-    await cache.upsertSeries(
+    return (
+      seriesId,
       CachedSeriesRow(
         seriesId: seriesId,
         romaji: s.titles.romaji,
@@ -227,6 +233,5 @@ class FixMatchService implements FixMatchRepository {
         coverImagePath: artPath,
       ),
     );
-    return seriesId;
   }
 }

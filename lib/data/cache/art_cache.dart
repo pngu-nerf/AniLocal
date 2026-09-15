@@ -74,9 +74,11 @@ class ArtCache {
     final ext = _extensionOf(url);
     final file = File('${dir.path}/$seriesId$ext');
 
-    // An unknown previous URL means "no opinion" — reuse, as before.
+    // An unknown previous URL means "no opinion" — reuse, as before — but
+    // only a file that IS an image: an HTML error page saved under .jpg used
+    // to be reused forever.
     final sameSource = cachedUrl == null || cachedUrl == url;
-    if (sameSource && await file.exists() && await file.length() > 0) {
+    if (sameSource && await _isImageFile(file)) {
       return file.path; // already cached
     }
 
@@ -88,6 +90,15 @@ class ArtCache {
         headers: {'User-Agent': aniLocalUserAgent},
       );
       if (response.statusCode != 200 || response.bodyBytes.isEmpty) return null;
+      if (!looksLikeImage(response.bodyBytes)) {
+        // A 200 that is not a picture: a captive portal, an error page, a
+        // CDN interstitial. Nothing is written, so it is retried next scan.
+        AppLog.warnRepeated(
+          'cover-not-image',
+          'Cover: $url did not return an image (${response.bodyBytes.length} bytes)',
+        );
+        return null;
+      }
       // Write beside, then rename into place: a crash or a truncated body
       // mid-write used to leave a partial image at the canonical name, which
       // the reuse check above then accepted forever.
@@ -138,10 +149,21 @@ class ArtCache {
     await for (final entity in dir.list()) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
+      // A `.part` is a download that never finished (the app quit mid-way);
+      // nothing reuses it, so it goes.
+      if (name.endsWith('.part')) {
+        try {
+          await entity.delete();
+          removed++;
+        } on Exception catch (e) {
+          AppLog.warn('Cover: could not delete ${entity.path}', error: e);
+        }
+        continue;
+      }
       final dot = name.lastIndexOf('.');
       final id = int.tryParse(dot < 0 ? name : name.substring(0, dot));
-      // Not one of ours (a stray `.DS_Store`, a `.part` we did not finish):
-      // only a bare integer stem is a cover, and a `.part` stem is not one.
+      // Not one of ours (a stray `.DS_Store`): only a bare integer stem is a
+      // cover.
       if (id == null || keep.contains(id)) continue;
       try {
         await entity.delete();
@@ -164,4 +186,37 @@ class ArtCache {
   /// The client is injected and owned by the composition root; this closes
   /// only a client this cache constructed itself.
   void dispose() {}
+}
+
+/// Whether [bytes] begin like an image this app can show: JPEG, PNG, GIF or
+/// WebP magic. Checked on download and on reuse, so a non-image never pins
+/// itself under a cover's name.
+bool looksLikeImage(List<int> bytes) {
+  if (bytes.length < 12) return false;
+  bool at(int i, List<int> sig) {
+    for (var k = 0; k < sig.length; k++) {
+      if (bytes[i + k] != sig[k]) return false;
+    }
+    return true;
+  }
+
+  return at(0, const [0xFF, 0xD8, 0xFF]) || // JPEG
+      at(0, const [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) || // PNG
+      at(0, const [0x47, 0x49, 0x46, 0x38]) || // GIF8
+      (at(0, const [0x52, 0x49, 0x46, 0x46]) &&
+          at(8, const [0x57, 0x45, 0x42, 0x50])); // RIFF….WEBP
+}
+
+Future<bool> _isImageFile(File file) async {
+  try {
+    if (!await file.exists()) return false;
+    final handle = await file.open();
+    try {
+      return looksLikeImage(await handle.read(12));
+    } finally {
+      await handle.close();
+    }
+  } on Exception {
+    return false;
+  }
 }

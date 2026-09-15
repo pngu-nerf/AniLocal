@@ -18,6 +18,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
+
 /// The complete v8 schema (pre stable-volume-identity): file_cache keyed by an
 /// absolute `path`, library_folders with no volume binding. Authored by hand so
 /// the test can open a populated v8 cache and exercise the real v8 -> v9
@@ -158,7 +160,7 @@ void main() {
         final mock = MockClient(
           (req) async => req.method == 'POST'
               ? http.Response('nope', 500)
-              : http.Response.bytes([1, 2, 3], 200),
+              : http.Response.bytes(kFakeJpeg, 200),
         );
         final sync = LibrarySync(
           scanner: const FileSystemFolderScanner(),

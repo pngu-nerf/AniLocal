@@ -662,6 +662,23 @@ class DriftLibraryRepository
 
   // --- Watch state (keyed by episode identity, never file path) ---
 
+  /// The series id a write for [episode] goes under. A placeholder id is
+  /// re-resolved from the file: the scan may have identified it since the
+  /// player opened it, rekeyed its rows to the real id and deleted the
+  /// placeholder's — a write under the stale id would recreate a row nothing
+  /// prunes and the promoted row would stop advancing. One place, so the
+  /// player never has to know.
+  Future<int> _writeSeriesId(Episode episode) async {
+    if (!isPlaceholderSeriesId(episode.seriesId) || episode.sources.isEmpty) {
+      return episode.seriesId;
+    }
+    final resolved = await _db.seriesIdForFile(
+      episode.sources.first.folderPath,
+      episode.fileRef,
+    );
+    return resolved ?? episode.seriesId;
+  }
+
   @override
   Future<void> saveProgress(
     Episode episode, {
@@ -672,7 +689,7 @@ class DriftLibraryRepository
     // (never clobber a manual watched/unwatched while resume keeps ticking).
     // One statement, so it cannot interleave with a concurrent mark-watched.
     await _db.saveProgressRow(
-      seriesId: episode.seriesId,
+      seriesId: await _writeSeriesId(episode),
       episode: episode.anchoredNumber,
       resumePositionMs: position.inMilliseconds,
       durationMs: duration.inMilliseconds,
@@ -687,7 +704,7 @@ class DriftLibraryRepository
     // is sacred user data), and the row count says so to the caller. Marking
     // watched clears resume so it leaves "Continue watching".
     final changed = await _db.setWatchedAutoRow(
-      seriesId: episode.seriesId,
+      seriesId: await _writeSeriesId(episode),
       episode: episode.anchoredNumber,
       watched: watched,
       durationMs: episode.duration.inMilliseconds,
@@ -706,7 +723,7 @@ class DriftLibraryRepository
     // — watch_state has no fill-path writer). Progress is UNTOUCHED: the saved
     // resume position + duration carry over exactly.
     await _db.setWatchedManualRow(
-      seriesId: episode.seriesId,
+      seriesId: await _writeSeriesId(episode),
       episode: episode.anchoredNumber,
       watched: watched,
       durationMs: episode.duration.inMilliseconds,
@@ -715,8 +732,10 @@ class DriftLibraryRepository
   }
 
   @override
-  Future<void> clearProgress(Episode episode) =>
-      _db.deleteWatchState(episode.seriesId, episode.anchoredNumber);
+  Future<void> clearProgress(Episode episode) async => _db.deleteWatchState(
+    await _writeSeriesId(episode),
+    episode.anchoredNumber,
+  );
 
   @override
   Future<List<ContinueWatching>> continueWatching() async {

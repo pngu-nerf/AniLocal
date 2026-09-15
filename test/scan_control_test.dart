@@ -44,7 +44,7 @@ SyncSummary _summary({bool cancelled = false}) => SyncSummary(
 /// a 500-title scan against a dead network, which before this could not be
 /// stopped at all.
 Widget _app(ScanRunner onScan) => AniLocalApp(
-  repository: FakeLibraryRepository(series: [_show]),
+  repository: FakeLibraryRepository(series: [_show], folders: ['/a']),
   fixMatch: const FakeFixMatch(),
   watchState: FakeLibraryRepository(),
   sourceSelection: FakeLibraryRepository(),

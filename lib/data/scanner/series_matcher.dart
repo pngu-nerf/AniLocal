@@ -2,6 +2,7 @@ import 'package:anilocal/domain/models/series.dart' show Series;
 
 import '../../domain/models/metadata_failure.dart';
 import '../../domain/models/source_preference.dart';
+import '../../sync/source_health.dart';
 import '../metadata/metadata_provider.dart';
 import 'title_matching.dart';
 
@@ -59,9 +60,14 @@ class SeriesMatcher {
   /// as fresh as the rule needs — the order cannot change mid-scan from the
   /// scan's own point of view). Omitted, it is read fresh, which is what
   /// fix-match wants.
+  ///
+  /// [health] is the run's circuit breaker: a source it has marked down is
+  /// not asked (each ask would be a full timeout), and every outcome here
+  /// feeds it. Omitted for a one-off match (fix-match), where one wait is fine.
   Future<MatchResult> match(
     String title, {
     List<MetadataProvider>? providers,
+    SourceHealth? health,
   }) async {
     MetadataException? lastFailure;
     var tried = 0;
@@ -70,9 +76,11 @@ class SeriesMatcher {
       // Not a failure — a provider awaiting a client ID simply isn't available,
       // and must not count towards "everything is down".
       if (!await provider.isConfigured()) continue;
+      if (health?.isDown(provider.token) ?? false) continue;
       tried++;
       try {
         final result = await _matchWith(provider, title);
+        health?.succeeded(provider.token);
         // Stamped here rather than in ranking: ranking compares titles and has
         // no idea who supplied the candidates.
         return (
@@ -81,6 +89,7 @@ class SeriesMatcher {
           source: provider.token,
         );
       } on MetadataException catch (e) {
+        health?.failed(provider.token, e.failure);
         lastFailure = e;
       }
     }

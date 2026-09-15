@@ -16,6 +16,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'support/fake_art.dart';
 import 'support/graphql_request.dart';
 
 /// AniSkip is keyed by MAL id, and that id used to come ONLY from AniList's
@@ -105,7 +106,7 @@ void main() {
             200,
           );
         }
-        return http.Response.bytes([1, 2, 3], 200);
+        return http.Response.bytes(kFakeJpeg, 200);
       });
       return LibrarySync(
         scanner: const FileSystemFolderScanner(),

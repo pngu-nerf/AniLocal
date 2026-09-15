@@ -152,9 +152,7 @@ Future<void> refreshMetadata(
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          content: Text(
-            'Refresh failed: $e — details are in Settings › About.',
-          ),
+          content: Text('Refresh failed. ${userFacingMessage(e)}'),
           duration: const Duration(seconds: 8),
         ),
       );

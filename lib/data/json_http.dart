@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show HttpDate;
+import 'dart:io' show HandshakeException, HttpDate;
 
 import 'package:http/http.dart' as http;
 
@@ -137,9 +137,18 @@ class JsonHttp {
       await throttle?.wait();
       try {
         response = await send();
+      } on HandshakeException catch (e) {
+        // TLS was refused or intercepted: a proxy, a VPN, a captive portal,
+        // a clock so wrong the certificate reads as invalid. The connection
+        // itself worked, so "check your internet" would send the user the
+        // wrong way — `blocked` names something in between.
+        throw fail(
+          'TLS handshake with $service failed: $e',
+          failure: MetadataFailure.blocked,
+        );
       } on Exception catch (e) {
         // No HTTP response at all: the request never reached the service, so
-        // the fault is on this side of the wire.
+        // the fault is on this side of the wire — DNS, refused, timed out.
         throw fail(
           'Network error contacting $service: $e',
           failure: MetadataFailure.connection,

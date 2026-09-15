@@ -17,6 +17,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
+
 /// A provider that answers every title with a distinct show and lets the test
 /// act between lookups — cancel, count, or watch what has been committed.
 class _ScriptedProvider implements MetadataProvider {
@@ -93,7 +95,7 @@ void main() {
           cache: db,
           art: ArtCache(
             httpClient: MockClient(
-              (_) async => http.Response.bytes([1, 2, 3], 200),
+              (_) async => http.Response.bytes(kFakeJpeg, 200),
             ),
             directory: () async => Directory('${dir.path}/.art')..createSync(),
           ),

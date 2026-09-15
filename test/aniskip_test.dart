@@ -20,6 +20,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/fake_art.dart';
+
 String _skipJson() => jsonEncode({
   'found': true,
   'results': [
@@ -182,7 +184,7 @@ void main() {
         if (req.url.host.contains('aniskip')) {
           return http.Response(_skipJson(), 200);
         }
-        return http.Response.bytes([1, 2, 3], 200); // art
+        return http.Response.bytes(kFakeJpeg, 200); // art
       });
       await touch('Cowboy Bebop - 03.mkv');
 
@@ -207,7 +209,7 @@ void main() {
       final mock = MockClient((req) async {
         if (req.method == 'POST') return _anilistPage();
         if (req.url.host.contains('aniskip')) return http.Response('', 404);
-        return http.Response.bytes([1, 2, 3], 200);
+        return http.Response.bytes(kFakeJpeg, 200);
       });
       await touch('Cowboy Bebop - 03.mkv');
 
@@ -292,7 +294,7 @@ void main() {
         if (req.url.host.contains('aniskip')) {
           return http.Response(_skipJson(), 200);
         }
-        return http.Response.bytes([1, 2, 3], 200);
+        return http.Response.bytes(kFakeJpeg, 200);
       });
       final sync = LibrarySync(
         scanner: const FileSystemFolderScanner(),

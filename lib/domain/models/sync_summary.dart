@@ -17,6 +17,8 @@ class SyncSummary extends Equatable {
     this.unreadableFolders = const [],
     this.apiFailure,
     this.cancelled = false,
+    this.skipLookupsFailed = 0,
+    this.sourcesDown = const [],
   });
 
   /// Total video files found on disk.
@@ -74,6 +76,16 @@ class SyncSummary extends Equatable {
   /// the stop; no removals were applied, and the titles not yet identified
   /// remain pending placeholders that the next scan picks up.
   final bool cancelled;
+
+  /// Skip lookups that FAILED this run (a network error, not "no data") and
+  /// were not stored, so they are retried next scan. A scan used to say
+  /// nothing about them.
+  final int skipLookupsFailed;
+
+  /// Sources marked unreachable during this run and skipped for the rest of
+  /// it — see `SourceHealth`. Named so the user knows why lookups were fast
+  /// and empty.
+  final List<String> sourcesDown;
 
   @override
   List<Object?> get props => [

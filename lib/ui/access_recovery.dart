@@ -23,8 +23,10 @@ Future<void> showAccessDeniedDialog(
     builder: (ctx) => XpDialog(
       title: 'Folder access needed',
       content: Text(
-        "AniLocal can't access $label.\n\n"
-        'Enable AniLocal in $kFilesAndFoldersPath, then scan again.',
+        'AniLocal can read the folder you just added, but not the rest of '
+        '$label.\n\n'
+        'That is fine for this folder. To let AniLocal read anywhere in '
+        '$label, enable it in $kFilesAndFoldersPath.',
       ),
       actions: [
         XpButton(label: 'Later', onPressed: () => Navigator.of(ctx).pop()),

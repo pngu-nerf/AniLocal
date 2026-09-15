@@ -13,6 +13,7 @@ import '../../../domain/repositories/watch_state_repository.dart';
 import '../../../playback/media_remote.dart';
 import '../../../playback/playback_controller.dart';
 import '../../../playback/playback_rules.dart';
+import '../../window_chrome.dart';
 import '../controls/player_controls_state.dart';
 
 /// Builds the media remote the session reports to. Injected so the session's
@@ -89,7 +90,13 @@ class PlaybackSession {
           unawaited(_guard(playback.player.playOrPause(), 'playOrPause')),
       onNext: () => unawaited(advance()),
     );
+    // Cmd-Q: the position is committed and AWAITED before the process ends.
+    // The 1-second save timer and the `onInactive` save were both races the
+    // runner could win; this one it waits for.
+    _removeQuitHook = WindowChrome.addQuitHook(persistNow);
   }
+
+  late final VoidCallback _removeQuitHook;
 
   /// The app-lifetime engine. Consumed, never owned: the session opens on it
   /// and [PlaybackController.stop]s it on the way out, and must NEVER dispose
@@ -544,20 +551,19 @@ class PlaybackSession {
   /// playback has a position, and when the position has not moved since the
   /// last write — the timer ticks on while paused, and a paused player has
   /// nothing new to say.
-  void persist() {
-    if (_markedWatched) return;
-    if (_duration <= Duration.zero || _position <= Duration.zero) return;
-    if (_lastSaved == _position) return;
+  void persist() => unawaited(persistNow());
+
+  /// [persist], awaitable — the quit hook waits on this one.
+  Future<void> persistNow() {
+    if (_disposed || _markedWatched) return Future.value();
+    if (_duration <= Duration.zero || _position <= Duration.zero) {
+      return Future.value();
+    }
+    if (_lastSaved == _position) return Future.value();
     _lastSaved = _position;
-    unawaited(
-      _guard(
-        watchState.saveProgress(
-          _shown,
-          position: _position,
-          duration: _duration,
-        ),
-        'saveProgress',
-      ),
+    return _guard(
+      watchState.saveProgress(_shown, position: _position, duration: _duration),
+      'saveProgress',
     );
   }
 
@@ -629,6 +635,7 @@ class PlaybackSession {
     unawaited(_errorSub?.cancel());
     persist();
     _disposed = true;
+    _removeQuitHook();
     _remote.dispose(); // relinquish now-playing + stop receiving commands
     controls.dispose();
     await _guard(playback.stop(), 'stop');

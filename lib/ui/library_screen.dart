@@ -33,6 +33,7 @@ import 'shell/header_spec.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'widgets/guarded.dart';
+import 'window_chrome.dart';
 
 /// Whether a series matches the live library search [query] — a case-insensitive
 /// substring of any cached title (English, romaji, or native). A pending
@@ -76,6 +77,8 @@ String scanSummaryText(SyncSummary s, String Function(String token) nameOf) =>
     '${s.filesScanned} scanned · ${s.processed} new '
     '(${s.matched} matched / ${s.unmatched} unmatched) · '
     '${s.unchanged} unchanged · ${s.removed} removed · ${lookupSummary(s, nameOf)}'
+    '${s.skipLookupsFailed > 0 ? ' · ${s.skipLookupsFailed} skip lookups failed, will retry' : ''}'
+    '${s.sourcesDown.isNotEmpty ? ' · unreachable: ${s.sourcesDown.map(nameOf).join(', ')}' : ''}'
     '${s.cancelled ? ' · stopped early' : ''}';
 
 /// Home: browse the cached library. Reads ONLY from the repository (cache) —
@@ -184,8 +187,23 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   }
 
   void _onScanningChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    // Folders changed while a scan ran: the rescan they need starts once the
+    // running one has ended — after this notification returns, since `end()`
+    // is still on the stack.
+    if (_rescanQueued && !_services.scanning.value) {
+      _rescanQueued = false;
+      scheduleMicrotask(() {
+        if (mounted) unawaited(_scan());
+      });
+    }
   }
+
+  /// Set when Settings reported a folder added or removed while a scan was
+  /// running. The post-settings scan used to return at the re-entrancy guard
+  /// and the new folder was silently never scanned.
+  bool _rescanQueued = false;
 
   @override
   void dispose() {
@@ -371,7 +389,19 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     // is the default, which the next read re-resolves with no scan and no
     // network.
     if (outcome.sourceSetChanged) {
-      await _scan();
+      if (_services.scanning.value) {
+        _rescanQueued = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Folders changed — they will be scanned when the current scan '
+              'finishes.',
+            ),
+          ),
+        );
+      } else {
+        await _scan();
+      }
     } else {
       _reload();
     }
@@ -417,8 +447,10 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
             duration: const Duration(seconds: 8),
             backgroundColor: Xp.error,
             content: Text(
-              '⚠ Could not read: ${summary.unreadableFolders.join(", ")}. '
-              'Re-add the folder to restore access (its cached items were kept).',
+              unreadableFoldersText(
+                summary.unreadableFolders,
+                missing: _services.missingFolderPaths.value,
+              ),
             ),
           ),
         );
@@ -453,7 +485,22 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   Future<void> _addFolder() async {
     final sources = _services.settingsActions.sources;
-    final result = await sources.onAddFolder();
+    final ({bool added, String? deniedLabel}) result;
+    try {
+      result = await sources.onAddFolder();
+    } catch (e, stack) {
+      // Refused (already added, or nested with one that is) or failed:
+      // either way the user hears why, through the one renderer.
+      AppLog.warn('Add folder refused or failed', error: e, stack: stack);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(userFacingMessage(e)),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     if (result.deniedLabel != null) {
       await showAccessDeniedDialog(
@@ -522,7 +569,13 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               // refresh keeps the current list on screen.
               if (all == null) {
                 final error = _loadError;
-                if (error != null) return _LoadErrorState(error: error);
+                if (error != null) {
+                  return _LoadErrorState(
+                    error: error,
+                    cachePath: _services.cachePath,
+                    onReset: _services.onResetCache,
+                  );
+                }
                 return const Center(child: CircularProgressIndicator());
               }
               if (all.isEmpty) {
@@ -616,6 +669,9 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       onSettings: _openSettings,
       progress: _services.scan.progress.value,
       onStopScan: _services.scanning.value ? _services.scan.stop : null,
+      // Unknown until the first snapshot lands: an action fails ABSENT only
+      // when its precondition is KNOWN to be gone.
+      canScan: _series == null || _folderCount > 0,
     ),
   );
 
@@ -693,9 +749,16 @@ class _NoSearchResults extends StatelessWidget {
 /// a specific remedy (a cache from a newer build → update the app) from every
 /// other, and hands the user the log so a report contains evidence.
 class _LoadErrorState extends StatefulWidget {
-  const _LoadErrorState({required this.error});
+  const _LoadErrorState({required this.error, this.cachePath, this.onReset});
 
   final Object error;
+
+  /// Where the cache lives — named, so the user knows which file is broken.
+  final String? cachePath;
+
+  /// Sets the cache aside (returns the quarantined path); the panel then
+  /// quits the app, because a closed database cannot be reopened in place.
+  final Future<String> Function()? onReset;
 
   @override
   State<_LoadErrorState> createState() => _LoadErrorStateState();
@@ -703,6 +766,28 @@ class _LoadErrorState extends StatefulWidget {
 
 class _LoadErrorStateState extends State<_LoadErrorState> {
   String _copyLabel = 'Copy diagnostics';
+
+  /// Where the broken cache went, once reset has run.
+  String? _movedTo;
+  bool _resetting = false;
+
+  Future<void> _reset() async {
+    final reset = widget.onReset;
+    if (reset == null || _resetting) return;
+    setState(() => _resetting = true);
+    try {
+      final moved = await reset();
+      if (mounted) setState(() => _movedTo = moved);
+    } catch (e, stack) {
+      AppLog.error('Cache reset failed', error: e, stack: stack);
+      if (mounted) {
+        setState(() => _resetting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Couldn't reset. ${userFacingMessage(e)}")),
+        );
+      }
+    }
+  }
 
   /// The same report Settings › About produces — one payload for one button
   /// label — awaited so the label can confirm, and caught so the screen whose
@@ -724,35 +809,108 @@ class _LoadErrorStateState extends State<_LoadErrorState> {
   Widget build(BuildContext context) {
     final error = widget.error;
     final newer = error is CacheNewerThanAppException;
+    final movedTo = _movedTo;
+    const dim = TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeBody);
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            newer
-                ? 'This library was created by a newer version of AniLocal.'
-                : "Couldn't open the library cache.",
-            style: const TextStyle(color: Xp.text, fontSize: Xp.fontSizeTitle),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            newer ? 'Update the app to open it.' : '$error',
-            style: const TextStyle(
-              color: Xp.textDim,
-              fontSize: Xp.fontSizeBody,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              newer
+                  ? 'This library was created by a newer version of AniLocal.'
+                  : "Couldn't open the library cache.",
+              style: const TextStyle(
+                color: Xp.text,
+                fontSize: Xp.fontSizeTitle,
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: Xp.spaceL),
-          XpButton(
-            icon: Icons.copy_outlined,
-            label: _copyLabel,
-            onPressed: _copy,
-          ),
-        ],
+            const SizedBox(height: 10),
+            Text(
+              newer ? 'Update the app to open it.' : userFacingMessage(error),
+              style: dim,
+              textAlign: TextAlign.center,
+            ),
+            if (widget.cachePath case final path?) ...[
+              const SizedBox(height: 6),
+              Text(
+                'The cache is $path',
+                style: dim,
+                textAlign: TextAlign.center,
+              ),
+            ],
+            const SizedBox(height: Xp.spaceL),
+            if (movedTo != null)
+              Text(
+                'Moved the broken cache to $movedTo. Quit and reopen AniLocal '
+                'to start with an empty library; your folders will need to be '
+                'added and scanned again.',
+                style: dim,
+                textAlign: TextAlign.center,
+              ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: [
+                XpButton(
+                  icon: Icons.copy_outlined,
+                  label: _copyLabel,
+                  onPressed: _copy,
+                ),
+                // Only for a cache that IS broken: a newer-schema cache is
+                // intact and wants the newer app, not a reset.
+                if (!newer && widget.onReset != null && movedTo == null)
+                  XpButton(
+                    icon: Icons.restart_alt,
+                    label: 'Reset library cache',
+                    onPressed: _resetting ? null : _reset,
+                  ),
+                if (movedTo != null)
+                  XpButton(
+                    lit: true,
+                    icon: Icons.power_settings_new,
+                    label: 'Quit AniLocal',
+                    onPressed: () => unawaited(WindowChrome.quit()),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// The scan's "could not read" line, branching on WHY: an unplugged drive
+/// wants reconnecting, a folder that exists but refused wants re-adding or a
+/// grant. One sentence used to say "re-add the folder" for both — the denied
+/// remedy, offered for a mere unplug.
+@visibleForTesting
+String unreadableFoldersText(
+  List<String> unreadable, {
+  required Set<String> missing,
+}) {
+  final gone = [
+    for (final p in unreadable)
+      if (missing.contains(p)) p,
+  ];
+  final refused = [
+    for (final p in unreadable)
+      if (!missing.contains(p)) p,
+  ];
+  final parts = <String>[
+    if (gone.isNotEmpty)
+      '${gone.join(", ")} ${gone.length == 1 ? "is" : "are"} not connected — '
+          'reconnect the drive and scan again',
+    if (refused.isNotEmpty)
+      "couldn't read ${refused.join(", ")} — re-add the folder or grant "
+          'access in $kFilesAndFoldersPath',
+  ];
+  return '⚠ ${parts.join('; ')}. Cached items were kept.';
 }
 
 /// Two different empties, two different next steps: no folders yet → add
