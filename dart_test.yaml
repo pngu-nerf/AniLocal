@@ -2,3 +2,9 @@
 # only the `-P` preset flag, which is why test_live/ is a separate directory
 # rather than a tag — see docs/ARCHITECTURE.md).
 timeout: 60s
+
+tags:
+  # Measurements over a synthetic 600-show / 8,000-file library. Excluded from
+  # the gate (tool/check.sh) and from coverage; run with tool/perf.sh.
+  perf:
+    timeout: 10m

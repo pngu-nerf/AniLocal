@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-flutter test --coverage >/dev/null
+flutter test --coverage --exclude-tags perf >/dev/null
 # Generated Drift code (*.g.dart) is skipped: it is not ours to cover, and at
 # ~4k lines it would swamp the figure either way.
 awk -F'[:,]' '

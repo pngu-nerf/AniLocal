@@ -9,4 +9,6 @@ cd "$(dirname "$0")/.."
 
 dart format --output=none --set-exit-if-changed .
 flutter analyze
-flutter test
+# `perf` is excluded: those tests print measurements and assert nothing about
+# time — tool/perf.sh runs them, docs/performance.md records them.
+flutter test --exclude-tags perf
