@@ -63,18 +63,24 @@ class VfdReadout extends StatelessWidget {
     // Semantics label so the readout is spoken by screen readers and findable
     // in tests (a CustomPainter draws no Text, so it would otherwise be
     // invisible to both).
+    // Its own layer: every lit dot is two circles, one blurred, so a readout
+    // is hundreds of blur ops. In a RepaintBoundary a neighbour repainting
+    // (the seek bar every position event) no longer redraws it, and a
+    // changed readout redraws only itself.
     return Semantics(
       label: text,
-      child: SizedBox(
-        width: s.width,
-        height: s.height,
-        child: CustomPaint(
-          painter: _DotMatrixPainter(
-            text: text.toUpperCase(),
-            color: color,
-            dotPitch: dotPitch,
-            glow: glow,
-            showGrid: showGrid,
+      child: RepaintBoundary(
+        child: SizedBox(
+          width: s.width,
+          height: s.height,
+          child: CustomPaint(
+            painter: _DotMatrixPainter(
+              text: text.toUpperCase(),
+              color: color,
+              dotPitch: dotPitch,
+              glow: glow,
+              showGrid: showGrid,
+            ),
           ),
         ),
       ),

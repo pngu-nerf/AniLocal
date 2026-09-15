@@ -40,6 +40,7 @@ void main() {
 
         await AppLog.attachFile(() async => dir);
         AppLog.info('after attach');
+        AppLog.flush(); // info lines are batched; the test wants them now
 
         final text = await File('${dir.path}/app.log').readAsString();
         expect(
@@ -61,6 +62,7 @@ void main() {
       for (var i = 0; i < (AppLog.maxFileBytes ~/ 4096) + 4; i++) {
         AppLog.info(big);
       }
+      AppLog.flush();
 
       expect(
         File('${dir.path}/app.log.1').existsSync(),
@@ -100,6 +102,24 @@ void main() {
       expect(lines[2], contains('(100 so far under "k")'));
       expect(AppLog.repeatCount('k'), 120);
       expect(AppLog.repeatCount('other'), 0);
+    });
+
+    test('lines are batched to disk; an error lands at once', () async {
+      final dir = await Directory.systemTemp.createTemp('anilocal_log_');
+      addTearDown(() => dir.delete(recursive: true));
+      await AppLog.attachFile(() async => dir);
+      final file = File('${dir.path}/app.log');
+      final before = file.lengthSync();
+      AppLog.info('batched');
+      expect(file.lengthSync(), before, reason: 'not written yet');
+      AppLog.error('urgent');
+      final text = file.readAsStringSync();
+      expect(text, contains('urgent'));
+      expect(
+        text,
+        contains('batched'),
+        reason: 'the error flushed the batch too',
+      );
     });
 
     test('dump() is the ring, joined — what Copy diagnostics pastes', () {

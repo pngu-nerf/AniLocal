@@ -68,6 +68,7 @@ List<EpisodeListRow> episodeRowsFor({
   required int? episodeCount,
   required bool showMissing,
   required String query,
+  List<EpisodeSlot>? slots,
 }) {
   final q = query.trim().toLowerCase();
   if (!showMissing) {
@@ -81,7 +82,9 @@ List<EpisodeListRow> episodeRowsFor({
           PresentRow(e),
     ];
   }
-  final slots = computeEpisodeSlots(
+  // [slots] may be supplied by a caller that already computed (and memoised)
+  // them; otherwise derive them here — same function, same result.
+  slots ??= computeEpisodeSlots(
     present: episodes,
     hidden: hidden,
     episodeCount: episodeCount,
@@ -683,14 +686,33 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     ),
   );
 
+  ({List<Episode> eps, Set<int> hidden, int? count, List<EpisodeSlot> slots})?
+  _slotsMemo;
+
+  List<EpisodeSlot> _slotsFor(List<Episode> eps, Set<int> hidden, int? count) {
+    final m = _slotsMemo;
+    if (m != null &&
+        identical(m.eps, eps) &&
+        identical(m.hidden, hidden) &&
+        m.count == count) {
+      return m.slots;
+    }
+    final slots = computeEpisodeSlots(
+      present: eps,
+      hidden: hidden,
+      episodeCount: count,
+    );
+    _slotsMemo = (eps: eps, hidden: hidden, count: count, slots: slots);
+    return slots;
+  }
+
   Widget _content(Series series) {
     final showMissing = _missingEnabled && !series.pending;
     final effectiveHidden = showMissing ? _hidden : const <int>{};
-    final slots = computeEpisodeSlots(
-      present: _episodes,
-      hidden: effectiveHidden,
-      episodeCount: series.episodeCount,
-    );
+    // Memoised on its inputs: build runs per keystroke of the episode search,
+    // and the slot model is O(episodeCount) allocations — ~4,000 per typed
+    // character on a 1,000-episode entry. The inputs change only on reload.
+    final slots = _slotsFor(_episodes, effectiveHidden, series.episodeCount);
     final tally = computeDownloadTally(slots, series.episodeCount);
     final hiddenSorted = _hidden.toList()..sort();
     final hiddenTabAvailable = showMissing && hiddenSorted.isNotEmpty;
@@ -701,6 +723,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       episodeCount: series.episodeCount,
       showMissing: showMissing,
       query: q,
+      slots: slots,
     );
     final visibleHidden = q.isEmpty
         ? hiddenSorted

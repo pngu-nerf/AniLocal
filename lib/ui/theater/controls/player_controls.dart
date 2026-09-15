@@ -55,20 +55,41 @@ class PlayPauseButton extends StatelessWidget {
 }
 
 /// `m:ss / m:ss` (or `h:mm:ss`) current / total.
-class TimeLabel extends StatelessWidget {
+///
+/// Stateful for one reason: the position stream ticks several times a second
+/// and the readout shows whole seconds, so it listens to the SECOND — the
+/// stream mapped and de-duplicated once, here, not rebuilt per frame. Every
+/// position event used to redraw ~250 blurred dots.
+class TimeLabel extends StatefulWidget {
   const TimeLabel({super.key, required this.player});
   final Player player;
 
   @override
+  State<TimeLabel> createState() => _TimeLabelState();
+}
+
+class _TimeLabelState extends State<TimeLabel> {
+  late Stream<int> _seconds = _secondsOf(widget.player);
+
+  static Stream<int> _secondsOf(Player p) =>
+      p.stream.position.map((d) => d.inSeconds).distinct();
+
+  @override
+  void didUpdateWidget(TimeLabel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.player != oldWidget.player) _seconds = _secondsOf(widget.player);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<Duration>(
-      stream: player.stream.position,
-      initialData: player.state.position,
+    return StreamBuilder<int>(
+      stream: _seconds,
+      initialData: widget.player.state.position.inSeconds,
       builder: (context, posSnap) => StreamBuilder<Duration>(
-        stream: player.stream.duration,
-        initialData: player.state.duration,
+        stream: widget.player.stream.duration,
+        initialData: widget.player.state.duration,
         builder: (context, durSnap) {
-          final pos = posSnap.data ?? Duration.zero;
+          final pos = Duration(seconds: posSnap.data ?? 0);
           final dur = durSnap.data ?? Duration.zero;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),

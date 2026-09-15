@@ -59,26 +59,38 @@ class ShowCover extends StatelessWidget {
     // have nothing to act on here; callers disable those options.)
     if (!hasCover(imagePath)) return _placeholder(placeholderIcon);
 
-    final image = Image.file(
-      File(imagePath!),
-      fit: fit,
-      // The file can be gone (a sweep, a hand edit): fall to the placeholder
-      // instead of Flutter's grey error box.
-      errorBuilder: (_, _, _) => _placeholder(placeholderIcon),
+    // Decode at the size the cover is SHOWN, not the size it was saved. A
+    // provider's "extra large" cover is ~460×650 (~1.2 MB decoded); a grid
+    // card is ~200 px wide. Full-size decodes filled the image cache with 80
+    // covers and evicted continuously while a 600-card grid scrolled.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final dpr = MediaQuery.devicePixelRatioOf(context);
+        final w = constraints.maxWidth;
+        final image = Image.file(
+          File(imagePath!),
+          fit: fit,
+          cacheWidth: w.isFinite && w > 0 ? (w * dpr).ceil() : null,
+          // The file can be gone (a sweep, a hand edit): fall to the
+          // placeholder instead of Flutter's grey error box.
+          errorBuilder: (_, _, _) => _placeholder(placeholderIcon),
+        );
+        if (pictureMode == PictureMode.blur) {
+          // Clip so the blur can't bleed past the cover's bounds. The blur
+          // runs over the downscaled decode, not the original.
+          return ClipRect(
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(
+                sigmaX: blurSigma,
+                sigmaY: blurSigma,
+              ),
+              child: image,
+            ),
+          );
+        }
+        return image;
+      },
     );
-    if (pictureMode == PictureMode.blur) {
-      // Clip so the blur can't bleed past the cover's bounds.
-      return ClipRect(
-        child: ImageFiltered(
-          imageFilter: ui.ImageFilter.blur(
-            sigmaX: blurSigma,
-            sigmaY: blurSigma,
-          ),
-          child: image,
-        ),
-      );
-    }
-    return image;
   }
 
   Widget _placeholder(IconData icon) => ColoredBox(

@@ -144,8 +144,16 @@ class _MarqueeState extends State<_Marquee>
   static const double _loopGap = 48; // blank run before the title repeats
   static const Duration _startPause = Duration(milliseconds: 900);
 
+  /// How many full passes the title makes before the marquee RESTS at its
+  /// start. The reader has had the whole title by then; a marquee that runs
+  /// forever is ~800 blurred dots a frame for as long as the page is open —
+  /// on every show page with a long title, including behind a playing video.
+  /// Hovering the readout runs it again.
+  static const int passesBeforeRest = 3;
+
   late final AnimationController _controller;
   late final double _travel; // one full cycle's distance
+  bool _running = false;
 
   @override
   void initState() {
@@ -156,15 +164,30 @@ class _MarqueeState extends State<_Marquee>
       vsync: this,
       duration: _startPause + Duration(milliseconds: scrollMs),
     );
-    // Continuous loop. To switch to scroll-once-then-settle, replace `.repeat()`
-    // with `.forward()` (it ends with the title back at the start).
-    unawaited(_controller.repeat());
-    // The marquee is ~800 blurred dots a frame, forever. Not while the app is
-    // in the background: stop on inactive, resume on return.
+    unawaited(_run());
+    // Not while the app is in the background either: stop on inactive,
+    // resume the passes on return.
     _lifecycle = AppLifecycleListener(
       onInactive: _controller.stop,
-      onResume: () => unawaited(_controller.repeat()),
+      onResume: () => unawaited(_run()),
     );
+  }
+
+  /// [passesBeforeRest] passes, then rest at the start. Idempotent while a
+  /// run is in progress.
+  Future<void> _run() async {
+    if (_running) return;
+    _running = true;
+    try {
+      for (var i = 0; i < passesBeforeRest && mounted; i++) {
+        await _controller.forward(from: 0);
+      }
+    } on TickerCanceled {
+      // disposed or stopped mid-pass: nothing to finish
+    } finally {
+      _running = false;
+      if (mounted) _controller.value = 0;
+    }
   }
 
   late final AppLifecycleListener _lifecycle;
@@ -191,22 +214,26 @@ class _MarqueeState extends State<_Marquee>
 
     // OverflowBox lets the (too-wide) content lay out at its natural width; the
     // parent ClipRect masks it to the black screen's title region.
-    return OverflowBox(
-      alignment: Alignment.centerLeft,
-      maxWidth: double.infinity,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final t = _controller.value;
-          final progress = t <= pauseFraction
-              ? 0.0
-              : (t - pauseFraction) / (1 - pauseFraction);
-          return Transform.translate(
-            offset: Offset(-progress * _travel, 0),
-            child: child,
-          );
-        },
-        child: content,
+    return MouseRegion(
+      // Wake the marquee for another set of passes.
+      onEnter: (_) => unawaited(_run()),
+      child: OverflowBox(
+        alignment: Alignment.centerLeft,
+        maxWidth: double.infinity,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final t = _controller.value;
+            final progress = t <= pauseFraction
+                ? 0.0
+                : (t - pauseFraction) / (1 - pauseFraction);
+            return Transform.translate(
+              offset: Offset(-progress * _travel, 0),
+              child: child,
+            );
+          },
+          child: content,
+        ),
       ),
     );
   }

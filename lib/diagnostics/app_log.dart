@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
@@ -28,7 +30,7 @@ abstract final class AppLog {
   /// File rotates past this: `app.log` -> `app.log.1`, the previous `.1` gone.
   static const int maxFileBytes = 1 << 20;
 
-  static final List<String> _ring = <String>[];
+  static final ListQueue<String> _ring = ListQueue<String>();
   static File? _file;
   static int _fileBytes = 0;
   static bool _debug = false;
@@ -57,6 +59,7 @@ abstract final class AppLog {
           await _rotate(file);
         }
       } else {
+        await file.create(recursive: true); // exists from attach, even if idle
         _fileBytes = 0;
       }
       _file = file;
@@ -64,6 +67,7 @@ abstract final class AppLog {
       for (final line in _ring) {
         _append(line);
       }
+      flush();
     } on Exception {
       _file = null; // ring-only; a logger must never take the app down
     }
@@ -103,6 +107,9 @@ abstract final class AppLog {
 
   /// Forget everything. Tests only; production never resets.
   static void reset() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _pending.clear();
     _debug = false;
     _repeats.clear();
     _ring.clear();
@@ -126,24 +133,51 @@ abstract final class AppLog {
     if (stack != null) buffer.write('\n$stack');
     final line = buffer.toString();
     _ring.add(line);
-    if (_ring.length > ringCapacity) _ring.removeAt(0);
+    if (_ring.length > ringCapacity) _ring.removeFirst();
     if (_debug) {
       developer.log(message, name: 'anilocal', level: _developerLevel(level));
     }
-    if (_file != null) _append(line);
+    // An error line races the crash it may be describing: it goes to disk at
+    // once. Everything else is batched.
+    if (_file != null) _append(line, urgent: level == LogLevel.error);
   }
 
-  static void _append(String line) {
+  /// Lines waiting for the disk. Written in one go by [flush], which runs
+  /// [flushDelay] after the first buffered line, immediately for an error,
+  /// and on demand (the quit path). One synchronous write per line used to be
+  /// the rule — right for a crash log, wrong once mpv's log stream and a scan
+  /// over a bad volume produced hundreds of lines a minute.
+  static final StringBuffer _pending = StringBuffer();
+  static Timer? _flushTimer;
+  static const Duration flushDelay = Duration(milliseconds: 250);
+
+  static void _append(String line, {bool urgent = false}) {
+    if (_file == null) return;
+    _pending.writeln(line);
+    if (urgent) {
+      flush();
+      return;
+    }
+    _flushTimer ??= Timer(flushDelay, flush);
+  }
+
+  /// Write everything buffered to the file now. Safe to call at any time;
+  /// a no-op when nothing is pending or no file is attached.
+  static void flush() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
     final file = _file;
-    if (file == null) return;
+    if (file == null || _pending.isEmpty) return;
+    final text = _pending.toString();
+    _pending.clear();
     try {
-      // Synchronous on purpose: a log line that races the crash it describes
-      // is a log line that never lands. These are short writes to a local
-      // file; the cost is invisible next to a single network request.
-      file.writeAsStringSync('$line\n', mode: FileMode.append, flush: false);
-      _fileBytes += utf8.encode(line).length + 1; // bytes, like the file
+      // Synchronous: the quit path and an error line must land before the
+      // process can go.
+      file.writeAsStringSync(text, mode: FileMode.append, flush: false);
+      _fileBytes += utf8.encode(text).length; // bytes, like the file
       if (_fileBytes > maxFileBytes) {
         _rotateSync(file);
+        file.createSync(); // the live file exists, empty, right away
       }
     } on Exception {
       // dropped — see class doc
