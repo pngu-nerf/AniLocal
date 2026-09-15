@@ -25,7 +25,15 @@ class TccFolderAccess implements FolderAccess {
     final cat = tccCategoryRoot(folderPath, _home);
     if (cat == null) return const FolderAccessResult.notApplicable();
     if (_confirmed.contains(cat.root)) {
-      return FolderAccessResult.granted(cat.label);
+      // "Granted" has to mean "readable now". A volume root confirmed earlier
+      // in the session and unplugged since used to keep answering granted,
+      // which hid the unplug from every health pass until relaunch.
+      final present = await Directory(
+        cat.root,
+      ).exists().timeout(const Duration(seconds: 5), onTimeout: () => false);
+      if (present) return FolderAccessResult.granted(cat.label);
+      _confirmed.remove(cat.root);
+      return FolderAccessResult.missing(cat.label);
     }
     try {
       // Enumerate the category root, reading at most one entry. The opendir is

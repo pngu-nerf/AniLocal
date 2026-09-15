@@ -44,7 +44,13 @@ abstract interface class VolumeResolver {
 /// the instance (cheap; a relaunch/rescan re-resolves), and never throws — any
 /// failure (no diskutil, unknown volume, unmounted) surfaces as null.
 class DiskutilVolumeResolver implements VolumeResolver {
-  DiskutilVolumeResolver();
+  /// [plist] runs `diskutil info -plist <arg>` and returns its output, or null
+  /// on any failure. Injectable so the caching rules are testable without
+  /// diskutil; production uses the bounded process runner below.
+  DiskutilVolumeResolver({Future<String?> Function(String arg)? plist})
+    : _plist = plist ?? _diskutilPlist;
+
+  final Future<String?> Function(String arg) _plist;
 
   static const _diskutil = '/usr/sbin/diskutil';
   final Map<String, String?> _mountByVolumeId = {};
@@ -64,7 +70,7 @@ class DiskutilVolumeResolver implements VolumeResolver {
     // (null = "leave unbound; the stored path is its own stable identity").
     final root = _volumeRootOf(path);
     if (root == null) return null;
-    final plist = await _diskutilPlist(root);
+    final plist = await _plist(root);
     if (plist == null) return null;
     final uuid = diskutilPlistString(plist, 'VolumeUUID');
     final mount = diskutilPlistString(plist, 'MountPoint');
@@ -87,14 +93,23 @@ class DiskutilVolumeResolver implements VolumeResolver {
   Future<String?> mountPointForVolumeId(String volumeId) async {
     if (_mountByVolumeId.containsKey(volumeId)) {
       final cached = _mountByVolumeId[volumeId];
-      final since = _negativeAt[volumeId];
-      final expired =
-          cached == null &&
-          since != null &&
-          DateTime.now().difference(since) >= negativeTtl;
-      if (!expired) return cached;
+      if (cached != null) {
+        // A positive answer is trusted only while the mount point EXISTS. A
+        // drive pulled mid-session used to be reported at its old mount for
+        // the rest of the process, so the library never greyed until relaunch.
+        final present = await Directory(
+          cached,
+        ).exists().timeout(const Duration(seconds: 5), onTimeout: () => false);
+        if (present) return cached;
+        _mountByVolumeId.remove(volumeId);
+      } else {
+        final since = _negativeAt[volumeId];
+        final expired =
+            since != null && DateTime.now().difference(since) >= negativeTtl;
+        if (!expired) return null;
+      }
     }
-    final plist = await _diskutilPlist(volumeId);
+    final plist = await _plist(volumeId);
     final mount = plist == null
         ? null
         : diskutilPlistString(plist, 'MountPoint');
@@ -117,7 +132,7 @@ class DiskutilVolumeResolver implements VolumeResolver {
   /// freezing the library screen.
   static const Duration _diskutilTimeout = Duration(seconds: 10);
 
-  Future<String?> _diskutilPlist(String arg) async {
+  static Future<String?> _diskutilPlist(String arg) async {
     Process? process;
     try {
       // `Process.start`, not `run`: `run(...).timeout()` abandoned the child on

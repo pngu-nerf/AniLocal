@@ -19,6 +19,7 @@ import 'data/cache/skip_view_source.dart';
 import 'data/crossmap/cross_map_store.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
+import 'data/folders/folder_health_probe.dart';
 import 'data/folders/tcc_folder_access.dart';
 import 'data/folders/volume_resolver.dart';
 import 'data/jikan/jikan_client.dart';
@@ -376,16 +377,12 @@ Future<void> main() async {
   // out shows sourced only from these. Populated by [scan] from the same
   // ensureAccess results that drive the reconnect banner.
   final missingFolderPaths = ValueNotifier<Set<String>>(const {});
-  void applyAccess(FolderAccessResult r) {
-    final label = r.categoryLabel;
-    if (label == null) return; // not a TCC category / volume
-    final denied = {...accessIssues.value}..remove(label);
-    final missing = {...missingFolders.value}..remove(label);
-    if (r.isDenied) denied.add(label);
-    if (r.isMissing) missing.add(label);
-    accessIssues.value = denied.toList()..sort();
-    missingFolders.value = missing.toList()..sort();
-  }
+  // ONE probe rebuilds all three, together, at launch and at the start of
+  // every scan — see FolderHealthProbe for the two rules it holds.
+  final folderHealth = FolderHealthProbe(
+    resolver: volumeResolver,
+    access: folderAccess,
+  );
 
   // Folders are user-picked via the native panel — there is NO hardcoded path.
   // Adding a folder under a TCC category provokes the folder-wide prompt (so
@@ -402,12 +399,11 @@ Future<void> main() async {
     final refusal = folderRefusal(path, [for (final f in existing) f.path]);
     if (refusal != null) throw refusal;
     await repository.addFolder(path);
-    final result = await folderAccess.ensureAccess(path);
     // The CATEGORY grant is reported to the caller (its dialog explains what
     // the folder-wide prompt was about) but not made ambient here: the folder
     // itself reads through the panel's inferred consent, and the banner is
-    // for a scan that actually could not read — see [scan].
-    if (!result.isDenied) applyAccess(result);
+    // for a folder that actually cannot be read — the probe decides that.
+    final result = await folderAccess.ensureAccess(path);
     return (
       added: true,
       deniedLabel: result.isDenied ? result.categoryLabel : null,
@@ -430,29 +426,18 @@ Future<void> main() async {
   /// unplugged drive or a revoked permission showed a healthy library with
   /// nothing greyed and no banner until the user happened to press Scan.
   Future<List<LibraryFolderRow>> refreshFolderHealth() async {
-    // Folder ROWS (not just paths) carry each folder's volume binding, so we can
-    // resolve its CURRENT mount before checking access.
+    // Folder ROWS (not just paths) carry each folder's volume binding, so the
+    // probe can resolve the CURRENT mount before checking access.
     final folders = await database.allFolderRows();
-    // Confirm/upgrade folder-wide access per category (additive — does NOT gate
-    // the scan; the scanner still reads each folder via whatever grant it has).
-    // Check on the CURRENT mount so a volume that remounted under a NEW name is
-    // not mistaken for missing; a truly-unmounted volume (resolves to null)
-    // reports missing via its stable path. Same pass records which folder PATHS
-    // are currently missing so the UI can grey out shows sourced only there —
-    // replaced wholesale each pass, so a replugged folder clears automatically.
-    final missingPaths = <String>{};
-    for (final f in folders) {
-      final current = await resolveFolderPath(
-        storedPath: f.path,
-        volumeId: f.volumeId,
-        volumeSubpath: f.volumeSubpath,
-        resolver: volumeResolver,
-      );
-      final result = await folderAccess.ensureAccess(current ?? f.path);
-      applyAccess(result);
-      if (current == null || result.isMissing) missingPaths.add(f.path);
-    }
-    missingFolderPaths.value = missingPaths;
+    final report = await folderHealth.probe([
+      for (final f in folders)
+        (path: f.path, volumeId: f.volumeId, volumeSubpath: f.volumeSubpath),
+    ]);
+    // Published together, wholesale: the greying, the reconnect banner and
+    // the access banner can no longer disagree about the same folder.
+    missingFolderPaths.value = report.missingPaths;
+    missingFolders.value = report.missingLabels;
+    accessIssues.value = report.deniedLabels;
     return folders;
   }
 

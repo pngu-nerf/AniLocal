@@ -71,7 +71,29 @@ String lookupSummary(SyncSummary s, String Function(String token) nameOf) {
       : 'lookups: ${parts.join(', ')}';
 }
 
-/// The scan snackbar's one line.
+/// Everything the scan has to say, as ONE message: the summary line, then
+/// the unreadable-folder line and the API-failure line when there are any.
+/// `problem` is true when either problem line is present (red, longer).
+@visibleForTesting
+({String text, bool problem}) scanResultText(
+  SyncSummary s,
+  String Function(String token) nameOf, {
+  required Set<String> missing,
+}) {
+  final lines = [scanSummaryText(s, nameOf)];
+  if (s.unreadableFolders.isNotEmpty) {
+    lines.add(unreadableFoldersText(s.unreadableFolders, missing: missing));
+  }
+  if (s.apiFailure case final failure?) {
+    lines.add(
+      '⚠ ${metadataFailureCause(failure)} '
+      'Your library was kept as-is (nothing removed).',
+    );
+  }
+  return (text: lines.join('\n'), problem: lines.length > 1);
+}
+
+/// The scan snackbar's summary line.
 @visibleForTesting
 String scanSummaryText(SyncSummary s, String Function(String token) nameOf) =>
     '${s.filesScanned} scanned · ${s.processed} new '
@@ -437,37 +459,23 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         cancellation: cancellation,
       );
       if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
-      messenger.showSnackBar(
-        SnackBar(content: Text(scanSummaryText(summary, _sourceName))),
+      // ONE snackbar. The summary, the unreadable folders and the API failure
+      // used to queue as three, so the red one appeared only after the first
+      // had timed out — by which time the user had looked away.
+      final result = scanResultText(
+        summary,
+        _sourceName,
+        missing: _services.missingFolderPaths.value,
       );
-      if (summary.unreadableFolders.isNotEmpty) {
-        messenger.showSnackBar(
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
           SnackBar(
-            duration: const Duration(seconds: 8),
-            backgroundColor: Xp.error,
-            content: Text(
-              unreadableFoldersText(
-                summary.unreadableFolders,
-                missing: _services.missingFolderPaths.value,
-              ),
-            ),
+            duration: Duration(seconds: result.problem ? 8 : 4),
+            backgroundColor: result.problem ? Xp.error : null,
+            content: Text(result.text),
           ),
         );
-      }
-      final apiFailure = summary.apiFailure;
-      if (apiFailure != null) {
-        messenger.showSnackBar(
-          SnackBar(
-            duration: const Duration(seconds: 8),
-            backgroundColor: Xp.error,
-            content: Text(
-              '⚠ ${metadataFailureCause(apiFailure)} '
-              'Your library was kept as-is (nothing removed).',
-            ),
-          ),
-        );
-      }
       _reload();
     } catch (e, stack) {
       AppLog.error('Scan failed', error: e, stack: stack);
