@@ -12,6 +12,7 @@ import '../domain/missing_episodes.dart';
 import '../domain/models/cache_errors.dart';
 import '../domain/models/continue_watching.dart';
 import '../domain/models/episode.dart';
+import '../domain/models/library_snapshot.dart';
 import '../domain/models/series.dart';
 import '../domain/models/sync_summary.dart';
 import 'access_recovery.dart';
@@ -189,12 +190,9 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     if (mounted) setState(() {});
   }
 
-  /// Every secondary read this screen fires goes through here: the value is
-  /// applied on arrival if the screen is still mounted, and a failure is
-  /// LOGGED and leaves the field as it was. Only the main `allSeries` read
-  /// owns the error panel, because that is the one whose absence is a blank
-  /// screen; a sibling failing (continue-watching, up-next, a setting) must
-  /// not be an uncaught async error.
+  /// A secondary read (a persisted layout value): applied on arrival if the
+  /// screen is still mounted; a failure is LOGGED and leaves the field as it
+  /// was, never an uncaught async error.
   void _background<T>(
     String what,
     Future<T> future,
@@ -229,19 +227,40 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     _reload();
   }
 
+  /// Monotonic run counter for [_reload]. It is called from eight places, so
+  /// runs overlap routinely (mid-scan progress + post-scan, return from the
+  /// player + a card tap); without this the OLDER run finishing last won the
+  /// `setState` and the grid showed a stale library.
+  int _reloadGeneration = 0;
+
   void _reload() {
-    // Assign ON ARRIVAL, exactly like the three fields below — nothing is
-    // cleared, so the current library stays on screen while the new one loads.
+    final generation = ++_reloadGeneration;
+    // ONE read for everything the screen shows — the series, every card's
+    // episodes, continue-watching, up-next, the unmatched count — assigned ON
+    // ARRIVAL so the current library stays on screen while the new one loads
+    // (CLAUDE.md, "never clear known content"). Five separate reads used to
+    // load the same tables five times per repaint; docs/performance.md has the
+    // numbers.
     unawaited(
-      _services.repository.allSeries().then(
-        (s) {
-          if (!mounted) return;
-          setState(() {
-            _series = s;
-            _loadError = null;
-          });
-          unawaited(_loadSeriesStats(s));
-        },
+      () async {
+        final snapshot = await _services.repository.snapshot();
+        final missingEnabled = await _services.settings.loadMissingEnabled();
+        if (!mounted || generation != _reloadGeneration) return;
+        final stats = _statsFrom(
+          snapshot,
+          missingEnabled ? snapshot.hidden : const <int, Set<int>>{},
+        );
+        setState(() {
+          _series = snapshot.series;
+          _loadError = null;
+          _continueEntries = snapshot.continueWatching;
+          _upNext = snapshot.upNext;
+          _unmatchedCount = snapshot.unmatchedCount;
+          _sourceFoldersBySeries = stats.folders;
+          _downloadCounts = stats.counts;
+        });
+      }().then(
+        (_) {},
         // Without this, every "cannot open the database" failure — corrupt
         // file, read-only folder, a cache from a newer build, a migration that
         // threw — left `_series` null forever: an eternal spinner, no message,
@@ -249,54 +268,23 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         // a way to copy the log.
         onError: (Object e, StackTrace stack) {
           AppLog.error('Library load failed', error: e, stack: stack);
-          if (mounted) setState(() => _loadError = e);
+          if (mounted && generation == _reloadGeneration) {
+            setState(() => _loadError = e);
+          }
         },
       ),
     );
-    // Continue-watching: resolved off the cache into state so the panel's
-    // presence (and thus the layout) is known without a FutureBuilder.
-    _background(
-      'continue watching',
-      _services.watchState.continueWatching(),
-      (e) => setState(() => _continueEntries = e),
-    );
-    // "Up Next" per series — resolved off the cache; updates the grid when ready.
-    _background(
-      'up next',
-      _services.watchOrder.upNextBySeries(),
-      (m) => setState(() => _upNext = m),
-    );
-    // Confirmed-unmatched count — gates the top-bar Unmatched button.
-    _background(
-      'unmatched count',
-      _services.repository.unmatchedFiles(),
-      (u) => setState(() => _unmatchedCount = u.length),
-    );
   }
 
-  /// Monotonic run counter for [_loadSeriesStats]. `_reload` is called from
-  /// eight places, so runs overlap routinely; without this the OLDER run
-  /// finishing last won the `setState` and the grid showed stale greying and
-  /// tallies.
-  int _statsGeneration = 0;
-
-  /// Per-series stats for the grid: the library folders each show's sources
-  /// occupy (for greying), and the downloaded-episode tally for the card's
-  /// "⬇N of M +X" line. Reads existing cached domain state only.
-  Future<void> _loadSeriesStats(List<Series> series) async {
-    final generation = ++_statsGeneration;
-    final missingEnabled = await _services.settings.loadMissingEnabled();
-    final allHidden = missingEnabled
-        ? await _services.missingEpisodes.allHiddenEpisodes()
-        : const <int, Set<int>>{};
-    // ONE read for every series, not one per card: `episodesFor` rebuilds the
-    // whole library from five tables each time it is called.
-    final episodesBySeries = await _services.repository.episodesBySeries();
-    if (!mounted || generation != _statsGeneration) return;
+  /// Per-series stats for the grid, derived from the snapshot: the library
+  /// folders each show's sources occupy (for greying), and the downloaded-
+  /// episode tally for the card's "⬇N of M +X" line. Pure.
+  static ({Map<int, Set<String>> folders, Map<int, DownloadTally> counts})
+  _statsFrom(LibrarySnapshot snapshot, Map<int, Set<int>> hidden) {
     final folders = <int, Set<String>>{};
     final counts = <int, DownloadTally>{};
-    for (final s in series) {
-      final eps = episodesBySeries[s.seriesId] ?? const <Episode>[];
+    for (final s in snapshot.series) {
+      final eps = snapshot.episodesBySeries[s.seriesId] ?? const <Episode>[];
       folders[s.seriesId] = {
         for (final e in eps)
           for (final src in e.sources) src.folderPath,
@@ -304,15 +292,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       // The SAME rule the show page uses, through the same function.
       final slots = computeEpisodeSlots(
         present: eps,
-        hidden: allHidden[s.seriesId] ?? const <int>{},
+        hidden: hidden[s.seriesId] ?? const <int>{},
         episodeCount: s.episodeCount,
       );
       counts[s.seriesId] = computeDownloadTally(slots, s.episodeCount);
     }
-    setState(() {
-      _sourceFoldersBySeries = folders;
-      _downloadCounts = counts;
-    });
+    return (folders: folders, counts: counts);
   }
 
   HeaderHooks get _header => HeaderHooks(

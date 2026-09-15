@@ -12,6 +12,10 @@ class CountingInterceptor extends QueryInterceptor {
   int deletes = 0;
   int customs = 0;
   int transactions = 0;
+
+  /// Rows returned by every select — the number that tells a per-series read
+  /// from a whole-library one when their statement counts are the same.
+  int rowsRead = 0;
   Duration busy = Duration.zero;
 
   /// Statements by their first two words ("SELECT file_cache" is not
@@ -23,6 +27,7 @@ class CountingInterceptor extends QueryInterceptor {
 
   void reset() {
     selects = inserts = updates = deletes = customs = transactions = 0;
+    rowsRead = 0;
     busy = Duration.zero;
     byTable.clear();
   }
@@ -30,7 +35,7 @@ class CountingInterceptor extends QueryInterceptor {
   String summary() =>
       '$statements statements ($selects select, $inserts insert, $updates '
       'update, $deletes delete, $customs custom; $transactions tx; '
-      '${busy.inMilliseconds}ms in SQLite)';
+      '$rowsRead rows read; ${busy.inMilliseconds}ms in SQLite)';
 
   void _note(String statement) {
     final m = RegExp(
@@ -64,7 +69,11 @@ class CountingInterceptor extends QueryInterceptor {
   ) {
     selects++;
     _note(statement);
-    return _timed(() => super.runSelect(executor, statement, args));
+    return _timed(() async {
+      final rows = await super.runSelect(executor, statement, args);
+      rowsRead += rows.length;
+      return rows;
+    });
   }
 
   @override

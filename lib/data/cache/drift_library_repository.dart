@@ -4,6 +4,7 @@ import '../../domain/models/episode_source.dart';
 import '../../domain/models/external_ids.dart';
 import '../../domain/models/identified_episode.dart';
 import '../../domain/models/library_folder.dart';
+import '../../domain/models/library_snapshot.dart';
 import '../../domain/models/next_result.dart';
 import '../../domain/models/picture_mode.dart';
 import '../../domain/models/series.dart';
@@ -70,6 +71,58 @@ class _Logical {
   final String? pinnedFolder; // in-effect manual pin, else null (automatic)
 }
 
+/// The rows one read derives from, loaded once. A library-wide read holds
+/// every table; a per-series read holds that series' rows only (plus the
+/// small override table, which decides which files belong to whom).
+class _View {
+  _View({
+    required this.files,
+    required this.overrides,
+    required this.folders,
+    required this.currentByFolder,
+    required this.sourceOverrides,
+    required this.watch,
+    required this.skips,
+    required this.series,
+    required this.prefs,
+    required this.externalIds,
+    required this.hidden,
+    required this.skipView,
+  }) : watchByKey = {for (final w in watch) (w.seriesId, w.episode): w},
+       prefsById = {
+         for (final p in prefs)
+           p.seriesId: ShowPreferences(
+             pictureMode: PictureMode.fromToken(p.pictureMode),
+             nextEpisodeHidden: p.nextEpisodeHidden,
+           ),
+       } {
+    for (final a in skips) {
+      (skipsByKey[(a.seriesId, a.episode)] ??= []).add(a);
+    }
+    for (final h in hidden) {
+      (hiddenBySeries[h.seriesId] ??= {}).add(h.episode);
+    }
+  }
+
+  final List<CachedFileRow> files;
+  final List<MatchOverrideRow> overrides;
+  final List<LibraryFolderRow> folders; // sorted by sortOrder asc
+  final Map<String, String?> currentByFolder;
+  final List<SourceOverrideRow> sourceOverrides;
+  final List<WatchStateRow> watch;
+  final List<SkipSourceAnswerRow> skips;
+  final List<CachedSeriesRow> series;
+  final List<ShowPreferenceRow> prefs;
+  final Map<int, ExternalIds> externalIds;
+  final List<HiddenEpisodeRow> hidden;
+  final _SkipView skipView;
+
+  final Map<(int, int), WatchStateRow> watchByKey;
+  final Map<int, ShowPreferences> prefsById;
+  final Map<(int, int), List<SkipSourceAnswerRow>> skipsByKey = {};
+  final Map<int, Set<int>> hiddenBySeries = {};
+}
+
 /// Cache-backed read path (seam #2). Maps Drift rows to domain models — no Drift
 /// type leaks out. Reads never touch the network.
 ///
@@ -102,6 +155,18 @@ class DriftLibraryRepository
   /// for tests). The fast path (stored folder path still exists) calls nothing.
   final VolumeResolver _resolver;
 
+  // ---------------------------------------------------------------------
+  // The read path: ONE load, many views.
+  //
+  // Every public read below builds a [_View] — the rows it needs, loaded once
+  // — and derives its answer from that in memory. A library-wide read loads
+  // each table once; a per-series read loads only that series' rows through
+  // the indexes. Before this, each public method loaded the tables it wanted
+  // independently, so a library-screen reload loaded `file_cache` five times
+  // and a per-series read loaded the whole library to answer for one show.
+  // The measurements are in docs/performance.md.
+  // ---------------------------------------------------------------------
+
   /// Map each library folder's stable identity to its CURRENT absolute path
   /// (null when its volume isn't mounted). Resolved once per read.
   Future<Map<String, String?>> _currentFolderPaths(
@@ -123,20 +188,77 @@ class DriftLibraryRepository
   /// folder's current mount joined with the file's relative path. Falls back to
   /// the stable folder path when the volume is missing (the show is greyed
   /// offline anyway), so a fileRef is always a non-empty string.
-  String _fileRef(CachedFileRow f, Map<String, String?> currentByFolder) {
+  static String _fileRef(
+    CachedFileRow f,
+    Map<String, String?> currentByFolder,
+  ) {
     final current = currentByFolder[f.folderPath] ?? f.folderPath;
     return f.relativePath.isEmpty ? current : '$current/${f.relativePath}';
   }
 
-  /// Build the effective (override-or-auto) match for every cached file.
-  Future<List<_Effective>> _effectiveMatches() async {
-    final files = await _db.allFileRows();
+  /// Load everything a library-wide read derives from. Each table once.
+  Future<_View> _loadAll() async {
+    final folders = await _db.allFolderRows(); // sorted by sortOrder asc
+    return _View(
+      files: await _db.allFileRows(),
+      overrides: await _db.allOverrideRows(),
+      folders: folders,
+      currentByFolder: await _currentFolderPaths(folders),
+      sourceOverrides: await _db.allSourceOverrideRows(),
+      watch: await _db.allWatchStateRows(),
+      skips: await _db.allSkipAnswers(),
+      series: await _db.allSeriesRows(),
+      prefs: await _db.allShowPrefRows(),
+      externalIds: await _db.externalIdsBySeriesId(),
+      hidden: await _db.allHiddenRows(),
+      skipView: await _currentSkipView(),
+    );
+  }
+
+  /// Load only what ONE series needs: its file rows (by the `series_id`
+  /// index), the overrides that point at it and their files (an override
+  /// can pull a file whose auto row belongs elsewhere), and its own rows in
+  /// the side tables. Every query here hits an index or a primary key.
+  Future<_View> _loadSeries(int seriesId) async {
+    final folders = await _db.allFolderRows();
+    final overrides = await _db.overrideRowsForSeries(seriesId);
+    final files = <(String, String), CachedFileRow>{
+      for (final f in await _db.fileRowsForSeries(seriesId))
+        (f.folderPath, f.relativePath): f,
+    };
+    for (final o in overrides) {
+      final f = await _db.fileByFingerprint(o.fileSize, o.modifiedAtMs);
+      if (f != null) files[(f.folderPath, f.relativePath)] = f;
+    }
+    // A file whose auto row says this series but whose override redirects it
+    // elsewhere must not count here; the library-wide override map decides.
+    // Overrides are few (one per fix-match), so loading them all is cheap and
+    // is the one library-wide read a per-series load makes.
+    final allOverrides = await _db.allOverrideRows();
+    final series = await _db.seriesRow(seriesId);
+    return _View(
+      files: files.values.toList(),
+      overrides: allOverrides,
+      folders: folders,
+      currentByFolder: await _currentFolderPaths(folders),
+      sourceOverrides: await _db.sourceOverrideRowsForSeries(seriesId),
+      watch: await _db.watchStateRowsForSeries(seriesId),
+      skips: await _db.skipAnswersForSeries(seriesId),
+      series: series == null ? const [] : [series],
+      prefs: [?await _db.showPrefFor(seriesId)],
+      externalIds: {seriesId: await _db.externalIdsFor(seriesId)},
+      hidden: await _db.hiddenRowsFor(seriesId),
+      skipView: await _currentSkipView(),
+    );
+  }
+
+  /// Build the effective (override-or-auto) match for every file in [v].
+  List<_Effective> _effectiveMatches(_View v) {
     final overrides = {
-      for (final o in await _db.allOverrideRows())
-        (o.fileSize, o.modifiedAtMs): o,
+      for (final o in v.overrides) (o.fileSize, o.modifiedAtMs): o,
     };
     return [
-      for (final f in files)
+      for (final f in v.files)
         () {
           final o = overrides[(f.fileSize, f.modifiedAtMs)];
           if (o != null) {
@@ -172,16 +294,13 @@ class DriftLibraryRepository
   /// highest-priority source. This is where multi-source de-duplication and
   /// source resolution live — entirely in the data layer (the UI sees one
   /// Episode per identity).
-  Future<Map<(int, int), _Logical>> _logicalEpisodes([
-    List<_Effective>? effective,
-  ]) async {
-    effective ??= await _effectiveMatches();
-    final folders = await _db.allFolderRows(); // sorted by sortOrder asc
-    final folderByPath = {for (final f in folders) f.path: f};
-    final currentByFolder = await _currentFolderPaths(folders);
+  Map<(int, int), _Logical> _logicalEpisodes(
+    _View v,
+    List<_Effective> effective,
+  ) {
+    final folderByPath = {for (final f in v.folders) f.path: f};
     final overrides = {
-      for (final o in await _db.allSourceOverrideRows())
-        (o.seriesId, o.episode): o,
+      for (final o in v.sourceOverrides) (o.seriesId, o.episode): o,
     };
 
     final groups = <(int, int), List<_Effective>>{};
@@ -200,7 +319,7 @@ class DriftLibraryRepository
             for (final e in files)
               (
                 source: EpisodeSource(
-                  fileRef: _fileRef(e.file, currentByFolder),
+                  fileRef: _fileRef(e.file, v.currentByFolder),
                   folderPath: e.file.folderPath,
                   folderSortOrder:
                       folderByPath[e.file.folderPath]?.sortOrder ??
@@ -246,29 +365,123 @@ class DriftLibraryRepository
     return result;
   }
 
-  @override
-  Future<List<Series>> allSeries() async {
-    final effective = await _effectiveMatches();
+  /// Every logical episode as a domain [Episode], grouped by series and
+  /// sorted by display number — the ONE pass the per-series and the
+  /// all-series reads both take, so they cannot disagree.
+  Map<int, List<Episode>> _episodesOf(
+    _View v,
+    Map<(int, int), _Logical> logical,
+  ) {
+    final bySeries = <int, List<Episode>>{};
+    for (final l in logical.values) {
+      (bySeries[l.seriesId] ??= []).add(
+        _toEpisode(
+          l,
+          v.watchByKey[(l.seriesId, l.anchored)],
+          v.skipsByKey[(l.seriesId, l.anchored)],
+          v.skipView,
+        ),
+      );
+    }
+    for (final list in bySeries.values) {
+      list.sort((a, b) => a.number.compareTo(b.number));
+    }
+    return bySeries;
+  }
+
+  /// Placeholder episodes for EVERY pending title group in one pass — the
+  /// not-yet-identified files grouped by parsed title, then by episode
+  /// position, resolved to their playable current path. Watch state is keyed
+  /// by the placeholder's synthetic id, so resume survives until the show is
+  /// identified (then re-keys to the real id on the next scan).
+  ///
+  /// One pass, not one per placeholder: during a first scan every show is
+  /// pending, and rebuilding the effective list and re-loading two tables per
+  /// placeholder made one reload 600× the cost of the identified case.
+  Map<int, List<Episode>> _placeholderEpisodes(
+    _View v,
+    List<_Effective> effective,
+  ) {
+    final folderByPath = {for (final f in v.folders) f.path: f};
+    // placeholderId -> episode key -> files
+    final groups = <int, Map<int, List<CachedFileRow>>>{};
+    for (final e in effective) {
+      if (e.seriesId != null || !e.pending) continue;
+      final raw = e.file.parsedTitle;
+      if (raw.isEmpty) continue;
+      final id = placeholderSeriesId(normalizeTitle(raw));
+      // A numbered episode keys by its number (multi-source copies merge); an
+      // un-numbered file (movie/special) keys by a stable per-file negative so
+      // distinct ones stay separate rather than merging into one "Episode 0".
+      final key =
+          e.file.episodeNumber ??
+          (-1 - placeholderStableHash(e.file.relativePath));
+      ((groups[id] ??= {})[key] ??= []).add(e.file);
+    }
+
+    final result = <int, List<Episode>>{};
+    groups.forEach((placeholderId, byKey) {
+      final keys = byKey.keys.toList()..sort();
+      result[placeholderId] = [
+        for (final anchored in keys)
+          () {
+            final sources =
+                [
+                  for (final f in byKey[anchored]!)
+                    EpisodeSource(
+                      fileRef: _fileRef(f, v.currentByFolder),
+                      folderPath: f.folderPath,
+                      folderSortOrder:
+                          folderByPath[f.folderPath]?.sortOrder ??
+                          _unfiledSortOrder,
+                    ),
+                ]..sort((a, b) {
+                  final c = a.folderSortOrder.compareTo(b.folderSortOrder);
+                  return c != 0 ? c : a.fileRef.compareTo(b.fileRef);
+                });
+            final number = anchored >= 0 ? anchored : 0;
+            final w = v.watchByKey[(placeholderId, anchored)];
+            return Episode(
+              number: number,
+              fileRef: sources.first.fileRef,
+              // Un-numbered (a movie/special): the file's name is the only
+              // label there is. Numbered: none — `displayTitle` says Episode N.
+              title: number > 0 ? null : basenameOf(sources.first.fileRef),
+              seriesId: placeholderId,
+              anchoredNumber: anchored,
+              watched: w?.watched ?? false,
+              resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
+              duration: Duration(milliseconds: w?.durationMs ?? 0),
+              sources: sources,
+            );
+          }(),
+      ];
+    });
+    return result;
+  }
+
+  /// The series list for [v]: identified shows plus one named placeholder
+  /// per pending title group, sorted by display title.
+  List<Series> _seriesOf(_View v, List<_Effective> effective) {
     final wanted = {
       for (final e in effective)
         if (e.seriesId != null) e.seriesId!,
     };
-    final byId = {for (final r in await _db.allSeriesRows()) r.seriesId: r};
-    final prefs = await allPreferences();
-    final externalIds = await _db.externalIdsBySeriesId();
+    final byId = {for (final r in v.series) r.seriesId: r};
     final list = [
       for (final id in wanted)
         if (byId[id] != null)
           _toSeries(
             byId[id]!,
-            prefs[id] ?? const ShowPreferences(),
-            externalIds[id] ?? ExternalIds.empty,
+            v.prefsById[id] ?? const ShowPreferences(),
+            v.externalIds[id] ?? ExternalIds.empty,
           ),
     ];
     // Pending (not-yet-identified) files surface as NAMED PLACEHOLDERS — one
     // per distinct parsed-title group — so the library reflects what's on disk
-    // even before/without AniList. They upgrade in place once a scan matches
-    // them (their rows gain an seriesId and re-group under the real series).
+    // even before/without a metadata source. They upgrade in place once a scan
+    // matches them (their rows gain a seriesId and re-group under the real
+    // series).
     final placeholderTitle = <int, String>{}; // synthetic id -> sample title
     for (final e in effective) {
       if (e.seriesId != null || !e.pending) continue;
@@ -286,79 +499,150 @@ class DriftLibraryRepository
     return list;
   }
 
+  List<ContinueWatching> _continueWatchingOf(
+    _View v,
+    Map<(int, int), _Logical> logical,
+  ) {
+    final seriesById = {for (final r in v.series) r.seriesId: r};
+    // Recent first — the same order `inProgressWatchStates` returns, derived
+    // here from the rows already loaded.
+    final inProgress = [
+      for (final w in v.watch)
+        if (w.resumePositionMs > 0 && !w.watched) w,
+    ]..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
+    return [
+      for (final w in inProgress)
+        if (logical[(w.seriesId, w.episode)] case final match?)
+          if (seriesById[w.seriesId] case final series?)
+            ContinueWatching(
+              series: _toSeries(
+                series,
+                v.prefsById[w.seriesId] ?? const ShowPreferences(),
+                v.externalIds[w.seriesId] ?? ExternalIds.empty,
+              ),
+              episode: _toEpisode(
+                match,
+                w,
+                v.skipsByKey[(w.seriesId, w.episode)],
+                v.skipView,
+              ),
+            ),
+    ];
+  }
+
+  Map<int, Episode> _upNextOf(_View v, Map<(int, int), _Logical> logical) {
+    // Furthest WATCHED anchored position per series the user has started.
+    final latestWatched = <int, int>{};
+    for (final w in v.watch) {
+      if (!w.watched) continue;
+      final cur = latestWatched[w.seriesId];
+      if (cur == null || w.episode > cur) latestWatched[w.seriesId] = w.episode;
+    }
+    final result = <int, Episode>{};
+    latestWatched.forEach((seriesId, anchored) {
+      // Same resolver as nextEpisode — within-season next.
+      final next = _resolveNext(seriesId, anchored, logical);
+      if (next == null) return; // NoNextEpisode -> caught up, show nothing
+      final w = v.watchByKey[(next.seriesId, next.anchored)];
+      if (w?.watched ?? false) return; // already watched -> nothing "next"
+      result[seriesId] = _toEpisode(
+        next,
+        w,
+        v.skipsByKey[(next.seriesId, next.anchored)],
+        v.skipView,
+      );
+    });
+    return result;
+  }
+
+  @override
+  Future<LibrarySnapshot> snapshot() async {
+    final v = await _loadAll();
+    final effective = _effectiveMatches(v);
+    final logical = _logicalEpisodes(v, effective);
+    final episodes = _episodesOf(v, logical)
+      ..addAll(_placeholderEpisodes(v, effective));
+    var unmatched = 0;
+    for (final e in effective) {
+      if (e.seriesId == null && !e.pending) unmatched++;
+    }
+    return LibrarySnapshot(
+      series: _seriesOf(v, effective),
+      episodesBySeries: episodes,
+      continueWatching: _continueWatchingOf(v, logical),
+      upNext: _upNextOf(v, logical),
+      unmatchedCount: unmatched,
+      hidden: v.hiddenBySeries,
+    );
+  }
+
+  @override
+  Future<List<Series>> allSeries() async {
+    final v = await _loadAll();
+    return _seriesOf(v, _effectiveMatches(v));
+  }
+
+  @override
+  Future<Series?> seriesById(int seriesId) async {
+    if (isPlaceholderSeriesId(seriesId)) {
+      // A placeholder exists only while pending files carry its title.
+      final v = await _loadAll();
+      for (final s in _seriesOf(v, _effectiveMatches(v))) {
+        if (s.seriesId == seriesId) return s;
+      }
+      return null;
+    }
+    final v = await _loadSeries(seriesId);
+    if (v.series.isEmpty) return null;
+    // A series row with no file and no override pointing at it is gone from
+    // the library (the prune will drop the row); say so rather than hand back
+    // a show with nothing in it.
+    final effective = _effectiveMatches(v);
+    if (!effective.any((e) => e.seriesId == seriesId)) return null;
+    return _toSeries(
+      v.series.single,
+      v.prefsById[seriesId] ?? const ShowPreferences(),
+      v.externalIds[seriesId] ?? ExternalIds.empty,
+    );
+  }
+
   @override
   Future<List<Episode>> episodesFor(int seriesId) async {
     // A negative id is a pending placeholder (see [placeholderSeriesId]); its
-    // "episodes" are the pending files of that parsed-title group.
+    // "episodes" are the pending files of that parsed-title group, which only
+    // a library-wide pass can find (they have no series_id to index on).
     if (isPlaceholderSeriesId(seriesId)) {
-      return _placeholderEpisodesFor(seriesId);
+      final v = await _loadAll();
+      return _placeholderEpisodes(v, _effectiveMatches(v))[seriesId] ??
+          const [];
     }
-    final all = await _episodesOf(await _logicalEpisodes());
-    return all[seriesId] ?? const [];
+    final v = await _loadSeries(seriesId);
+    final effective = _effectiveMatches(v);
+    return _episodesOf(v, _logicalEpisodes(v, effective))[seriesId] ?? const [];
   }
 
   @override
   Future<Map<int, List<Episode>>> episodesBySeries() async {
-    final effective = await _effectiveMatches();
-    final result = await _episodesOf(await _logicalEpisodes(effective));
-    // Placeholders too, so a caller that needs "every card's episodes" makes
-    // exactly one call and never falls back to the per-series read.
-    final placeholderIds = <int>{
-      for (final e in effective)
-        if (e.seriesId == null && e.pending && e.file.parsedTitle.isNotEmpty)
-          placeholderSeriesId(normalizeTitle(e.file.parsedTitle)),
-    };
-    for (final id in placeholderIds) {
-      result[id] = await _placeholderEpisodesFor(id, effective: effective);
-    }
-    return result;
-  }
-
-  /// Every logical episode as a domain [Episode], grouped by series and
-  /// sorted by display number — the ONE pass the per-series and the
-  /// all-series reads both take, so they cannot disagree.
-  Future<Map<int, List<Episode>>> _episodesOf(
-    Map<(int, int), _Logical> logical,
-  ) async {
-    final watch = {
-      for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
-    };
-    final skips = <(int, int), List<SkipSourceAnswerRow>>{};
-    for (final a in await _db.allSkipAnswers()) {
-      (skips[(a.seriesId, a.episode)] ??= []).add(a);
-    }
-    final view = await _currentSkipView();
-    final bySeries = <int, List<Episode>>{};
-    for (final l in logical.values) {
-      (bySeries[l.seriesId] ??= []).add(
-        _toEpisode(
-          l,
-          watch[(l.seriesId, l.anchored)],
-          skips[(l.seriesId, l.anchored)],
-          view,
-        ),
-      );
-    }
-    for (final list in bySeries.values) {
-      list.sort((a, b) => a.number.compareTo(b.number));
-    }
-    return bySeries;
+    final v = await _loadAll();
+    final effective = _effectiveMatches(v);
+    return _episodesOf(v, _logicalEpisodes(v, effective))
+      ..addAll(_placeholderEpisodes(v, effective));
   }
 
   @override
+  Future<int> unmatchedCount() => _db.unmatchedFileCount();
+
+  @override
   Future<List<IdentifiedEpisode>> unmatchedFiles() async {
-    final effective = await _effectiveMatches();
-    final currentByFolder = await _currentFolderPaths(
-      await _db.allFolderRows(),
-    );
+    final v = await _loadAll();
     return [
-      for (final e in effective)
-        // Only CONFIRMED-unmatched (AniList said no) — a pending file is shown
-        // as a library placeholder instead, and must not appear here (it's
-        // "not yet tried", not "couldn't identify").
+      for (final e in _effectiveMatches(v))
+        // Only CONFIRMED-unmatched (a source said no) — a pending file is
+        // shown as a library placeholder instead, and must not appear here
+        // (it's "not yet tried", not "couldn't identify").
         if (e.seriesId == null && !e.pending)
           IdentifiedEpisode(
-            filePath: _fileRef(e.file, currentByFolder),
+            filePath: _fileRef(e.file, v.currentByFolder),
             parsedTitle: e.file.parsedTitle,
             parsedEpisodeNumber: e.file.episodeNumber,
             releaseGroup: e.file.releaseGroup,
@@ -374,76 +658,6 @@ class DriftLibraryRepository
     titles: Titles(romaji: parsedTitle),
     pending: true,
   );
-
-  /// Episodes for a pending placeholder: the not-yet-identified files of the
-  /// matching parsed-title group, collapsed by episode number (so multi-source
-  /// copies are one row) and resolved to their playable current path. Watch
-  /// state is keyed by the placeholder's synthetic id, so resume survives until
-  /// the show is identified (then re-keys to the real id on the next scan).
-  Future<List<Episode>> _placeholderEpisodesFor(
-    int placeholderId, {
-    List<_Effective>? effective,
-  }) async {
-    effective ??= await _effectiveMatches();
-    final folders = await _db.allFolderRows();
-    final folderByPath = {for (final f in folders) f.path: f};
-    final currentByFolder = await _currentFolderPaths(folders);
-    final watch = {
-      for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
-    };
-
-    // Group this title group's pending files by episode position. A numbered
-    // episode keys by its number (multi-source copies merge); an un-numbered
-    // file (movie/special) keys by a stable per-file negative so distinct ones
-    // stay separate rather than merging into one "Episode 0".
-    final groups = <int, List<CachedFileRow>>{};
-    for (final e in effective) {
-      if (e.seriesId != null || !e.pending) continue;
-      final raw = e.file.parsedTitle;
-      if (raw.isEmpty) continue;
-      if (placeholderSeriesId(normalizeTitle(raw)) != placeholderId) continue;
-      final key =
-          e.file.episodeNumber ??
-          (-1 - placeholderStableHash(e.file.relativePath));
-      groups.putIfAbsent(key, () => []).add(e.file);
-    }
-
-    final keys = groups.keys.toList()..sort();
-    return [
-      for (final anchored in keys)
-        () {
-          final sources =
-              [
-                for (final f in groups[anchored]!)
-                  EpisodeSource(
-                    fileRef: _fileRef(f, currentByFolder),
-                    folderPath: f.folderPath,
-                    folderSortOrder:
-                        folderByPath[f.folderPath]?.sortOrder ??
-                        _unfiledSortOrder,
-                  ),
-              ]..sort((a, b) {
-                final c = a.folderSortOrder.compareTo(b.folderSortOrder);
-                return c != 0 ? c : a.fileRef.compareTo(b.fileRef);
-              });
-          final number = anchored >= 0 ? anchored : 0;
-          final w = watch[(placeholderId, anchored)];
-          return Episode(
-            number: number,
-            fileRef: sources.first.fileRef,
-            // Un-numbered (a movie/special): the file's name is the only
-            // label there is. Numbered: none — `displayTitle` says Episode N.
-            title: number > 0 ? null : basenameOf(sources.first.fileRef),
-            seriesId: placeholderId,
-            anchoredNumber: anchored,
-            watched: w?.watched ?? false,
-            resumePosition: Duration(milliseconds: w?.resumePositionMs ?? 0),
-            duration: Duration(milliseconds: w?.durationMs ?? 0),
-            sources: sources,
-          );
-        }(),
-    ];
-  }
 
   // --- Watch state (keyed by episode identity, never file path) ---
 
@@ -505,37 +719,8 @@ class DriftLibraryRepository
 
   @override
   Future<List<ContinueWatching>> continueWatching() async {
-    final inProgress = await _db
-        .inProgressWatchStates(); // ordered, recent first
-    final logical = await _logicalEpisodes(); // one per episode identity
-    final seriesById = {
-      for (final r in await _db.allSeriesRows()) r.seriesId: r,
-    };
-    final skips = <(int, int), List<SkipSourceAnswerRow>>{};
-    for (final a in await _db.allSkipAnswers()) {
-      (skips[(a.seriesId, a.episode)] ??= []).add(a);
-    }
-    final prefs = await allPreferences();
-    final externalIds = await _db.externalIdsBySeriesId();
-    final view = await _currentSkipView();
-
-    final result = <ContinueWatching>[];
-    for (final w in inProgress) {
-      final match = logical[(w.seriesId, w.episode)];
-      final series = seriesById[w.seriesId];
-      if (match == null || series == null) continue; // file/series gone
-      result.add(
-        ContinueWatching(
-          series: _toSeries(
-            series,
-            prefs[w.seriesId] ?? const ShowPreferences(),
-            externalIds[w.seriesId] ?? ExternalIds.empty,
-          ),
-          episode: _toEpisode(match, w, skips[(w.seriesId, w.episode)], view),
-        ),
-      );
-    }
-    return result;
+    final v = await _loadAll();
+    return _continueWatchingOf(v, _logicalEpisodes(v, _effectiveMatches(v)));
   }
 
   @override
@@ -618,55 +803,30 @@ class DriftLibraryRepository
 
   @override
   Future<NextResult> nextEpisode(Episode current) async {
-    final logical = await _logicalEpisodes();
+    // Within-season: the answer is inside this series, so this series is all
+    // that is loaded — an auto-advance used to rebuild the whole library.
+    final v = await _loadSeries(current.seriesId);
+    final logical = _logicalEpisodes(v, _effectiveMatches(v));
     final next = _resolveNext(
       current.seriesId,
       current.anchoredNumber,
       logical,
     );
     if (next == null) return const NoNextEpisode();
-    final w = await _db.watchStateFor(next.seriesId, next.anchored);
-    final answers = await _db.skipAnswersFor(next.seriesId, next.anchored);
-    return NextEpisode(_toEpisode(next, w, answers, await _currentSkipView()));
+    return NextEpisode(
+      _toEpisode(
+        next,
+        v.watchByKey[(next.seriesId, next.anchored)],
+        v.skipsByKey[(next.seriesId, next.anchored)],
+        v.skipView,
+      ),
+    );
   }
 
   @override
   Future<Map<int, Episode>> upNextBySeries() async {
-    final logical = await _logicalEpisodes();
-    final watch = {
-      for (final w in await _db.allWatchStateRows()) (w.seriesId, w.episode): w,
-    };
-    final skips = <(int, int), List<SkipSourceAnswerRow>>{};
-    for (final a in await _db.allSkipAnswers()) {
-      (skips[(a.seriesId, a.episode)] ??= []).add(a);
-    }
-
-    // Furthest WATCHED anchored position per series the user has started.
-    final latestWatched = <int, int>{};
-    for (final w in watch.values) {
-      if (!w.watched) continue;
-      final cur = latestWatched[w.seriesId];
-      if (cur == null || w.episode > cur) {
-        latestWatched[w.seriesId] = w.episode;
-      }
-    }
-
-    final result = <int, Episode>{};
-    final view = await _currentSkipView();
-    latestWatched.forEach((seriesId, anchored) {
-      // Same resolver as nextEpisode — within-season next.
-      final next = _resolveNext(seriesId, anchored, logical);
-      if (next == null) return; // NoNextEpisode -> caught up, show nothing
-      final w = watch[(next.seriesId, next.anchored)];
-      if (w?.watched ?? false) return; // already watched -> nothing "next"
-      result[seriesId] = _toEpisode(
-        next,
-        w,
-        skips[(next.seriesId, next.anchored)],
-        view,
-      );
-    });
-    return result;
+    final v = await _loadAll();
+    return _upNextOf(v, _logicalEpisodes(v, _effectiveMatches(v)));
   }
 
   /// The logical episode after (seriesId, anchored) WITHIN the same series, or
@@ -678,8 +838,9 @@ class DriftLibraryRepository
     Map<(int, int), _Logical> logical,
   ) => logical[(seriesId, anchored + 1)];
 
-  /// Read fresh per query, never snapshotted, so changing any of these takes
-  /// effect on the next read instead of needing a rescan. `disabled` is what
+  /// Read fresh per LOAD (once per [_View], not once per method), never
+  /// snapshotted across reads, so changing any of these takes effect on the
+  /// next read instead of needing a rescan. `disabled` is what
   /// the build ships minus what is enabled: a source the user switched off,
   /// whose stored answers must stop being used the moment they do.
   Future<_SkipView> _currentSkipView() async {

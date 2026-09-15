@@ -51,6 +51,39 @@ What the table says, in words:
   visible here and is measured by the walkthrough (scan a large library while
   scrolling).
 
-## After
+## After the read-path rewrite (2026-09-14, same machine, same harness)
 
-*(recorded when the read path is reshaped — same harness, same table)*
+One loaded view per read; a library-wide read loads each table once and derives
+every view from it in memory; a per-series read loads only that series' rows
+through the `series_id` index and the PKs. `LibraryRepository.snapshot()` is the
+library screen's whole reload. The prune runs once at the end of a scan instead
+of once per batch. Schema v21 adds `watch_state(updated_at_ms)`.
+
+| operation | before | after | statements before → after |
+|---|---|---|---|
+| **the library reload** (5 reads → `snapshot()`) | **231 ms** | **126 ms** | 29 → **10** (each table once) |
+| **the reload during a first scan** (P=600) | **3,427 ms** | **39 ms** | 1,206 → **10** |
+| the reload mid-scan (P=300) | 1,215 ms | 47 ms | 606 → 10 |
+| `episodesFor` (one show) | 68 ms | **1 ms** | whole library → one series by index |
+| `nextEpisode` (one episode) | 24 ms | **1 ms** | whole library → one series by index |
+| **12-episode binge** (nextEpisode + episodesFor ×12) | **1,061 ms** | **23 ms** | 144 full-table loads → 264 indexed row-sets |
+| `unmatchedCount` | 22 ms (materialised rows) | 0 ms | 3 → 1 COUNT |
+| `seriesById` (one show) | — (did not exist) | 3 ms | 11 indexed |
+| `allSeries` / `continueWatching` / `upNextBySeries` alone | 45 / 59 / 61 ms | 62 / 66 / 65 ms | each now the full one-pass load — slightly dearer alone, and no longer what the screen calls |
+
+Two honest notes:
+
+- **126 ms is still eight frames.** The statements are gone from the bill; what
+  remains is mapping 8,000 rows into `Episode`s on the UI isolate, which drift's
+  background isolate does not cover (it runs the SQL, not the row decoding). The
+  next step, if the walkthrough shows the reload as a stutter on a real library,
+  is to build the snapshot off the UI isolate. Left as measured, not assumed.
+- The single-purpose reads (`allSeries`, `continueWatching`, `upNextBySeries`)
+  got slightly MORE expensive alone, because each is now the whole one-pass load.
+  That is deliberate: the screen does not call them any more, and one
+  implementation that cannot disagree with `snapshot()` beats five tuned ones.
+
+The statement counts above are pinned in `test/read_path_shape_test.dart`
+(in the gate): ten selects per snapshot whatever the pending ratio, and a
+per-series read whose statements AND rows read are the same at ten times the
+library. Both guards go red when the optimisation is reverted (mutation-checked).

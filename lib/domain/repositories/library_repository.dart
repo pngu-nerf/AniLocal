@@ -1,6 +1,7 @@
 import '../models/episode.dart';
 import '../models/identified_episode.dart';
 import '../models/library_folder.dart';
+import '../models/library_snapshot.dart';
 import '../models/series.dart';
 
 /// The UI's read path into the library. Backed by the local cache (seam #2);
@@ -19,6 +20,20 @@ abstract interface class LibraryRepository {
 
   /// All matched series in the library (for the grid).
   Future<List<Series>> allSeries();
+
+  /// One show by id, or null when it is no longer in the library (pruned by a
+  /// rescan, or re-identified under another id). The live re-read for a screen
+  /// that was pushed with a `Series` and must not keep showing a stale one.
+  Future<Series?> seriesById(int seriesId);
+
+  /// Everything the library screen renders, in ONE pass — see
+  /// [LibrarySnapshot] for why the five reads it replaces are not issued
+  /// separately.
+  Future<LibrarySnapshot> snapshot();
+
+  /// How many files a source confirmed it could not identify. A COUNT, not
+  /// the rows: the two callers show a number.
+  Future<int> unmatchedCount();
 
   /// Episodes (matched files) for a series, ordered by episode number.
   Future<List<Episode>> episodesFor(int seriesId);

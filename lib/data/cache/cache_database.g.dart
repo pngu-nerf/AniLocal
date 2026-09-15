@@ -4456,6 +4456,10 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     'file_cache_series',
     'CREATE INDEX file_cache_series ON file_cache (series_id)',
   );
+  late final Index watchStateUpdated = Index(
+    'watch_state_updated',
+    'CREATE INDEX watch_state_updated ON watch_state (updated_at_ms)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4474,6 +4478,7 @@ abstract class _$CacheDatabase extends GeneratedDatabase {
     seriesExternalIds,
     fileCacheFingerprint,
     fileCacheSeries,
+    watchStateUpdated,
   ];
 }
 

@@ -4,6 +4,7 @@ import 'package:anilocal/domain/models/continue_watching.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/library_folder.dart';
+import 'package:anilocal/domain/models/library_snapshot.dart';
 import 'package:anilocal/domain/models/next_result.dart';
 import 'package:anilocal/domain/models/picture_mode.dart';
 import 'package:anilocal/domain/models/series.dart';
@@ -88,6 +89,31 @@ class FakeLibraryRepository
   Future<Map<int, List<Episode>>> episodesBySeries() async {
     calls.add('episodesBySeries');
     return {for (final s in series) s.seriesId: episodes[s.seriesId] ?? []};
+  }
+
+  @override
+  Future<Series?> seriesById(int seriesId) async {
+    calls.add('seriesById');
+    for (final s in series) {
+      if (s.seriesId == seriesId) return s;
+    }
+    return null;
+  }
+
+  @override
+  Future<int> unmatchedCount() async => (await unmatchedFiles()).length;
+
+  @override
+  Future<LibrarySnapshot> snapshot() async {
+    calls.add('snapshot');
+    return LibrarySnapshot(
+      series: await allSeries(),
+      episodesBySeries: await episodesBySeries(),
+      continueWatching: await continueWatching(),
+      upNext: await upNextBySeries(),
+      unmatchedCount: await unmatchedCount(),
+      hidden: await allHiddenEpisodes(),
+    );
   }
 
   @override

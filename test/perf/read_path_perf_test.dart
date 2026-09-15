@@ -86,6 +86,15 @@ void main() {
   test('every read, library fully identified', () async {
     final r = await build();
     addTearDown(r.db.close);
+    final snap = await measure(
+      'snapshot (the new reload)',
+      r.n,
+      r.repo.snapshot,
+    );
+    expect(snap.series, hasLength(series));
+    expect(snap.unmatchedCount, 0);
+    await measure('unmatchedCount', r.n, r.repo.unmatchedCount);
+    await measure('seriesById(one show)', r.n, () => r.repo.seriesById(300));
     final all = await measure('allSeries', r.n, r.repo.allSeries);
     expect(all, hasLength(series));
     final bySeries = await measure(

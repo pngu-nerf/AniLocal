@@ -284,12 +284,17 @@ class LibrarySync {
             if (entry.value.seriesId != null)
               (placeholderSeriesId(entry.key), entry.value.seriesId!),
         ];
+        // No prune per batch: the three orphan sweeps run ONCE at the end of
+        // the run (below). Inside every batch they were 24 full-table passes
+        // per 600-title scan, each holding the write lock every UI read
+        // queued behind.
         await cache.applySync(
           seriesUpserts: seriesUpserts,
           fileUpserts: fileUpserts,
           removedKeys: const [],
           skipUpserts: skipUpserts,
           promotions: promotions,
+          prune: false,
         );
         run.titlesDone += batch.length;
         onProgress?.call(
@@ -333,10 +338,15 @@ class LibrarySync {
           seriesUpserts: const [],
           fileUpserts: untitledRows,
           removedKeys: removedKeys,
+          prune: false,
         );
       }
+      // The one prune of the run: series no file or override references any
+      // more (re-identified away, or removed above), their skip answers, and
+      // fix-match overrides whose file is gone from every folder.
+      await cache.pruneOrphans();
       if (!apiUnreachable) {
-        // The prune above dropped series nobody references; their covers go
+        // The prune dropped series nobody references; their covers go
         // too. Only a run that saw every source answer gets to delete art —
         // an outage must never look like a library shrinking.
         final live = {for (final r in await cache.allSeriesRows()) r.seriesId};

@@ -192,7 +192,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     if (mounted) setState(() {});
   }
 
+  /// Monotonic run counter: `_reload` is called from ten places (return from
+  /// the player, a hide, a settings close, a scan…) and runs overlap; the
+  /// older run finishing last must not win.
+  int _reloadGeneration = 0;
+
   Future<void> _reload() async {
+    final generation = ++_reloadGeneration;
     try {
       // Independent — the missing-episodes setting doesn't gate WHICH episodes
       // exist, only whether gaps are surfaced — so they wait together instead
@@ -201,7 +207,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       final (enabled, eps, unmatched) = await (
         _services.settings.loadMissingEnabled(),
         _services.repository.episodesFor(widget.series.seriesId),
-        _services.repository.unmatchedFiles(),
+        _services.repository.unmatchedCount(),
       ).wait;
       // The feature never applies to a not-yet-identified placeholder (no
       // episode count, synthetic negative id) — treat it as nothing hidden.
@@ -211,13 +217,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
               widget.series.seriesId,
             );
       final unavailable = eps.isNotEmpty && !await _anyReachable(eps);
-      if (!mounted) return;
+      if (!mounted || generation != _reloadGeneration) return;
       setState(() {
         _episodes = eps;
         _hidden = hidden;
         _missingEnabled = enabled;
         _sourcesUnavailable = unavailable;
-        _unmatchedCount = unmatched.length;
+        _unmatchedCount = unmatched;
         _loading = false;
         _error = false;
         _expandedBundles.clear();
@@ -232,7 +238,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       // Don't hang on the spinner — surface an error state with retry, and
       // keep the cause so the message has a diagnosis path behind it.
       AppLog.error('Show page: episode load failed', error: e, stack: stack);
-      if (!mounted) return;
+      if (!mounted || generation != _reloadGeneration) return;
       setState(() {
         _loading = false;
         _error = true;

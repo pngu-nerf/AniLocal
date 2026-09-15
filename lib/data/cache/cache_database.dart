@@ -145,6 +145,7 @@ class MatchOverrides extends Table {
 /// anchored (AniList-faithful) [episode] position — NOT by file path or player
 /// session. This is what survives a file move and what the future multi-source
 /// stage needs: "resume episode 5" is episode 5 whatever file played it.
+@TableIndex(name: 'watch_state_updated', columns: {#updatedAtMs})
 @DataClassName('WatchStateRow')
 class WatchStates extends Table {
   IntColumn get seriesId => integer()();
@@ -365,7 +366,7 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// The schema this build writes, readable without an instance (the startup
   /// log line and the diagnostics report want it before the database opens).
-  static const int currentSchemaVersion = 20;
+  static const int currentSchemaVersion = 21;
 
   @override
   int get schemaVersion => currentSchemaVersion;
@@ -622,6 +623,12 @@ class CacheDatabase extends _$CacheDatabase {
           await m.createIndex(fileCacheFingerprint);
           await m.createIndex(fileCacheSeries);
         }
+        if (from < 21) {
+          // v21: Continue watching is "recent first" over a table that grows
+          // for the install's lifetime by design (watch_state is never
+          // pruned); the sort needs an index. No row changes.
+          await m.createIndex(watchStateUpdated);
+        }
       });
     },
   );
@@ -808,6 +815,44 @@ class CacheDatabase extends _$CacheDatabase {
       await (delete(fileCache)..where((f) => f.folderPath.equals(path))).go();
       await _pruneOrphans(includeOverrides: false);
     });
+  }
+
+  // --- Per-series reads. Each hits an index (file_cache_series, or a PK that
+  //     leads with series_id), so answering for ONE show costs one show, not
+  //     the library. The read path uses these for the show page, the player's
+  //     rail and every auto-advance. ---
+
+  Future<List<CachedFileRow>> fileRowsForSeries(int seriesId) =>
+      (select(fileCache)..where((f) => f.seriesId.equals(seriesId))).get();
+
+  Future<List<MatchOverrideRow>> overrideRowsForSeries(int seriesId) =>
+      (select(matchOverrides)..where((o) => o.seriesId.equals(seriesId))).get();
+
+  Future<List<SourceOverrideRow>> sourceOverrideRowsForSeries(int seriesId) =>
+      (select(
+        sourceOverrides,
+      )..where((o) => o.seriesId.equals(seriesId))).get();
+
+  Future<List<WatchStateRow>> watchStateRowsForSeries(int seriesId) =>
+      (select(watchStates)..where((w) => w.seriesId.equals(seriesId))).get();
+
+  Future<List<SkipSourceAnswerRow>> skipAnswersForSeries(int seriesId) =>
+      (select(
+        skipSourceAnswers,
+      )..where((s) => s.seriesId.equals(seriesId))).get();
+
+  /// CONFIRMED-unmatched files: no series, not pending, and no fix-match
+  /// override for the fingerprint (an override makes a file matched whatever
+  /// its auto row says). One COUNT, no rows materialised.
+  Future<int> unmatchedFileCount() async {
+    final row = await customSelect(
+      'SELECT COUNT(*) AS n FROM file_cache f '
+      'WHERE f.series_id IS NULL AND f.pending_identification = 0 '
+      'AND NOT EXISTS (SELECT 1 FROM match_overrides o '
+      'WHERE o.file_size = f.file_size AND o.modified_at_ms = f.modified_at_ms)',
+      readsFrom: {fileCache, matchOverrides},
+    ).getSingle();
+    return row.read<int>('n');
   }
 
   /// Record a folder's volume binding (UUID + within-volume subpath), discovered
@@ -998,8 +1043,18 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// series_id -> everything other databases call it, for the read path.
   /// A minted series simply has fewer entries (no 'anilist' row at all).
-  Future<Map<int, ExternalIds>> externalIdsBySeriesId() async {
-    final rows = await select(seriesExternalIds).get();
+  Future<Map<int, ExternalIds>> externalIdsBySeriesId() async =>
+      _externalIdsOf(await select(seriesExternalIds).get());
+
+  /// The provider ids of ONE series — the per-show read, indexed by the PK.
+  Future<ExternalIds> externalIdsFor(int seriesId) async {
+    final rows = await (select(
+      seriesExternalIds,
+    )..where((r) => r.seriesId.equals(seriesId))).get();
+    return _externalIdsOf(rows)[seriesId] ?? ExternalIds.empty;
+  }
+
+  Map<int, ExternalIds> _externalIdsOf(List<SeriesExternalId> rows) {
     final byProvider = <int, Map<String, int>>{};
     for (final r in rows) {
       final value = int.tryParse(r.externalId);
@@ -1296,12 +1351,18 @@ class CacheDatabase extends _$CacheDatabase {
   /// positions (>= 0) move; any leftover placeholder-keyed rows are then
   /// deleted, so no synthetic id survives identification. `UPDATE OR IGNORE`
   /// leaves a pre-existing real row (already-watched-as-matched) untouched.
+  ///
+  /// [prune] runs [pruneOrphans] inside the same transaction. The scan passes
+  /// `false` for its per-batch commits and prunes ONCE at the end of the run:
+  /// the three full-table sweeps used to run 24 times per 600-title scan, each
+  /// inside a write transaction every UI read had to wait behind.
   Future<void> applySync({
     required List<CachedSeriesRow> seriesUpserts,
     required List<CachedFileRow> fileUpserts,
     required List<(String folderPath, String relativePath)> removedKeys,
     List<SkipSourceAnswerRow> skipUpserts = const [],
     List<(int placeholderId, int realId)> promotions = const [],
+    bool prune = true,
   }) {
     return transaction(() async {
       for (final s in seriesUpserts) {
@@ -1330,9 +1391,14 @@ class CacheDatabase extends _$CacheDatabase {
             ))
             .go();
       }
-      await _pruneOrphans(includeOverrides: true);
+      if (prune) await _pruneOrphans(includeOverrides: true);
     });
   }
+
+  /// The scan's end-of-run prune — the same policy [applySync] applies when
+  /// asked to, in its own transaction. See [_pruneOrphans] for what goes.
+  Future<void> pruneOrphans() =>
+      transaction(() => _pruneOrphans(includeOverrides: true));
 
   /// Everything DERIVED from the files goes when the files go — one policy,
   /// called from both paths that remove files (`applySync`, a folder removal)
