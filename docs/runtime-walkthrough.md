@@ -8,7 +8,7 @@ script. Walk it top to bottom against a built app; report by **step number**.
 
 Each step is `do → expect`. Where a step says *note*, write down what you saw
 instead — the exact words on screen are the evidence. Nothing here needs a
-debugger; the log is at `~/Library/Application Support/anilocal/logs/app.log`
+debugger; the log is at `~/Library/Application Support/com.anilocal.anilocal/anilocal/logs/app.log`
 (Settings › About › Log file › Reveal) and every "Copy diagnostics" pastes it.
 
 **You need:** a folder of anime on the internal disk; a second folder on an
@@ -21,7 +21,7 @@ network (Wi-Fi off, or a hosts-file blackhole for `graphql.anilist.co`,
 
 ## A. First launch, no cache
 
-Delete or move `~/Library/Application Support/anilocal/` first (keep a copy if
+Delete or move `~/Library/Application Support/com.anilocal.anilocal/anilocal/` first (keep a copy if
 you want your library back afterwards; §M restores it).
 
 - [ ] **A1.** Launch → the window opens zoomed to the visible screen area, header
@@ -267,7 +267,7 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 
 ## M. A broken cache
 
-Quit the app. In `~/Library/Application Support/anilocal/`, overwrite
+Quit the app. In `~/Library/Application Support/com.anilocal.anilocal/anilocal/`, overwrite
 `cache.sqlite` with garbage: `echo junk > cache.sqlite` (move the real one
 aside first if you want it back).
 
