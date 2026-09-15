@@ -12,6 +12,12 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- **Change copy from the player.** The ⚙ menu's Copy section lists an
+  episode's copies for a show in several folders; switching re-opens at the
+  same position and pins the choice, the same pin the show page offers.
+- **Unmatched files live in Settings** as a category with the live count in
+  its label; Fix match opens from there. The header's Unmatched tab opens
+  Settings on it.
 - **Scan progress and Stop.** The header's Scan tab becomes Stop while a scan
   runs; the readout counts `identifying 120/600`, then `metadata`, `skips`.
   Stop keeps every batch already committed. Actions that must not run
@@ -32,6 +38,22 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   `tool/perf.sh`; `docs/runtime-walkthrough.md`.
 
 ### Changed
+- The header shows its title and tabs on the first frame (a notification
+  raised during the very first build was thrown away, so the header stayed
+  empty until the window was resized).
+- The scan readout is a short status that fits the display and moves per
+  title: `Identifying 12/340`, `Metadata…`, `Skips 120/600`; shows fill in
+  as each batch is saved rather than in one sweep at the end; the show page
+  and the player follow the scan too. The dot-matrix font gained the
+  punctuation real titles carry (the apostrophe was a hole).
+- Settings closes on Escape and on a click outside as well as Done; the
+  Metadata and Skip lists are read-only during a scan like Folders; a
+  pending card says "Identifying…" only while a scan runs.
+- Folder health is one probe with three results published together, and a
+  category is "denied" only when its folder cannot be read now — the
+  Downloads banner no longer flashes for the length of a scan that works.
+- The scan reports in one snackbar (summary plus any problem lines), red
+  when there is a problem, instead of three queued one after another.
 - **The read path is one snapshot per reload** and single-show reads are
   indexed: a library reload at 600 shows went from 231 ms / 29 statements to
   126 ms / 10; a first-scan reload from 3.4 s to 39 ms; a twelve-episode binge
@@ -64,6 +86,14 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   rounded-square set from it.
 
 ### Fixed
+- Unplugging a drive mid-session now greys its shows and marks its Folders
+  row on the next scan, not only after a relaunch: two session caches (the
+  volume's mount point, a confirmed category root) kept a stale positive
+  answer for the life of the process.
+- Playback resumes after Settings or a dialog closes over the player, if it
+  was playing when covered.
+- Escape over a fullscreen player with a dialog up closes the dialog first
+  instead of leaving fullscreen.
 - **Touching a file no longer deletes its fix-match**: an override follows
   the file to its new fingerprint (a re-download, an in-place tag edit, a
   backup restore, a clock change).

@@ -25,7 +25,8 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 **Video zone** (`video_zone.dart`, behaviour in `playback_session.dart`)
 - [ ] Video renders via media_kit `Video` — **no tint/effect/overlay on the texture**.
 - [ ] **A file that cannot be opened says so** — "Couldn't play this episode" with mpv's line under it, centred over the frame; the line is also in Copy diagnostics. Never a silent black frame. A drive unplugged mid-playback lands here too, and Back still works.
-- [ ] **Anything pushed over the player pauses it** — Settings, a dialog, Unmatched files, Licences (the two pages that used to land on top of the theater now pop it first; the pause is the backstop). Playback resumes where it was when the overlay closes, and the header is intact.
+- [ ] **Anything pushed over the player pauses it, and its going away resumes it** — Settings, a dialog, Licences. Resume happens only if it was PLAYING when covered (`pauseForObscured` / `resumeIfObscurePaused`); a viewer who had paused stays paused. The header is intact after.
+- [ ] **⚙ › Copy** lists an episode's copies (`folder › file`) for a show in several folders, with Automatic; choosing one re-opens the same episode on that file at the SAME position (even if the episode is marked watched) and pins it — the same pin the show page's "Choose copy…" writes. Absent for a single-copy episode.
 - [ ] Controls overlay drawn by media_kit's `Video(controls:)` builder (same builder windowed **and** fullscreen).
 
 **Series-info zone** (`series_info_zone.dart`)

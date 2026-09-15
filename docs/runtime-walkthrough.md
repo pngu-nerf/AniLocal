@@ -35,6 +35,9 @@ you want your library back afterwards; §M restores it).
       the app again in Finder, or `open -n`) → the first window comes to the
       front and no second window appears. *Note:* if a second window opens,
       both are writing one database.
+- [ ] **A5.** *(re-issued)* Launch with a populated library → the header shows
+      the title **and** the Scan / Settings tabs on the first frame, with no
+      click, double-click or resize needed.
 
 ## B. Adding folders
 
@@ -55,12 +58,14 @@ you want your library back afterwards; §M restores it).
       inside …, which is already in your library — its files are already
       scanned.` Add the **parent** of a listed folder → refused, naming the
       child and how to proceed.
-- [ ] **B6.** Add a folder under **~/Downloads** → macOS may ask about
-      Downloads; **deny** it. A dialog says *AniLocal can read the folder you
-      just added, but not the rest of Downloads* with **Later / Open
+- [ ] **B6.** *(re-issued)* Add a folder under **~/Downloads** → macOS may ask
+      about Downloads; **deny** it. A dialog says *AniLocal can read the folder
+      you just added, but not the rest of Downloads* with **Later / Open
       Settings**. Choose Later → the scan runs and **finds the files** in that
-      folder, and **no red "Can't access Downloads" banner** remains after the
-      scan (the banner is for a folder the scan could not read).
+      folder, and **no red "Can't access Downloads" bar appears at any point**
+      — not during the scan, not after. (It used to sit between the header
+      and the search bar for the length of the scan. It now appears only when
+      a folder in that category genuinely cannot be read.)
 - [ ] **B7.** Settings › Folders shows every folder with no health note beside
       it while all are reachable.
 - [ ] **B8.** Add a folder whose name has **accented or Japanese characters**
@@ -75,19 +80,27 @@ you want your library back afterwards; §M restores it).
 Use the biggest library you have; the numbers in `docs/performance.md` were
 measured at 600 shows / 8,000 files.
 
-- [ ] **C1.** Start a scan of the external folder → the readout counts
-      `identifying 12/340` and moves; the Stop tooltip repeats the count.
-      Placeholders paint as they are discovered; the grid stays scrollable
-      and responsive while the scan runs (no multi-second freezes).
-- [ ] **C2.** Press **Stop** mid-`identifying` → the scan ends within a few
-      seconds; the snackbar ends `· stopped early`; everything identified so
-      far keeps its art and title; the rest stay named placeholders.
+- [ ] **C1.** *(re-issued)* Start a scan of the external folder → the VFD
+      readout reads `IDENTIFYING 12/340` and the counter moves **per title**
+      (it used to move once per 25, and the line overflowed so the counter
+      never scrolled into view); then `METADATA…`, then `SKIPS 40/600`. The
+      Stop tooltip repeats the count. Placeholders paint as they are
+      discovered, and **shows fill in with title and art as each batch of 25
+      lands**, not in one sweep at the end. The grid stays scrollable and
+      responsive throughout.
+- [ ] **C2.** *(re-issued)* Press **Stop** mid-`identifying` → the scan ends
+      within a few seconds; the snackbar ends `· stopped early`; every batch
+      already saved keeps its art and title; the rest stay named placeholders
+      whose line reads **Not identified yet — scan to retry** (never
+      "Identifying…" while nothing is running).
 - [ ] **C3.** Scan again → the placeholders resolve (they are retried); nothing
       already identified is re-fetched (the lookup count is only the
       remainder).
-- [ ] **C4.** With the scan running, open Settings › Folders → **Add**,
-      **Remove**, drag-reorder and **Refresh metadata** are disabled and say
-      *Wait for the scan to finish*.
+- [ ] **C4.** *(re-issued)* With the scan running, open Settings → in
+      **Folders**, Add / Remove / drag-reorder; in **Metadata** and **Skip**,
+      the checkboxes and drag-reorder; in **Library**, Refresh metadata — all
+      disabled, each saying *Wait for the scan to finish*. They come back the
+      moment the scan ends, with the window still open.
 - [ ] **C5.** Scroll the full grid fast, top to bottom and back → covers appear
       as you pass them and **stay** decoded on the way back (no flicker, no
       re-loading of cards you just saw). Memory in Activity Monitor settles
@@ -109,9 +122,10 @@ Use the external folder from §C.
       to access this library, then scan again.* with a **Scan** button and
       **no Open Settings** button. Cards sourced only from that drive are greyed
       with their "not connected" line; shows also present on the internal
-      disk are not greyed. The red snackbar reads `… is not connected —
-      reconnect the drive and scan again. Cached items were kept.` — **not**
-      "re-add the folder".
+      disk are not greyed. **One** red snackbar appears at once, carrying the
+      summary line and, under it, `… is not connected — reconnect the drive
+      and scan again. Cached items were kept.` — **not** "re-add the folder",
+      and not a plain summary first with the warning queued behind it.
 - [ ] **D2.** Settings › Folders → that folder's row reads **Not connected**.
 - [ ] **D3.** Open a greyed show → the page shows its title, art and every
       episode, dimmed, with the reconnect banner; the episode menu, **Choose
@@ -121,15 +135,19 @@ Use the external folder from §C.
       greying are there **on first paint**, before you press anything.
 - [ ] **D5.** Plug the drive back in, press Scan → banner gone, greying gone,
       summary shows `N unchanged · 0 removed`. Nothing was re-identified.
-- [ ] **D6.** **Mid-scan:** start a scan of the external folder and unplug the
-      drive while `identifying` is counting → the scan ends with the red
-      "not connected" snackbar; the summary shows **`0 removed`**; the
-      show cards from that drive are still in the library (greyed), and
-      their fix-matches and watch state survive the next scan after replug.
-- [ ] **D7.** **Mid-playback:** play an episode from the drive, unplug → the
-      player shows *Couldn't play this episode* with mpv's line, or stalls
-      and then says so; Back returns to the show page; the app does not quit
-      or hang. Replug → the same episode resumes from its saved position.
+- [ ] **D6.** *(re-issued)* **Mid-scan:** start a scan of the external folder
+      and unplug the drive **within the first second or two**, while the
+      folders are still being walked → the scan ends with the red "not
+      connected" snackbar; the summary shows **`0 removed`**; the cards from
+      that drive are greyed at once. (Unplugging later, during `identifying`,
+      finds nothing wrong on that run — the file list was already taken while
+      the drive was there; the NEXT scan reports it. Both are correct.)
+- [ ] **D7.** **Mid-playback:** play an episode from the drive, unplug →
+      playback carries on from mpv's buffer for a while (tens of seconds, and
+      short seeks within it work); the first read past the buffer shows
+      *Couldn't play this episode* with mpv's line. Back returns to the show
+      page; the app does not quit or hang. Replug → the same episode resumes
+      from its saved position. *(Confirmed in round 1; kept as the reference.)*
 
 ## E. Quitting
 
@@ -174,13 +192,17 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 
 ## G. Fix-match and identity
 
-- [ ] **G1.** Header **Unmatched** → the list; pick a file → **Fix match**;
-      search, **Assign** → back on the Unmatched list the file is gone, and
-      **Back** to the library shows the show's card **and** the Unmatched
-      count in the header is lower, without pressing Scan.
+- [ ] **G1.** *(re-issued)* Header **Unmatched** → **Settings opens on its
+      Unmatched category** (the sidebar entry reads `Unmatched (N)`); pick a
+      file → the window closes and the **Fix match** page opens; search,
+      **Assign** → back on the library the show's card is there **and** the
+      header's Unmatched count is lower, without pressing Scan. Settings ›
+      Library › *Unmatched files* jumps to the same category **inside** the
+      window.
 - [ ] **G2.** Rename a file that is on the Unmatched list (in Finder), then
-      click it → *That file isn't there any more. Scan to update the list.*
-      Its Assign is refused the same way from the Fix match page.
+      pick it in Settings › Unmatched → *That file isn't there any more. Scan
+      to update the list.* Its Assign is refused the same way from the Fix
+      match page.
 - [ ] **G3.** On a show page, episode menu → **Reassign Show** to a different
       show → the page's title, art and episode count follow the **new** show
       at once (it used to keep the old identity over the new episodes). Back
@@ -204,24 +226,26 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 
 ## H. Settings over the player, and other overlays
 
-- [ ] **H1.** Play an episode; open **Settings** from the header → playback
-      **pauses** while the window is up; Done → the player is exactly where
-      it was, the header intact.
-- [ ] **H2.** Settings › Library › **Unmatched files** from the player → the
-      player is popped **first**; the Unmatched list opens over the show page
-      with the header's actions intact; audio does not continue underneath.
+- [ ] **H1.** *(re-issued)* Play an episode; open **Settings** from the header
+      → playback **pauses** while the window is up; Done, Escape or a click
+      outside → playback **resumes** by itself. Pause first, then open and
+      close Settings → it stays paused (only what was playing resumes).
+- [ ] **H2.** *(re-issued)* Settings › **Unmatched** from the player → the
+      list is in the window; pick a file → the window closes and the Fix match
+      page opens over the paused player; Back → the player, still paused
+      where it was.
 - [ ] **H3.** Settings › About › Licences › **View** → a **Licences** page with
       the header's Back working; opened from the player, same as H2.
-- [ ] **H4.** Settings remembers the category you were on when reopened in the
-      same session; the window does **not** close on a click outside it
-      (Escape and Done do close it).
-- [ ] **H5.** Open Settings › Folders **before** a scan is running, then start
-      one from another route is not possible from inside the window — so
-      instead: add a folder in Settings and press Done **while the scan the
-      previous add started is still running** (add two folders in quick
-      succession from the empty state) → a snackbar *Folders changed — they
-      will be scanned when the current scan finishes.* and a second scan
-      follows the first without another click.
+- [ ] **H4.** *(re-issued)* Settings remembers the category you were on when
+      reopened in the same session; **Escape**, a **click outside** and
+      **Done** all close it. Type `45` into Skip › *Ignore skips shorter than*
+      and press Escape with the field still focused → reopen: it reads 45.
+- [ ] **H5.** *(re-issued)* Play an episode, enter **fullscreen**, open
+      Settings from the header (leave fullscreen with Escape first if the
+      header is hidden, then re-enter with ⛶ and use the player's ⚙ →
+      nothing; use the header route instead) — with Settings open over a
+      fullscreen player, the first **Escape closes Settings**; the second
+      leaves fullscreen.
 
 ## I. A binge
 
@@ -255,6 +279,13 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 - [ ] **K3.** A 0-byte `.mkv` in a folder → it is listed (as an episode of its
       parsed show) and *Couldn't play this episode* when opened; it does not
       break the scan.
+- [ ] **K4.** *(new)* With a show that has the same episode in two folders,
+      play it → the player's ⚙ menu has a **Copy** section: *Automatic* plus
+      one entry per copy as `folder › file`, the playing one checked. Pick the
+      other copy → playback re-opens on that file **at the same position**
+      (also for an episode already marked watched — no restart from 0); the
+      rail follows; the show page's copy picker shows the pin. Pick
+      *Automatic* → back to the priority default.
 
 ## L. Accessibility
 
