@@ -26,7 +26,9 @@ class SeriesInfoZone extends StatelessWidget {
 
   /// Episodes actually in the library for this series (falls back to AniList's
   /// reported count for the headline figure).
-  final int episodeCount;
+  /// Episodes in the library for this show; null while the list is loading
+  /// (no count is shown then rather than a wrong one).
+  final int? episodeCount;
 
   /// The episode currently in the video frame.
   final Episode nowPlaying;
@@ -39,7 +41,7 @@ class SeriesInfoZone extends StatelessWidget {
 
     final meta = <String>[
       if (series.format != null) series.format!,
-      '${series.episodeCount ?? episodeCount} episodes',
+      if ((series.episodeCount ?? episodeCount) case final n?) '$n episodes',
       if (!series.pending && series.externalIds.anilist != null)
         'AniList #${series.externalIds.anilist}',
     ];

@@ -10,6 +10,7 @@ import '../library_services.dart';
 import '../routes.dart';
 import '../shell/header_scope.dart';
 import '../shell/header_spec.dart';
+import '../widgets/guarded.dart';
 import '../window_chrome.dart';
 import 'theater_layout.dart';
 import 'theater_layout_config.dart';
@@ -65,6 +66,10 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   late Episode _current;
   List<Episode>? _episodes; // null while first loading
 
+  /// The show as last read — re-read with the episodes so the header and the
+  /// info zone follow a rescan or a reassign instead of the push-time value.
+  late Series _series = widget.series;
+
   /// Live rail width. Seeded from the config so the first frame is correct,
   /// then overwritten by the persisted value (clamped) once it loads.
   late double _railFraction;
@@ -99,6 +104,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
     WindowChrome.fullscreen.addListener(_onWindowFullscreenChanged);
     widget.services.scanning.addListener(_onScanningChanged);
     widget.services.scan.progress.addListener(_onScanningChanged);
+    widget.services.unmatchedCount.addListener(_onScanningChanged);
     // The player is the ONLY place fullscreen has an exit (⛶ / Escape), so it
     // is the only place the window is allowed to enter it. Scoped to exactly
     // this screen's lifetime; the runner force-exits when it goes away.
@@ -111,6 +117,7 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   void dispose() {
     widget.services.scanning.removeListener(_onScanningChanged);
     widget.services.scan.progress.removeListener(_onScanningChanged);
+    widget.services.unmatchedCount.removeListener(_onScanningChanged);
     WindowChrome.fullscreen.removeListener(_onWindowFullscreenChanged);
     unawaited(WindowChrome.setFullscreenAllowed(false));
     super.dispose();
@@ -129,17 +136,24 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   }
 
   /// Already clamped by the repository (every setting is, on load).
-  Future<void> _loadRailFraction() async {
+  Future<void> _loadRailFraction() => guarded('rail fraction', () async {
     final stored = await widget.services.settings.loadRailFraction();
     if (mounted) setState(() => _railFraction = stored);
-  }
+  });
 
-  Future<void> _loadEpisodes() async {
-    final eps = await widget.services.repository.episodesFor(
-      widget.series.seriesId,
-    );
-    if (mounted) setState(() => _episodes = eps);
-  }
+  Future<void> _loadEpisodes() => guarded('theater episodes', () async {
+    final (eps, series) = await (
+      widget.services.repository.episodesFor(widget.series.seriesId),
+      widget.services.repository.seriesById(widget.series.seriesId),
+    ).wait;
+    if (!mounted) return;
+    setState(() {
+      _episodes = eps;
+      // The show may have left the library mid-session; keep the last known
+      // identity for the frame that is still playing rather than blanking it.
+      if (series != null) _series = series;
+    });
+  });
 
   /// Enter/exit fullscreen. The ONE fullscreen path — the ⛶ button and the
   /// Escape shortcut both land here via [PlayerControlsActions.toggleFullscreen].
@@ -206,15 +220,20 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   HeaderSpec buildHeaderSpec() => HeaderSpec(
     title: widget.services.scanning.value
         ? scanningTitle(
-            widget.series.displayTitle,
+            _series.displayTitle,
             widget.services.scan.progress.value,
           )
-        : widget.series.displayTitle,
+        : _series.displayTitle,
     actions: AppActions(
       scanning: widget.services.scanning.value,
-      unmatchedCount: widget.header.unmatchedCount,
+      unmatchedCount: widget.services.unmatchedCount.value,
       onScan: widget.header.onScan,
-      onUnmatched: widget.header.onUnmatched,
+      // Leave the player FIRST: the Unmatched page must not open on top of a
+      // playing frame (its audio would carry on behind it).
+      onUnmatched: () {
+        unawaited(Navigator.of(context).maybePop());
+        widget.header.onUnmatched();
+      },
       onSettings: _openSettings,
       progress: widget.services.scan.progress.value,
       onStopScan: widget.services.scanning.value
@@ -227,7 +246,11 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   Widget build(BuildContext context) {
     publishHeader();
 
-    final episodes = _episodes ?? const <Episode>[];
+    // Another page pushed OVER the player (Settings › Library › Unmatched
+    // files, About › Licences) leaves this route mounted, so audio kept
+    // playing behind an unrelated screen. `ModalRoute.of` subscribes to the
+    // route's state, so this rebuilds when it stops being current.
+    final obscured = !(ModalRoute.of(context)?.isCurrent ?? true);
 
     final zones = <TheaterZone, Widget>{
       TheaterZone.video: VideoZone(
@@ -242,15 +265,20 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
         fullscreen: _fullscreen,
         onToggleFullscreen: _toggleFullscreen,
         settingsRevision: _settingsRevision,
+        obscured: obscured,
         onEpisodeChanged: _onAdvanced,
       ),
       TheaterZone.seriesInfo: SeriesInfoZone(
-        series: widget.series,
-        episodeCount: episodes.length,
+        series: _series,
+        // Null until the list has loaded — the zone then shows no count
+        // rather than "0 episodes".
+        episodeCount: _episodes?.length,
         nowPlaying: _current,
       ),
       TheaterZone.episodeList: EpisodeListZone(
-        episodes: episodes,
+        // Null = loading (a spinner), [] = genuinely nothing. The rail used
+        // to say "No episodes here yet" during the query.
+        episodes: _episodes,
         current: _current,
         onSelect: _select,
       ),

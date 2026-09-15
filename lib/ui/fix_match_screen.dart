@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../data/paths.dart' show basenameOf;
 import '../diagnostics/app_log.dart';
 import '../domain/models/series.dart';
 import '../domain/repositories/fix_match_repository.dart';
@@ -104,6 +105,16 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
     if (chosen == null) return;
     setState(() => _busy = true);
     try {
+      // The override is keyed by the file's fingerprint; a file that has gone
+      // since the list was read would pin a phantom. Check before writing.
+      for (final p in widget.filePaths) {
+        if (!await File(p).exists()) {
+          throw StateError(
+            "The file isn't there any more (${basenameOf(p)}). "
+            'Scan to update the list, then try again.',
+          );
+        }
+      }
       if (widget.isSplit && widget.filePaths.length > 1) {
         await widget.fixMatch.assignRange(
           filePaths: widget.filePaths,

@@ -45,6 +45,7 @@ class VideoZone extends StatefulWidget {
     required this.fullscreen,
     required this.onToggleFullscreen,
     this.settingsRevision = 0,
+    this.obscured = false,
     this.onEpisodeChanged,
   });
 
@@ -75,6 +76,11 @@ class VideoZone extends StatefulWidget {
   /// read once per episode, so a change made mid-episode applied only to the
   /// next one.
   final int settingsRevision;
+
+  /// True while another page sits on top of the theater. Playback PAUSES on
+  /// the transition to true (audio behind an unrelated screen is never what
+  /// the viewer meant); it does not resume on its own.
+  final bool obscured;
 
   final ValueChanged<Episode>? onEpisodeChanged;
 
@@ -116,6 +122,7 @@ class _VideoZoneState extends State<VideoZone> {
     if (widget.settingsRevision != oldWidget.settingsRevision) {
       unawaited(_session.reloadContext());
     }
+    if (widget.obscured && !oldWidget.obscured) _session.pause();
     _session.select(widget.episode);
   }
 

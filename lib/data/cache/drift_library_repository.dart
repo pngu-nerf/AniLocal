@@ -573,6 +573,7 @@ class DriftLibraryRepository
       upNext: _upNextOf(v, logical),
       unmatchedCount: unmatched,
       hidden: v.hiddenBySeries,
+      folderCount: v.folders.length,
     );
   }
 

@@ -8,8 +8,6 @@ import '../../domain/models/picture_mode.dart';
 import '../../domain/models/series.dart';
 import '../library_services.dart';
 import '../routes.dart';
-import '../series_detail_screen.dart';
-import '../shell/instant_page_route.dart';
 import '../theme/xp_pressable.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
@@ -110,14 +108,11 @@ class _SeriesCardState extends State<SeriesCard> {
         );
       return;
     }
-    await Navigator.of(context).push(
-      InstantPageRoute<void>(
-        builder: (_) => SeriesDetailScreen(
-          series: widget.series,
-          services: widget.services,
-          header: widget.header,
-        ),
-      ),
+    await AppRoutes.detail(
+      context,
+      series: widget.series,
+      services: widget.services,
+      header: widget.header,
     );
     widget.onReturn(); // continue-watching / up-next may have changed
   }

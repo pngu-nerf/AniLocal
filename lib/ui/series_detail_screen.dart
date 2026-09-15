@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../diagnostics/app_log.dart';
+import '../domain/folder_health.dart';
 import '../domain/format_duration.dart';
 import '../domain/missing_episodes.dart';
 import '../domain/models/episode.dart';
@@ -14,6 +15,7 @@ import '../domain/models/series.dart';
 import '../domain/watch_order.dart';
 import 'library/library_search_bar.dart';
 import 'library_services.dart';
+import 'metadata_failure_message.dart';
 import 'routes.dart';
 import 'series_detail/missing_episode_tiles.dart';
 import 'settings/settings_window.dart';
@@ -23,6 +25,7 @@ import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
 import 'widgets/download_tally_label.dart';
 import 'widgets/episode_tile.dart';
+import 'widgets/guarded.dart';
 import 'widgets/show_cover.dart';
 import 'widgets/xp_banner.dart';
 import 'widgets/xp_dialog.dart';
@@ -130,9 +133,26 @@ class SeriesDetailScreen extends StatefulWidget {
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
 }
 
+/// Why a show's files cannot be reached — see `_unreachable`.
+enum _Unreachable { missing, denied }
+
 class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     with HeaderPublisher {
   LibraryServices get _services => widget.services;
+
+  /// The show as LAST READ. Seeded from the push-time value so the hero
+  /// paints at once, then re-read on every reload: after a reassign, a split
+  /// or a rescan the title, cover, count and picture mode follow. Null once
+  /// the repository says the show is gone (pruned, or re-identified under
+  /// another id) — the page then says so instead of showing the old identity.
+  late Series? _series = widget.series;
+
+  /// Why the show's files cannot be reached right now, or null when they can:
+  /// `missing` (its folders' volumes are not mounted — reconnect) or `denied`
+  /// (a folder's TCC category is refused — System Settings). Two different
+  /// remedies, so two different banners; the old single flag sent a
+  /// permission problem to the "reconnect the drive" message.
+  _Unreachable? _unreachable;
 
   List<Episode> _episodes = const [];
   Set<int> _hidden = {};
@@ -143,18 +163,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   /// error state with a retry instead of hanging on the spinner.
   bool _error = false;
 
-  /// True when NONE of the show's source files are currently reachable (e.g. the
-  /// drive/mount holding them was unplugged while viewing) — shows a reconnect
-  /// banner and gates playback; cached metadata + the list stay visible.
-  bool _sourcesUnavailable = false;
+  bool get _sourcesUnavailable => _unreachable != null;
 
   /// Which tab of the episode area is showing (false = Episodes, true = Hidden).
   bool _viewingHidden = false;
 
   Episode? _next; // next episode to watch for this series
-
-  /// Live: seeded from the push-time value, re-read on every reload.
-  late int _unmatchedCount = widget.header.unmatchedCount;
 
   /// Bundles currently expanded inline into a per-episode hide checklist, keyed
   /// by the bundle's first episode number.
@@ -178,13 +192,25 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     super.initState();
     _services.scanning.addListener(_onScanningChanged);
     _services.scan.progress.addListener(_onScanningChanged);
+    _services.unmatchedCount.addListener(_onScanningChanged);
+    _services.missingFolderPaths.addListener(_onFolderHealthChanged);
+    _services.accessIssues.addListener(_onFolderHealthChanged);
     unawaited(_reload());
+  }
+
+  /// A drive plugged in or a permission granted reaches this page without a
+  /// reload: the banner and the gating follow the shared folder health.
+  void _onFolderHealthChanged() {
+    if (mounted) setState(() => _unreachable = _unreachableFor(_episodes));
   }
 
   @override
   void dispose() {
     _services.scanning.removeListener(_onScanningChanged);
     _services.scan.progress.removeListener(_onScanningChanged);
+    _services.unmatchedCount.removeListener(_onScanningChanged);
+    _services.missingFolderPaths.removeListener(_onFolderHealthChanged);
+    _services.accessIssues.removeListener(_onFolderHealthChanged);
     _scroll.dispose();
     _searchController.dispose();
     super.dispose();
@@ -206,26 +232,32 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       // exist, only whether gaps are surfaced — so they wait together instead
       // of one after the other. `hiddenEpisodes` below is NOT parallelised with
       // them: it genuinely depends on `enabled`.
-      final (enabled, eps, unmatched) = await (
+      final (enabled, eps, series) = await (
         _services.settings.loadMissingEnabled(),
         _services.repository.episodesFor(widget.series.seriesId),
-        _services.repository.unmatchedCount(),
+        // LIVE: the show itself, not the push-time snapshot.
+        _services.repository.seriesById(widget.series.seriesId),
       ).wait;
       // The feature never applies to a not-yet-identified placeholder (no
       // episode count, synthetic negative id) — treat it as nothing hidden.
-      final hidden = (!enabled || widget.series.pending)
+      final hidden = (!enabled || (series?.pending ?? widget.series.pending))
           ? <int>{}
           : await _services.missingEpisodes.hiddenEpisodes(
               widget.series.seriesId,
             );
-      final unavailable = eps.isNotEmpty && !await _anyReachable(eps);
+      // Folder health first (it names the cause); a probe of the files only
+      // when the folders are healthy but the files might still be gone.
+      var unreachable = _unreachableFor(eps);
+      if (unreachable == null && eps.isNotEmpty && !await _anyReachable(eps)) {
+        unreachable = _Unreachable.missing;
+      }
       if (!mounted || generation != _reloadGeneration) return;
       setState(() {
+        _series = series;
         _episodes = eps;
         _hidden = hidden;
         _missingEnabled = enabled;
-        _sourcesUnavailable = unavailable;
-        _unmatchedCount = unmatched;
+        _unreachable = unreachable;
         _loading = false;
         _error = false;
         _expandedBundles.clear();
@@ -246,6 +278,25 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         _error = true;
       });
     }
+  }
+
+  /// The folder-health verdict for [eps]: every source folder unmounted →
+  /// missing; any source folder in a denied category → denied; else null.
+  /// The same sets the library greys cards from, so the two cannot disagree.
+  _Unreachable? _unreachableFor(List<Episode> eps) {
+    final folders = <String>{
+      for (final e in eps)
+        for (final s in e.sources) s.folderPath,
+    };
+    if (folders.isEmpty) return null;
+    final denied = _services.accessIssues.value.toSet();
+    if (folders.any((f) => denied.contains(_services.categoryLabelOf(f)))) {
+      return _Unreachable.denied;
+    }
+    if (seriesUnavailable(folders, _services.missingFolderPaths.value)) {
+      return _Unreachable.missing;
+    }
+    return null;
   }
 
   /// Whether ANY source of any present episode exists on disk. Async and
@@ -275,21 +326,22 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     _expandedBundles.clear();
   });
 
-  Future<void> _hide(List<int> numbers) async {
+  Future<void> _hide(List<int> numbers) => guarded('hide episodes', () async {
     await _services.missingEpisodes.hideEpisodes(
       widget.series.seriesId,
       numbers,
     );
     await _reload();
-  }
+  }, onError: _sayWriteFailed);
 
-  Future<void> _unhide(List<int> numbers) async {
-    await _services.missingEpisodes.unhideEpisodes(
-      widget.series.seriesId,
-      numbers,
-    );
-    await _reload();
-  }
+  Future<void> _unhide(List<int> numbers) =>
+      guarded('unhide episodes', () async {
+        await _services.missingEpisodes.unhideEpisodes(
+          widget.series.seriesId,
+          numbers,
+        );
+        await _reload();
+      }, onError: _sayWriteFailed);
 
   /// The header's ⚙ action — the one door to every setting, Folders included.
   ///
@@ -303,7 +355,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       settings: _services.settings,
       actions: _services.settingsActions.forScreen(
         onRefreshed: _reload,
-        loadUnmatchedCount: () async => _unmatchedCount,
+        loadUnmatchedCount: () async => _services.unmatchedCount.value,
         onOpenUnmatched: widget.header.onUnmatched,
       ),
     );
@@ -317,26 +369,27 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     if (mounted) await _reload();
   }
 
-  HeaderHooks get _header => HeaderHooks(
-    onScan: _scan,
-    onUnmatched: widget.header.onUnmatched,
-    unmatchedCount: _unmatchedCount,
-  );
+  HeaderHooks get _header =>
+      HeaderHooks(onScan: _scan, onUnmatched: widget.header.onUnmatched);
 
-  /// What the fix-match search box is pre-filled with: the show's best title.
-  String get _fixMatchPrefill =>
-      widget.series.titles.romaji ??
-      widget.series.titles.english ??
-      widget.series.titles.native ??
-      '';
+  /// What the fix-match search box is pre-filled with: the show's best title,
+  /// as last read.
+  String get _fixMatchPrefill {
+    final titles = (_series ?? widget.series).titles;
+    return titles.romaji ?? titles.english ?? titles.native ?? '';
+  }
 
   void _showReconnectHint() {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            "This show's drive isn't connected. Reconnect it, then try again.",
+            _unreachable == _Unreachable.denied
+                ? "AniLocal can't read this show's folder. Grant access in "
+                      'System Settings › Privacy & Security › Files and Folders.'
+                : "This show's drive isn't connected. Reconnect it, then try "
+                      'again.',
           ),
         ),
       );
@@ -352,7 +405,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     await AppRoutes.theater(
       context,
       services: _services,
-      series: widget.series,
+      series: _series ?? widget.series,
       episode: e,
       header: _header,
       onSettings: _openSettings,
@@ -447,7 +500,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         .toList();
     // Real prior-season count: this show's episode count (fallback to the
     // split point minus one). Never hardcoded.
-    final prior = widget.series.episodeCount ?? (from.number - 1);
+    final prior = (_series ?? widget.series).episodeCount ?? (from.number - 1);
     final done = await AppRoutes.fixMatch(
       context,
       services: _services,
@@ -469,7 +522,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     // A pending placeholder can't be source-pinned (no real identity to key a
     // pin to) — it always plays the automatic source. Show the source count,
     // but not the picker.
-    final pinnable = multi && !widget.series.pending;
+    final pinnable = multi && !(_series ?? widget.series).pending;
     final subtitle = [
       _basename(e.fileRef),
       if (multi) '${e.sources.length} copies · playing ${e.fileRef}',
@@ -563,28 +616,65 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   /// Sticky manual watched-override toggle. Flips the episode's watched flag via
   /// the durable per-episode override (wins over the threshold, survives re-entry
   /// + refresh); progress/resume is untouched.
-  Future<void> _toggleWatched(Episode e) async {
+  Future<void> _toggleWatched(Episode e) => guarded('mark watched', () async {
     await _services.watchState.setWatchedManual(e, watched: !e.watched);
     await _reload();
+  }, onError: _sayWriteFailed);
+
+  void _sayWriteFailed(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("That didn't save. ${userFacingMessage(e)}")),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     publishHeader();
-    return _content(widget.series);
+    final series = _series;
+    if (series == null) return _goneState();
+    return _content(series);
   }
+
+  /// The show left the library while this page was open — pruned by a
+  /// rescan, or every file re-identified under another show. Information
+  /// fails NEUTRAL: say so, offer the way back; never keep showing a title
+  /// and a cover the library no longer has.
+  Widget _goneState() => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'This show is no longer in your library.',
+          style: TextStyle(color: Xp.text, fontSize: Xp.fontSizeTitle),
+        ),
+        const SizedBox(height: Xp.spaceS),
+        const Text(
+          'Its files were removed or matched to another show.',
+          style: TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeBody),
+        ),
+        const SizedBox(height: Xp.spaceL),
+        XpButton(
+          icon: Icons.arrow_back,
+          label: 'Back to library',
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ],
+    ),
+  );
 
   @override
   HeaderSpec buildHeaderSpec() => HeaderSpec(
-    title: _services.scanning.value
-        ? scanningTitle(
-            widget.series.displayTitle,
-            _services.scan.progress.value,
-          )
-        : widget.series.displayTitle,
+    // A neutral, TRUE title while the show is gone: the old name would claim
+    // a page the library no longer has.
+    title: _series == null
+        ? 'Not in library'
+        : _services.scanning.value
+        ? scanningTitle(_series!.displayTitle, _services.scan.progress.value)
+        : _series!.displayTitle,
     actions: AppActions(
       scanning: _services.scanning.value,
-      unmatchedCount: _unmatchedCount,
+      unmatchedCount: _services.unmatchedCount.value,
       onScan: _scan,
       onUnmatched: widget.header.onUnmatched,
       onSettings: _openSettings,
@@ -623,8 +713,34 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Disconnected-drive banner (cached info stays visible below it).
-        if (_sourcesUnavailable && ready)
+        // Unreachable-files banner (cached info stays visible below it). Two
+        // causes, two remedies: a missing drive wants a cable, a denied
+        // category wants System Settings.
+        if (_unreachable == _Unreachable.denied && ready)
+          XpBanner(
+            icon: Icons.lock_outline,
+            message:
+                "AniLocal can't read this show's folder — grant access in "
+                'System Settings › Privacy & Security › Files and Folders.',
+            actions: [
+              XpButton(
+                dense: true,
+                icon: Icons.settings,
+                label: 'Open Settings',
+                onPressed: () => fireAndForget(
+                  'open access settings',
+                  _services.settingsActions.sources.onOpenAccessSettings,
+                ),
+              ),
+              XpButton(
+                dense: true,
+                icon: Icons.refresh,
+                label: 'Try again',
+                onPressed: _reload,
+              ),
+            ],
+          ),
+        if (_unreachable == _Unreachable.missing && ready)
           XpBanner(
             icon: Icons.link_off,
             message:
@@ -887,14 +1003,19 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: Xp.spaceL),
         sliver: SliverOpacity(
-          // Cached list stays visible when disconnected, just dimmed.
+          // Cached list stays visible when disconnected, just dimmed — and
+          // INERT: dimming alone left every menu live under a banner saying
+          // "reconnect it to change files" (actions fail ABSENT).
           opacity: _sourcesUnavailable ? 0.5 : 1,
-          sliver: XpInsetSliver(
-            sliver: SliverList.separated(
-              itemCount: rows.length,
-              itemBuilder: (_, i) => _rowTile(rows[i]),
-              separatorBuilder: (_, _) =>
-                  const Divider(height: 1, color: Xp.divider),
+          sliver: SliverIgnorePointer(
+            ignoring: _sourcesUnavailable,
+            sliver: XpInsetSliver(
+              sliver: SliverList.separated(
+                itemCount: rows.length,
+                itemBuilder: (_, i) => _rowTile(rows[i]),
+                separatorBuilder: (_, _) =>
+                    const Divider(height: 1, color: Xp.divider),
+              ),
             ),
           ),
         ),

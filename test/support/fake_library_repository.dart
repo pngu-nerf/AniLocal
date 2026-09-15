@@ -113,6 +113,7 @@ class FakeLibraryRepository
       upNext: await upNextBySeries(),
       unmatchedCount: await unmatchedCount(),
       hidden: await allHiddenEpisodes(),
+      folderCount: folders.length,
     );
   }
 

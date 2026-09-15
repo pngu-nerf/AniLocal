@@ -65,11 +65,7 @@ Widget _app(FakeLibraryRepository repo) {
     home: SeriesDetailScreen(
       series: _series(),
       services: _services(repo, metadata: [], skip: []),
-      header: const HeaderHooks(
-        onScan: _noScan,
-        onUnmatched: _noop,
-        unmatchedCount: 0,
-      ),
+      header: const HeaderHooks(onScan: _noScan, onUnmatched: _noop),
     ),
   );
 }
@@ -95,12 +91,19 @@ LibraryServices _services(
   settings: const FakeSettings(),
   playback: PlaybackController(resolver: repo),
   scan: ScanControl(),
+  missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+  accessIssues: ValueNotifier<List<String>>(const []),
+  categoryLabelOf: (_) => null,
+  unmatchedCount: ValueNotifier<int>(0),
   settingsActions: SettingsActions(
     sources: SourcesActions(
       repository: repo,
       onAddFolder: () async => (added: false, deniedLabel: null),
       onOpenAccessSettings: () async => false,
       scanning: ValueNotifier<bool>(false),
+      missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+      accessIssues: ValueNotifier<List<String>>(const []),
+      categoryLabelOf: (_) => null,
     ),
     metadataSources: metadata,
     skipSources: skip,
@@ -265,11 +268,7 @@ void _settingsFromShowPageTests() {
               ),
             ],
           ),
-          header: const HeaderHooks(
-            onScan: _noScan,
-            onUnmatched: _noop,
-            unmatchedCount: 0,
-          ),
+          header: const HeaderHooks(onScan: _noScan, onUnmatched: _noop),
         ),
       ),
     );

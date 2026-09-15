@@ -23,6 +23,7 @@ class LibrarySnapshot extends Equatable {
     required this.upNext,
     required this.unmatchedCount,
     required this.hidden,
+    this.folderCount = 0,
   });
 
   static const empty = LibrarySnapshot(
@@ -54,6 +55,10 @@ class LibrarySnapshot extends Equatable {
   /// Hidden episode positions per series (the missing-episodes feature).
   final Map<int, Set<int>> hidden;
 
+  /// How many library folders exist — tells "nothing found" from "nothing
+  /// added" when [series] is empty.
+  final int folderCount;
+
   @override
   List<Object?> get props => [
     series,
@@ -62,5 +67,6 @@ class LibrarySnapshot extends Equatable {
     upNext,
     unmatchedCount,
     hidden,
+    folderCount,
   ];
 }

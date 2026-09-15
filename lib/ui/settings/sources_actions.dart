@@ -18,6 +18,9 @@ class SourcesActions {
     required this.onAddFolder,
     required this.onOpenAccessSettings,
     required this.scanning,
+    required this.missingFolderPaths,
+    required this.accessIssues,
+    required this.categoryLabelOf,
   });
 
   /// Lists, removes and REORDERS folders. Reordering rewrites
@@ -37,4 +40,9 @@ class SourcesActions {
   /// mid-scan would silently never be walked and a removed one would be
   /// written back by the next batch.
   final ValueListenable<bool> scanning;
+
+  /// Folder health, for the per-row state — see `LibraryServices`.
+  final ValueListenable<Set<String>> missingFolderPaths;
+  final ValueListenable<List<String>> accessIssues;
+  final String? Function(String path) categoryLabelOf;
 }

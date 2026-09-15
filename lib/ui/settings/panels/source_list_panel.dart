@@ -1,11 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/source_descriptor.dart';
 import '../../../domain/models/source_preference.dart';
 import '../../../domain/repositories/settings_repository.dart';
+import '../../metadata_failure_message.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
+import '../../widgets/guarded.dart';
 import '../../widgets/xp_reorderable_list.dart';
 import 'client_id_dialog.dart';
 
@@ -73,7 +76,18 @@ class _SourceListPanelState extends State<SourceListPanel> {
     unawaited(_load());
   }
 
-  Future<void> _load() async {
+  /// Set when the load failed; rendered instead of the spinner.
+  Object? _loadError;
+
+  Future<void> _load() => guarded(
+    'source list',
+    _loadUnguarded,
+    onError: (e) {
+      if (mounted) setState(() => _loadError = e);
+    },
+  );
+
+  Future<void> _loadUnguarded() async {
     final prefs = await widget.loadOrder();
     final keys = <String, String?>{};
     for (final source in widget.sources) {
@@ -99,6 +113,16 @@ class _SourceListPanelState extends State<SourceListPanel> {
     });
   }
 
+  /// A write that did not land: say so, then re-read so the list shows what
+  /// IS stored rather than what was attempted.
+  void _sayWriteFailed(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("That didn't save. ${userFacingMessage(e)}")),
+    );
+    unawaited(_load());
+  }
+
   /// Persist the list exactly as displayed, so what the user sees IS the saved
   /// order — no separate notion of order living anywhere else.
   Future<void> _persist(List<SourceDescriptor> ordered) async {
@@ -121,7 +145,11 @@ class _SourceListPanelState extends State<SourceListPanel> {
       );
       _prefs = prefs;
     });
-    await widget.saveOrder(prefs);
+    await guarded(
+      'save source order',
+      () => widget.saveOrder(prefs),
+      onError: _sayWriteFailed,
+    );
   }
 
   Future<void> _reorder(int oldIndex, int newIndex) async {
@@ -142,7 +170,11 @@ class _SourceListPanelState extends State<SourceListPanel> {
         ),
     ];
     setState(() => _prefs = prefs);
-    await widget.saveOrder(prefs);
+    await guarded(
+      'save source order',
+      () => widget.saveOrder(prefs),
+      onError: _sayWriteFailed,
+    );
   }
 
   Future<void> _editClientId(SourceDescriptor source) async {
@@ -152,7 +184,11 @@ class _SourceListPanelState extends State<SourceListPanel> {
       current: _clientIds[source.token],
     );
     if (entered == null) return; // cancelled — leave the stored key alone
-    await widget.settings.setSourceClientId(source.token, entered);
+    await guarded(
+      'save client id',
+      () => widget.settings.setSourceClientId(source.token, entered),
+      onError: _sayWriteFailed,
+    );
     if (!mounted) return;
     setState(() {
       _clientIds = {
@@ -166,6 +202,15 @@ class _SourceListPanelState extends State<SourceListPanel> {
   Widget build(BuildContext context) {
     final ordered = _ordered;
     if (ordered == null) {
+      final error = _loadError;
+      if (error != null) {
+        return Center(
+          child: Text(
+            "Couldn't read the source list. ${userFacingMessage(error)}",
+            style: const TextStyle(color: Xp.textDim),
+          ),
+        );
+      }
       return const Center(child: CircularProgressIndicator());
     }
     return Column(

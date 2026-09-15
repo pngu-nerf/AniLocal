@@ -37,6 +37,10 @@ class LibraryServices {
     required this.settingsActions,
     required this.playback,
     required this.scan,
+    required this.missingFolderPaths,
+    required this.accessIssues,
+    required this.categoryLabelOf,
+    required this.unmatchedCount,
   });
 
   final LibraryRepository repository;
@@ -66,4 +70,24 @@ class LibraryServices {
 
   /// True while a scan runs — the flag every header disables its Scan on.
   ValueNotifier<bool> get scanning => scan.scanning;
+
+  /// Library folder PATHS whose volume is not mounted right now. Written by
+  /// the composition root's folder-health pass (at launch and on every scan);
+  /// read by every screen that greys or blocks a file-dependent action.
+  final ValueListenable<Set<String>> missingFolderPaths;
+
+  /// TCC category labels ("Downloads", 'the volume "X"') whose access is
+  /// currently DENIED — distinct from missing: the fix is System Settings,
+  /// not a cable.
+  final ValueListenable<List<String>> accessIssues;
+
+  /// The TCC category label a folder path falls under, or null when it is
+  /// freely readable. Supplied by the composition root so the UI can relate
+  /// a folder to [accessIssues] without importing the data layer.
+  final String? Function(String path) categoryLabelOf;
+
+  /// CONFIRMED-unmatched files, LIVE: the library screen writes it from each
+  /// snapshot; every header reads it. It used to travel as a push-time
+  /// integer, so a scan from the player left the Unmatched tab wrong.
+  final ValueNotifier<int> unmatchedCount;
 }

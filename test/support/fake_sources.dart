@@ -40,9 +40,16 @@ SourcesActions fakeSourcesActions(
   FakeSourcesRepository repository, {
   Future<({bool added, String? deniedLabel})> Function()? onAddFolder,
   ValueListenable<bool>? scanning,
+  ValueListenable<Set<String>>? missingFolderPaths,
+  ValueListenable<List<String>>? accessIssues,
+  String? Function(String path)? categoryLabelOf,
 }) => SourcesActions(
   repository: repository,
   onAddFolder: onAddFolder ?? () async => (added: false, deniedLabel: null),
   onOpenAccessSettings: () async => false,
   scanning: scanning ?? ValueNotifier<bool>(false),
+  missingFolderPaths:
+      missingFolderPaths ?? ValueNotifier<Set<String>>(const {}),
+  accessIssues: accessIssues ?? ValueNotifier<List<String>>(const []),
+  categoryLabelOf: categoryLabelOf ?? (_) => null,
 );

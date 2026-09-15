@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../diagnostics/app_log.dart';
 import '../domain/models/identified_episode.dart';
 import 'library_services.dart';
 import 'routes.dart';
@@ -11,6 +11,7 @@ import 'shell/header_spec.dart';
 import 'theme/xp_pressable.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
+import 'widgets/guarded.dart';
 
 /// Lists files that matched no show (kept on record across rescans). Tapping
 /// one opens fix-match to assign it (the OPM Specials case).
@@ -38,23 +39,41 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
     _reload();
   }
 
-  void _reload() {
-    unawaited(
-      widget.services.repository.unmatchedFiles().then(
-        (f) {
-          if (mounted) setState(() => _files = f);
-        },
-        // Information fails NEUTRAL: an error line, not a spinner that never
-        // ends and not an empty list claiming there is nothing to fix.
-        onError: (Object e, StackTrace stack) {
-          AppLog.error('Unmatched list failed', error: e, stack: stack);
-          if (mounted) setState(() => _loadError = e);
-        },
-      ),
-    );
-  }
+  void _reload() => fireAndForget(
+    'unmatched list',
+    () async {
+      final f = await widget.services.repository.unmatchedFiles();
+      if (mounted) {
+        setState(() {
+          _files = f;
+          _loadError = null; // a later success clears an earlier failure
+        });
+      }
+    },
+    // Information fails NEUTRAL: an error line, not a spinner that never
+    // ends and not an empty list claiming there is nothing to fix. With a
+    // list already showing, the line sits above it — a failed REFRESH used to
+    // leave the stale list with no notice at all.
+    onError: (e) {
+      if (mounted) setState(() => _loadError = e);
+    },
+  );
 
   Future<void> _fix(IdentifiedEpisode f) async {
+    // The row is what the cache knows; the file may have gone since the scan
+    // that wrote it. Say so instead of opening a fix-match for nothing.
+    if (!await File(f.filePath).exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "That file isn't there any more. Scan to update the list.",
+          ),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
     final done = await AppRoutes.fixMatch(
       context,
       services: widget.services,
@@ -87,6 +106,26 @@ class _UnmatchedScreenState extends State<UnmatchedScreen>
         child: Text('No unmatched files.', style: TextStyle(color: Xp.textDim)),
       );
     }
+    final staleNotice = _loadError == null
+        ? null
+        : const Padding(
+            padding: EdgeInsets.fromLTRB(Xp.spaceM, Xp.spaceS, Xp.spaceM, 0),
+            child: Text(
+              "Couldn't refresh this list — showing the last one read. "
+              'Details are in Settings › About.',
+              style: TextStyle(color: Xp.error, fontSize: Xp.fontSizeCaption),
+            ),
+          );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ?staleNotice,
+        Expanded(child: _list(files)),
+      ],
+    );
+  }
+
+  Widget _list(List<IdentifiedEpisode> files) {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 6),
       itemCount: files.length,

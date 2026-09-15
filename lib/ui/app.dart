@@ -49,6 +49,7 @@ class AniLocalApp extends StatelessWidget {
     required this.accessIssues,
     required this.missingFolders,
     required this.missingFolderPaths,
+    required this.categoryLabelOf,
     required this.onOpenAccessSettings,
     this.metadataSources = const [],
     this.skipSources = const [],
@@ -105,6 +106,9 @@ class AniLocalApp extends StatelessWidget {
   /// sources live there. Same detection as [missingFolders], different shape.
   final ValueListenable<Set<String>> missingFolderPaths;
 
+  /// See [LibraryServices.categoryLabelOf].
+  final String? Function(String path) categoryLabelOf;
+
   /// Opens the privacy settings pane (best-effort); the message always also
   /// shows the written path, so a stale link never strands the user.
   final Future<bool> Function() onOpenAccessSettings;
@@ -154,6 +158,9 @@ class _AppLifetimeState extends State<_AppLifetime> {
   /// `ScanControl`).
   final _scan = ScanControl();
 
+  /// Live unmatched count for every header (see `LibraryServices`).
+  final _unmatchedCount = ValueNotifier<int>(0);
+
   late final LibraryServices _services = LibraryServices(
     repository: widget.app.repository,
     fixMatch: widget.app.fixMatch,
@@ -165,6 +172,10 @@ class _AppLifetimeState extends State<_AppLifetime> {
     settings: widget.app.settings,
     playback: widget.app.playback,
     scan: _scan,
+    missingFolderPaths: widget.app.missingFolderPaths,
+    accessIssues: widget.app.accessIssues,
+    categoryLabelOf: widget.app.categoryLabelOf,
+    unmatchedCount: _unmatchedCount,
     // The ONE place the app-wide settings bundle is built; each screen's ⚙
     // completes it with its own hooks via `SettingsActions.forScreen`.
     settingsActions: SettingsActions(
@@ -173,6 +184,9 @@ class _AppLifetimeState extends State<_AppLifetime> {
         onAddFolder: widget.app.onAddFolder,
         onOpenAccessSettings: widget.app.onOpenAccessSettings,
         scanning: _scan.scanning,
+        missingFolderPaths: widget.app.missingFolderPaths,
+        accessIssues: widget.app.accessIssues,
+        categoryLabelOf: widget.app.categoryLabelOf,
       ),
       metadataSources: widget.app.metadataSources,
       skipSources: widget.app.skipSources,
@@ -188,6 +202,7 @@ class _AppLifetimeState extends State<_AppLifetime> {
     unawaited(widget.app.playback.dispose());
     _headerController.dispose();
     _scan.dispose();
+    _unmatchedCount.dispose();
     super.dispose();
   }
 

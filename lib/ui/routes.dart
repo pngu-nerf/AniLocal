@@ -4,6 +4,7 @@ import '../domain/models/episode.dart';
 import '../domain/models/series.dart';
 import 'fix_match_screen.dart';
 import 'library_services.dart';
+import 'series_detail_screen.dart';
 import 'shell/instant_page_route.dart';
 import 'theater/theater_screen.dart';
 import 'unmatched_screen.dart';
@@ -13,15 +14,10 @@ import 'unmatched_screen.dart';
 /// decides whether the Unmatched tab shows. One value object rather than
 /// three parameters threaded through every screen.
 class HeaderHooks {
-  const HeaderHooks({
-    required this.onScan,
-    required this.onUnmatched,
-    required this.unmatchedCount,
-  });
+  const HeaderHooks({required this.onScan, required this.onUnmatched});
 
   final Future<void> Function() onScan;
   final VoidCallback onUnmatched;
-  final int unmatchedCount;
 }
 
 /// Every route in the app, constructed in ONE place.
@@ -31,6 +27,22 @@ class HeaderHooks {
 /// meant editing every site or one screen silently losing it — the exact
 /// shape of the settings-bundle bug this codebase already shipped once.
 abstract final class AppRoutes {
+  /// The show page. Was the one screen still pushed inline (from the card).
+  static Future<void> detail(
+    BuildContext context, {
+    required Series series,
+    required LibraryServices services,
+    required HeaderHooks header,
+  }) => Navigator.of(context).push(
+    InstantPageRoute<void>(
+      builder: (_) => SeriesDetailScreen(
+        series: series,
+        services: services,
+        header: header,
+      ),
+    ),
+  );
+
   static Future<void> theater(
     BuildContext context, {
     required LibraryServices services,

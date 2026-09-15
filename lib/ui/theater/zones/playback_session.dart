@@ -496,6 +496,9 @@ class PlaybackSession {
     }
   }
 
+  /// Pause playback (the host is obscured, or the viewer asked). Idempotent.
+  void pause() => unawaited(_guard(playback.player.pause(), 'pause'));
+
   void cancelPreRoll() {
     _preRollCancelled = true;
     _preRollShowing = false;

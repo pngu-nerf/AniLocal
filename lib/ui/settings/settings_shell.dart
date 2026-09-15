@@ -50,8 +50,12 @@ class SettingsCategory {
 /// out of reach. Here the panel length is bounded by its category, and the
 /// sidebar stays put no matter how far the panel scrolls.
 class SettingsShell extends StatefulWidget {
-  const SettingsShell({super.key, required this.categories, this.initialId})
-    : assert(categories.length > 0, 'the shell needs at least one category');
+  const SettingsShell({
+    super.key,
+    required this.categories,
+    this.initialId,
+    this.onCategoryChanged,
+  }) : assert(categories.length > 0, 'the shell needs at least one category');
 
   final List<SettingsCategory> categories;
 
@@ -59,6 +63,9 @@ class SettingsShell extends StatefulWidget {
   /// deep-link that names a category which no longer exists still opens a
   /// valid page instead of throwing.
   final String? initialId;
+
+  /// Told each time a category is selected (the window remembers it).
+  final ValueChanged<String>? onCategoryChanged;
 
   /// Sidebar width, and the window size the dialog asks for. Kept here so the
   /// shell's proportions live with the shell.
@@ -104,6 +111,7 @@ class _SettingsShellState extends State<SettingsShell> {
     if (id == _selectedId) return;
     if (!widget.categories.any((c) => c.id == id)) return;
     setState(() => _selectedId = id);
+    widget.onCategoryChanged?.call(id);
     // A new panel starts at its top when re-entered from the sidebar; its
     // state (loaded lists, field text) is kept, its scroll offset is not.
     final scroll = _scrolls[id];

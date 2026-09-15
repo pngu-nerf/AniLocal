@@ -26,11 +26,17 @@ class MainFlutterWindow: NSWindow {
   /// override for why entering anywhere else is a trap.
   private var fullscreenAllowed = false
 
+  /// The autosave name; AppDelegate reads the matching defaults key.
+  static let frameAutosaveKey = "AniLocalMainWindow"
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+    // Remember size and position across launches (the frame used to be
+    // re-zoomed every start). AppDelegate zooms only when nothing is saved yet.
+    self.setFrameAutosaveName(MainFlutterWindow.frameAutosaveKey)
 
     // Spotify-style integrated title bar: hide the standard macOS title bar and
     // let the Flutter content span the FULL window height (into the former

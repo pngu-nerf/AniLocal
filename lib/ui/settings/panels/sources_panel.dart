@@ -1,10 +1,13 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/library_folder.dart';
 import '../../access_recovery.dart';
+import '../../metadata_failure_message.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
+import '../../widgets/guarded.dart';
 import '../../widgets/xp_reorderable_list.dart';
 import '../sources_actions.dart';
 
@@ -37,9 +40,32 @@ class _SourcesPanelState extends State<SourcesPanel> {
     unawaited(_reload());
   }
 
-  Future<void> _reload() async {
-    final folders = await widget.sources.repository.watchedFolders();
-    if (mounted) setState(() => _folders = folders);
+  /// Set when a load failed; rendered instead of the spinner. A throw here
+  /// used to leave the spinner forever and the error unhandled.
+  Object? _loadError;
+
+  Future<void> _reload() => guarded(
+    'folders list',
+    () async {
+      final folders = await widget.sources.repository.watchedFolders();
+      if (mounted) {
+        setState(() {
+          _folders = folders;
+          _loadError = null;
+        });
+      }
+    },
+    onError: (e) {
+      if (mounted) setState(() => _loadError = e);
+    },
+  );
+
+  void _sayWriteFailed(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("That didn't save. ${userFacingMessage(e)}")),
+    );
+    unawaited(_reload()); // show what IS stored, not what was attempted
   }
 
   Future<void> _add() async {
@@ -55,10 +81,11 @@ class _SourcesPanelState extends State<SourcesPanel> {
     if (result.added) await _reload();
   }
 
-  Future<void> _remove(LibraryFolder folder) async {
-    await widget.sources.repository.removeFolder(folder);
-    await _reload();
-  }
+  Future<void> _remove(LibraryFolder folder) =>
+      guarded('remove folder', () async {
+        await widget.sources.repository.removeFolder(folder);
+        await _reload();
+      }, onError: _sayWriteFailed);
 
   /// Drag committed: reorder optimistically, then persist the new priority.
   /// Folder order IS source priority, so this re-ranks the preferred default
@@ -69,7 +96,11 @@ class _SourcesPanelState extends State<SourcesPanel> {
     final moved = list.removeAt(oldIndex);
     list.insert(newIndex, moved);
     setState(() => _folders = list);
-    await widget.sources.repository.reorderFolders(list);
+    await guarded(
+      'reorder folders',
+      () => widget.sources.repository.reorderFolders(list),
+      onError: _sayWriteFailed,
+    );
   }
 
   static const _waitTooltip = 'Wait for the scan to finish';
@@ -78,6 +109,15 @@ class _SourcesPanelState extends State<SourcesPanel> {
   Widget build(BuildContext context) {
     final folders = _folders;
     if (folders == null) {
+      final error = _loadError;
+      if (error != null) {
+        return Center(
+          child: Text(
+            "Couldn't read the folder list. ${userFacingMessage(error)}",
+            style: const TextStyle(color: Xp.textDim),
+          ),
+        );
+      }
       return const Center(child: CircularProgressIndicator());
     }
     // Add / Remove / reorder are OFF while a scan runs: the scan holds the
@@ -85,11 +125,40 @@ class _SourcesPanelState extends State<SourcesPanel> {
     // be walked and a removed one would be written back by the next batch.
     return ValueListenableBuilder<bool>(
       valueListenable: widget.sources.scanning,
-      builder: (context, scanning, _) => _body(folders, scanning: scanning),
+      // Folder health rides along: a row says "not connected" or "access
+      // needed" from the same sets the library greys and banners from. The
+      // one place folders are managed used to show them all alike.
+      builder: (context, scanning, _) => ValueListenableBuilder<Set<String>>(
+        valueListenable: widget.sources.missingFolderPaths,
+        builder: (context, missing, _) => ValueListenableBuilder<List<String>>(
+          valueListenable: widget.sources.accessIssues,
+          builder: (context, denied, _) => _body(
+            folders,
+            scanning: scanning,
+            missing: missing,
+            denied: denied.toSet(),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _body(List<LibraryFolder> folders, {required bool scanning}) {
+  String? _health(LibraryFolder f, Set<String> missing, Set<String> denied) {
+    if (missing.contains(f.path)) return 'Not connected';
+    final label = widget.sources.categoryLabelOf(f.path);
+    if (label != null && denied.contains(label)) {
+      return 'Access needed — System Settings › Privacy & Security › '
+          'Files and Folders';
+    }
+    return null;
+  }
+
+  Widget _body(
+    List<LibraryFolder> folders, {
+    required bool scanning,
+    required Set<String> missing,
+    required Set<String> denied,
+  }) {
     if (folders.isEmpty) {
       return Center(
         child: XpButton(
@@ -131,6 +200,8 @@ class _SourcesPanelState extends State<SourcesPanel> {
             items: folders,
             keyOf: (f) => f.path,
             titleOf: (f) => f.path,
+            subtitleOf: (f) => _health(f, missing, denied),
+            dimmed: (f) => _health(f, missing, denied) != null,
             firstCaption: 'Preferred source',
             onReorder: _onReorder,
             enabled: !scanning,

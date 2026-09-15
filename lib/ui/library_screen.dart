@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../diagnostics/app_log.dart';
 import '../diagnostics/diagnostics.dart';
+import '../domain/folder_health.dart';
 import '../domain/missing_episodes.dart';
 import '../domain/models/cache_errors.dart';
 import '../domain/models/continue_watching.dart';
@@ -31,13 +32,7 @@ import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
-
-/// A show is "unavailable" iff it has source folders AND every one of them is
-/// currently missing — a single connected source keeps a multi-source show
-/// playable, so it stays un-greyed. Pure (UI-layer) so it's unit-testable.
-@visibleForTesting
-bool seriesUnavailable(Set<String> sourceFolders, Set<String> missingFolders) =>
-    sourceFolders.isNotEmpty && sourceFolders.every(missingFolders.contains);
+import 'widgets/guarded.dart';
 
 /// Whether a series matches the live library search [query] — a case-insensitive
 /// substring of any cached title (English, romaji, or native). A pending
@@ -159,9 +154,10 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   // after the Settings dialog closes so a change takes effect immediately.
   bool _showContinueWatching = true;
   bool _showSearchBar = true;
-  // Count of CONFIRMED-unmatched files — NOT pending placeholders, which
-  // auto-resolve. Gates the top-bar Unmatched button.
-  int _unmatchedCount = 0;
+
+  /// How many library folders exist, from the snapshot: tells the empty
+  /// state "nothing found in your folders" from "no folders yet".
+  int _folderCount = 0;
   // Live continue-watching panel width. Seeded from the config so the first
   // frame is correct, then overwritten by the persisted (clamped) value.
   double _panelWidth = LibraryLayoutConfig.landingDefault.panelWidth;
@@ -173,48 +169,29 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     // screen republishes its header when it flips.
     _services.scanning.addListener(_onScanningChanged);
     _services.scan.progress.addListener(_onScanningChanged);
+    _services.unmatchedCount.addListener(_onScanningChanged);
     _reload();
-    unawaited(_loadHomepageToggles());
-    _background(
-      'continue-collapsed setting',
-      _services.settings.loadContinueCollapsed(),
-      (c) => setState(() => _continueCollapsed = c),
-    );
+    fireAndForget('homepage toggles', _loadHomepageToggles);
+    fireAndForget('continue-collapsed setting', () async {
+      final v = await _services.settings.loadContinueCollapsed();
+      if (mounted) setState(() => _continueCollapsed = v);
+    });
     // Already clamped by the repository; the layout clamps again on drag.
-    _background(
-      'panel width setting',
-      _services.settings.loadPanelWidth(),
-      (w) => setState(() => _panelWidth = w),
-    );
+    fireAndForget('panel width setting', () async {
+      final v = await _services.settings.loadPanelWidth();
+      if (mounted) setState(() => _panelWidth = v);
+    });
   }
 
   void _onScanningChanged() {
     if (mounted) setState(() {});
   }
 
-  /// A secondary read (a persisted layout value): applied on arrival if the
-  /// screen is still mounted; a failure is LOGGED and leaves the field as it
-  /// was, never an uncaught async error.
-  void _background<T>(
-    String what,
-    Future<T> future,
-    void Function(T value) apply,
-  ) {
-    unawaited(
-      future.then(
-        (v) {
-          if (mounted) apply(v);
-        },
-        onError: (Object e, StackTrace stack) =>
-            AppLog.error('Library read failed: $what', error: e, stack: stack),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _services.scanning.removeListener(_onScanningChanged);
     _services.scan.progress.removeListener(_onScanningChanged);
+    _services.unmatchedCount.removeListener(_onScanningChanged);
     _searchController.dispose();
     _gridScroll.dispose();
     super.dispose();
@@ -225,10 +202,11 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     unawaited(_services.settings.setContinueCollapsed(_continueCollapsed));
   }
 
-  Future<void> _dismissFromContinue(ContinueWatching entry) async {
-    await _services.watchState.clearProgress(entry.episode);
-    _reload();
-  }
+  Future<void> _dismissFromContinue(ContinueWatching entry) =>
+      guarded('dismiss from continue watching', () async {
+        await _services.watchState.clearProgress(entry.episode);
+        _reload();
+      });
 
   /// Monotonic run counter for [_reload]. It is called from eight places, so
   /// runs overlap routinely (mid-scan progress + post-scan, return from the
@@ -249,6 +227,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         final snapshot = await _services.repository.snapshot();
         final missingEnabled = await _services.settings.loadMissingEnabled();
         if (!mounted || generation != _reloadGeneration) return;
+        // Live for every header, not a push-time integer.
+        _services.unmatchedCount.value = snapshot.unmatchedCount;
         final stats = _statsFrom(
           snapshot,
           missingEnabled ? snapshot.hidden : const <int, Set<int>>{},
@@ -258,7 +238,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
           _loadError = null;
           _continueEntries = snapshot.continueWatching;
           _upNext = snapshot.upNext;
-          _unmatchedCount = snapshot.unmatchedCount;
+          _folderCount = snapshot.folderCount;
           _sourceFoldersBySeries = stats.folders;
           _downloadCounts = stats.counts;
         });
@@ -303,11 +283,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     return (folders: folders, counts: counts);
   }
 
-  HeaderHooks get _header => HeaderHooks(
-    onScan: _scan,
-    onUnmatched: _openUnmatched,
-    unmatchedCount: _unmatchedCount,
-  );
+  HeaderHooks get _header =>
+      HeaderHooks(onScan: _scan, onUnmatched: _openUnmatched);
 
   Future<void> _play(Episode episode, Series series) async {
     // The Continue panel plays straight into the theater; a show whose only
@@ -360,7 +337,24 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   /// The homepage ⚙ action — the shared app Settings window, identical to the
   /// one the detail page opens from its title bar. Folders is a category in it,
   /// so this is the only header door into it.
-  Future<void> _openSettings() async {
+  /// Wired to a `VoidCallback` on the header, so every throw in here used to
+  /// be a dropped future: guarded, and the user hears about it.
+  Future<void> _openSettings() => guarded(
+    'settings',
+    _openSettingsUnguarded,
+    onError: (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Settings didn't close cleanly. ${userFacingMessage(e)}",
+          ),
+        ),
+      );
+    },
+  );
+
+  Future<void> _openSettingsUnguarded() async {
     final outcome = await showAppSettingsDialog(
       context,
       settings: _services.settings,
@@ -388,7 +382,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   SettingsDialogActions _settingsActions() =>
       _services.settingsActions.forScreen(
         onRefreshed: _reload,
-        loadUnmatchedCount: () async => _unmatchedCount,
+        loadUnmatchedCount: () async => _services.unmatchedCount.value,
         onOpenUnmatched: _openUnmatched,
       );
 
@@ -480,8 +474,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     return token;
   }
 
-  void _openUnmatched() =>
-      unawaited(AppRoutes.unmatched(context, services: _services));
+  /// Awaited: a fix-match made on the Unmatched screen changes the grid and
+  /// the count, so the return reloads — every other pushed screen already did.
+  void _openUnmatched() => fireAndForget('open unmatched', () async {
+    await AppRoutes.unmatched(context, services: _services);
+    if (mounted) _reload();
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -529,7 +527,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
               }
               if (all.isEmpty) {
                 // Truly empty library — no search/panel, just onboarding.
-                return _EmptyState(scanning: scanning, onAddFolder: _addFolder);
+                return _EmptyState(
+                  scanning: scanning,
+                  hasFolders: _folderCount > 0,
+                  onAddFolder: _addFolder,
+                  onScan: _scan,
+                );
               }
               final filtered = [
                 for (final s in all)
@@ -607,7 +610,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         : 'Library',
     actions: AppActions(
       scanning: _services.scanning.value,
-      unmatchedCount: _unmatchedCount,
+      unmatchedCount: _services.unmatchedCount.value,
       onUnmatched: _openUnmatched,
       onScan: _scan,
       onSettings: _openSettings,
@@ -752,11 +755,22 @@ class _LoadErrorStateState extends State<_LoadErrorState> {
   }
 }
 
+/// Two different empties, two different next steps: no folders yet → add
+/// one; folders but nothing found → the folders are empty or unreadable, so
+/// scan again or check them. One copy for both used to send a user whose
+/// drive was unplugged to "add your first folder".
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.scanning, required this.onAddFolder});
+  const _EmptyState({
+    required this.scanning,
+    required this.hasFolders,
+    required this.onAddFolder,
+    required this.onScan,
+  });
 
   final bool scanning;
+  final bool hasFolders;
   final Future<void> Function() onAddFolder;
+  final Future<void> Function() onScan;
 
   @override
   Widget build(BuildContext context) {
@@ -764,20 +778,37 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            'Your library is empty.',
-            style: TextStyle(color: Xp.text, fontSize: Xp.fontSizeTitle),
+          Text(
+            hasFolders
+                ? 'Nothing found in your folders.'
+                : 'Your library is empty.',
+            style: const TextStyle(color: Xp.text, fontSize: Xp.fontSizeTitle),
           ),
           const SizedBox(height: Xp.spaceL),
-          XpButton(
-            icon: Icons.create_new_folder_outlined,
-            label: 'Add your first folder',
-            onPressed: scanning ? null : onAddFolder,
-          ),
+          if (hasFolders)
+            XpButton(
+              icon: Icons.sync,
+              label: 'Scan again',
+              onPressed: scanning ? null : onScan,
+            )
+          else
+            XpButton(
+              icon: Icons.create_new_folder_outlined,
+              label: 'Add your first folder',
+              onPressed: scanning ? null : onAddFolder,
+            ),
           const SizedBox(height: 10),
-          const Text(
-            'Point AniLocal at a folder of anime — it scans it for you.',
-            style: TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeBody),
+          Text(
+            hasFolders
+                ? 'No video files turned up in the folders you added. If a '
+                      'drive is unplugged, reconnect it; otherwise check the '
+                      'folders in Settings › Folders.'
+                : 'Point AniLocal at a folder of anime — it scans it for you.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Xp.textDim,
+              fontSize: Xp.fontSizeBody,
+            ),
           ),
         ],
       ),

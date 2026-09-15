@@ -20,6 +20,11 @@ class AppDelegate: FlutterAppDelegate {
     // synchronous zoom would find nothing / no-op. After state restoration has
     // settled a restored frame can't clobber it; the isZoomed guard makes this
     // "ensure zoomed" so an already-zoomed restored window isn't toggled down.
+    // Only on a FIRST launch: once the user has sized the window, the saved
+    // frame (setFrameAutosaveName in MainFlutterWindow) is what they expect.
+    let saved = UserDefaults.standard.object(
+      forKey: "NSWindow Frame \(MainFlutterWindow.frameAutosaveKey)")
+    guard saved == nil else { return }
     DispatchQueue.main.async {
       guard
         let window = NSApp.windows.first(where: { $0 is MainFlutterWindow }),

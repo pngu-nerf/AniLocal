@@ -59,6 +59,7 @@ Widget _app(
   accessIssues: ValueNotifier<List<String>>(const []),
   missingFolders: ValueNotifier<List<String>>(const []),
   missingFolderPaths: ValueNotifier<Set<String>>(const {}),
+  categoryLabelOf: (_) => null,
   onOpenAccessSettings: () async => true,
   metadataSources: metadataSources,
   skipSources: skipSources,

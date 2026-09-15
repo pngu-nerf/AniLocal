@@ -30,8 +30,9 @@ import 'settings_shell.dart';
 /// It is a MODAL over the app's single window, not a second macOS window: the
 /// app is frameless and owns one persistent shell, so there is no native
 /// titlebar to hand a settings window and no second Flutter view to host it.
-/// Being modal, it keeps exactly one dismiss affordance (Done). Every control
-/// still applies immediately — Done only closes.
+/// Being modal, it closes on Done or Escape and NOT on a click outside (the
+/// barrier is inert), so a stray click cannot drop a half-typed field. Every
+/// control still applies immediately — closing only closes.
 Future<SettingsOutcome> showAppSettingsDialog(
   BuildContext context, {
   required SettingsRepository settings,
@@ -69,19 +70,39 @@ Future<SettingsOutcome> showAppSettingsDialog(
   }
   await showDialog<void>(
     context: context,
+    barrierDismissible: false,
     builder: (dialogContext) => _SettingsWindow(
       model: model,
       actions: actions,
-      initialCategory: initialCategory,
+      // The category asked for, else the one the user was on last time this
+      // session — the window used to open on Folders every time.
+      initialCategory: initialCategory ?? _lastCategory,
+      onCategoryChanged: (id) => _lastCategory = id,
     ),
   );
   model.dispose();
-  final after = await _folderPaths(actions);
-  return SettingsOutcome(
-    sourceSetChanged: !setEquals(before.toSet(), after.toSet()),
-    sourceOrderChanged: !listEquals(before, after),
-  );
+  // The CLOSING read decides whether the caller rescans. A failure here must
+  // not become an unhandled error out of a VoidCallback: the honest answer is
+  // "unchanged", logged.
+  try {
+    final after = await _folderPaths(actions);
+    return SettingsOutcome(
+      sourceSetChanged: !setEquals(before.toSet(), after.toSet()),
+      sourceOrderChanged: !listEquals(before, after),
+    );
+  } catch (e, stack) {
+    AppLog.error(
+      'Settings: folder list after close failed',
+      error: e,
+      stack: stack,
+    );
+    return const SettingsOutcome.unchanged();
+  }
 }
+
+/// The category the settings window was on when it last closed, for this
+/// app run. Session memory, not a setting.
+String? _lastCategory;
 
 Future<List<String>> _folderPaths(SettingsDialogActions actions) async => [
   for (final f in await actions.sources.repository.watchedFolders()) f.path,
@@ -118,11 +139,15 @@ class _SettingsWindow extends StatelessWidget {
     required this.model,
     required this.actions,
     this.initialCategory,
+    this.onCategoryChanged,
   });
 
   final SettingsModel model;
   final SettingsDialogActions actions;
   final String? initialCategory;
+
+  /// Told each time the user picks a category, so the window can reopen there.
+  final ValueChanged<String>? onCategoryChanged;
 
   /// THE category list. Adding one later is an entry here plus its panel —
   /// `SettingsShell` never changes, and nothing else in this file does either.
@@ -254,6 +279,7 @@ class _SettingsWindow extends StatelessWidget {
           child: SettingsShell(
             categories: _categories(),
             initialId: initialCategory,
+            onCategoryChanged: onCategoryChanged,
           ),
         ),
       ),

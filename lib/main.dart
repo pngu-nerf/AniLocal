@@ -403,11 +403,13 @@ Future<void> main() async {
     );
   }
 
-  Future<SyncSummary> scan(
-    void Function() onDiscovered, {
-    void Function(SyncProgress progress)? onProgress,
-    SyncCancellation? cancellation,
-  }) async {
+  /// Which folders are reachable RIGHT NOW: resolve each folder's current
+  /// mount, confirm/upgrade its category access, and publish the results the
+  /// banners and the greying read. Runs at LAUNCH and at the start of every
+  /// scan. It used to run only inside a scan, so a cold start into an
+  /// unplugged drive or a revoked permission showed a healthy library with
+  /// nothing greyed and no banner until the user happened to press Scan.
+  Future<List<LibraryFolderRow>> refreshFolderHealth() async {
     // Folder ROWS (not just paths) carry each folder's volume binding, so we can
     // resolve its CURRENT mount before checking access.
     final folders = await database.allFolderRows();
@@ -417,7 +419,7 @@ Future<void> main() async {
     // not mistaken for missing; a truly-unmounted volume (resolves to null)
     // reports missing via its stable path. Same pass records which folder PATHS
     // are currently missing so the UI can grey out shows sourced only there —
-    // replaced wholesale each scan, so a replugged folder clears automatically.
+    // replaced wholesale each pass, so a replugged folder clears automatically.
     final missingPaths = <String>{};
     for (final f in folders) {
       final current = await resolveFolderPath(
@@ -431,6 +433,15 @@ Future<void> main() async {
       if (current == null || result.isMissing) missingPaths.add(f.path);
     }
     missingFolderPaths.value = missingPaths;
+    return folders;
+  }
+
+  Future<SyncSummary> scan(
+    void Function() onDiscovered, {
+    void Function(SyncProgress progress)? onProgress,
+    SyncCancellation? cancellation,
+  }) async {
+    final folders = await refreshFolderHealth();
     return sync.sync(
       [for (final f in folders) f.path],
       onDiscovered: onDiscovered,
@@ -446,6 +457,16 @@ Future<void> main() async {
   // docs/player-architecture-research.md. `repository` is the WatchOrder
   // resolver (the single "what's next" source) the advance path routes through.
   final playback = PlaybackController(resolver: repository);
+
+  // Folder health for the first frame's banners and greying — not awaited:
+  // it opens the database and may ask diskutil, and the library paints from
+  // the cache the moment it can; the notifiers update when this lands.
+  unawaited(
+    refreshFolderHealth().catchError((Object e, StackTrace s) {
+      AppLog.warn('Folder health at launch failed', error: e, stack: s);
+      return const <LibraryFolderRow>[];
+    }),
+  );
 
   runApp(
     AniLocalApp(
@@ -487,6 +508,10 @@ Future<void> main() async {
       accessIssues: accessIssues,
       missingFolders: missingFolders,
       missingFolderPaths: missingFolderPaths,
+      // The UI relates a folder to a denied category by label without
+      // importing the data layer; the home dir is the real one here.
+      categoryLabelOf: (path) =>
+          tccCategoryRoot(path, Platform.environment['HOME'] ?? '')?.label,
       onOpenAccessSettings: openPrivacyFilesAndFoldersSettings,
     ),
   );

@@ -22,7 +22,8 @@ class EpisodeListZone extends StatefulWidget {
     required this.onSelect,
   });
 
-  final List<Episode> episodes;
+  /// Null while the first load is in flight; empty when there is nothing.
+  final List<Episode>? episodes;
 
   /// The episode currently playing in the video zone (marked "now playing").
   final Episode current;
@@ -55,7 +56,8 @@ class _EpisodeListZoneState extends State<EpisodeListZone> {
   /// Keep the now-playing episode visible as it changes (incl. auto-advance).
   void _scrollToCurrent() {
     if (!_scroll.hasClients) return;
-    final i = widget.episodes.indexWhere((e) => _isCurrent(e, widget.current));
+    final i =
+        widget.episodes?.indexWhere((e) => _isCurrent(e, widget.current)) ?? -1;
     if (i < 0) return;
     final target = (i * _rowExtent).clamp(
       0.0,
@@ -85,18 +87,33 @@ class _EpisodeListZoneState extends State<EpisodeListZone> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ZoneEyebrow(label: 'Episodes', trailing: '${widget.episodes.length}'),
+          ZoneEyebrow(
+            label: 'Episodes',
+            trailing: widget.episodes == null
+                ? ''
+                : '${widget.episodes!.length}',
+          ),
           const Divider(height: 1, color: Xp.divider),
           Expanded(
-            child: widget.episodes.isEmpty
+            // Loading is NOT empty: information fails NEUTRAL (a spinner),
+            // never "No episodes here yet" for a list that has not arrived.
+            child: widget.episodes == null
+                ? const Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : widget.episodes!.isEmpty
                 ? const _EmptyEpisodes()
                 : ListView.builder(
                     controller: _scroll,
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemExtent: _rowExtent,
-                    itemCount: widget.episodes.length,
+                    itemCount: widget.episodes!.length,
                     itemBuilder: (context, i) {
-                      final e = widget.episodes[i];
+                      final e = widget.episodes![i];
                       final resuming =
                           !e.watched && e.resumePosition > Duration.zero;
                       final progress = e.duration > Duration.zero

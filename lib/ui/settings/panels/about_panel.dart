@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../../../diagnostics/app_log.dart';
 import '../../../diagnostics/diagnostics.dart';
+import '../../licences_screen.dart';
 import '../../theme/xp_widgets.dart';
+import '../../widgets/guarded.dart';
 import '../setting_row.dart';
 
 /// About & Diagnostics: the version, the evidence, and the disclosures.
@@ -54,11 +56,15 @@ class _AboutPanelState extends State<AboutPanel> {
                 'libass, Archivo (OFL), and every package it builds on.',
             control: XpButton(
               label: 'View',
-              onPressed: () => showLicensePage(
-                context: context,
-                applicationName: 'AniLocal',
-                applicationVersion: Diagnostics.appVersion,
-              ),
+              // Close the window, then open OUR licences page (it publishes a
+              // header spec; the stock page did not and blanked the header).
+              onPressed: () {
+                Navigator.of(context).pop();
+                fireAndForget(
+                  'open licences',
+                  () => LicencesScreen.open(context),
+                );
+              },
             ),
           ),
         ],
