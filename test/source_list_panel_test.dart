@@ -4,7 +4,9 @@ import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/source_preference.dart';
 import 'package:anilocal/ui/settings/panels/source_list_panel.dart';
+import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:anilocal/ui/theme/xp_theme.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -39,7 +41,11 @@ class _StubProvider implements MetadataProvider {
   Future<List<Series>> fetchByProviderIds(List<int> ids) async => const [];
 }
 
-Future<void> _pump(WidgetTester tester, RecorderSettings settings) async {
+Future<void> _pump(
+  WidgetTester tester,
+  RecorderSettings settings, {
+  ValueListenable<bool>? scanning,
+}) async {
   tester.view.physicalSize = const Size(900, 700);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
@@ -49,6 +55,7 @@ Future<void> _pump(WidgetTester tester, RecorderSettings settings) async {
       theme: XpTheme.data(),
       home: Scaffold(
         body: SourceListPanel(
+          scanning: scanning,
           settings: settings,
           loadOrder: settings.loadMetadataSourceOrder,
           saveOrder: settings.setMetadataSourceOrder,
@@ -78,6 +85,23 @@ Future<void> _pump(WidgetTester tester, RecorderSettings settings) async {
 
 void main() {
   group('source list panel', () {
+    testWidgets('is read-only while a scan runs, and says why', (tester) async {
+      final settings = RecorderSettings();
+      final scanning = ValueNotifier<bool>(true);
+      await _pump(tester, settings, scanning: scanning);
+      final box = find.byType(Checkbox).first;
+      expect(tester.widget<Checkbox>(box).onChanged, isNull);
+      expect(find.byTooltip(kWaitForScanTooltip), findsWidgets);
+
+      scanning.value = false;
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<Checkbox>(find.byType(Checkbox).first).onChanged,
+        isNotNull,
+        reason: 'live again when the scan ends',
+      );
+    });
+
     testWidgets('lists every source, including one awaiting setup', (
       tester,
     ) async {

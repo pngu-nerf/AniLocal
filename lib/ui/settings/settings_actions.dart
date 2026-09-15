@@ -2,10 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../diagnostics/app_log.dart';
+import '../../domain/models/identified_episode.dart';
 import '../../domain/models/refresh_summary.dart';
 import '../../domain/models/source_descriptor.dart';
 import '../metadata_failure_message.dart';
 import 'sources_actions.dart';
+
+/// The one sentence every mid-scan-disabled control says.
+const String kWaitForScanTooltip = 'Wait for the scan to finish';
 
 /// The app-wide half of what the Settings window needs, built ONCE at the
 /// composition root and handed down as a single object. Which sources this
@@ -50,16 +54,18 @@ class SettingsActions {
   /// Complete the bundle with this screen's own hooks.
   SettingsDialogActions forScreen({
     required VoidCallback onRefreshed,
-    required Future<int> Function() loadUnmatchedCount,
-    required VoidCallback onOpenUnmatched,
+    required ValueListenable<int> unmatchedCount,
+    required Future<List<IdentifiedEpisode>> Function() loadUnmatched,
+    required Future<void> Function(IdentifiedEpisode file) onFixMatch,
   }) => SettingsDialogActions._(
     sources: sources,
     metadataSources: metadataSources,
     skipSources: skipSources,
     onRefreshMetadata: onRefreshMetadata,
     onRefreshed: onRefreshed,
-    loadUnmatchedCount: loadUnmatchedCount,
-    onOpenUnmatched: onOpenUnmatched,
+    unmatchedCount: unmatchedCount,
+    loadUnmatched: loadUnmatched,
+    onFixMatch: onFixMatch,
     scanning: scanning,
   );
 }
@@ -75,8 +81,9 @@ class SettingsDialogActions {
     this.skipSources = const [],
     required this.onRefreshMetadata,
     required this.onRefreshed,
-    required this.loadUnmatchedCount,
-    required this.onOpenUnmatched,
+    required this.unmatchedCount,
+    required this.loadUnmatched,
+    required this.onFixMatch,
     required this.scanning,
   });
 
@@ -100,11 +107,17 @@ class SettingsDialogActions {
   /// Called after a successful refresh so the opening screen can reload.
   final VoidCallback onRefreshed;
 
-  /// Current confirmed-unmatched file count (for the "Unmatched files" row).
-  final Future<int> Function() loadUnmatchedCount;
+  /// Confirmed-unmatched file count, LIVE — the Unmatched category's label
+  /// and the Library row read it, and the panel reloads its list when it
+  /// changes.
+  final ValueListenable<int> unmatchedCount;
 
-  /// Navigate to the unmatched-files screen (the window is closed first).
-  final VoidCallback onOpenUnmatched;
+  /// The unmatched files themselves, for the Unmatched category.
+  final Future<List<IdentifiedEpisode>> Function() loadUnmatched;
+
+  /// Open fix-match for one file. The window has been closed by the time this
+  /// runs (fix-match is a page); the hook reloads the opening screen after.
+  final Future<void> Function(IdentifiedEpisode file) onFixMatch;
 }
 
 /// Re-fetch metadata + skip data for cached series (no scan, no data loss).

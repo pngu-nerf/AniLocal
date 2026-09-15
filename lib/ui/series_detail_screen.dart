@@ -13,12 +13,14 @@ import '../domain/models/episode_slot.dart';
 import '../domain/models/episode_source.dart';
 import '../domain/models/series.dart';
 import '../domain/watch_order.dart';
+import 'fix_match_flow.dart';
 import 'library/library_search_bar.dart';
 import 'library_services.dart';
 import 'metadata_failure_message.dart';
 import 'routes.dart';
 import 'scan_control.dart';
 import 'series_detail/missing_episode_tiles.dart';
+import 'settings/settings_categories.dart';
 import 'settings/settings_window.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
@@ -372,18 +374,29 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   /// copy of a duplicated episode plays; this screen renders those paths, so
   /// it re-reads once the window closes — after ANY visit, since the skip floor
   /// and the missing-episodes toggle are read fresh by `_reload` too.
-  Future<void> _openSettings() async {
+  Future<void> _openSettings({String? initialCategory}) async {
     await showAppSettingsDialog(
       context,
       settings: _services.settings,
       actions: _services.settingsActions.forScreen(
         onRefreshed: _reload,
-        loadUnmatchedCount: () async => _services.unmatchedCount.value,
-        onOpenUnmatched: widget.header.onUnmatched,
+        unmatchedCount: _services.unmatchedCount,
+        loadUnmatched: _services.repository.unmatchedFiles,
+        onFixMatch: (file) async {
+          if (await fixMatchFor(context, _services, file) && mounted) {
+            await _reload();
+          }
+        },
       ),
+      initialCategory: initialCategory,
     );
     if (mounted) await _reload();
   }
+
+  /// The header's Unmatched tab, here and in the theater this page pushes:
+  /// Settings on its Unmatched category, over THIS page.
+  Future<void> _openUnmatched() =>
+      _openSettings(initialCategory: unmatchedCategoryId);
 
   /// Header "Scan" on the show page: run the home-provided scan, then reload
   /// this screen's data. No local spinner beyond the shared header one.
@@ -392,8 +405,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     if (mounted) await _reload();
   }
 
-  HeaderHooks get _header =>
-      HeaderHooks(onScan: _scan, onUnmatched: widget.header.onUnmatched);
+  HeaderHooks get _header => HeaderHooks(
+    onScan: _scan,
+    onUnmatched: () => unawaited(_openUnmatched()),
+  );
 
   /// What the fix-match search box is pre-filled with: the show's best title,
   /// as last read.
@@ -699,7 +714,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       scanning: _services.scanning.value,
       unmatchedCount: _services.unmatchedCount.value,
       onScan: _scan,
-      onUnmatched: widget.header.onUnmatched,
+      onUnmatched: () => unawaited(_openUnmatched()),
       onSettings: _openSettings,
       progress: _services.scan.progress.value,
       onStopScan: _services.scanning.value ? _services.scan.stop : null,

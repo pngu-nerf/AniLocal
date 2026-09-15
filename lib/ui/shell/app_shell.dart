@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -49,13 +50,23 @@ import 'header_spec.dart';
 /// data, but the rebuild is guaranteed rather than inferred. [HeaderScope]
 /// remains, purely so PAGES can find the controller to publish to.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.controller, required this.child});
+  const AppShell({
+    super.key,
+    required this.controller,
+    required this.child,
+    this.modalDepth,
+  });
 
   /// The header state. Subscribed to directly — see the class doc.
   final HeaderController controller;
 
   /// The Navigator, from `MaterialApp.builder`.
   final Widget child;
+
+  /// How many dialogs sit over the pages (see `ModalDepthObserver`); the
+  /// fullscreen Escape backstop yields while it is above zero, so Escape
+  /// reaches the dialog. Null = no dialogs are ever tracked (tests).
+  final ValueListenable<int>? modalDepth;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -89,6 +100,10 @@ class _AppShellState extends State<AppShell> {
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
     if (!WindowChrome.fullscreen.value) return false;
+    // A dialog is up: its own Escape (dismiss) comes first. This handler runs
+    // before focus dispatch, so without the check Settings over a fullscreen
+    // player lost its first Escape to leaving fullscreen.
+    if ((widget.modalDepth?.value ?? 0) > 0) return false;
     // Dismiss first, then resize — a tooltip mounted across an overlay-size
     // change is the `size == theater.size` crash (see TooltipDismissOnResize).
     Tooltip.dismissAllToolTips();

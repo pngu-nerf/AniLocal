@@ -20,8 +20,9 @@ SettingsDialogActions _actions(RefreshSummary result) =>
       scanning: ValueNotifier<bool>(false),
     ).forScreen(
       onRefreshed: () {},
-      loadUnmatchedCount: () async => 0,
-      onOpenUnmatched: () {},
+      unmatchedCount: ValueNotifier<int>(0),
+      loadUnmatched: () async => const [],
+      onFixMatch: (_) async {},
     );
 
 /// Opens a dialog and fires the real `refreshMetadata` action from inside it

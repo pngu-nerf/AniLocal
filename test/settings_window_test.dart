@@ -1,10 +1,13 @@
+import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/skip_mode.dart';
 import 'package:anilocal/ui/settings/setting_row.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:anilocal/ui/settings/settings_window.dart';
 import 'package:anilocal/ui/theme/xp_theme.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_sources.dart';
@@ -20,9 +23,17 @@ import 'support/recorder_settings.dart';
 /// the always-visible surface, and no "Show / hide" labels — because those are
 /// the things a later edit would quietly undo.
 
+const _unmatchedFile = IdentifiedEpisode(
+  filePath: '/lib/Mystery - 01.mkv',
+  parsedTitle: 'Mystery',
+  parsedEpisodeNumber: 1,
+);
+
 SettingsDialogActions _actions({
-  VoidCallback? onUnmatched,
+  Future<void> Function(IdentifiedEpisode)? onFixMatch,
   FakeSourcesRepository? sources,
+  ValueListenable<int>? unmatchedCount,
+  ValueListenable<bool>? scanning,
 }) =>
     SettingsActions(
       sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
@@ -30,11 +41,12 @@ SettingsDialogActions _actions({
       skipSources: const [],
       onRefreshMetadata: () async =>
           const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-      scanning: ValueNotifier<bool>(false),
+      scanning: scanning ?? ValueNotifier<bool>(false),
     ).forScreen(
       onRefreshed: () {},
-      loadUnmatchedCount: () async => 3,
-      onOpenUnmatched: onUnmatched ?? () {},
+      unmatchedCount: unmatchedCount ?? ValueNotifier<int>(3),
+      loadUnmatched: () async => const [_unmatchedFile],
+      onFixMatch: onFixMatch ?? (_) async {},
     );
 
 Future<RecorderSettings> _openSettings(
@@ -251,21 +263,77 @@ void main() {
       }
     });
 
-    testWidgets('a navigation row closes the window before navigating', (
+    testWidgets('the Library row jumps to the Unmatched category in-window', (
       tester,
     ) async {
-      var opened = false;
-      await _openSettings(
-        tester,
-        actions: _actions(onUnmatched: () => opened = true),
-      );
+      await _openSettings(tester);
       await _openCategory(tester, 'Library');
-
       await tester.tap(find.text('Unmatched files'));
       await tester.pumpAndSettle();
+      expect(find.text('Mystery - 01.mkv'), findsOneWidget);
+      expect(findXpLabel('Done'), findsOneWidget, reason: 'window still open');
+    });
 
-      expect(opened, isTrue);
-      expect(find.byType(SettingRow), findsNothing, reason: 'window dismissed');
+    testWidgets('Unmatched is a category whose label carries the live count', (
+      tester,
+    ) async {
+      final count = ValueNotifier<int>(3);
+      await _openSettings(tester, actions: _actions(unmatchedCount: count));
+      expect(find.text('Unmatched (3)'), findsOneWidget);
+      count.value = 0;
+      await tester.pumpAndSettle();
+      expect(find.text('Unmatched'), findsOneWidget);
+      expect(find.text('Unmatched (3)'), findsNothing);
+    });
+
+    testWidgets('Fix match closes the window, then hands the file over', (
+      tester,
+    ) async {
+      IdentifiedEpisode? fixed;
+      await _openSettings(
+        tester,
+        actions: _actions(onFixMatch: (f) async => fixed = f),
+      );
+      await _openCategory(tester, 'Unmatched (3)');
+      await tester.tap(find.text('Mystery - 01.mkv'));
+      await tester.pumpAndSettle();
+      expect(fixed, _unmatchedFile);
+      expect(findXpLabel('Done'), findsNothing, reason: 'window dismissed');
+    });
+
+    testWidgets('Escape closes the window', (tester) async {
+      await _openSettings(tester);
+      expect(findXpLabel('Done'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(findXpLabel('Done'), findsNothing);
+    });
+
+    testWidgets('a click outside closes the window', (tester) async {
+      await _openSettings(tester);
+      await tester.tapAt(const Offset(5, 5)); // the barrier
+      await tester.pumpAndSettle();
+      expect(findXpLabel('Done'), findsNothing);
+    });
+
+    testWidgets('closing under a focused seconds field still commits it', (
+      tester,
+    ) async {
+      final settings = await _openSettings(tester);
+      await _openCategory(tester, 'Skip');
+      final field = find.byType(TextField);
+      await tester.enterText(field, '45');
+      // Escape with the field focused: the route pops with no blur cycle.
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(settings.writes, contains('minSkip=45'));
+
+      final again = await _openSettings(tester);
+      await _openCategory(tester, 'Skip');
+      await tester.enterText(find.byType(TextField), '50');
+      await tester.tapAt(const Offset(5, 5)); // the barrier
+      await tester.pumpAndSettle();
+      expect(again.writes, contains('minSkip=50'));
     });
   });
 }

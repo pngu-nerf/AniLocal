@@ -440,6 +440,49 @@ void main() {
       );
     });
 
+    testWidgets('Escape with a dialog up in fullscreen closes the DIALOG, not '
+        'fullscreen', (tester) async {
+      // The backstop runs before focus dispatch, so Settings over a fullscreen
+      // player used to lose its first Escape to leaving fullscreen.
+      final h = ShellHarness();
+      h.captureWindowCalls();
+      await _pumpShell(
+        tester,
+        h.app(
+          home: const SpecPage(spec: HeaderSpec(title: 'Library')),
+        ),
+      );
+      await _pumpPastGrace(tester);
+      await h.setFullscreen(true);
+      await tester.pump();
+      unawaited(
+        showDialog<void>(
+          context: h.navigatorKey.currentContext!,
+          builder: (_) => const AlertDialog(content: Text('a dialog')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('a dialog'), findsOneWidget);
+
+      h.windowCalls.clear();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('a dialog'), findsNothing, reason: 'the dialog closed');
+      expect(
+        h.windowCalls.map((c) => c.method),
+        isNot(contains('setFullscreen')),
+        reason: 'the backstop yielded to the dialog',
+      );
+
+      // With the dialog gone the backstop is back.
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(
+        h.windowCalls.map((c) => '${c.method}:${c.arguments}'),
+        contains('setFullscreen:false'),
+      );
+    });
+
     testWidgets('Escape is not swallowed when we are NOT fullscreen', (
       tester,
     ) async {

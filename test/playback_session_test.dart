@@ -155,6 +155,22 @@ void main() {
   group('PlaybackSession', () {
     setUp(AppLog.reset);
 
+    test('an overlay pauses; its going away resumes only what was playing', () {
+      final rig = _Rig(episodes: [_episode(1)]);
+      rig.session.start();
+      rig.player.emitPlaying(true);
+      rig.session.pauseForObscured();
+      expect(rig.player.callCount(#pause), 1);
+      rig.session.resumeIfObscurePaused();
+      expect(rig.player.callCount(#play), 1, reason: 'it was playing');
+
+      // Paused by the viewer before the overlay: stays paused after it.
+      rig.player.emitPlaying(false);
+      rig.session.pauseForObscured();
+      rig.session.resumeIfObscurePaused();
+      expect(rig.player.callCount(#play), 1, reason: 'not resumed');
+    });
+
     test('Cmd-Q commits the position through the quit hook, awaited', () async {
       // The 1-second save timer has not fired; the runner asks to quit.
       final rig = _Rig(episodes: [_episode(1)]);

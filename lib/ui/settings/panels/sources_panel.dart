@@ -10,6 +10,7 @@ import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
 import '../../widgets/guarded.dart';
 import '../../widgets/xp_reorderable_list.dart';
+import '../settings_actions.dart';
 import '../sources_actions.dart';
 
 /// Folders: the watched library folders, in priority order.
@@ -119,7 +120,7 @@ class _SourcesPanelState extends State<SourcesPanel> {
     );
   }
 
-  static const _waitTooltip = 'Wait for the scan to finish';
+  static const _waitTooltip = kWaitForScanTooltip;
 
   @override
   Widget build(BuildContext context) {

@@ -9,4 +9,5 @@ const String skipCategoryId = 'skip';
 const String playbackCategoryId = 'playback';
 const String libraryCategoryId = 'library';
 const String homepageCategoryId = 'homepage';
+const String unmatchedCategoryId = 'unmatched';
 const String aboutCategoryId = 'about';

@@ -24,6 +24,7 @@ import 'settings/sources_actions.dart';
 import 'shell/app_shell.dart';
 import 'shell/header_controller.dart';
 import 'shell/header_scope.dart';
+import 'shell/modal_depth_observer.dart';
 import 'theme/xp_theme.dart';
 import 'tooltip_dismiss_observer.dart';
 import 'window_chrome.dart';
@@ -167,6 +168,9 @@ class _AppLifetimeState extends State<_AppLifetime> {
   late final _headerController = HeaderController(navigatorKey: _navigatorKey);
   late final _headerRouteObserver = HeaderRouteObserver(_headerController);
 
+  /// Dialogs over the pages, for the shell's Escape backstop.
+  final _modalDepth = ModalDepthObserver();
+
   /// Scan state for every header — the running flag, progress and Stop (see
   /// `ScanControl`).
   final _scan = ScanControl();
@@ -231,6 +235,7 @@ class _AppLifetimeState extends State<_AppLifetime> {
     // never reach this — it calls stop() instead (see VideoZone.dispose).
     unawaited(widget.app.playback.dispose());
     _headerController.dispose();
+    _modalDepth.dispose();
     _scan.dispose();
     _unmatchedCount.dispose();
     super.dispose();
@@ -248,7 +253,11 @@ class _AppLifetimeState extends State<_AppLifetime> {
         navigatorKey: _navigatorKey,
         // The header observer is typed to PageRoute, so dialogs never register
         // as "the top page" — see HeaderController.
-        navigatorObservers: [_tooltipDismissObserver, _headerRouteObserver],
+        navigatorObservers: [
+          _tooltipDismissObserver,
+          _headerRouteObserver,
+          _modalDepth,
+        ],
         // The VFD "fine-instrument" theme, applied app-wide so EVERY screen
         // inherits the phosphor palette and legible sans — one cohesive
         // instrument, not per-subtree.
@@ -274,7 +283,11 @@ class _AppLifetimeState extends State<_AppLifetime> {
           style: Theme.of(context).textTheme.bodyMedium!,
           child: HeaderScope(
             controller: _headerController,
-            child: AppShell(controller: _headerController, child: child!),
+            child: AppShell(
+              controller: _headerController,
+              modalDepth: _modalDepth.depth,
+              child: child!,
+            ),
           ),
         ),
         home: LibraryScreen(

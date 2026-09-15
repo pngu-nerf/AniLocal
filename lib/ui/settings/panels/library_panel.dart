@@ -41,21 +41,23 @@ class LibraryPanel extends StatelessWidget {
       SettingsGroup(
         title: 'Maintenance',
         children: [
-          SettingRow(
-            label: 'Unmatched files',
-            subtitle: model.unmatchedCount == 0
-                ? 'Nothing needs fixing'
-                : '${model.unmatchedCount} file(s) we could not identify',
-            info:
-                'Files that were scanned and parsed but matched nothing in any '
-                'entry.\n\n'
-                'They stay in the library and can be matched by hand; nothing '
-                'is deleted or moved.',
-            onTap: () {
-              Navigator.of(context).pop();
-              actions.onOpenUnmatched();
-            },
-            control: const _Chevron(),
+          ValueListenableBuilder<int>(
+            valueListenable: actions.unmatchedCount,
+            builder: (context, count, _) => SettingRow(
+              label: 'Unmatched files',
+              subtitle: count == 0
+                  ? 'Nothing needs fixing'
+                  : '$count file(s) we could not identify',
+              info:
+                  'Files that were scanned and parsed but matched nothing in '
+                  'any entry.\n\n'
+                  'They stay in the library and can be matched by hand; '
+                  'nothing is deleted or moved.',
+              // Unmatched is a category in this window now.
+              onTap: () =>
+                  SettingsNavigation.goTo(context, unmatchedCategoryId),
+              control: const _Chevron(),
+            ),
           ),
           ValueListenableBuilder<bool>(
             valueListenable: actions.scanning,
@@ -64,7 +66,7 @@ class LibraryPanel extends StatelessWidget {
               // A scan and a refresh share the fill path and cannot overlap;
               // the row says so instead of failing with an error.
               subtitle: scanning
-                  ? 'Wait for the scan to finish'
+                  ? kWaitForScanTooltip
                   : 'Re-fetch ids and skip data',
               info:
                   'Re-fetches metadata for shows already in the cache, by id, '

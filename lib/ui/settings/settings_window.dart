@@ -16,6 +16,7 @@ import 'panels/library_panel.dart';
 import 'panels/playback_panel.dart';
 import 'panels/source_list_panel.dart';
 import 'panels/sources_panel.dart';
+import 'panels/unmatched_panel.dart';
 import 'setting_row.dart';
 import 'settings_actions.dart';
 import 'settings_categories.dart';
@@ -30,9 +31,10 @@ import 'settings_shell.dart';
 /// It is a MODAL over the app's single window, not a second macOS window: the
 /// app is frameless and owns one persistent shell, so there is no native
 /// titlebar to hand a settings window and no second Flutter view to host it.
-/// Being modal, it closes on Done or Escape and NOT on a click outside (the
-/// barrier is inert), so a stray click cannot drop a half-typed field. Every
-/// control still applies immediately — closing only closes.
+/// It closes on Done, on Escape and on a click outside — the walkthrough
+/// asked for all three. Closing cannot drop a half-typed field: a focused
+/// field loses focus as the route goes, and the blur commits (pinned by
+/// test). Every control applies immediately — closing only closes.
 Future<SettingsOutcome> showAppSettingsDialog(
   BuildContext context, {
   required SettingsRepository settings,
@@ -46,10 +48,7 @@ Future<SettingsOutcome> showAppSettingsDialog(
   final SettingsModel model;
   try {
     before = await _folderPaths(actions);
-    model = await SettingsModel.load(
-      repository: settings,
-      loadUnmatchedCount: actions.loadUnmatchedCount,
-    );
+    model = await SettingsModel.load(repository: settings);
   } catch (e, stack) {
     // The one situation you most need Settings › About (an unreadable cache)
     // used to make the ⚙ do nothing and reject unhandled. Say so instead.
@@ -70,7 +69,7 @@ Future<SettingsOutcome> showAppSettingsDialog(
   }
   await showDialog<void>(
     context: context,
-    barrierDismissible: false,
+    barrierDismissible: true,
     builder: (dialogContext) => _SettingsWindow(
       model: model,
       actions: actions,
@@ -153,7 +152,7 @@ class _SettingsWindow extends StatelessWidget {
   /// `SettingsShell` never changes, and nothing else in this file does either.
   ///
   /// Only categories with content are listed; there are no placeholder pages.
-  List<SettingsCategory> _categories() => [
+  List<SettingsCategory> _categories(int unmatched) => [
     // Sources leads, and so is the landing panel: it is the only category that
     // decides what the library CONTAINS (and, by its order, which copy plays)
     // rather than how it behaves — and with no Sources tab in the header, this
@@ -183,6 +182,7 @@ class _SettingsWindow extends StatelessWidget {
         saveOrder: model.repository.setMetadataSourceOrder,
         caption:
             'Top source is used first. The rest are tried only if it fails.',
+        scanning: actions.scanning,
       ),
     ),
     // Same interaction, different question: this one decides where OP/ED
@@ -200,6 +200,7 @@ class _SettingsWindow extends StatelessWidget {
         caption:
             'Top source is used first. The rest are tried only if it has no '
             'data for an episode.',
+        scanning: actions.scanning,
         extra: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -244,6 +245,15 @@ class _SettingsWindow extends StatelessWidget {
       icon: Icons.video_library_outlined,
       builder: (_) => LibraryPanel(model: model, actions: actions),
     ),
+    // Library upkeep the header used to push a page for. The label carries
+    // the live count so the sidebar says whether there is anything to do.
+    SettingsCategory(
+      id: unmatchedCategoryId,
+      label: unmatched == 0 ? 'Unmatched' : 'Unmatched ($unmatched)',
+      icon: Icons.help_outline,
+      scrollable: false, // a list that scrolls itself
+      builder: (_) => UnmatchedPanel(actions: actions),
+    ),
     SettingsCategory(
       id: homepageCategoryId,
       label: 'Homepage',
@@ -267,7 +277,7 @@ class _SettingsWindow extends StatelessWidget {
     // Rebuilt as a whole on any change so every panel — and the sidebar — sees
     // the same values; the model is the one source while the window is open.
     content: ListenableBuilder(
-      listenable: model,
+      listenable: Listenable.merge([model, actions.unmatchedCount]),
       builder: (context, _) => LayoutBuilder(
         // The window asks for a fixed 760x520, but CLAMPS to what is actually
         // available: the app's minimum window is 600pt wide, so an unclamped
@@ -277,7 +287,7 @@ class _SettingsWindow extends StatelessWidget {
               ? math.min(SettingsShell.windowHeight, constraints.maxHeight)
               : SettingsShell.windowHeight,
           child: SettingsShell(
-            categories: _categories(),
+            categories: _categories(actions.unmatchedCount.value),
             initialId: initialCategory,
             onCategoryChanged: onCategoryChanged,
           ),
@@ -310,6 +320,9 @@ class _SecondsFieldState extends State<_SecondsField> {
     text: '${widget.seconds}',
   );
 
+  /// What was last written, so a blur that changed nothing writes nothing.
+  late String _committed = '${widget.seconds}';
+
   @override
   void dispose() {
     _controller.dispose();
@@ -320,13 +333,16 @@ class _SecondsFieldState extends State<_SecondsField> {
   /// way to "30" is a different setting, and saving it would briefly hide
   /// windows the user never meant to exclude.
   void _commit() {
-    final parsed = int.tryParse(_controller.text.trim());
+    final text = _controller.text.trim();
+    if (text == _committed) return;
+    final parsed = int.tryParse(text);
     if (parsed == null) {
-      _controller.text = '${widget.seconds}'; // unparseable -> leave it alone
+      _controller.text = _committed; // unparseable -> leave it alone
       return;
     }
     final clamped = parsed.clamp(0, minSkipLengthMax.inSeconds);
     _controller.text = '$clamped';
+    _committed = '$clamped';
     widget.onChanged(clamped);
   }
 

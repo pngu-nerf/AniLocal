@@ -265,6 +265,7 @@ class PlaybackSession {
     _outroSkipped = false;
     _error = null;
     _awaitingStart = false;
+    _resumeOnReveal = false;
     _pausedSave?.cancel();
     _publish();
     return ++_generation;
@@ -505,6 +506,25 @@ class PlaybackSession {
 
   /// Pause playback (the host is obscured, or the viewer asked). Idempotent.
   void pause() => unawaited(_guard(playback.player.pause(), 'pause'));
+
+  /// Another page or a dialog now sits over the player: pause, remembering
+  /// whether it WAS playing so [resumeIfObscurePaused] can pick it back up.
+  /// Audio behind an unrelated screen is never what the viewer meant; a
+  /// player that stays paused after Done is not either.
+  void pauseForObscured() {
+    _resumeOnReveal = playback.player.state.playing;
+    pause();
+  }
+
+  /// The overlay went away: play again only if [pauseForObscured] paused
+  /// something that was playing. A viewer who had paused stays paused.
+  void resumeIfObscurePaused() {
+    if (!_resumeOnReveal) return;
+    _resumeOnReveal = false;
+    unawaited(_guard(playback.player.play(), 'play'));
+  }
+
+  bool _resumeOnReveal = false;
 
   void cancelPreRoll() {
     _preRollCancelled = true;

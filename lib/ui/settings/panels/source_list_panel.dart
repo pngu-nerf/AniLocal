@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/source_descriptor.dart';
@@ -10,6 +11,7 @@ import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
 import '../../widgets/guarded.dart';
 import '../../widgets/xp_reorderable_list.dart';
+import '../settings_actions.dart';
 import 'client_id_dialog.dart';
 
 /// An ordered, individually-switchable list of sources.
@@ -31,7 +33,13 @@ class SourceListPanel extends StatefulWidget {
     required this.saveOrder,
     required this.caption,
     this.extra,
+    this.scanning,
   });
+
+  /// True while a scan runs: reordering and switching are disabled, like the
+  /// Folders panel — the scan reads the order per match, and a list that
+  /// changes under it is a scan whose answers came from two orders.
+  final ValueListenable<bool>? scanning;
 
   /// Every source of this family that the build ships, in built-in order.
   final List<SourceDescriptor> sources;
@@ -232,35 +240,47 @@ class _SourceListPanelState extends State<SourceListPanel> {
             child: widget.extra,
           ),
         Expanded(
-          child: XpReorderableList<SourceDescriptor>(
-            items: ordered,
-            keyOf: (s) => s.token,
-            titleOf: (s) => s.displayName,
-            firstCaption: 'Source of truth',
-            subtitleOf: (s) => switch (s) {
-              _ when !_configured(s) => s.setupHint,
-              _ when s.fallbackOnly =>
-                'Fallback only — never the source of truth',
-              _ => null,
-            },
-            dimmed: (s) => !_configured(s) || !isSourceEnabled(s.token, _prefs),
-            onReorder: _reorder,
-            trailingBuilder: (s) => !s.requiresClientId
-                ? const SizedBox.shrink()
-                : XpButton(
-                    dense: true,
-                    icon: Icons.key_outlined,
-                    label: _configured(s) ? 'Change' : 'Add key',
-                    tooltip: 'Client ID for ${s.displayName}',
-                    onPressed: () => _editClientId(s),
-                  ),
-            leadingBuilder: (s) => Checkbox(
-              value: isSourceEnabled(s.token, _prefs),
-              // An unconfigured source can't be switched on — there is nothing
-              // behind it yet. The row stays visible and says what is missing.
-              onChanged: _configured(s) ? (v) => _toggle(s, v ?? false) : null,
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          child: ValueListenableBuilder<bool>(
+            valueListenable:
+                widget.scanning ?? const AlwaysStoppedAnimation<bool>(false),
+            builder: (context, scanning, _) => XpReorderableList<SourceDescriptor>(
+              enabled: !scanning,
+              items: ordered,
+              keyOf: (s) => s.token,
+              titleOf: (s) => s.displayName,
+              firstCaption: 'Source of truth',
+              subtitleOf: (s) => switch (s) {
+                _ when !_configured(s) => s.setupHint,
+                _ when s.fallbackOnly =>
+                  'Fallback only — never the source of truth',
+                _ => null,
+              },
+              dimmed: (s) =>
+                  !_configured(s) || !isSourceEnabled(s.token, _prefs),
+              onReorder: _reorder,
+              trailingBuilder: (s) => !s.requiresClientId
+                  ? const SizedBox.shrink()
+                  : XpButton(
+                      dense: true,
+                      icon: Icons.key_outlined,
+                      label: _configured(s) ? 'Change' : 'Add key',
+                      tooltip: 'Client ID for ${s.displayName}',
+                      onPressed: () => _editClientId(s),
+                    ),
+              leadingBuilder: (s) => Tooltip(
+                message: scanning ? kWaitForScanTooltip : '',
+                child: Checkbox(
+                  value: isSourceEnabled(s.token, _prefs),
+                  // An unconfigured source can't be switched on — there is
+                  // nothing behind it yet. The row stays visible and says what
+                  // is missing. Nor can any source while a scan runs.
+                  onChanged: _configured(s) && !scanning
+                      ? (v) => _toggle(s, v ?? false)
+                      : null,
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ),
           ),
         ),

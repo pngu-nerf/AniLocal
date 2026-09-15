@@ -21,7 +21,6 @@ import 'watched_threshold.dart';
 class SettingsModel extends ChangeNotifier {
   SettingsModel({
     required this.repository,
-    required this.unmatchedCount,
     required this.autoPlayNext,
     required this.skipMode,
     required this.watchedThreshold,
@@ -39,7 +38,6 @@ class SettingsModel extends ChangeNotifier {
   /// order, same defaults as the old dialog's preamble.
   static Future<SettingsModel> load({
     required SettingsRepository repository,
-    required Future<int> Function() loadUnmatchedCount,
   }) async {
     // Independent reads, issued together: ten sequential awaits before the
     // window could open was the whole wait behind the ⚙ click.
@@ -51,13 +49,7 @@ class SettingsModel extends ChangeNotifier {
         missingEnabled,
         corroborateSkips,
       ),
-      (
-        minSkipLength,
-        hideNextEpisode,
-        showContinueWatching,
-        showSearchBar,
-        unmatchedCount,
-      ),
+      (minSkipLength, hideNextEpisode, showContinueWatching, showSearchBar),
     ) = await (
       (
         repository.loadAutoPlayNext(),
@@ -71,7 +63,6 @@ class SettingsModel extends ChangeNotifier {
         repository.loadHideNextEpisode(),
         repository.loadShowContinueWatching(),
         repository.loadShowSearchBar(),
-        loadUnmatchedCount(),
       ).wait,
     ).wait;
     return SettingsModel(
@@ -85,15 +76,10 @@ class SettingsModel extends ChangeNotifier {
       hideNextEpisode: hideNextEpisode,
       showContinueWatching: showContinueWatching,
       showSearchBar: showSearchBar,
-      unmatchedCount: unmatchedCount,
     );
   }
 
   final SettingsRepository repository;
-
-  /// Snapshot, deliberately: it labels a row that navigates away, and the
-  /// window is closed before anything can change the count.
-  final int unmatchedCount;
 
   /// Seeded from the persisted value and owned here so the field keeps its text
   /// across category switches.
@@ -196,8 +182,20 @@ class SettingsModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A blur-commit field can write on its way out, AFTER the window's route
+  /// has popped and this model was disposed. The write still reaches the
+  /// repository (that is the point); only the notification is skipped.
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     thresholdController.dispose();
     super.dispose();
   }

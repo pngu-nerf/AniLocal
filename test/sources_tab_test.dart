@@ -57,8 +57,9 @@ Future<_Closed> _open(
                     scanning: ValueNotifier<bool>(false),
                   ).forScreen(
                     onRefreshed: () {},
-                    loadUnmatchedCount: () async => 0,
-                    onOpenUnmatched: () {},
+                    unmatchedCount: ValueNotifier<int>(0),
+                    loadUnmatched: () async => const [],
+                    onFixMatch: (_) async {},
                   ),
               initialCategory: sourcesCategoryId,
             ),

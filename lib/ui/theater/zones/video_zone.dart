@@ -77,9 +77,10 @@ class VideoZone extends StatefulWidget {
   /// next one.
   final int settingsRevision;
 
-  /// True while another page sits on top of the theater. Playback PAUSES on
-  /// the transition to true (audio behind an unrelated screen is never what
-  /// the viewer meant); it does not resume on its own.
+  /// True while another page or dialog sits on top of the theater. Playback
+  /// PAUSES on the transition to true (audio behind an unrelated screen is
+  /// never what the viewer meant) and RESUMES on the transition back only if
+  /// it was playing when it was covered.
   final bool obscured;
 
   final ValueChanged<Episode>? onEpisodeChanged;
@@ -122,7 +123,12 @@ class _VideoZoneState extends State<VideoZone> {
     if (widget.settingsRevision != oldWidget.settingsRevision) {
       unawaited(_session.reloadContext());
     }
-    if (widget.obscured && !oldWidget.obscured) _session.pause();
+    if (widget.obscured && !oldWidget.obscured) {
+      _session.pauseForObscured();
+    }
+    if (!widget.obscured && oldWidget.obscured) {
+      _session.resumeIfObscurePaused();
+    }
     _session.select(widget.episode);
   }
 

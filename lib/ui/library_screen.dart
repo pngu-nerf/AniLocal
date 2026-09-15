@@ -18,6 +18,7 @@ import '../domain/models/series.dart';
 import '../domain/models/sync_control.dart';
 import '../domain/models/sync_summary.dart';
 import 'access_recovery.dart';
+import 'fix_match_flow.dart';
 import 'library/continue_watching_panel.dart';
 import 'library/library_layout.dart';
 import 'library/library_layout_config.dart';
@@ -27,6 +28,7 @@ import 'library_services.dart';
 import 'metadata_failure_message.dart';
 import 'routes.dart';
 import 'settings/settings_actions.dart';
+import 'settings/settings_categories.dart';
 import 'settings/settings_window.dart';
 import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
@@ -379,9 +381,9 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   /// so this is the only header door into it.
   /// Wired to a `VoidCallback` on the header, so every throw in here used to
   /// be a dropped future: guarded, and the user hears about it.
-  Future<void> _openSettings() => guarded(
+  Future<void> _openSettings({String? initialCategory}) => guarded(
     'settings',
-    _openSettingsUnguarded,
+    () => _openSettingsUnguarded(initialCategory: initialCategory),
     onError: (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -394,11 +396,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     },
   );
 
-  Future<void> _openSettingsUnguarded() async {
+  Future<void> _openSettingsUnguarded({String? initialCategory}) async {
     final outcome = await showAppSettingsDialog(
       context,
       settings: _services.settings,
       actions: _settingsActions(),
+      initialCategory: initialCategory,
     );
     if (!mounted) return;
     // Reflect any change made in the window: homepage-toggle visibility, and a
@@ -434,8 +437,13 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   SettingsDialogActions _settingsActions() =>
       _services.settingsActions.forScreen(
         onRefreshed: _reload,
-        loadUnmatchedCount: () async => _services.unmatchedCount.value,
-        onOpenUnmatched: _openUnmatched,
+        unmatchedCount: _services.unmatchedCount,
+        loadUnmatched: _services.repository.unmatchedFiles,
+        onFixMatch: (file) async {
+          if (await fixMatchFor(context, _services, file) && mounted) {
+            _reload();
+          }
+        },
       );
 
   Future<void> _scan() async {
@@ -531,10 +539,9 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
 
   /// Awaited: a fix-match made on the Unmatched screen changes the grid and
   /// the count, so the return reloads — every other pushed screen already did.
-  void _openUnmatched() => fireAndForget('open unmatched', () async {
-    await AppRoutes.unmatched(context, services: _services);
-    if (mounted) _reload();
-  });
+  /// The header's Unmatched tab: Settings, opened on its Unmatched category.
+  void _openUnmatched() =>
+      unawaited(_openSettings(initialCategory: unmatchedCategoryId));
 
   @override
   Widget build(BuildContext context) {

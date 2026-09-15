@@ -7,11 +7,10 @@ import 'library_services.dart';
 import 'series_detail_screen.dart';
 import 'shell/instant_page_route.dart';
 import 'theater/theater_screen.dart';
-import 'unmatched_screen.dart';
 
 /// The hooks a pushed screen needs to render the SAME header as the one it
-/// was pushed from: what Scan does, how to open Unmatched, and the count that
-/// decides whether the Unmatched tab shows. One value object rather than
+/// was pushed from: what Scan does and how to open Unmatched (Settings on
+/// its Unmatched category, from the screen that owns the settings hooks). One value object rather than
 /// three parameters threaded through every screen.
 class HeaderHooks {
   const HeaderHooks({required this.onScan, required this.onUnmatched});
@@ -23,7 +22,7 @@ class HeaderHooks {
 /// Every route in the app, constructed in ONE place.
 ///
 /// `TheaterScreen(` was built in two screens with eleven identical arguments,
-/// `UnmatchedScreen(` in two, `FixMatchScreen(` in three. Adding a parameter
+/// `FixMatchScreen(` in three. Adding a parameter
 /// meant editing every site or one screen silently losing it — the exact
 /// shape of the settings-bundle bug this codebase already shipped once.
 abstract final class AppRoutes {
@@ -60,13 +59,6 @@ abstract final class AppRoutes {
         onSettings: onSettings,
       ),
     ),
-  );
-
-  static Future<void> unmatched(
-    BuildContext context, {
-    required LibraryServices services,
-  }) => Navigator.of(context).push(
-    InstantPageRoute<void>(builder: (_) => UnmatchedScreen(services: services)),
   );
 
   /// Pops `true` when an override was written.

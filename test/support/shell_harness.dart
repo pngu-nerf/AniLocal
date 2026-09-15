@@ -5,6 +5,7 @@ import 'package:anilocal/ui/shell/header_controller.dart';
 import 'package:anilocal/ui/shell/header_scope.dart';
 import 'package:anilocal/ui/shell/header_spec.dart';
 import 'package:anilocal/ui/shell/instant_page_route.dart';
+import 'package:anilocal/ui/shell/modal_depth_observer.dart';
 import 'package:anilocal/ui/window_chrome.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,8 @@ class ShellHarness {
   ShellHarness() {
     controller = HeaderController(navigatorKey: navigatorKey);
     observer = HeaderRouteObserver(controller);
+    modals = ModalDepthObserver();
+    addTearDown(modals.dispose);
     // The controller outlives the widget tree (it's app-lifetime in production),
     // so a test must dispose it or its grace timer is left pending at teardown.
     addTearDown(controller.dispose);
@@ -28,6 +31,7 @@ class ShellHarness {
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   late final HeaderController controller;
   late final HeaderRouteObserver observer;
+  late final ModalDepthObserver modals;
 
   /// Mirrors AniLocalApp: the controller is handed to the shell directly (the
   /// shell subscribes to it), while HeaderScope exists so PAGES can publish.
@@ -35,7 +39,7 @@ class ShellHarness {
   /// instant navigation the app does.
   Widget app({required Widget home}) => MaterialApp(
     navigatorKey: navigatorKey,
-    navigatorObservers: [observer],
+    navigatorObservers: [observer, modals],
     theme: ThemeData(
       pageTransitionsTheme: PageTransitionsTheme(
         builders: {
@@ -45,7 +49,11 @@ class ShellHarness {
     ),
     builder: (context, child) => HeaderScope(
       controller: controller,
-      child: AppShell(controller: controller, child: child!),
+      child: AppShell(
+        controller: controller,
+        modalDepth: modals.depth,
+        child: child!,
+      ),
     ),
     home: home,
   );
