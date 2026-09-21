@@ -145,18 +145,20 @@ Use the external folder from §C.
       walked, the scan itself reports nothing wrong; that is correct — the
       file list was taken while the drive was there — and the UI still tells
       the truth at the end.
-- [ ] **D7.** *(re-issued, round 4)* **Mid-playback:** play an episode from the
+- [ ] **D7.** *(re-issued, round 5)* **Mid-playback:** play an episode from the
       drive (a show with ONE copy), unplug → playback carries on from mpv's
       buffer for a while; when it runs dry the frame freezes, and **within
-      about six seconds** *Couldn't play this episode* appears with *Playback
-      stopped at m:ss — the file is no longer readable* **and a Retry button**
-      — on THIS episode, with no click anywhere (mpv says nothing when a
-      volume vanishes mid-read; the player now notices the frozen position
-      itself and checks whether the file is still there). The rail does not
-      move. Replug, press **Retry** → the SAME episode resumes **where it
-      stopped**. Back returns to the show page; the app does not quit or hang.
-      *A slow network mount that is merely buffering shows nothing — the file
-      is still there, so it is left to buffer.*
+      about six seconds** *Couldn't play this episode* appears on a **dark
+      panel** over the frozen frame, with *Playback stopped at m:ss — the file
+      is no longer readable* **and a Retry button** — on THIS episode, with no
+      click anywhere. **It stays up**: seeking along the dead stream, or
+      waiting, does not clear it (it used to flicker away on the seek's
+      position report and come back six seconds later). It clears only when
+      playback actually resumes. The rail does not move. Replug, press
+      **Retry** → the SAME episode resumes **where it stopped** and the notice
+      goes. Back returns to the show page; the app does not quit or hang. *A
+      slow network mount that is merely buffering shows nothing — the file is
+      still there, so it is left to buffer.*
 
 ## E. Quitting
 
