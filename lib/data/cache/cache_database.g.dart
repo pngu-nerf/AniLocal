@@ -4776,7 +4776,16 @@ class $$SeriesCacheTableTableManager
                 coverImagePath: coverImagePath,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SeriesCacheTable, CachedSeriesRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $SeriesCacheTable,
+                    CachedSeriesRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5087,7 +5096,16 @@ class $$FileCacheTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$FileCacheTable, CachedFileRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $FileCacheTable,
+                    CachedFileRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5295,7 +5313,16 @@ class $$LibraryFoldersTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$LibraryFoldersTable, LibraryFolderRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $LibraryFoldersTable,
+                    LibraryFolderRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5528,7 +5555,16 @@ class $$MatchOverridesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$MatchOverridesTable, MatchOverrideRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $MatchOverridesTable,
+                    MatchOverrideRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5774,7 +5810,16 @@ class $$WatchStatesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$WatchStatesTable, WatchStateRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $WatchStatesTable,
+                    WatchStateRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5986,7 +6031,16 @@ class $$SourceOverridesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SourceOverridesTable, SourceOverrideRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $SourceOverridesTable,
+                    SourceOverrideRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6264,7 +6318,18 @@ class $$SkipSourceAnswersTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SkipSourceAnswersTable, SkipSourceAnswerRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $SkipSourceAnswersTable,
+                    SkipSourceAnswerRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6438,7 +6503,16 @@ class $$HiddenEpisodesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$HiddenEpisodesTable, HiddenEpisodeRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $HiddenEpisodesTable,
+                    HiddenEpisodeRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6577,7 +6651,16 @@ class $$AppSettingsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AppSettingsTable, AppSettingRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $AppSettingsTable,
+                    AppSettingRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6737,7 +6820,16 @@ class $$ShowPrefsTableTableManager
                 nextEpisodeHidden: nextEpisodeHidden,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ShowPrefsTable, ShowPreferenceRow>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $ShowPrefsTable,
+                    ShowPreferenceRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6910,7 +7002,16 @@ class $$SeriesExternalIdsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SeriesExternalIdsTable, SeriesExternalId>(table),
+                  BaseReferences<
+                    _$CacheDatabase,
+                    $SeriesExternalIdsTable,
+                    SeriesExternalId
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
