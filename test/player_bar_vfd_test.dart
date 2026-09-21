@@ -10,6 +10,7 @@ import 'package:anilocal/ui/theater/controls/vfd_control.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
 import 'package:anilocal/ui/theme/vfd_readout.dart' show VfdReadout;
 import 'package:anilocal/ui/theme/xp_tokens.dart';
+import 'package:anilocal/ui/theme/xp_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
@@ -222,15 +223,12 @@ void main() {
         ),
       );
       expect(find.text('Couldn’t play this episode'), findsOneWidget);
-      // A backing behind the error, so it reads over a frozen frame too.
+      // In the sunken display well — opaque, so the same one error screen
+      // over a black frame (failed open) and over a frozen picture (stall).
       expect(
         find.ancestor(
           of: find.text('Couldn’t play this episode'),
-          matching: find.byWidgetPredicate(
-            (w) =>
-                w is DecoratedBox &&
-                (w.decoration as BoxDecoration).color == Xp.scrimHeavy,
-          ),
+          matching: find.byWidgetPredicate((w) => w is XpPanel && w.inset),
         ),
         findsOneWidget,
       );

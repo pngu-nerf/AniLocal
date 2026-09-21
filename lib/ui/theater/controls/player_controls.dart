@@ -469,17 +469,18 @@ class PlaybackErrorNotice extends StatelessWidget {
             ),
           );
         }
-        // A dark backing: a failed OPEN leaves the frame black, but a stream
-        // that died mid-play leaves its last picture, and the notice used to
-        // sit on it with nothing behind.
+        // The instrument's sunken display well — the same panel the show
+        // page's error state sits in. OPAQUE on purpose: a failed OPEN leaves
+        // the frame black and a stream that died mid-play leaves its last
+        // picture, and a translucent backing looked like nothing over the one
+        // and like a glass card over the other — two error screens for one
+        // widget. The well looks the same over both.
         return Padding(
           padding: const EdgeInsets.all(Xp.spaceXl),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Xp.scrimHeavy,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Padding(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: XpPanel(
+              inset: true,
               padding: const EdgeInsets.all(Xp.spaceL),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
