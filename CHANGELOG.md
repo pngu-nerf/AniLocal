@@ -18,7 +18,8 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   frame simply freezes; Retry resumes where playback stopped, on the episode
   that is actually current. A mount that is merely buffering is left alone.
   The notice stays up until playback actually resumes (a seek along the dead
-  stream no longer wipes it) and sits on a dark panel over the frozen frame.
+  stream no longer wipes it) and sits in the player's black display well, so
+  a failed open and a dead stream look the same.
 - **Automatic copies fail over.** When the copy an episode plays from cannot
   be opened (an unplugged drive, a 0-byte download), an Automatic episode
   plays the next copy at the same position and says which folder it came

@@ -145,12 +145,15 @@ Use the external folder from §C.
       walked, the scan itself reports nothing wrong; that is correct — the
       file list was taken while the drive was there — and the UI still tells
       the truth at the end.
-- [ ] **D7.** *(re-issued, round 5)* **Mid-playback:** play an episode from the
+- [ ] **D7.** *(re-issued, round 6)* **Mid-playback:** play an episode from the
       drive (a show with ONE copy), unplug → playback carries on from mpv's
       buffer for a while; when it runs dry the frame freezes, and **within
-      about six seconds** *Couldn't play this episode* appears on a **dark
-      panel** over the frozen frame, with *Playback stopped at m:ss — the file
-      is no longer readable* **and a Retry button** — on THIS episode, with no
+      about six seconds** *Couldn't play this episode* appears in the **black
+      display well** — the same sunken panel the show page's error state sits
+      in, opaque, so it looks IDENTICAL whether the frame behind it is black
+      (unplug BEFORE opening the episode) or the frozen picture (unplug
+      mid-play): one error screen, not two — with *Playback stopped at m:ss —
+      the file is no longer readable* **and a Retry button** — on THIS episode, with no
       click anywhere. **It stays up**: seeking along the dead stream, or
       waiting, does not clear it (it used to flicker away on the seek's
       position report and come back six seconds later). It clears only when
