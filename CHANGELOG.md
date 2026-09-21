@@ -13,8 +13,10 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
 - A stream that dies mid-play (a drive pulled while an episode runs) shows
-  the error with Retry and stays on that episode instead of advancing; Retry
-  resumes where playback stopped, on the episode that is actually current.
+  the error with Retry within a few seconds and stays on that episode instead
+  of advancing — including when the engine reports nothing at all and the
+  frame simply freezes; Retry resumes where playback stopped, on the episode
+  that is actually current. A mount that is merely buffering is left alone.
 - **Automatic copies fail over.** When the copy an episode plays from cannot
   be opened (an unplugged drive, a 0-byte download), an Automatic episode
   plays the next copy at the same position and says which folder it came

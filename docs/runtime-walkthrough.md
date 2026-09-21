@@ -145,15 +145,18 @@ Use the external folder from §C.
       walked, the scan itself reports nothing wrong; that is correct — the
       file list was taken while the drive was there — and the UI still tells
       the truth at the end.
-- [ ] **D7.** *(re-issued, round 3)* **Mid-playback:** play an episode from the
+- [ ] **D7.** *(re-issued, round 4)* **Mid-playback:** play an episode from the
       drive (a show with ONE copy), unplug → playback carries on from mpv's
-      buffer for a while; when it runs dry, *Couldn't play this episode*
-      appears with a line saying where playback stopped **and a Retry
-      button** — and the player **stays on this episode**: the rail does not
-      move to the next one (it used to advance, then fail on episode 2).
-      Replug, press **Retry** → the SAME episode resumes **where it stopped**,
-      and the rail agrees. Back returns to the show page; the app does not
-      quit or hang.
+      buffer for a while; when it runs dry the frame freezes, and **within
+      about six seconds** *Couldn't play this episode* appears with *Playback
+      stopped at m:ss — the file is no longer readable* **and a Retry button**
+      — on THIS episode, with no click anywhere (mpv says nothing when a
+      volume vanishes mid-read; the player now notices the frozen position
+      itself and checks whether the file is still there). The rail does not
+      move. Replug, press **Retry** → the SAME episode resumes **where it
+      stopped**. Back returns to the show page; the app does not quit or hang.
+      *A slow network mount that is merely buffering shows nothing — the file
+      is still there, so it is left to buffer.*
 
 ## E. Quitting
 
