@@ -586,7 +586,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           ),
         if (pinnable)
           IconButton(
-            tooltip: '${e.sources.length} copies — choose…',
+            tooltip: '${e.sources.length} sources — choose…',
             icon: Badge(
               label: Text('${e.sources.length}'),
               child: const Icon(

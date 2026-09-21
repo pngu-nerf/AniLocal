@@ -19,7 +19,8 @@ import '../../domain/models/sync_control.dart';
 /// user-in-control".
 /// The readout line while a scan runs — the scan's STATUS, short enough to
 /// fit the VFD screen without scrolling: `Identifying 12/340`, `Metadata…`,
-/// `Skips 120/600`. It used to be the page title with the status appended;
+/// `Identifying skips 120/600`. It used to be the page title with the status
+/// appended;
 /// that overflowed, and the marquee restarts on every change, so the counter
 /// never scrolled into view. Same on every page.
 String scanningTitle(SyncProgress? progress) {

@@ -221,9 +221,9 @@ class SubtitlesControl extends StatelessWidget {
 }
 
 /// The "settings" hub — a small menu, not a single-purpose button. Playback
-/// speed is one NESTED subsection (a submenu); **Copy** is another, shown
+/// speed is one NESTED subsection (a submenu); **Sources** is another, shown
 /// only for an episode that exists in more than one folder and only when the
-/// host can pin sources — the walkthrough found that switching copies meant
+/// host can pin sources — the walkthrough found that switching sources meant
 /// leaving the player for the show page and back. More sections slot in
 /// beside these without changing the bar.
 class SettingsControl extends StatelessWidget {
@@ -456,7 +456,7 @@ class PlaybackErrorNotice extends StatelessWidget {
         final notice = s.notice;
         if (message == null && notice == null) return const SizedBox.shrink();
         if (message == null) {
-          // A transient line — "Playing the copy in X instead" — not a failure.
+          // A transient line — "Playing the source in X instead" — not a failure.
           return Padding(
             padding: const EdgeInsets.all(Xp.spaceXl),
             child: Text(

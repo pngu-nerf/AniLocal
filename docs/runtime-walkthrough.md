@@ -35,7 +35,7 @@ you want your library back afterwards; §M restores it).
       the app again in Finder, or `open -n`) → the first window comes to the
       front and no second window appears. *Note:* if a second window opens,
       both are writing one database.
-- [ ] **A5.** *(re-issued)* Launch with a populated library → the header shows
+- [ ] **A5.** Launch with a populated library → the header shows
       the title **and** the Scan / Settings tabs on the first frame, with no
       click, double-click or resize needed.
 
@@ -58,7 +58,7 @@ you want your library back afterwards; §M restores it).
       inside …, which is already in your library — its files are already
       scanned.` Add the **parent** of a listed folder → refused, naming the
       child and how to proceed.
-- [ ] **B6.** *(re-issued)* Add a folder under **~/Downloads** → macOS may ask
+- [ ] **B6.** Add a folder under **~/Downloads** → macOS may ask
       about Downloads; **deny** it. A dialog says *AniLocal can read the folder
       you just added, but not the rest of Downloads* with **Later / Open
       Settings**. Choose Later → the scan runs and **finds the files** in that
@@ -80,7 +80,7 @@ you want your library back afterwards; §M restores it).
 Use the biggest library you have; the numbers in `docs/performance.md` were
 measured at 600 shows / 8,000 files.
 
-- [ ] **C1.** *(re-issued, round 3)* Start a scan of the external folder → the
+- [ ] **C1.** Start a scan of the external folder → the
       VFD readout reads `IDENTIFYING 12/340` and the counter moves **per
       title**; shows **fill in with title and art every four titles** (four is
       how many covers download at once — one at a time would only slow the
@@ -89,7 +89,7 @@ measured at 600 shows / 8,000 files.
       episodes — the long part, after every show is already on screen. The
       Stop tooltip repeats the count; the grid stays scrollable and responsive
       throughout.
-- [ ] **C2.** *(re-issued)* Press **Stop** mid-`identifying` → the scan ends
+- [ ] **C2.** Press **Stop** mid-`identifying` → the scan ends
       within a few seconds; the snackbar ends `· stopped early`; every batch
       already saved keeps its art and title; the rest stay named placeholders
       whose line reads **Not identified yet — scan to retry** (never
@@ -97,7 +97,7 @@ measured at 600 shows / 8,000 files.
 - [ ] **C3.** Scan again → the placeholders resolve (they are retried); nothing
       already identified is re-fetched (the lookup count is only the
       remainder).
-- [ ] **C4.** *(re-issued)* With the scan running, open Settings → in
+- [ ] **C4.** With the scan running, open Settings → in
       **Folders**, Add / Remove / drag-reorder; in **Metadata** and **Skip**,
       the checkboxes and drag-reorder; in **Library**, Refresh metadata — all
       disabled, each saying *Wait for the scan to finish*. They come back the
@@ -136,7 +136,7 @@ Use the external folder from §C.
       greying are there **on first paint**, before you press anything.
 - [ ] **D5.** Plug the drive back in, press Scan → banner gone, greying gone,
       summary shows `N unchanged · 0 removed`. Nothing was re-identified.
-- [ ] **D6.** *(re-issued, round 2)* **Mid-scan:** start a scan of the external
+- [ ] **D6.** **Mid-scan:** start a scan of the external
       folder and unplug the drive at any point while it runs → when the scan
       ends, the cards from that drive are **greyed**, the reconnect banner is
       up and Settings › Folders says **Not connected** — in the SAME scan, not
@@ -145,7 +145,7 @@ Use the external folder from §C.
       walked, the scan itself reports nothing wrong; that is correct — the
       file list was taken while the drive was there — and the UI still tells
       the truth at the end.
-- [ ] **D7.** *(re-issued, round 6)* **Mid-playback:** play an episode from the
+- [ ] **D7.** **Mid-playback:** play an episode from the
       drive (a show with ONE copy), unplug → playback carries on from mpv's
       buffer for a while; when it runs dry the frame freezes, and **within
       about six seconds** *Couldn't play this episode* appears in the **black
@@ -206,7 +206,7 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 
 ## G. Fix-match and identity
 
-- [ ] **G1.** *(re-issued)* Header **Unmatched** → **Settings opens on its
+- [ ] **G1.** Header **Unmatched** → **Settings opens on its
       Unmatched category** (the sidebar entry reads `Unmatched (N)`); pick a
       file → the window closes and the **Fix match** page opens; search,
       **Assign** → back on the library the show's card is there **and** the
@@ -240,21 +240,21 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 
 ## H. Settings over the player, and other overlays
 
-- [ ] **H1.** *(re-issued)* Play an episode; open **Settings** from the header
+- [ ] **H1.** Play an episode; open **Settings** from the header
       → playback **pauses** while the window is up; Done, Escape or a click
       outside → playback **resumes** by itself. Pause first, then open and
       close Settings → it stays paused (only what was playing resumes).
-- [ ] **H2.** *(re-issued)* Settings › **Unmatched** from the player → the
+- [ ] **H2.** Settings › **Unmatched** from the player → the
       list is in the window; pick a file → the window closes and the Fix match
       page opens over the paused player; Back → the player, still paused
       where it was.
 - [ ] **H3.** Settings › About › Licences › **View** → a **Licences** page with
       the header's Back working; opened from the player, same as H2.
-- [ ] **H4.** *(re-issued)* Settings remembers the category you were on when
+- [ ] **H4.** Settings remembers the category you were on when
       reopened in the same session; **Escape**, a **click outside** and
       **Done** all close it. Type `45` into Skip › *Ignore skips shorter than*
       and press Escape with the field still focused → reopen: it reads 45.
-- [ ] **H5.** *(re-issued)* Play an episode, enter **fullscreen**, open
+- [ ] **H5.** Play an episode, enter **fullscreen**, open
       Settings from the header (leave fullscreen with Escape first if the
       header is hidden, then re-enter with ⛶ and use the player's ⚙ →
       nothing; use the header route instead) — with Settings open over a
@@ -293,7 +293,7 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 - [ ] **K3.** A 0-byte `.mkv` in a folder → it is listed (as an episode of its
       parsed show) and *Couldn't play this episode* when opened; it does not
       break the scan.
-- [ ] **K4.** *(re-issued, round 3)* With a show that has the same episode in
+- [ ] **K4.** With a show that has the same episode in
       two folders, play it → the player's ⚙ menu has a **Sources** section:
       *Automatic* plus one entry **per file** as `folder › file`, the playing
       one checked. Pick the other source → playback re-opens on that file **at
@@ -304,7 +304,7 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       Pick a **corrupted** source (a 0-byte file), then a good one → the good
       one starts **where you were**, not from 0. Pick *Automatic* → back to
       the priority default.
-- [ ] **K5.** *(re-issued, round 3)* With an Automatic episode whose default
+- [ ] **K5.** With an Automatic episode whose default
       source is on the external drive and another on the internal disk: unplug
       the drive, open the show → the internal copy is the default now (no pin
       needed). Replug → the drive's copy is the default again. Then, with the

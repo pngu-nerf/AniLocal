@@ -20,18 +20,18 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   The notice stays up until playback actually resumes (a seek along the dead
   stream no longer wipes it) and sits in the player's black display well, so
   a failed open and a dead stream look the same.
-- **Automatic copies fail over.** When the copy an episode plays from cannot
+- **Automatic sources fail over.** When the file an episode plays from cannot
   be opened (an unplugged drive, a 0-byte download), an Automatic episode
-  plays the next copy at the same position and says which folder it came
+  plays the next source at the same position and says which folder it came
   from; a pinned episode shows the error instead. Automatic also prefers a
-  copy on a connected drive and a real file over a 0-byte one.
-- **Pins name the file, not just the folder** (cache schema v22): two copies
+  source on a connected drive and a real file over a 0-byte one.
+- **Pins name the file, not just the folder** (cache schema v22): two files
   of one episode in the same folder are two choices, in the show page's
-  picker and the player's Copy menu. Existing pins keep working.
+  picker and the player's Sources menu. Existing pins keep working.
 - **Retry** on the "Couldn't play this episode" notice re-opens the episode
   where it was — a replugged drive no longer needs a click off and back.
-- **Change copy from the player.** The ⚙ menu's Copy section lists an
-  episode's copies for a show in several folders; switching re-opens at the
+- **Change source from the player.** The ⚙ menu's Sources section lists an
+  episode's sources for a show in several folders; switching re-opens at the
   same position and pins the choice, the same pin the show page offers.
 - **Unmatched files live in Settings** as a category with the live count in
   its label; Fix match opens from there. The header's Unmatched tab opens
@@ -67,7 +67,7 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   raised during the very first build was thrown away, so the header stayed
   empty until the window was resized).
 - The scan readout is a short status that fits the display and moves per
-  title: `Identifying 12/340`, `Metadata…`, `Skips 120/600`; shows fill in
+  title: `Identifying 12/340`, `Metadata…`, `Identifying skips 120/600`; shows fill in
   as each batch is saved rather than in one sweep at the end; the show page
   and the player follow the scan too. The dot-matrix font gained the
   punctuation real titles carry (the apostrophe was a hole).

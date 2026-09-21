@@ -57,7 +57,7 @@ class PlayerControlsState {
   /// silent black screen.
   final String? errorMessage;
 
-  /// A transient, non-error line over the frame — "Playing the copy in X
+  /// A transient, non-error line over the frame — "Playing the source in X
   /// instead" after a fall-through. Cleared by the session a few seconds on.
   final String? notice;
 
