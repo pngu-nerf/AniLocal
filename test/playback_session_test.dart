@@ -130,6 +130,7 @@ class _Rig {
     _Settings? settings,
     Duration saveCadence = const Duration(seconds: 1),
     Future<Episode?> Function(Episode)? refetch,
+    this.fileExists = true,
   }) : settings = settings ?? _Settings(),
        watchOrder = _WatchOrder(episodes) {
     playback = PlaybackController.withPlayer(player, resolver: watchOrder);
@@ -145,8 +146,16 @@ class _Rig {
       saveCadence: saveCadence,
       sourceSelection: refetch == null ? null : sources,
       refetchEpisode: refetch,
+      fileExists: (_) async {
+        probes++;
+        return fileExists;
+      },
     );
   }
+
+  /// What the stall watchdog's probe answers, and how often it asked.
+  bool fileExists;
+  int probes = 0;
 
   final sources = _SourceSelection();
 
@@ -316,6 +325,104 @@ void main() {
       expect(rig.player.opened, hasLength(3));
       expect(rig.player.opened.last.uri, a.fileRef);
       expect(rig.session.controls.value.errorMessage, isNull);
+    });
+
+    group('the stall watchdog', () {
+      const a = EpisodeSource(
+        fileRef: '/usb/ep1.mkv',
+        folderPath: '/usb',
+        folderSortOrder: 0,
+        relativePath: 'ep1.mkv',
+      );
+      const b = EpisodeSource(
+        fileRef: '/nas/ep1.mkv',
+        folderPath: '/nas',
+        folderSortOrder: 1,
+        relativePath: 'ep1.mkv',
+      );
+      final twoSources = Episode(
+        number: 1,
+        anchoredNumber: 1,
+        seriesId: 7,
+        fileRef: a.fileRef,
+        sources: const [a, b],
+      );
+
+      /// Playing at 0:40, then the position stops moving.
+      void stallAt40(_Rig rig, FakeAsync async) {
+        rig.session.start();
+        async.flushMicrotasks();
+        rig.player.emitDuration(_s(minutes: 24));
+        rig.player.emitPlaying(true);
+        rig.player.emitPosition(_s(seconds: 40));
+        async.flushMicrotasks();
+      }
+
+      test('a frozen position with the file GONE is a loss: the other source '
+          'at the same place, or the error — never an advance', () {
+        fakeAsync((async) {
+          final rig = _Rig(
+            episodes: [twoSources, _episode(2)],
+            refetch: (_) async => twoSources,
+            fileExists: false,
+          );
+          stallAt40(rig, async);
+          async.elapse(kStallTolerance + const Duration(seconds: 1));
+          async.flushMicrotasks();
+          expect(rig.probes, 1);
+          expect(rig.player.opened.last.uri, b.fileRef, reason: 'fell through');
+          expect(rig.player.opened.last.start, _s(seconds: 40));
+          expect(rig.advanced.map((e) => e.anchoredNumber), isNot(contains(2)));
+
+          final single = _Rig(
+            episodes: [_episode(1), _episode(2)],
+            fileExists: false,
+          );
+          stallAt40(single, async);
+          async.elapse(kStallTolerance + const Duration(seconds: 1));
+          async.flushMicrotasks();
+          expect(single.session.controls.value.errorMessage, contains('0:40'));
+          expect(single.advanced, isEmpty);
+          expect(single.player.opened, hasLength(1));
+        });
+      });
+
+      test('a frozen position with the file PRESENT is buffering: probed '
+          'again after another tolerance, nothing else', () {
+        fakeAsync((async) {
+          final rig = _Rig(episodes: [_episode(1), _episode(2)]);
+          stallAt40(rig, async);
+          async.elapse(kStallTolerance + const Duration(seconds: 1));
+          async.flushMicrotasks();
+          expect(rig.probes, 1);
+          expect(rig.session.controls.value.errorMessage, isNull);
+          expect(rig.player.opened, hasLength(1));
+          async.elapse(kStallTolerance + const Duration(seconds: 1));
+          async.flushMicrotasks();
+          expect(rig.probes, 2, reason: 're-armed');
+        });
+      });
+
+      test('paused, or moving, is not a stall', () {
+        fakeAsync((async) {
+          final paused = _Rig(episodes: [_episode(1)], fileExists: false);
+          stallAt40(paused, async);
+          paused.player.emitPlaying(false); // the viewer paused
+          async.elapse(const Duration(minutes: 5));
+          async.flushMicrotasks();
+          expect(paused.probes, 0);
+          expect(paused.session.controls.value.errorMessage, isNull);
+
+          final moving = _Rig(episodes: [_episode(1)], fileExists: false);
+          stallAt40(moving, async);
+          for (var i = 1; i <= 20; i++) {
+            async.elapse(const Duration(seconds: 1));
+            moving.player.emitPosition(_s(seconds: 40 + i));
+          }
+          async.flushMicrotasks();
+          expect(moving.probes, 0);
+        });
+      });
     });
 
     test('"completed" far from the end is a dead stream: no advance; the next '

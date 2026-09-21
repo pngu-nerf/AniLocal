@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -70,8 +71,10 @@ class PlaybackSession {
     bool fullscreen = false,
     MediaRemoteFactory remoteFactory = MediaRemote.new,
     this.saveCadence = const Duration(seconds: 1),
+    Future<bool> Function(String path)? fileExists,
   }) : _shown = episode,
-       _fullscreen = fullscreen {
+       _fullscreen = fullscreen,
+       _fileExists = fileExists ?? _fileStillThere {
     controls = ValueNotifier(
       PlayerControlsState(episode: episode, fullscreen: fullscreen),
     );
@@ -216,8 +219,72 @@ class PlaybackSession {
     _saveTimer = Timer.periodic(saveCadence, (_) {
       persist();
       _pushNowPlaying();
+      _checkStall();
     });
     unawaited(_open(_shown));
+  }
+
+  // ---- the stall watchdog ----------------------------------------------
+
+  /// Whether the file at a path can still be seen. Injected so tests run
+  /// under fakeAsync without touching the disk; bounded, because a wedged
+  /// mount can hang an `exists()` for as long as the kernel takes to give up,
+  /// and "did not answer" is the same news as "gone".
+  final Future<bool> Function(String path) _fileExists;
+
+  static Future<bool> _fileStillThere(String path) => File(
+    path,
+  ).exists().timeout(const Duration(seconds: 2), onTimeout: () => false);
+
+  Duration _lastTickPos = Duration.zero;
+  Duration _stalledFor = Duration.zero;
+  bool _probing = false;
+
+  /// The third signal of a dead stream. mpv reports a failed OPEN on its
+  /// error stream and a truncated file as a completion far from the end; a
+  /// volume that vanishes MID-READ produces neither — the position stops and
+  /// the frame freezes with pause still false. So: while the engine says it
+  /// is playing and the position has not moved for `kStallTolerance`, ask
+  /// whether the file is still there. Gone → a playback loss (the fall-through
+  /// or the error, at the position it stopped). Present → buffering; wait
+  /// another tolerance and ask again.
+  void _checkStall() {
+    if (_disposed || _transitioning || _probing) return;
+    final started = !_awaitingStart && _position > Duration.zero;
+    if (!started || _error != null || !playback.player.state.playing) {
+      _stalledFor = Duration.zero;
+      _lastTickPos = _position;
+      return;
+    }
+    if (_position != _lastTickPos) {
+      _lastTickPos = _position;
+      _stalledFor = Duration.zero;
+      return;
+    }
+    _stalledFor += saveCadence;
+    if (_stalledFor < kStallTolerance) return;
+    _stalledFor = Duration.zero; // re-armed: a present file is probed again
+    _probing = true;
+    final gen = _generation;
+    final path = _shown.fileRef;
+    unawaited(
+      _guard(() async {
+        final present = await _fileExists(path);
+        _probing = false;
+        if (_disposed || gen != _generation || present) return;
+        final at = _position;
+        _onOpenFailed(
+          'Playback stopped at ${_clock(at)} — the file is no longer '
+          'readable. Was the drive disconnected?',
+        );
+      }(), 'stall probe'),
+    );
+  }
+
+  static String _clock(Duration d) {
+    final m = d.inMinutes;
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   /// Host-driven swap (a rail tap). Same episode → nothing.

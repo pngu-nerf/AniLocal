@@ -29,6 +29,14 @@ const Duration kEndOfFileGuard = Duration(milliseconds: 750);
 /// buffer ran dry, minutes from the end.
 const Duration kCompletionTolerance = Duration(seconds: 5);
 
+/// How long the position may sit still while the engine says it is PLAYING
+/// before the session asks whether the file is still there. A volume that
+/// vanishes mid-read makes mpv emit nothing — no completion, no error line,
+/// pause still false — the frame simply freezes; this is the third signal of
+/// a dead stream. Six seconds clears any ordinary buffering hiccup; a file
+/// that is still present when probed is left to buffer.
+const Duration kStallTolerance = Duration(seconds: 6);
+
 /// Where an outro skip should seek, or null when it should do nothing.
 ///
 /// The target is the window's end, clamped to [duration] − [kEndOfFileGuard]
