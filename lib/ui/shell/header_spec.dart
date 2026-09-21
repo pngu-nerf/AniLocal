@@ -25,7 +25,12 @@ import '../../domain/models/sync_control.dart';
 String scanningTitle(SyncProgress? progress) {
   if (progress == null) return 'Scanning…';
   final phase = progress.phase;
-  final label = phase[0].toUpperCase() + phase.substring(1);
+  // "Skips 40/600" did not say what was happening; the skips phase is the
+  // long one, so the readout names it in full.
+  final label = switch (phase) {
+    'skips' => 'Identifying skips',
+    _ => phase[0].toUpperCase() + phase.substring(1),
+  };
   // The metadata pass reports once, as a whole; a count would read 12/12.
   if (phase == 'metadata' || progress.total <= 0) return '$label…';
   return '$label ${progress.done}/${progress.total}';

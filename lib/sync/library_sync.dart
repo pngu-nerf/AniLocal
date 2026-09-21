@@ -78,7 +78,7 @@ class LibrarySync {
     this.loadSkipOrder,
     this.crossMap,
     VolumeResolver? resolver,
-    this.batchSize = 10,
+    this.batchSize = kArtConcurrency,
   }) : resolver = resolver ?? DiskutilVolumeResolver();
 
   final FolderScanner scanner;

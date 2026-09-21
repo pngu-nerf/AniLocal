@@ -257,7 +257,10 @@ class PlaybackSession {
     final alreadyAutomatic =
         source == null && current.pinnedSourceFolder == null;
     if (alreadyPinned || alreadyAutomatic) return;
-    final at = _position;
+    // The place to keep: the live position, or — after a FAILED open, which
+    // leaves it at zero — the position that open was asked to start from. A
+    // good source picked after a corrupted one used to start over.
+    final at = _position > Duration.zero ? _position : _lastPos;
     await persistNow();
     if (source == null) {
       await selection.clearSource(current);
@@ -278,14 +281,19 @@ class PlaybackSession {
   }(), 'switchSource');
 
   /// Open the episode again where it was — the error notice's Retry. A
-  /// replugged drive used to need a click off the episode and back. Starts
-  /// from the episode's OWN copy (not the last one a fall-through tried) with
-  /// every copy fair again, at the last position the engine reported.
+  /// replugged drive used to need a click off the episode and back. Re-reads
+  /// the episode when the host allows, so the Automatic default is whatever
+  /// is reachable NOW (the replugged drive's copy again), with every copy
+  /// fair again, at the last position the engine reported. The host is told,
+  /// so the rail and the video agree.
   Future<void> retry() => _guard(() async {
     if (_disposed) return;
     _failoverTried.clear();
     final at = _lastPos;
-    await _open(_origin, startAt: at > Duration.zero ? at : null);
+    final target = await refetchEpisode?.call(_origin) ?? _origin;
+    if (_disposed) return;
+    onEpisodeChanged?.call(target);
+    await _open(target, startAt: at > Duration.zero ? at : null);
   }(), 'retry');
 
   /// The copy that could not be opened: try the next one, or say so.
@@ -302,7 +310,9 @@ class PlaybackSession {
     if (current.pinnedSourceFolder == null) {
       for (final s in current.sources) {
         if (_failoverTried.contains(s.fileRef)) continue;
-        _showNotice('Playing the copy in ${basenameOf(s.folderPath)} instead');
+        _showNotice(
+          'Playing the source in ${basenameOf(s.folderPath)} instead',
+        );
         unawaited(
           _open(current.playingFrom(s), startAt: _lastPos, failover: true),
         );
@@ -484,6 +494,18 @@ class PlaybackSession {
         _duration <= Duration.zero ||
         _position <= Duration.zero) {
       _onOpenFailed('The file ended before it started playing.');
+      return;
+    }
+    // "Completed" far from the END is a stream that died — a drive pulled
+    // mid-play makes mpv report EOF the moment its buffer runs dry. A real
+    // ending has the position at the duration (the outro seek lands 750 ms
+    // short; a VBR estimate can be a second off). It used to advance, so the
+    // viewer landed on episode 2 — which then failed on the same drive.
+    if (_duration - _position > kCompletionTolerance) {
+      _onOpenFailed(
+        'Playback stopped at ${_position.inSeconds}s of '
+        '${_duration.inSeconds}s — the file could not be read further.',
+      );
       return;
     }
     // "Played to the end" ≠ "crossed the watched mark": these are decoupled.
@@ -700,6 +722,9 @@ class PlaybackSession {
       return;
     }
     _resetForEpisode(next);
+    // Retry re-opens the episode that is CURRENT; an advance makes this one
+    // current as surely as an open does.
+    _origin = next;
     _awaitingStart = PlaybackController.resumeStartFor(next) > Duration.zero;
     _pushNowPlaying();
     onEpisodeChanged?.call(next);

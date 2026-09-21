@@ -80,7 +80,7 @@ Widget _bar({
 Finder _readout(String label) => find.bySemanticsLabel(label);
 
 void main() {
-  group('the Copy section of the settings menu', () {
+  group('the Sources section of the settings menu', () {
     const a = EpisodeSource(
       fileRef: '/usb/ep1.mkv',
       folderPath: '/usb',
@@ -135,8 +135,8 @@ void main() {
         ),
       );
       await openSettings(tester);
-      expect(find.text('Copy'), findsOneWidget);
-      await tester.tap(find.text('Copy'));
+      expect(find.text('Sources'), findsOneWidget);
+      await tester.tap(find.text('Sources'));
       await tester.pumpAndSettle();
       expect(find.text('usb › ep1.mkv'), findsOneWidget);
       await tester.tap(find.text('nas › ep1.mkv'));
@@ -182,7 +182,7 @@ void main() {
       );
       await openSettings(tester);
       expect(find.text('Playback speed'), findsOneWidget);
-      expect(find.text('Copy'), findsNothing);
+      expect(find.text('Sources'), findsNothing);
     });
   });
 

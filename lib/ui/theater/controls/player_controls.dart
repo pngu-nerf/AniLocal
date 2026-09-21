@@ -302,7 +302,7 @@ class SettingsControl extends StatelessWidget {
                   ),
                 ),
             ],
-            child: const Text('Copy'),
+            child: const Text('Sources'),
           ),
       ],
     );

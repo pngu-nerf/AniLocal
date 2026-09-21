@@ -217,11 +217,10 @@ void main() {
         final e = await ep3();
         expect(e.fileRef, '${folderB.path}/Cowboy Bebop - 03.mkv');
         expect(e.pinnedSourceFolder, folderB.path);
-        expect(e.pinnedSourceRelativePath, isNull);
-        expect(
-          e.isPinned(e.sources.firstWhere((s) => s.folderPath == folderB.path)),
-          isTrue,
-        );
+        // Resolved to the copy it selected, so exactly one copy reads as
+        // pinned (two same-folder copies both read as chosen before).
+        expect(e.pinnedSourceRelativePath, 'Cowboy Bebop - 03.mkv');
+        expect(e.sources.where(e.isPinned).toList(), hasLength(1));
       },
     );
 

@@ -22,6 +22,13 @@ import '../domain/models/skip_range.dart';
 /// far before the end keeps completion an event only playback can produce.
 const Duration kEndOfFileGuard = Duration(milliseconds: 750);
 
+/// How close to the duration a `completed` must land to count as the episode
+/// ENDING rather than the stream dying. A real ending is within a second or
+/// so (the outro seek stops [kEndOfFileGuard] short; a VBR duration estimate
+/// can be off by one); a drive pulled mid-play reports EOF wherever the
+/// buffer ran dry, minutes from the end.
+const Duration kCompletionTolerance = Duration(seconds: 5);
+
 /// Where an outro skip should seek, or null when it should do nothing.
 ///
 /// The target is the window's end, clamped to [duration] − [kEndOfFileGuard]

@@ -301,7 +301,7 @@ void main() {
         _s(minutes: 4),
         reason: 'the resume point survives the fall-through',
       );
-      expect(rig.session.controls.value.notice, contains('nas'));
+      expect(rig.session.controls.value.notice, contains('source in nas'));
       expect(rig.session.controls.value.errorMessage, isNull);
       expect(rig.advanced, isEmpty, reason: 'same episode, not the next');
 
@@ -317,6 +317,132 @@ void main() {
       expect(rig.player.opened.last.uri, a.fileRef);
       expect(rig.session.controls.value.errorMessage, isNull);
     });
+
+    test('"completed" far from the end is a dead stream: no advance; the next '
+        'copy at the same place, or the error', () async {
+      const a = EpisodeSource(
+        fileRef: '/usb/ep1.mkv',
+        folderPath: '/usb',
+        folderSortOrder: 0,
+        relativePath: 'ep1.mkv',
+      );
+      const b = EpisodeSource(
+        fileRef: '/nas/ep1.mkv',
+        folderPath: '/nas',
+        folderSortOrder: 1,
+        relativePath: 'ep1.mkv',
+      );
+      final ep1 = Episode(
+        number: 1,
+        anchoredNumber: 1,
+        seriesId: 7,
+        fileRef: a.fileRef,
+        sources: const [a, b],
+      );
+      final rig = _Rig(episodes: [ep1, _episode(2)], refetch: (_) async => ep1);
+      rig.session.start();
+      await Future<void>.delayed(
+        Duration.zero,
+      ); // context (next, auto-play) loaded
+      rig.player.emitDuration(_s(minutes: 24));
+      rig.player.emitPosition(_s(seconds: 40));
+      // The drive is pulled: mpv reports EOF where the buffer ran dry.
+      rig.player.emitCompleted();
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        rig.advanced.map((e) => e.anchoredNumber),
+        isNot(contains(2)),
+        reason: 'not an ending',
+      );
+      expect(rig.player.opened.last.uri, b.fileRef, reason: 'fell through');
+      expect(rig.player.opened.last.start, _s(seconds: 40));
+
+      // Single-copy episode: the error, with Retry, still no advance.
+      final rig2 = _Rig(episodes: [_episode(1), _episode(2)]);
+      rig2.session.start();
+      await Future<void>.delayed(Duration.zero);
+      rig2.player.emitDuration(_s(minutes: 24));
+      rig2.player.emitPosition(_s(minutes: 10));
+      rig2.player.emitCompleted();
+      await Future<void>.delayed(Duration.zero);
+      expect(rig2.advanced, isEmpty);
+      expect(rig2.session.controls.value.errorMessage, contains('600s of'));
+      expect(rig2.player.opened, hasLength(1));
+    });
+
+    test('Retry after an advance re-opens the episode that is CURRENT, where '
+        'it was, and tells the host', () async {
+      final rig = _Rig(
+        episodes: [_episode(1), _episode(2)],
+        refetch: (e) async => e,
+      );
+      rig.session.start();
+      await Future<void>.delayed(
+        Duration.zero,
+      ); // context (next, auto-play) loaded
+      rig.player.emitDuration(_s(minutes: 24));
+      rig.player.emitPosition(_s(minutes: 24) - _s(seconds: 1));
+      rig.player.emitCompleted(); // a real ending → episode 2
+      await Future<void>.delayed(Duration.zero);
+      expect(rig.advanced.last.anchoredNumber, 2);
+      rig.player.emitDuration(_s(minutes: 24));
+      rig.player.emitPosition(_s(minutes: 3));
+      rig.player.emitError('Cannot read /show/2.mkv');
+      rig.advanced.clear();
+      await rig.session.retry();
+      expect(
+        rig.player.opened.last.uri,
+        '/show/2.mkv',
+        reason: 'the advanced episode, not the one before',
+      );
+      expect(rig.player.opened.last.start, _s(minutes: 3));
+      expect(rig.advanced.last.anchoredNumber, 2, reason: 'rail told');
+    });
+
+    test(
+      'switching to a good source after a corrupted one keeps the place',
+      () async {
+        const a = EpisodeSource(
+          fileRef: '/usb/ep1.mkv',
+          folderPath: '/usb',
+          folderSortOrder: 0,
+          relativePath: 'ep1.mkv',
+        );
+        const b = EpisodeSource(
+          fileRef: '/nas/ep1.mkv',
+          folderPath: '/nas',
+          folderSortOrder: 1,
+          relativePath: 'ep1.mkv',
+        );
+        Episode ep({String? pinned}) => Episode(
+          number: 1,
+          anchoredNumber: 1,
+          seriesId: 7,
+          fileRef: pinned == '/nas' ? b.fileRef : a.fileRef,
+          sources: const [a, b],
+          pinnedSourceFolder: pinned,
+          pinnedSourceRelativePath: pinned == null ? null : 'ep1.mkv',
+          resumePosition: _s(minutes: 8),
+        );
+        String? pinnedNow;
+        final rig = _Rig(
+          episodes: [ep()],
+          refetch: (_) async => ep(pinned: pinnedNow),
+        );
+        rig.session.start();
+        // Pin the (corrupted) usb copy: its open fails at position 0.
+        pinnedNow = '/usb';
+        await rig.session.switchSource(a);
+        rig.player.emitError('Cannot open /usb/ep1.mkv');
+        await Future<void>.delayed(Duration.zero);
+        expect(rig.session.controls.value.errorMessage, isNotNull);
+        // Now the good one: the place is the 8:00 the failed open was asked for.
+        pinnedNow = '/nas';
+        await rig.session.switchSource(b);
+        expect(rig.player.opened.last.uri, b.fileRef);
+        expect(rig.player.opened.last.start, _s(minutes: 8));
+      },
+    );
 
     test(
       'a PINNED copy that fails is not switched behind the user\'s back',

@@ -100,7 +100,7 @@ void main() {
     );
     expect(
       scanningTitle(const SyncProgress(done: 120, total: 600, phase: 'skips')),
-      'Skips 120/600',
+      'Identifying skips 120/600',
     );
     // Every character of every status paints as a glyph, not a hole.
     for (final s in [

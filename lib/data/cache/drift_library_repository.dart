@@ -365,7 +365,10 @@ class DriftLibraryRepository
         if (i >= 0) {
           activeIdx = i;
           pinnedFolder = ov.folderPath;
-          pinnedRelativePath = ov.relativePath;
+          // A legacy folder pin names no file; the copy it resolved to is
+          // the pinned one, so exactly one copy reads as chosen.
+          pinnedRelativePath =
+              ov.relativePath ?? entries[i].source.relativePath;
         }
       }
 

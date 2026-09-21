@@ -560,7 +560,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     final pinnable = multi && !(_series ?? widget.series).pending;
     final subtitle = [
       _basename(e.fileRef),
-      if (multi) '${e.sources.length} copies · playing ${e.fileRef}',
+      if (multi) '${e.sources.length} sources · playing ${e.fileRef}',
       if (!e.watched && e.resumePosition > Duration.zero)
         '▸ resume ${formatDuration(e.resumePosition)}',
     ].join('\n');
@@ -642,7 +642,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           MenuItemButton(
             leadingIcon: const Icon(Icons.layers_outlined, size: 18),
             onPressed: () => _chooseSource(e),
-            child: const Text('Choose copy…'),
+            child: const Text('Choose source…'),
           ),
       ],
     );
