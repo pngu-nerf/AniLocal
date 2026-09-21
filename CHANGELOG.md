@@ -12,6 +12,9 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- A stream that dies mid-play (a drive pulled while an episode runs) shows
+  the error with Retry and stays on that episode instead of advancing; Retry
+  resumes where playback stopped, on the episode that is actually current.
 - **Automatic copies fail over.** When the copy an episode plays from cannot
   be opened (an unplugged drive, a 0-byte download), an Automatic episode
   plays the next copy at the same position and says which folder it came
@@ -48,9 +51,11 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   `tool/perf.sh`; `docs/runtime-walkthrough.md`.
 
 ### Changed
-- A scan identifies shows in batches of ten and shows them as each batch
-  lands; the skip lookups — the slow part — run as their own phase after
-  every show is on screen, with `Skips n/N` progress. Folder health is
+- The player's menu section is "Sources"; the show page says "Choose
+  source…" and "N sources". "Copies" is retired from the vocabulary.
+- A scan identifies shows in batches of four — the cover-download width — so
+  the grid fills in show by show; the skip lookups — the slow part — run as their own phase after
+  every show is on screen, with `Identifying skips n/N` progress. Folder health is
   probed again when a scan ends, so a drive pulled mid-scan is greyed by
   that scan.
 - The header shows its title and tabs on the first frame (a notification

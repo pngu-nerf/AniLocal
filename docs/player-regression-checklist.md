@@ -26,7 +26,7 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] Video renders via media_kit `Video` — **no tint/effect/overlay on the texture**.
 - [ ] **A file that cannot be opened says so** — "Couldn't play this episode" with mpv's line under it, centred over the frame; the line is also in Copy diagnostics. Never a silent black frame. A drive unplugged mid-playback lands here too, and Back still works.
 - [ ] **Anything pushed over the player pauses it, and its going away resumes it** — Settings, a dialog, Licences. Resume happens only if it was PLAYING when covered (`pauseForObscured` / `resumeIfObscurePaused`); a viewer who had paused stays paused. The header is intact after.
-- [ ] **⚙ › Copy** lists an episode's copies (`folder › file`) for a show in several folders, with Automatic; choosing one re-opens the same episode on that file at the SAME position (even if the episode is marked watched) and pins it — the same pin the show page's "Choose copy…" writes. Absent for a single-copy episode.
+- [ ] **⚙ › Sources** lists an episode's sources (`folder › file`) for a show in several folders, with Automatic; choosing one re-opens the same episode on that file at the SAME position (even if the episode is marked watched) and pins it — the same pin the show page's "Choose copy…" writes. Absent for a single-copy episode.
 - [ ] Controls overlay drawn by media_kit's `Video(controls:)` builder (same builder windowed **and** fullscreen).
 
 **Series-info zone** (`series_info_zone.dart`)
@@ -102,9 +102,9 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 
 - [ ] **Cmd-Q commits the position, awaited.** Seek to a distinctive time, quit at once, relaunch → Continue watching shows that time. The runner asks Dart before terminating (`applicationShouldTerminate` → the quit hooks); the 1-second save timer and the `onInactive` save are no longer the only writers.
 - [ ] **A placeholder played mid-scan keeps its progress** once the scan identifies it — the save resolves the real series by file at write time.
-- [ ] **Nothing advances without playback.** A `completed` from a file that never played (0-byte, a vanished drive → EOF at 0) is a FAILED OPEN, never an auto-advance: the guard is a duration and a position past the phantom zero. The viewer stays on the episode.
+- [ ] **Nothing advances without playback, and nothing advances from a dead stream.** A `completed` from a file that never played (0-byte, a vanished drive → EOF at 0) is a FAILED OPEN; a `completed` farther than `kCompletionTolerance` (5 s) from the duration is a stream that DIED (a drive pulled mid-play makes mpv report EOF where its buffer ran dry). Neither advances: an Automatic episode falls through to another source at that position, otherwise the error shows with Retry. Only a completion at the end advances.
 - [ ] **A failed open on an Automatic episode falls through** to the next copy at the same position, with *Playing the copy in <folder> instead* over the frame for a few seconds; each copy tried once. A PINNED episode is never switched — it shows the error.
-- [ ] **The error notice has Retry**, which re-opens the episode's OWN copy where it was (every copy fair again). An error mid-play is cleared by the next progress event.
+- [ ] **The error notice has Retry**, which re-reads the CURRENT episode (the one an advance may have moved to — `advance()` updates `_origin`) and re-opens it where it was, with every source fair again and the rail told. An error mid-play is cleared by the next progress event. A source picked after a corrupted one keeps the place (`_lastPos` when the failed open left `_position` at zero).
 
 ## E. States
 - [ ] **Playing** — controls auto-hide after 3s; cursor hides with them.
