@@ -37,6 +37,13 @@ const Duration kCompletionTolerance = Duration(seconds: 5);
 /// that is still present when probed is left to buffer.
 const Duration kStallTolerance = Duration(seconds: 6);
 
+/// The largest jump between two position reports that still looks like
+/// PLAYBACK. Position events arrive several times a second; a seek jumps
+/// farther, a stuck stream repeats the same value. An error is cleared only
+/// after two consecutive steps of at most this — a seek on a dead stream
+/// used to wipe the notice the stall watchdog had just raised.
+const Duration kPlaybackStepMax = Duration(seconds: 2);
+
 /// Where an outro skip should seek, or null when it should do nothing.
 ///
 /// The target is the window's end, clamped to [duration] − [kEndOfFileGuard]

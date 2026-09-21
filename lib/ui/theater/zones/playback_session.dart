@@ -445,6 +445,7 @@ class PlaybackSession {
     _shown = episode;
     _position = Duration.zero;
     _lastPos = Duration.zero;
+    _progressStreak = 0;
     _duration = Duration.zero;
     _lastSaved = null;
     _markedWatched = false;
@@ -520,11 +521,22 @@ class PlaybackSession {
     final previous = _lastPos;
     _lastPos = pos;
     _position = pos;
-    // Progress after an error means the engine recovered (a transient decoder
+    // PLAYBACK after an error means the engine recovered (a transient decoder
     // line, a network hiccup): the notice was about a moment that has passed.
-    if (_error != null && pos > Duration.zero) {
-      _error = null;
-      _publish();
+    // Playback, not a position report: a seek on a dead stream reports its
+    // target, and a stuck stream re-reports the same value, and either used
+    // to wipe the notice the stall watchdog had just raised — so it flickered
+    // and came back six seconds later. Two consecutive small forward steps.
+    if (_error != null) {
+      final step = pos - previous;
+      final looksLikePlayback =
+          step > Duration.zero && step <= kPlaybackStepMax;
+      _progressStreak = looksLikePlayback ? _progressStreak + 1 : 0;
+      if (_progressStreak >= 2) {
+        _error = null;
+        _progressStreak = 0;
+        _publish();
+      }
     }
     // Only continuous playback may cross the watched-threshold. A seek (paused
     // or a jump while playing) updates the resume position but never marks.
@@ -601,8 +613,12 @@ class PlaybackSession {
 
   void _setError(String message) {
     _error = message;
+    _progressStreak = 0;
     _publish();
   }
+
+  /// Consecutive playback-sized forward steps seen while an error is up.
+  int _progressStreak = 0;
 
   // ---- watched --------------------------------------------------------
 

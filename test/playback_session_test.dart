@@ -588,14 +588,39 @@ void main() {
       },
     );
 
-    test('an error mid-play is cleared by the next progress', () {
+    test('an error mid-play is cleared by PLAYBACK — not by a repeated '
+        'position, not by a seek', () {
       final rig = _Rig(episodes: [_episode(1)]);
       rig.session.start();
       rig.player.emitDuration(_s(minutes: 24));
       rig.player.emitPosition(_s(minutes: 3));
       rig.player.emitError('vd: dropped a frame');
       expect(rig.session.controls.value.errorMessage, isNotNull);
+      // A stuck stream re-reports the same position: not playback.
+      rig.player.emitPosition(_s(minutes: 3));
+      expect(rig.session.controls.value.errorMessage, isNotNull);
+      // One forward step, then a stall report: the streak starts over. A
+      // step either side of a stall is not two steps of playback.
       rig.player.emitPosition(_s(minutes: 3, seconds: 1));
+      rig.player.emitPosition(_s(minutes: 3, seconds: 1));
+      rig.player.emitPosition(_s(minutes: 3, seconds: 2));
+      expect(
+        rig.session.controls.value.errorMessage,
+        isNotNull,
+        reason: 'the stall between them broke the streak',
+      );
+      // The viewer seeks past the buffer on a dead stream: the target is
+      // reported, but nothing plays. Not playback.
+      rig.player.emitPosition(_s(minutes: 12));
+      expect(rig.session.controls.value.errorMessage, isNotNull);
+      // Two small forward steps: the engine is playing again.
+      rig.player.emitPosition(_s(minutes: 12, seconds: 1));
+      expect(
+        rig.session.controls.value.errorMessage,
+        isNotNull,
+        reason: 'one step is not yet playback',
+      );
+      rig.player.emitPosition(_s(minutes: 12, seconds: 2));
       expect(
         rig.session.controls.value.errorMessage,
         isNull,

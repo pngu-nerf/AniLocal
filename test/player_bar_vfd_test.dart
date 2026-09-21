@@ -222,6 +222,18 @@ void main() {
         ),
       );
       expect(find.text('Couldn’t play this episode'), findsOneWidget);
+      // A backing behind the error, so it reads over a frozen frame too.
+      expect(
+        find.ancestor(
+          of: find.text('Couldn’t play this episode'),
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is DecoratedBox &&
+                (w.decoration as BoxDecoration).color == Xp.scrimHeavy,
+          ),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(findXpLabel('Retry'));
       await tester.pump();
       expect(retries, 1);

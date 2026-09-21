@@ -469,40 +469,52 @@ class PlaybackErrorNotice extends StatelessWidget {
             ),
           );
         }
+        // A dark backing: a failed OPEN leaves the frame black, but a stream
+        // that died mid-play leaves its last picture, and the notice used to
+        // sit on it with nothing behind.
         return Padding(
           padding: const EdgeInsets.all(Xp.spaceXl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Couldn’t play this episode',
-                style: TextStyle(
-                  color: Xp.error,
-                  fontSize: Xp.fontSizeTitle,
-                  fontWeight: FontWeight.w600,
-                ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Xp.scrimHeavy,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(Xp.spaceL),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Couldn’t play this episode',
+                    style: TextStyle(
+                      color: Xp.error,
+                      fontSize: Xp.fontSizeTitle,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: Xp.spaceS),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Xp.textDim,
+                      fontSize: Xp.fontSizeCaption,
+                    ),
+                  ),
+                  if (onRetry != null) ...[
+                    const SizedBox(height: Xp.spaceM),
+                    XpButton(
+                      lit: true,
+                      icon: Icons.refresh,
+                      label: 'Retry',
+                      onPressed: onRetry,
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: Xp.spaceS),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Xp.textDim,
-                  fontSize: Xp.fontSizeCaption,
-                ),
-              ),
-              if (onRetry != null) ...[
-                const SizedBox(height: Xp.spaceM),
-                XpButton(
-                  lit: true,
-                  icon: Icons.refresh,
-                  label: 'Retry',
-                  onPressed: onRetry,
-                ),
-              ],
-            ],
+            ),
           ),
         );
       },
