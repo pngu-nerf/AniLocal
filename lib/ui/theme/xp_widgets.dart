@@ -448,7 +448,7 @@ class XpTitleBar extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Fixed inset clearing the traffic lights, which float over the bar.
-        const SizedBox(width: kTrafficLightInset),
+        SizedBox(width: kTrafficLightInset),
         // Decorative: IgnorePointer so the chassis under the logo stays
         // draggable (a text render box would otherwise absorb the pointer).
         Center(

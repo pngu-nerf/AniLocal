@@ -7,6 +7,7 @@ import 'package:anilocal/data/folders/folder_access.dart'
     show FolderAccess, kFolderProbeTimeout;
 
 import 'package:anilocal/data/scanner/folder_scanner.dart' show FolderScanner;
+import 'package:anilocal/domain/paths.dart';
 
 import '../../diagnostics/app_log.dart';
 
@@ -231,20 +232,17 @@ Future<String?> resolveFolderPath({
 ) {
   String? best;
   for (final f in folderPaths) {
-    if (absPath == f || absPath.startsWith('$f/')) {
-      if (best == null || f.length > best.length) best = f;
+    if (isUnderPath(absPath, f) && (best == null || f.length > best.length)) {
+      best = f;
     }
   }
   if (best == null) {
-    final i = absPath.lastIndexOf('/');
-    return i <= 0
-        ? (folderPath: '', relativePath: absPath)
-        : (
-            folderPath: absPath.substring(0, i),
-            relativePath: absPath.substring(i + 1),
-          );
+    final split = splitLast(absPath);
+    return (folderPath: split.parent, relativePath: split.name);
   }
-  final relative = absPath == best ? '' : absPath.substring(best.length + 1);
+  final relative = absPath.length <= best.length
+      ? ''
+      : absPath.substring(best.length + 1);
   return (folderPath: best, relativePath: relative);
 }
 
@@ -253,13 +251,25 @@ Future<String?> resolveFolderPath({
 /// root itself → `''`). Used to record [LibraryFolders.volumeSubpath] when
 /// binding a folder to its volume.
 String? volumeSubpathOf(String folderPath, String mountPoint) {
-  if (folderPath == mountPoint) return '';
-  if (folderPath.startsWith('$mountPoint/')) {
-    return folderPath.substring(mountPoint.length + 1);
-  }
   // Not under the reported mount: NULL, and the caller must not bind. This
   // used to return '' ("treat as the root"), which persisted a binding that
-  // resolved the library folder to the whole volume after a remount — the
-  // next scan walked the entire drive.
-  return null;
+  // resolved the library folder to the whole volume after a remount.
+  if (!isUnderPath(folderPath, mountPoint)) return null;
+  return folderPath.length <= mountPoint.length
+      ? ''
+      : folderPath.substring(mountPoint.length + 1);
+}
+
+/// The [VolumeResolver] for a platform with no volume-identity mechanism yet
+/// (Windows, Linux): nothing is ever bound, so a folder is its stored path and
+/// a drive that changes its mount point reads as missing until a native
+/// resolver exists (volume GUID on Windows, `findmnt` on Linux — ROADMAP).
+class NoVolumeResolver implements VolumeResolver {
+  const NoVolumeResolver();
+
+  @override
+  Future<VolumeInfo?> infoForPath(String path) async => null;
+
+  @override
+  Future<String?> mountPointForVolumeId(String volumeId) async => null;
 }

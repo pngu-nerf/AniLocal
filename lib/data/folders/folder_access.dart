@@ -81,6 +81,17 @@ abstract interface class FolderAccess {
   Future<FolderAccessResult> ensureAccess(String folderPath);
 }
 
+/// The [FolderAccess] for a platform without a Files-and-Folders gate
+/// (Windows, Linux): every folder is not-applicable — no probe, no banner, no
+/// Settings flow. The scanner's own reads decide what is readable there.
+class PermissiveFolderAccess implements FolderAccess {
+  const PermissiveFolderAccess();
+
+  @override
+  Future<FolderAccessResult> ensureAccess(String folderPath) async =>
+      const FolderAccessResult.notApplicable();
+}
+
 /// The TCC category root to probe for [path], plus a human label — or null when
 /// [path] is not under a TCC-protected category (freely readable, no prompt).
 /// Pure and testable; the home dir is injected.

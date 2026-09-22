@@ -1,3 +1,5 @@
+import 'dart:io' show Platform, exit;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,8 +11,10 @@ import 'package:flutter/services.dart';
 /// but deliberately leave the close/minimize/fullscreen buttons in their default
 /// position; they now float over the top-left of our content. This is the
 /// footprint of those three buttons plus a little breathing room, so our leading
-/// content (app glyph, back button) indents clear of them.
-const double kTrafficLightInset = 78;
+/// content (app glyph, back button) indents clear of them. Zero on any other
+/// platform: there the runner keeps its native frame (and its own controls), so
+/// nothing floats over the bar.
+double get kTrafficLightInset => WindowChrome.isNative ? 78 : 0;
 
 /// The Dart end of the runner's window channel. Because we hid the standard
 /// title bar, the window can no longer be moved/zoomed by grabbing a system
@@ -19,12 +23,29 @@ const double kTrafficLightInset = 78;
 abstract final class WindowChrome {
   static const MethodChannel _channel = MethodChannel('anilocal/window');
 
+  /// Whether a runner implements this channel. Only the macOS runner does
+  /// today; on any other platform every call here is a no-op, the way
+  /// `MediaRemote` already behaves — the channel would otherwise raise
+  /// `MissingPluginException` on every drag of the top bar. The HOST OS, not
+  /// `defaultTargetPlatform` (which flutter_test reports as Android, and the
+  /// header tests and goldens run against the real macOS chrome). A test that
+  /// wants the other branch sets [debugNativeOverride].
+  static bool get isNative => debugNativeOverride ?? Platform.isMacOS;
+
+  /// Test-only: pretend to be (or not be) on the platform with the runner.
+  @visibleForTesting
+  static bool? debugNativeOverride;
+
+  static Future<void> _invoke(String method, [Object? argument]) async {
+    if (!isNative) return;
+    await _channel.invokeMethod<void>(method, argument);
+  }
+
   /// Begin a native window move-drag from the current mouse event.
-  static Future<void> startDrag() => _channel.invokeMethod<void>('startDrag');
+  static Future<void> startDrag() => _invoke('startDrag');
 
   /// Toggle zoom (maximize / restore) — the title-bar double-click behavior.
-  static Future<void> toggleMaximize() =>
-      _channel.invokeMethod<void>('toggleMaximize');
+  static Future<void> toggleMaximize() => _invoke('toggleMaximize');
 
   /// **THE** fullscreen truth: whether the window is fullscreen right now,
   /// reported by the runner every time it changes (see
@@ -50,7 +71,7 @@ abstract final class WindowChrome {
   /// Enter or leave borderless fullscreen. Fire-and-forget: the resulting state
   /// comes back on [fullscreen], so callers never set it themselves.
   static Future<void> setFullscreen(bool value) =>
-      _channel.invokeMethod<void>('setFullscreen', value);
+      _invoke('setFullscreen', value);
 
   /// Declare whether a surface that can EXIT fullscreen is on screen.
   ///
@@ -63,7 +84,7 @@ abstract final class WindowChrome {
   /// Turning this off while fullscreen is active exits immediately (enforced in
   /// the runner), so a player that disappears can't strand the window.
   static Future<void> setFullscreenAllowed(bool value) =>
-      _channel.invokeMethod<void>('setFullscreenAllowed', value);
+      _invoke('setFullscreenAllowed', value);
 
   static bool _initialized = false;
 
@@ -117,7 +138,12 @@ abstract final class WindowChrome {
   /// Quit the app the way Cmd-Q does: through the runner, so the quit hooks
   /// run first. Used by the library's "reset cache" flow, which needs the
   /// database closed and the process gone before it can reopen empty.
-  static Future<void> quit() => _channel.invokeMethod<void>('quit');
+  static Future<void> quit() async {
+    if (isNative) return _channel.invokeMethod<void>('quit');
+    // No runner to ask: run the hooks ourselves, then end the process.
+    await runQuitHooks();
+    exit(0);
+  }
 }
 
 /// Wraps [child] so a click-drag inside it moves the window and a double-click
@@ -131,6 +157,9 @@ class WindowDragArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A native frame does the moving where there is one; wrapping would only
+    // swallow pans for nothing.
+    if (!WindowChrome.isNative) return child;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onPanStart: (_) => WindowChrome.startDrag(),

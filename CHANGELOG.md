@@ -56,6 +56,14 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   `tool/perf.sh`; `docs/runtime-walkthrough.md`.
 
 ### Changed
+- **Minimum macOS is 12 (Monterey).** Flutter 3.47 dropped 10.15 and 11 to
+  support Xcode 27; AniLocal builds on Flutter 3.47.5 and the renderer under
+  the video is the engine's default (Impeller).
+- The code stops assuming macOS: on Windows or Linux the window channel is a
+  no-op and the runner's own frame moves the window, folder access is not
+  gated, volumes are not bound, and paths with either separator split
+  correctly. macOS behaviour is unchanged. Windows and Linux runners build in
+  CI; nothing is packaged for them yet.
 - One word per button: every "try that again" button says **Retry** (the
   show page said "Try again", the player "Retry") and the scan button says
   **Scan** everywhere (one said "Scan again").

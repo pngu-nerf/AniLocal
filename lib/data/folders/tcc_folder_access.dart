@@ -15,7 +15,11 @@ import 'folder_access.dart';
 /// category within a session (provocation stays lazy + once).
 class TccFolderAccess implements FolderAccess {
   TccFolderAccess({String? home})
-    : _home = home ?? (Platform.environment['HOME'] ?? '');
+    : _home =
+          home ??
+          Platform.environment['HOME'] ??
+          Platform.environment['USERPROFILE'] ??
+          '';
 
   final String _home;
   final Set<String> _confirmed = {};

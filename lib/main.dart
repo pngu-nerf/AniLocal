@@ -183,7 +183,10 @@ Future<void> main() async {
   // library volume across remounts (different /Volumes name) by its UUID, so
   // file identity stays stable. Sharing the instance also shares its mount
   // memoization. Internal-disk folders never touch it (their path is stable).
-  final VolumeResolver volumeResolver = DiskutilVolumeResolver();
+  // Platform seam: the mechanism is macOS's; elsewhere nothing is bound yet.
+  final VolumeResolver volumeResolver = Platform.isMacOS
+      ? DiskutilVolumeResolver()
+      : const NoVolumeResolver();
   // ONE cross-map instance: shared by the AniSkip id backfill and by Jikan's
   // MAL -> AniList enrichment, so the 5.8MB source is fetched and parsed once.
   // ONE HTTP client for the whole app, and it is the one that times out.
@@ -364,7 +367,10 @@ Future<void> main() async {
   ];
 
   const FolderPicker picker = FileSelectorFolderPicker();
-  final FolderAccess folderAccess = TccFolderAccess();
+  // Platform seam: TCC is macOS's; elsewhere there is nothing to grant.
+  final FolderAccess folderAccess = Platform.isMacOS
+      ? TccFolderAccess()
+      : const PermissiveFolderAccess();
 
   // Shared not-readable state, split by KIND so each surfaces the right
   // recovery: denied -> Settings/Files-and-Folders banner; missing (unplugged

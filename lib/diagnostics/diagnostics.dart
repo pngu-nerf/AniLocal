@@ -51,19 +51,29 @@ abstract final class Diagnostics {
   /// macOS username in every path; a report is written to be pasted into a
   /// public issue, so the one identifier we can strip, we strip. Folder names
   /// under it stay — they are what the report is about.
-  static String redactHome(String text) {
-    final home = Platform.environment['HOME'];
+  static String redactHome(String text, {Map<String, String>? environment}) {
+    final env = environment ?? Platform.environment;
+    // HOME on macOS/Linux; USERPROFILE is Windows' name for the same thing.
+    final home = env['HOME'] ?? env['USERPROFILE'];
     if (home == null || home.isEmpty) return text;
     return text.replaceAll(home, '~');
   }
 
-  /// Reveal the log folder in Finder. macOS only by construction (`open`);
-  /// elsewhere this is a no-op rather than an error.
+  /// Reveal the log file in the platform's file browser: Finder (selected),
+  /// Explorer (selected), or the folder in whatever handles `xdg-open`. An
+  /// unknown platform is a no-op rather than an error.
   static Future<void> revealLogFolder() async {
     final path = AppLog.filePath;
-    if (path == null || !Platform.isMacOS) return;
+    if (path == null) return;
+    final (String, List<String>)? command = switch (Platform.operatingSystem) {
+      'macos' => ('open', ['-R', path]),
+      'windows' => ('explorer.exe', ['/select,', path]),
+      'linux' => ('xdg-open', [File(path).parent.path]),
+      _ => null,
+    };
+    if (command == null) return;
     try {
-      await Process.run('open', ['-R', path]);
+      await Process.run(command.$1, command.$2);
     } on ProcessException catch (e) {
       AppLog.warn('Could not reveal log folder', error: e);
     }
