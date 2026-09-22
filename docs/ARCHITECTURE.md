@@ -66,7 +66,11 @@ program and what is parked: **`docs/multi-source-plan.md`**.
 | **App wiring / who-implements-what** | `lib/main.dart` — the composition root. Read it; it's short and heavily commented. |
 | **Domain models** (Series, Episode, Titles, SkipRange, ShowPreferences, …) | `lib/domain/models/` |
 | **Repository interfaces** (the UI's whole API surface) | `lib/domain/repositories/` (8: library, watch-state, source-selection, watch-order, missing-episodes, show-preferences, settings, fix-match) |
-| **The database / tables / migrations** | `lib/data/cache/cache_database.dart` (Drift, **schema v22**; 11 tables + 3 indexes; migration comments narrate v2→v22) |
+| **The database / tables** | `lib/data/cache/cache_database.dart` (Drift, **schema v22**; 11 tables + 3 indexes) |
+| **Migrations** | `lib/data/cache/cache_migrations.dart` — a `part` of the database file: the whole v2→v22 ladder as `upgradeCache`, one transaction, comments narrate each step |
+| **The one error state, the one dim message, the one snackbar voice** | `lib/ui/widgets/xp_error_state.dart` (`XpErrorState`), `xp_message.dart` (`XpMessage`), `notices.dart` (`showNotice`/`showFailure`/`showWriteFailed`, `kNotice*` durations), `copy_diagnostics.dart` |
+| **The library page's whole-page states** | `lib/ui/library/library_states.dart` (`NoSearchResults`, `LibraryLoadError`, `LibraryEmptyState`) |
+| **The show page's list logic** (search match, rows) | `lib/ui/series_detail/episode_rows.dart` — pure, tested without a widget |
 | **Cache → domain mapping + all reads/writes** | `lib/data/cache/drift_library_repository.dart` (one class implements six of the interfaces — see below) |
 | **The read path** (what a screen loads) | `LibraryRepository.snapshot()` → `LibrarySnapshot` (`lib/domain/models/library_snapshot.dart`): ONE materialisation per library reload — series, episodes, continue-watching, up-next, unmatched count, hidden, folder count. Single-show reads (`episodesFor`, `nextEpisode`, `seriesById`) are indexed per-series queries, independent of library size. Numbers in `docs/performance.md` |
 | **Scan progress, Stop, "is a scan running"** | `lib/ui/scan_control.dart` (`ScanControl`, one per app, read by every header) ← `SyncProgress`/`SyncCancellation` in `lib/domain/models/sync_control.dart` |

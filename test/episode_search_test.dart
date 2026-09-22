@@ -1,4 +1,4 @@
-import 'package:anilocal/ui/series_detail_screen.dart';
+import 'package:anilocal/ui/series_detail/episode_rows.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
