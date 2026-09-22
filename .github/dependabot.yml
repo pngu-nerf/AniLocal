@@ -7,6 +7,12 @@ updates:
     groups:
       drift:
         patterns: ["drift", "drift_dev"]
+    ignore:
+      # 2.16 needs analyzer >=13.1 -> meta ^1.18.3; the pinned Flutter 3.44.1
+      # ships meta 1.18.0, so the bump cannot resolve. Lift when the Flutter
+      # pin in .github/workflows/ci.yml moves (ROADMAP, distribution track).
+      - dependency-name: "build_runner"
+        versions: ["2.16.x"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

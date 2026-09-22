@@ -9,6 +9,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The token only reads the checkout; nothing here pushes, comments or
+# releases. Stated so an org-level default can never widen it.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: format · analyze · test
@@ -39,6 +44,8 @@ jobs:
         with:
           name: lcov
           path: coverage/lcov.info
+          # A coverage report is useful for days, not the 90-day default.
+          retention-days: 14
 
   build:
     # Separate job: `pod install` curls the libmpv xcframeworks on a cold
