@@ -4,9 +4,7 @@ import 'package:anilocal/domain/models/episode_list_row.dart';
 import 'package:anilocal/domain/models/episode_slot.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// A present episode anchored at [n].
-Episode _ep(int n) =>
-    Episode(number: n, fileRef: 'f$n.mkv', seriesId: 1, anchoredNumber: n);
+import 'support/episodes.dart';
 
 /// Convenience: the (number, status) shape of computed slots.
 List<(int, EpisodeStatus)> _shape(List<EpisodeSlot> slots) => [
@@ -17,7 +15,7 @@ void main() {
   group('computeEpisodeSlots', () {
     test('M known: absent positions in 1..M are missing', () {
       final slots = computeEpisodeSlots(
-        present: [_ep(1), _ep(2), _ep(4)],
+        present: [testEpisode(1), testEpisode(2), testEpisode(4)],
         hidden: const {},
         episodeCount: 5,
       );
@@ -32,7 +30,7 @@ void main() {
 
     test('M unknown: only INTERIOR gaps, never beyond the highest owned', () {
       final slots = computeEpisodeSlots(
-        present: [_ep(3), _ep(5)],
+        present: [testEpisode(3), testEpisode(5)],
         hidden: const {},
         episodeCount: null,
       );
@@ -46,7 +44,7 @@ void main() {
 
     test('M unknown, single owned episode: no phantom gaps', () {
       final slots = computeEpisodeSlots(
-        present: [_ep(1)],
+        present: [testEpisode(1)],
         hidden: const {},
         episodeCount: null,
       );
@@ -55,7 +53,7 @@ void main() {
 
     test('specials (position <= 0) are present, never flagged missing', () {
       final slots = computeEpisodeSlots(
-        present: [_ep(0), _ep(1), _ep(2)],
+        present: [testEpisode(0), testEpisode(1), testEpisode(2)],
         hidden: const {},
         episodeCount: 2,
       );
@@ -68,7 +66,12 @@ void main() {
 
     test('present beyond M is kept (present), not gap-detected', () {
       final slots = computeEpisodeSlots(
-        present: [_ep(1), _ep(2), _ep(3), _ep(5)],
+        present: [
+          testEpisode(1),
+          testEpisode(2),
+          testEpisode(3),
+          testEpisode(5),
+        ],
         hidden: const {},
         episodeCount: 3,
       );
@@ -83,7 +86,7 @@ void main() {
 
     test('hidden positions become hidden slots (excluded from missing)', () {
       final slots = computeEpisodeSlots(
-        present: [_ep(1), _ep(2), _ep(4)],
+        present: [testEpisode(1), testEpisode(2), testEpisode(4)],
         hidden: const {3},
         episodeCount: 5,
       );
@@ -108,7 +111,7 @@ void main() {
         );
 
     test('a run of 2+ consecutive missing collapses to one bundle', () {
-      final r = rows([_ep(1)], const {}, 10);
+      final r = rows([testEpisode(1)], const {}, 10);
       expect(r[0], isA<PresentRow>());
       expect(r[1], isA<MissingBundleRow>());
       final bundle = r[1] as MissingBundleRow;
@@ -119,7 +122,7 @@ void main() {
     });
 
     test('an isolated missing episode is a single, not a bundle', () {
-      final r = rows([_ep(1), _ep(3)], const {}, 3);
+      final r = rows([testEpisode(1), testEpisode(3)], const {}, 3);
       expect(r.map((x) => x.runtimeType).toList(), [
         PresentRow,
         MissingSingleRow,
@@ -129,7 +132,11 @@ void main() {
     });
 
     test('multiple runs and singles interleave in order', () {
-      final r = rows([_ep(1), _ep(5), _ep(6), _ep(10)], const {}, 10);
+      final r = rows(
+        [testEpisode(1), testEpisode(5), testEpisode(6), testEpisode(10)],
+        const {},
+        10,
+      );
       expect(r.map((x) => x.runtimeType).toList(), [
         PresentRow, // 1
         MissingBundleRow, // 2-4
@@ -144,7 +151,7 @@ void main() {
 
     test('hiding mid-run re-groups: a hidden gap splits a bundle', () {
       // Missing would be 2,3,4,5,6,7; hide 4 and 5 → two separate bundles.
-      final r = rows([_ep(1), _ep(8)], const {4, 5}, 8);
+      final r = rows([testEpisode(1), testEpisode(8)], const {4, 5}, 8);
       expect(r.map((x) => x.runtimeType).toList(), [
         PresentRow, // 1
         MissingBundleRow, // 2-3
@@ -157,7 +164,7 @@ void main() {
 
     test('a hidden single between missing yields two singles', () {
       // Missing 2,4,5; hide 3 → single 2, bundle 4-5.
-      final r = rows([_ep(1), _ep(6)], const {3}, 6);
+      final r = rows([testEpisode(1), testEpisode(6)], const {3}, 6);
       expect(r.map((x) => x.runtimeType).toList(), [
         PresentRow, // 1
         MissingSingleRow, // 2
@@ -181,7 +188,11 @@ void main() {
         );
 
     test('counts in-range and out-of-range present episodes', () {
-      final t = tally([_ep(1), _ep(2), _ep(3), _ep(5)], const {}, 3);
+      final t = tally(
+        [testEpisode(1), testEpisode(2), testEpisode(3), testEpisode(5)],
+        const {},
+        3,
+      );
       expect(t.inRange, 3);
       expect(t.outOfRange, 1); // ep 5 beyond M=3
       expect(t.total, 3);
@@ -189,7 +200,7 @@ void main() {
 
     test('hidden in-range positions reduce the denominator', () {
       // Have 11 of 12, ep 12 missing → hide it → "11 of 11".
-      final present = [for (var n = 1; n <= 11; n++) _ep(n)];
+      final present = [for (var n = 1; n <= 11; n++) testEpisode(n)];
       final t = tally(present, const {12}, 12);
       expect(t.inRange, 11);
       expect(t.total, 11);
@@ -197,7 +208,7 @@ void main() {
     });
 
     test('unknown M yields a null total (indicator shows just N)', () {
-      final t = tally([_ep(1), _ep(2)], const {}, null);
+      final t = tally([testEpisode(1), testEpisode(2)], const {}, null);
       expect(t.inRange, 2);
       expect(t.total, isNull);
     });

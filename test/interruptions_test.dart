@@ -10,7 +10,6 @@ import 'package:anilocal/data/cache/series_identity.dart';
 import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/json_http.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
-import 'package:anilocal/data/metadata/metadata_provider.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
@@ -18,12 +17,8 @@ import 'package:anilocal/data/skip/skip_provider.dart';
 import 'package:anilocal/data/source_exception.dart';
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/episode_source.dart';
-import 'package:anilocal/domain/models/external_ids.dart';
 import 'package:anilocal/domain/models/folder_refused.dart';
 import 'package:anilocal/domain/models/metadata_failure.dart';
-import 'package:anilocal/domain/models/series.dart';
-import 'package:anilocal/domain/models/skip_range.dart';
-import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:anilocal/sync/source_health.dart';
 import 'package:drift/native.dart';
@@ -32,6 +27,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'support/fake_art.dart';
+import 'support/fake_metadata_provider.dart';
+import 'support/fake_skip_provider.dart';
 import 'support/graphql_request.dart';
 
 http.Response _page(List<Map<String, dynamic>> media) => http.Response(
@@ -64,82 +61,6 @@ MockClient _anilist() => MockClient((req) async {
   }
   return http.Response.bytes(kFakeJpeg, 200);
 });
-
-class _FakeProvider implements MetadataProvider {
-  _FakeProvider(this.token, {this.failure});
-
-  @override
-  final String token;
-  final MetadataFailure? failure;
-  int searchCalls = 0;
-
-  @override
-  String get displayName => token;
-  @override
-  String get idNamespace => token;
-  @override
-  bool get requiresClientId => false;
-  @override
-  String? get setupUrl => null;
-  @override
-  String? get setupInstructions => null;
-  @override
-  Future<bool> isConfigured() async => true;
-  @override
-  bool get isFallbackOnly => false;
-
-  @override
-  Future<List<Series>> searchCandidates(
-    String title, {
-    int perPage = 10,
-  }) async {
-    searchCalls++;
-    if (failure != null) {
-      throw MetadataException('$token is down', failure: failure!);
-    }
-    return [
-      Series(
-        seriesId: 1,
-        externalIds: const ExternalIds(anilist: 1),
-        titles: Titles(romaji: title),
-      ),
-    ];
-  }
-
-  @override
-  Future<List<Series>> fetchByProviderIds(List<int> providerIds) async => [];
-}
-
-class _FakeSkip implements SkipProvider {
-  _FakeSkip(this.token, {this.failure});
-
-  @override
-  final String token;
-  final MetadataFailure? failure;
-  int calls = 0;
-
-  @override
-  String get displayName => token;
-  @override
-  bool get requiresClientId => false;
-  @override
-  String? get setupUrl => null;
-  @override
-  String? get setupInstructions => null;
-  @override
-  bool get readsFile => false;
-  @override
-  Future<bool> canAnswer(SkipLookup lookup) async => true;
-  @override
-  Future<bool> isConfigured() async => true;
-
-  @override
-  Future<EpisodeSkips?> fetchSkips(SkipLookup lookup) async {
-    calls++;
-    if (failure != null) throw SkipException('$token down', failure: failure!);
-    return null;
-  }
-}
 
 /// A folder whose drive is pulled DURING the walk: the listing that comes
 /// back is partial (here: empty), and the root is gone by the time it does.
@@ -365,8 +286,11 @@ void main() {
     });
 
     test('the matcher stops asking a source that is down', () async {
-      final dead = _FakeProvider('dead', failure: MetadataFailure.connection);
-      final alive = _FakeProvider('alive');
+      final dead = FakeMetadataProvider(
+        'dead',
+        failure: MetadataFailure.connection,
+      );
+      final alive = FakeMetadataProvider('alive', answersTitle: true);
       final matcher = SeriesMatcher(providers: [dead, alive]);
       final health = SourceHealth();
       for (final title in ['One', 'Two', 'Three', 'Four']) {
@@ -388,7 +312,10 @@ void main() {
         for (final n in ['01', '02', '03', '04']) {
           await touch('lib/Cowboy Bebop - $n.mkv');
         }
-        final dead = _FakeSkip('dead', failure: MetadataFailure.connection);
+        final dead = FakeSkipProvider(
+          'dead',
+          failure: MetadataFailure.connection,
+        );
         final summary = await syncWith(
           skipProviders: [dead],
         ).sync(['${dir.path}/lib']);

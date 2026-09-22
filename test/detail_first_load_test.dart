@@ -1,24 +1,16 @@
 import 'dart:async';
 
 import 'package:anilocal/domain/models/episode.dart';
-import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/titles.dart';
-import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
-import 'package:anilocal/playback/playback_controller.dart';
-import 'package:anilocal/ui/library_services.dart';
 import 'package:anilocal/ui/routes.dart';
-import 'package:anilocal/ui/scan_control.dart';
 import 'package:anilocal/ui/series_detail_screen.dart';
-import 'package:anilocal/ui/settings/settings_actions.dart';
-import 'package:anilocal/ui/settings/sources_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'support/fake_fix_match.dart';
 import 'support/fake_library_repository.dart';
-import 'support/fake_settings.dart';
+import 'support/library_services.dart';
 import 'support/shell_harness.dart';
 
 /// The detail page's FIRST FRAME.
@@ -64,7 +56,7 @@ Widget _app(FakeLibraryRepository repo) {
   return h.app(
     home: SeriesDetailScreen(
       series: _series(),
-      services: _services(repo, metadata: [], skip: []),
+      services: testLibraryServices(repo, metadata: [], skip: []),
       header: const HeaderHooks(onScan: _noScan, onUnmatched: _noop),
     ),
   );
@@ -72,48 +64,6 @@ Widget _app(FakeLibraryRepository repo) {
 
 Future<void> _noScan() async {}
 void _noop() {}
-
-/// The services bundle a show-page test needs: the one fake repo behind every
-/// interface, a real (idle) playback controller, and a settings bundle with
-/// whatever source lists the test wants the ⚙ window to show.
-LibraryServices _services(
-  FakeLibraryRepository repo, {
-  List<SourceDescriptor> metadata = const [],
-  List<SourceDescriptor> skip = const [],
-}) => LibraryServices(
-  repository: repo,
-  fixMatch: const FakeFixMatch(),
-  watchState: repo,
-  sourceSelection: repo,
-  watchOrder: repo,
-  missingEpisodes: repo,
-  showPreferences: _NoPrefs(),
-  settings: const FakeSettings(),
-  playback: PlaybackController(resolver: repo),
-  scan: ScanControl(),
-  missingFolderPaths: ValueNotifier<Set<String>>(const {}),
-  accessIssues: ValueNotifier<List<String>>(const []),
-  categoryLabelOf: (_) => null,
-  unmatchedCount: ValueNotifier<int>(0),
-  settingsActions: SettingsActions(
-    sources: SourcesActions(
-      repository: repo,
-      onAddFolder: () async => (added: false, deniedLabel: null),
-      onOpenAccessSettings: () async => false,
-      scanning: ValueNotifier<bool>(false),
-      missingFolderPaths: ValueNotifier<Set<String>>(const {}),
-      accessIssues: ValueNotifier<List<String>>(const []),
-      categoryLabelOf: (_) => null,
-    ),
-    metadataSources: metadata,
-    skipSources: skip,
-    onRefreshMetadata: () async =>
-        const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-    scanning: ValueNotifier<bool>(false),
-  ),
-);
-
-class _NoPrefs extends Fake implements ShowPreferencesRepository {}
 
 void main() {
   _settingsFromShowPageTests();
@@ -256,7 +206,7 @@ void _settingsFromShowPageTests() {
       shell.app(
         home: SeriesDetailScreen(
           series: _series(),
-          services: _services(
+          services: testLibraryServices(
             repo,
             metadata: [
               SourceDescriptor(token: 'kitsu', displayName: 'Kitsu Probe'),

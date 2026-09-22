@@ -1,6 +1,4 @@
-import 'package:anilocal/data/metadata/metadata_provider.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
-import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/models/source_preference.dart';
 import 'package:anilocal/ui/settings/panels/source_list_panel.dart';
@@ -10,36 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_metadata_provider.dart';
 import 'support/recorder_settings.dart';
-
-class _StubProvider implements MetadataProvider {
-  _StubProvider(this.token);
-  @override
-  final String token;
-  @override
-  String get displayName => token;
-  @override
-  String get idNamespace => token;
-  @override
-  bool get requiresClientId => false;
-  @override
-  String? get setupUrl => null;
-  @override
-  String? get setupInstructions => null;
-  @override
-  Future<bool> isConfigured() async => true;
-  @override
-  bool get isFallbackOnly => false;
-  int calls = 0;
-  @override
-  Future<List<Series>> searchCandidates(String t, {int perPage = 10}) async {
-    calls++;
-    return const [];
-  }
-
-  @override
-  Future<List<Series>> fetchByProviderIds(List<int> ids) async => const [];
-}
 
 Future<void> _pump(
   WidgetTester tester,
@@ -208,8 +178,8 @@ void main() {
       'the saved order actually changes which source is asked first',
       () async {
         // The UI half is only worth anything if the chain honours it.
-        final anilist = _StubProvider('anilist');
-        final kitsu = _StubProvider('kitsu');
+        final anilist = FakeMetadataProvider('anilist');
+        final kitsu = FakeMetadataProvider('kitsu');
         final settings = RecorderSettings(
           metadataOrder: const [
             SourcePreference(token: 'kitsu'),
@@ -222,16 +192,20 @@ void main() {
           loadOrder: settings.loadMetadataSourceOrder,
         ).match('Cowboy Bebop');
 
-        expect(kitsu.calls, greaterThan(0));
-        expect(anilist.calls, 0, reason: 'disabled sources are never asked');
+        expect(kitsu.searchCalls, greaterThan(0));
+        expect(
+          anilist.searchCalls,
+          0,
+          reason: 'disabled sources are never asked',
+        );
       },
     );
 
     test('reordering takes effect without rebuilding the matcher', () async {
       // loadOrder is read per match, not snapshotted at construction — the
       // settings window can reorder while the app is open.
-      final anilist = _StubProvider('anilist');
-      final kitsu = _StubProvider('kitsu');
+      final anilist = FakeMetadataProvider('anilist');
+      final kitsu = FakeMetadataProvider('kitsu');
       final settings = RecorderSettings();
       final matcher = SeriesMatcher(
         providers: [anilist, kitsu],
@@ -239,7 +213,7 @@ void main() {
       );
 
       await matcher.match('x');
-      expect(anilist.calls, 1, reason: 'built-in order first');
+      expect(anilist.searchCalls, 1, reason: 'built-in order first');
 
       await settings.setMetadataSourceOrder(const [
         SourcePreference(token: 'anilist', enabled: false),
@@ -247,8 +221,8 @@ void main() {
       ]);
       await matcher.match('y');
 
-      expect(anilist.calls, 1, reason: 'now disabled — not asked again');
-      expect(kitsu.calls, greaterThan(0));
+      expect(anilist.searchCalls, 1, reason: 'now disabled — not asked again');
+      expect(kitsu.searchCalls, greaterThan(0));
     });
   });
 }

@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'support/episodes.dart';
 import 'support/finders.dart';
 import 'support/recording_player.dart';
 
@@ -35,14 +36,6 @@ import 'support/recording_player.dart';
 double? _volumeSet(RecordingPlayer player) => player.called(#setVolume)
     ? player.lastCall(#setVolume).positionalArguments.first as double
     : null;
-
-Episode _ep(int n) => Episode(
-  number: n,
-  fileRef: '/lib/ep$n.mkv',
-  seriesId: 1,
-  anchoredNumber: n,
-  title: 'Episode $n',
-);
 
 final _actions = PlayerControlsActions(
   skipIntro: () {},
@@ -194,7 +187,7 @@ void main() {
       var retries = 0;
       final state = ValueNotifier(
         PlayerControlsState(
-          episode: _ep(1),
+          episode: testEpisode(1),
           errorMessage: 'Cannot open /usb/ep1.mkv',
         ),
       );
@@ -237,7 +230,7 @@ void main() {
       expect(retries, 1);
 
       state.value = PlayerControlsState(
-        episode: _ep(1),
+        episode: testEpisode(1),
         notice: 'Playing the copy in nas instead',
       );
       await tester.pump();
@@ -262,19 +255,19 @@ void main() {
     });
 
     test('the legend degrades instead of breaking', () {
-      expect(EpisodeReadout.labelFor(_ep(12)), 'EP 12');
-      expect(EpisodeReadout.labelFor(_ep(1)), 'EP 1');
+      expect(EpisodeReadout.labelFor(testEpisode(12)), 'EP 12');
+      expect(EpisodeReadout.labelFor(testEpisode(1)), 'EP 1');
       // Specials/extras are modelled as position <= 0 — there is no sensible
       // number to print, so the readout names the kind instead of "EP 0".
-      expect(EpisodeReadout.labelFor(_ep(0)), 'SPECIAL');
-      expect(EpisodeReadout.labelFor(_ep(-1)), 'SPECIAL');
+      expect(EpisodeReadout.labelFor(testEpisode(0)), 'SPECIAL');
+      expect(EpisodeReadout.labelFor(testEpisode(-1)), 'SPECIAL');
       expect(EpisodeReadout.labelFor(null), isNull);
     });
 
     testWidgets('it renders in BOTH modes, and yields the room when narrow', (
       tester,
     ) async {
-      final state = PlayerControlsState(episode: _ep(12));
+      final state = PlayerControlsState(episode: testEpisode(12));
 
       await tester.pumpWidget(_bar(state: state));
       expect(_readout('EP 12'), findsOneWidget);
@@ -306,7 +299,9 @@ void main() {
               height: 600,
               child: PlayerControls(
                 player: RecordingPlayer(),
-                state: ValueNotifier(PlayerControlsState(episode: _ep(3))),
+                state: ValueNotifier(
+                  PlayerControlsState(episode: testEpisode(3)),
+                ),
                 actions: _actions,
               ),
             ),
@@ -345,7 +340,9 @@ void main() {
   volumeGroup();
 
   testWidgets('the seek bar is left exactly as it was', (tester) async {
-    await tester.pumpWidget(_bar(state: PlayerControlsState(episode: _ep(3))));
+    await tester.pumpWidget(
+      _bar(state: PlayerControlsState(episode: testEpisode(3))),
+    );
     expect(find.byType(SeekBar), findsOneWidget);
     expect(
       ControlBarConfig.windowedDefault.controlsIn(ControlSlot.scrubber),
@@ -365,7 +362,7 @@ void volumeGroup() {
       tester,
     ) async {
       await tester.pumpWidget(
-        _bar(state: PlayerControlsState(episode: _ep(3))),
+        _bar(state: PlayerControlsState(episode: testEpisode(3))),
       );
       expect(find.byType(Slider), findsNothing);
       expect(find.byType(VfdLevelMeter), findsOneWidget);
@@ -377,7 +374,7 @@ void volumeGroup() {
       final player = RecordingPlayer();
       await tester.pumpWidget(
         _bar(
-          state: PlayerControlsState(episode: _ep(3)),
+          state: PlayerControlsState(episode: testEpisode(3)),
           player: player,
         ),
       );
@@ -401,7 +398,7 @@ void volumeGroup() {
     testWidgets('it is spoken, though it is only painted', (tester) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
-        _bar(state: PlayerControlsState(episode: _ep(3))),
+        _bar(state: PlayerControlsState(episode: testEpisode(3))),
       );
       expect(find.bySemanticsLabel('Volume'), findsOneWidget);
       handle.dispose();
@@ -411,7 +408,7 @@ void volumeGroup() {
       'it folds away with the rest of the volume control when narrow',
       (tester) async {
         await tester.pumpWidget(
-          _bar(state: PlayerControlsState(episode: _ep(3)), width: 400),
+          _bar(state: PlayerControlsState(episode: testEpisode(3)), width: 400),
         );
         expect(
           find.byType(VfdLevelMeter),
@@ -447,7 +444,7 @@ void volumeGroup() {
     ) async {
       // The stub player reports playing:false, so PAUSE is the current state.
       await tester.pumpWidget(
-        _bar(state: PlayerControlsState(episode: _ep(3))),
+        _bar(state: PlayerControlsState(episode: testEpisode(3))),
       );
 
       final litGlyph = tester.widget<Icon>(find.byIcon(Icons.pause));
@@ -468,7 +465,7 @@ void volumeGroup() {
 
     testWidgets('no Material ink washes over the phosphor', (tester) async {
       await tester.pumpWidget(
-        _bar(state: PlayerControlsState(episode: _ep(3))),
+        _bar(state: PlayerControlsState(episode: testEpisode(3))),
       );
       final buttons = tester
           .widgetList<IconButton>(

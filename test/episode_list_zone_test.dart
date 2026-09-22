@@ -3,16 +3,7 @@ import 'package:anilocal/ui/theater/zones/episode_list_zone.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The rail's host-facing behavior, with no playback engine: tapping selects,
-/// and the "now playing" mark + auto-scroll follow [EpisodeListZone.current]
-/// when it changes (the path auto-advance drives via onEpisodeChanged).
-Episode _ep(int n) => Episode(
-  number: n,
-  fileRef: '/lib/ep$n.mkv',
-  seriesId: 1,
-  anchoredNumber: n,
-  title: 'Episode $n',
-);
+import 'support/episodes.dart';
 
 Widget _host(List<Episode> eps, Episode current, ValueChanged<Episode> onSel) =>
     MaterialApp(
@@ -32,7 +23,7 @@ Widget _host(List<Episode> eps, Episode current, ValueChanged<Episode> onSel) =>
 void main() {
   group('EpisodeListZone', () {
     testWidgets('tapping an episode reports the selection', (tester) async {
-      final eps = [for (var n = 1; n <= 5; n++) _ep(n)];
+      final eps = [for (var n = 1; n <= 5; n++) testEpisode(n)];
       Episode? picked;
       await tester.pumpWidget(_host(eps, eps[0], (e) => picked = e));
       await tester.tap(find.text('Episode 3'));
@@ -43,7 +34,7 @@ void main() {
     testWidgets('the now-playing mark follows current when it changes', (
       tester,
     ) async {
-      final eps = [for (var n = 1; n <= 5; n++) _ep(n)];
+      final eps = [for (var n = 1; n <= 5; n++) testEpisode(n)];
       await tester.pumpWidget(_host(eps, eps[0], (_) {}));
       // Episode 1 starts marked (speaker icon = now playing, not watched).
       expect(find.byIcon(Icons.volume_up), findsOneWidget);
@@ -58,7 +49,7 @@ void main() {
     testWidgets('a long list auto-scrolls to keep current visible', (
       tester,
     ) async {
-      final eps = [for (var n = 1; n <= 60; n++) _ep(n)];
+      final eps = [for (var n = 1; n <= 60; n++) testEpisode(n)];
       await tester.pumpWidget(_host(eps, eps[0], (_) {}));
       await tester.pumpAndSettle();
       // Episode 60 is far off-screen initially.
@@ -74,7 +65,7 @@ void main() {
     testWidgets('empty episode list shows an empty-state message', (
       tester,
     ) async {
-      await tester.pumpWidget(_host(const [], _ep(1), (_) {}));
+      await tester.pumpWidget(_host(const [], testEpisode(1), (_) {}));
       expect(find.text('No episodes here yet.'), findsOneWidget);
     });
   });

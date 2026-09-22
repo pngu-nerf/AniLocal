@@ -18,65 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-/// A provider whose behaviour each test dictates outright — the point here is
-/// the CHAIN and the IDENTITY rules, not any real API's wire format.
-class _FakeProvider implements MetadataProvider {
-  _FakeProvider(
-    this.token, {
-    this.results = const [],
-    this.failure,
-    this.configured = true,
-    this.fallbackOnly = false,
-  });
-
-  @override
-  final String token;
-  final List<Series> results;
-  final MetadataFailure? failure;
-  final bool configured;
-  final bool fallbackOnly;
-
-  int searchCalls = 0;
-
-  @override
-  String get displayName => token;
-
-  @override
-  String get idNamespace => token;
-
-  @override
-  bool get requiresClientId => false;
-  @override
-  String? get setupUrl => null;
-  @override
-  String? get setupInstructions => null;
-
-  @override
-  Future<bool> isConfigured() async => configured;
-
-  @override
-  bool get isFallbackOnly => fallbackOnly;
-
-  @override
-  Future<List<Series>> searchCandidates(
-    String title, {
-    int perPage = 10,
-  }) async {
-    searchCalls++;
-    if (failure != null) {
-      throw MetadataException('$token is down', failure: failure!);
-    }
-    return results;
-  }
-
-  @override
-  Future<List<Series>> fetchByProviderIds(List<int> providerIds) async {
-    if (failure != null) {
-      throw MetadataException('$token is down', failure: failure!);
-    }
-    return results;
-  }
-}
+import 'support/fake_metadata_provider.dart';
 
 Series _series(String title, ExternalIds ids, {int? seriesId}) => Series(
   seriesId: seriesId ?? ids.anilist ?? ids.kitsu ?? 1,
@@ -92,8 +34,11 @@ void main() {
 
   group('the fallback chain', () {
     test('a failing source falls through to the next', () async {
-      final down = _FakeProvider('anilist', failure: MetadataFailure.service);
-      final up = _FakeProvider(
+      final down = FakeMetadataProvider(
+        'anilist',
+        failure: MetadataFailure.service,
+      );
+      final up = FakeMetadataProvider(
         'kitsu',
         results: [
           _series('Cowboy Bebop', const ExternalIds(kitsu: 265, mal: 1)),
@@ -112,8 +57,8 @@ void main() {
     test(
       'an UNCONFIGURED source is skipped, not counted as a failure',
       () async {
-        final needsKey = _FakeProvider('mal', configured: false);
-        final ok = _FakeProvider(
+        final needsKey = FakeMetadataProvider('mal', configured: false);
+        final ok = FakeMetadataProvider(
           'anilist',
           results: [_series('Trigun', const ExternalIds(anilist: 6))],
         );
@@ -130,8 +75,8 @@ void main() {
     test('a genuine NO-MATCH stops the chain — it is an answer', () async {
       // Otherwise a title would be shopped around until some source guessed
       // something, which is worse than reporting no match.
-      final empty = _FakeProvider('anilist', results: const []);
-      final other = _FakeProvider(
+      final empty = FakeMetadataProvider('anilist', results: const []);
+      final other = FakeMetadataProvider(
         'kitsu',
         results: [_series('Wrong Show', const ExternalIds(kitsu: 9))],
       );
@@ -145,8 +90,14 @@ void main() {
     });
 
     test('all sources down throws, carrying the failure kind', () async {
-      final a = _FakeProvider('anilist', failure: MetadataFailure.service);
-      final b = _FakeProvider('kitsu', failure: MetadataFailure.connection);
+      final a = FakeMetadataProvider(
+        'anilist',
+        failure: MetadataFailure.service,
+      );
+      final b = FakeMetadataProvider(
+        'kitsu',
+        failure: MetadataFailure.connection,
+      );
 
       await expectLater(
         SeriesMatcher(providers: [a, b]).match('x'),
@@ -168,12 +119,12 @@ void main() {
         // Jikan is MAL's data through a volunteer proxy measured at ~30%
         // availability. Worth having when everything else is down; not worth
         // building a library's metadata on — so it cannot be dragged to the top.
-        final jikan = _FakeProvider(
+        final jikan = FakeMetadataProvider(
           'mal',
           fallbackOnly: true,
           results: [_series('Cowboy Bebop', const ExternalIds(mal: 1))],
         );
-        final anilist = _FakeProvider(
+        final anilist = FakeMetadataProvider(
           'anilist',
           results: [_series('Cowboy Bebop', const ExternalIds(anilist: 21))],
         );
@@ -197,11 +148,11 @@ void main() {
     );
 
     test('but a fallback-only source IS used when the others fail', () async {
-      final anilist = _FakeProvider(
+      final anilist = FakeMetadataProvider(
         'anilist',
         failure: MetadataFailure.service,
       );
-      final jikan = _FakeProvider(
+      final jikan = FakeMetadataProvider(
         'mal',
         fallbackOnly: true,
         results: [_series('Cowboy Bebop', const ExternalIds(mal: 1))],
@@ -218,7 +169,7 @@ void main() {
       'when EVERY source is fallback-only, one of them still answers',
       () async {
         // The rule must not deadlock a build that ships only such sources.
-        final a = _FakeProvider(
+        final a = FakeMetadataProvider(
           'mal',
           fallbackOnly: true,
           results: [_series('Cowboy Bebop', const ExternalIds(mal: 9))],
@@ -237,7 +188,7 @@ void main() {
       // be retried automatically — the wrong outcome for a config problem.
       await expectLater(
         SeriesMatcher(
-          providers: [_FakeProvider('mal', configured: false)],
+          providers: [FakeMetadataProvider('mal', configured: false)],
         ).match('x'),
         throwsA(isA<MetadataException>()),
       );
@@ -328,8 +279,11 @@ void main() {
       // The snackbar used to say "N AniList lookups" whoever answered, so a
       // scan that fell through to Kitsu because AniList was down looked
       // identical to one AniList served.
-      final down = _FakeProvider('anilist', failure: MetadataFailure.service);
-      final up = _FakeProvider(
+      final down = FakeMetadataProvider(
+        'anilist',
+        failure: MetadataFailure.service,
+      );
+      final up = FakeMetadataProvider(
         'kitsu',
         results: [_series('Cowboy Bebop', const ExternalIds(kitsu: 1))],
       );
@@ -342,7 +296,7 @@ void main() {
     });
 
     test('a no-match still names who was asked', () async {
-      final empty = _FakeProvider('anilist', results: const []);
+      final empty = FakeMetadataProvider('anilist', results: const []);
 
       final result = await SeriesMatcher(providers: [empty]).match('nothing');
 

@@ -1,22 +1,16 @@
 import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/episode_source.dart';
 import 'package:anilocal/domain/models/library_folder.dart';
-import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/series.dart';
 import 'package:anilocal/domain/models/source_preference.dart';
 import 'package:anilocal/domain/models/sync_control.dart';
 import 'package:anilocal/domain/models/titles.dart';
-import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
-import 'package:anilocal/playback/playback_controller.dart';
-import 'package:anilocal/ui/library_services.dart';
 import 'package:anilocal/ui/licences_screen.dart';
 import 'package:anilocal/ui/routes.dart';
 import 'package:anilocal/ui/scan_control.dart';
 import 'package:anilocal/ui/series_detail_screen.dart';
 import 'package:anilocal/ui/settings/panels/source_list_panel.dart';
 import 'package:anilocal/ui/settings/panels/sources_panel.dart';
-import 'package:anilocal/ui/settings/settings_actions.dart';
-import 'package:anilocal/ui/settings/sources_actions.dart';
 import 'package:anilocal/ui/theater/zones/episode_list_zone.dart';
 import 'package:anilocal/ui/theater/zones/series_info_zone.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
@@ -24,11 +18,11 @@ import 'package:anilocal/ui/theme/xp_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'support/fake_fix_match.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_settings.dart';
 import 'support/fake_sources.dart';
 import 'support/finders.dart';
+import 'support/library_services.dart';
 import 'support/shell_harness.dart';
 
 /// Every screen in the states it did not handle. Each test here is a state
@@ -42,51 +36,6 @@ const _show = Series(
   format: 'TV',
   episodeCount: 3,
 );
-
-class _NoPrefs extends Fake implements ShowPreferencesRepository {}
-
-LibraryServices _services(
-  FakeLibraryRepository repo, {
-  ValueNotifier<Set<String>>? missing,
-  ValueNotifier<List<String>>? denied,
-  String? Function(String)? categoryLabelOf,
-}) {
-  final missingN = missing ?? ValueNotifier<Set<String>>(const {});
-  final deniedN = denied ?? ValueNotifier<List<String>>(const []);
-  final label = categoryLabelOf ?? (_) => null;
-  return LibraryServices(
-    repository: repo,
-    fixMatch: const FakeFixMatch(),
-    watchState: repo,
-    sourceSelection: repo,
-    watchOrder: repo,
-    missingEpisodes: repo,
-    showPreferences: _NoPrefs(),
-    settings: const FakeSettings(),
-    playback: PlaybackController(resolver: repo),
-    scan: ScanControl(),
-    missingFolderPaths: missingN,
-    accessIssues: deniedN,
-    categoryLabelOf: label,
-    unmatchedCount: ValueNotifier<int>(0),
-    settingsActions: SettingsActions(
-      sources: SourcesActions(
-        repository: repo,
-        onAddFolder: () async => (added: false, deniedLabel: null),
-        onOpenAccessSettings: () async => false,
-        scanning: ValueNotifier<bool>(false),
-        missingFolderPaths: missingN,
-        accessIssues: deniedN,
-        categoryLabelOf: label,
-      ),
-      metadataSources: const [],
-      skipSources: const [],
-      onRefreshMetadata: () async =>
-          const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
-      scanning: ValueNotifier<bool>(false),
-    ),
-  );
-}
 
 Future<void> _noScan() async {}
 void _noop() {}
@@ -128,7 +77,7 @@ void main() {
         h.app(
           home: SeriesDetailScreen(
             series: _show,
-            services: _services(repo),
+            services: testLibraryServices(repo),
             header: const HeaderHooks(onScan: _noScan, onUnmatched: _noop),
           ),
         ),
@@ -159,7 +108,7 @@ void main() {
         h.app(
           home: SeriesDetailScreen(
             series: _show,
-            services: _services(repo),
+            services: testLibraryServices(repo),
             header: const HeaderHooks(onScan: _noScan, onUnmatched: _noop),
           ),
         ),
@@ -188,7 +137,7 @@ void main() {
         series: [_show],
         episodes: {7: _plainEpisodes()},
       );
-      final services = _services(repo);
+      final services = testLibraryServices(repo);
       final h = ShellHarness();
       await tester.pumpWidget(
         h.app(
@@ -235,7 +184,7 @@ void main() {
         h.app(
           home: SeriesDetailScreen(
             series: _show,
-            services: _services(
+            services: testLibraryServices(
               repo,
               missing: missing,
               denied: denied,

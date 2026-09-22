@@ -25,53 +25,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'support/fake_art.dart';
+import 'support/fake_skip_provider.dart';
 import 'support/fake_volume_resolver.dart';
-
-/// A skip source whose behaviour each test dictates.
-class _FakeSkip implements SkipProvider {
-  _FakeSkip(
-    this.token, {
-    this.windows,
-    this.failure,
-    this.configured = true,
-    this.onLookup,
-    this.answerable = true,
-    this.readsFile = false,
-  });
-
-  @override
-  final String token;
-  final EpisodeSkips? windows;
-  final MetadataFailure? failure;
-  final bool configured;
-  final bool answerable;
-  @override
-  final bool readsFile;
-  final void Function(SkipLookup)? onLookup;
-
-  int calls = 0;
-
-  @override
-  String get displayName => token;
-  @override
-  bool get requiresClientId => false;
-  @override
-  String? get setupUrl => null;
-  @override
-  String? get setupInstructions => null;
-  @override
-  Future<bool> canAnswer(SkipLookup lookup) async => answerable;
-  @override
-  Future<bool> isConfigured() async => configured;
-
-  @override
-  Future<EpisodeSkips?> fetchSkips(SkipLookup lookup) async {
-    calls++;
-    onLookup?.call(lookup);
-    if (failure != null) throw SkipException('$token down', failure: failure!);
-    return windows;
-  }
-}
 
 /// The answer a given source recorded for episode 1, or null if never asked.
 extension on List<SkipSourceAnswerRow> {
@@ -154,8 +109,8 @@ void main() {
 
   group('ordering applies to skip sources too', () {
     test('the saved order decides who is asked first', () {
-      final a = _FakeSkip('aniskip');
-      final b = _FakeSkip('chapters');
+      final a = FakeSkipProvider('aniskip');
+      final b = FakeSkipProvider('chapters');
 
       final ordered = applySourceOrder(
         [a, b],
@@ -170,8 +125,8 @@ void main() {
     });
 
     test('a disabled skip source is dropped from the chain', () {
-      final a = _FakeSkip('aniskip');
-      final b = _FakeSkip('chapters');
+      final a = FakeSkipProvider('aniskip');
+      final b = FakeSkipProvider('chapters');
 
       final ordered = applySourceOrder(
         [a, b],
@@ -283,7 +238,7 @@ void main() {
         // Refresh: the file is unchanged and was never asked about.
         final seenOnRefresh = <SkipLookup>[];
         await refreshWith([
-          _FakeSkip('chapters', onLookup: seenOnRefresh.add),
+          FakeSkipProvider('chapters', onLookup: seenOnRefresh.add),
         ], resolver: resolver);
         expect(seenOnRefresh, hasLength(1));
         expect(
@@ -298,7 +253,7 @@ void main() {
         await File('$remounted/Cowboy Bebop - 02.mkv').writeAsString('xxxxx');
         final seenOnScan = <SkipLookup>[];
         await scanWith(
-          [_FakeSkip('aniskip', onLookup: seenOnScan.add)],
+          [FakeSkipProvider('aniskip', onLookup: seenOnScan.add)],
           resolver: resolver,
           folders: [stored],
         );
@@ -316,8 +271,8 @@ void main() {
       // Since v19 the fill path stores raw answers rather than a verdict, so
       // "had nothing" is a recorded fact and not an absence. That is what lets
       // the read path decide later without ever re-asking.
-      final empty = _FakeSkip('aniskip');
-      final has = _FakeSkip('chapters', windows: _op());
+      final empty = FakeSkipProvider('aniskip');
+      final has = FakeSkipProvider('chapters', windows: _op());
 
       await scanWith([empty, has]);
 
@@ -335,8 +290,11 @@ void main() {
     test('a FAILING source records NOTHING, so it is retried', () async {
       // The distinction the contract rests on: "had nothing" is a row of
       // nulls and is never asked again; a failure is no row at all.
-      final down = _FakeSkip('aniskip', failure: MetadataFailure.service);
-      final up = _FakeSkip('chapters', windows: _op());
+      final down = FakeSkipProvider(
+        'aniskip',
+        failure: MetadataFailure.service,
+      );
+      final up = FakeSkipProvider('chapters', windows: _op());
 
       await scanWith([down, up]);
 
@@ -350,12 +308,12 @@ void main() {
       () async {
         // It must not leave a row of nulls either: that would read as "asked,
         // had nothing" and stop it being asked once a key is finally pasted.
-        final needsKey = _FakeSkip(
+        final needsKey = FakeSkipProvider(
           'animeskip',
           configured: false,
           windows: _op(),
         );
-        final ok = _FakeSkip('aniskip', windows: _op());
+        final ok = FakeSkipProvider('aniskip', windows: _op());
 
         await scanWith([needsKey, ok]);
 
@@ -367,7 +325,10 @@ void main() {
     );
 
     test('no source with data still records that both were asked', () async {
-      await scanWith([_FakeSkip('aniskip'), _FakeSkip('chapters')]);
+      await scanWith([
+        FakeSkipProvider('aniskip'),
+        FakeSkipProvider('chapters'),
+      ]);
 
       final answers = await db.allSkipAnswers();
       expect(answers.length, 2, reason: 'both answered "nothing"');
@@ -379,11 +340,11 @@ void main() {
       // fetches skips for files it is already reprocessing, so refresh is the
       // ONLY way a newly-added local source reaches episodes already scanned.
       // Without the file path a chapters-style source is silently inert here.
-      await scanWith([_FakeSkip('aniskip')]); // scan first, no skip data
+      await scanWith([FakeSkipProvider('aniskip')]); // scan first, no skip data
       expect((await db.allSkipAnswers()).from('chapters'), isNull);
 
       late SkipLookup seen;
-      final spy = _FakeSkip(
+      final spy = FakeSkipProvider(
         'chapters',
         windows: _op(),
         onLookup: (l) => seen = l,
@@ -402,8 +363,8 @@ void main() {
       // v19 moved cross-checking to the read path, so the fill path no longer
       // knows about it. Asking everyone once is what makes toggling the
       // setting instant later — the answers are already on disk.
-      final first = _FakeSkip('chapters', windows: _op());
-      final second = _FakeSkip('aniskip', windows: _op());
+      final first = FakeSkipProvider('chapters', windows: _op());
+      final second = FakeSkipProvider('aniskip', windows: _op());
 
       await scanWith([first, second]);
 
@@ -417,7 +378,11 @@ void main() {
       // have no data" would stop it ever being asked again, so the id the
       // cross-map supplies later could never reach it. The suite caught
       // exactly this when the answer table first landed.
-      final notYet = _FakeSkip('aniskip', windows: _op(), answerable: false);
+      final notYet = FakeSkipProvider(
+        'aniskip',
+        windows: _op(),
+        answerable: false,
+      );
 
       await scanWith([notYet]);
 
@@ -429,7 +394,7 @@ void main() {
       );
 
       // Once it CAN answer, the refresh picks it up.
-      final now = _FakeSkip('aniskip', windows: _op());
+      final now = FakeSkipProvider('aniskip', windows: _op());
       await refreshWith([now]);
       expect((await db.allSkipAnswers()).from('aniskip')!.introEndMs, 90000);
     });
@@ -443,8 +408,12 @@ void main() {
         // which a re-encode does not change, so its row stands. An earlier
         // version applied the refresh path's never-re-ask rule here and kept
         // the previous encode's chapter windows forever.
-        final chapters = _FakeSkip('chapters', windows: _op(), readsFile: true);
-        final aniskip = _FakeSkip('aniskip', windows: _op());
+        final chapters = FakeSkipProvider(
+          'chapters',
+          windows: _op(),
+          readsFile: true,
+        );
+        final aniskip = FakeSkipProvider('aniskip', windows: _op());
         await scanWith([chapters, aniskip]);
         final chaptersBefore = chapters.calls;
         final aniskipBefore = aniskip.calls;
@@ -466,7 +435,7 @@ void main() {
     test('a source already answered is never asked again', () async {
       // What keeps refresh incremental now that there is no resolution key:
       // presence of a row IS the record that we asked.
-      final chapters = _FakeSkip('chapters', windows: _op());
+      final chapters = FakeSkipProvider('chapters', windows: _op());
       await scanWith([chapters]);
       final afterScan = chapters.calls;
 
@@ -480,7 +449,7 @@ void main() {
       // raising or lowering it takes effect at once instead of needing the
       // whole library re-scanned.
       await scanWith([
-        _FakeSkip(
+        FakeSkipProvider(
           'chapters',
           windows: const EpisodeSkips(
             intro: SkipRange(start: Duration.zero, end: Duration(seconds: 8)),
@@ -517,7 +486,7 @@ void main() {
 
     test('the lookup carries the MAL id resolved for the series', () async {
       late SkipLookup seen;
-      final spy = _FakeSkip('aniskip', onLookup: (l) => seen = l);
+      final spy = FakeSkipProvider('aniskip', onLookup: (l) => seen = l);
 
       await scanWith([spy]);
 
@@ -584,8 +553,8 @@ void main() {
           directory: () async => Directory('${dir.path}/.art')..createSync(),
         ),
         skipProviders: [
-          _FakeSkip('chapters', windows: _op()),
-          _FakeSkip(
+          FakeSkipProvider('chapters', windows: _op()),
+          FakeSkipProvider(
             'aniskip',
             windows: const EpisodeSkips(
               intro: SkipRange(
