@@ -54,7 +54,7 @@ dev_dependencies:
   # The raw SQLite handle the migration tests use to build hand-shaped
   # databases; already Drift's transitive engine, made direct so tests can
   # import it.
-  sqlite3: ^3.3.2
+  sqlite3: ^3.6.0
 
 # Build-hook config for package:sqlite3 (Drift's native SQLite).
 # By DEFAULT sqlite3 3.x downloads a precompiled SQLite .dylib from GitHub at
