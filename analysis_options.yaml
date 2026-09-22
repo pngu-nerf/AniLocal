@@ -11,7 +11,9 @@ analyzer:
     strict-inference: true
     strict-raw-types: true
   errors:
-    # Generated code is exempt via its own ignore_for_file.
+    # A TODO is a promise with no owner; it fails the gate until it is either
+    # done or written into ROADMAP.md. (Generated code is exempt through its
+    # own ignore_for_file.)
     todo: warning
 
 linter:

@@ -11,9 +11,9 @@ one to fill the gap.
 > no test. Where the harness genuinely can't exercise a path, a documented
 > manual-verify note is the honest answer — not a shallow test.
 
-> **Measured (2026-09-12).** `tool/coverage.sh` — the whole suite with line
-> coverage, generated Drift code excluded — reports **76.6% of `lib/`
-> (5,307 of 6,930 lines)**. CI prints the figure on every run and keeps the
+> **Measured (2026-09-21; was 76.6% on 2026-09-12).** `tool/coverage.sh` — the
+> whole suite with line coverage, generated Drift code excluded — reports
+> **79.9% of `lib/` (6,307 of 7,893 lines)**. CI prints the figure on every run and keeps the
 > lcov file as an artifact; there is deliberately no threshold. The player's
 > own behaviour is now under test without an engine: `playback_rules_test`
 > (the decisions), `playback_session_test` (the sequencing, over

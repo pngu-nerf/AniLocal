@@ -1,5 +1,9 @@
 # Performance — the read path, measured
 
+> Measured 2026-09-14, before v22 (per-file pins), the failover path and the
+> skips-as-their-own-phase scan. The statement counts still hold for the read
+> path; a re-measure belongs with the next read-path change.
+
 The numbers `tool/perf.sh` prints, recorded here so before and after sit side by
 side. The harness (`test/perf/read_path_perf_test.dart`) seeds an in-memory SQLite
 with a synthetic library ten times the reference one — **600 shows, 8,000 files,

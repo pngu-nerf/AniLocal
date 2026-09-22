@@ -1,3 +1,5 @@
+> **Archived (2026-09-21).** Historical: the before/after oracle for the persistent-player rearchitecture, which shipped; its baseline is tag `pre-persistent-player`, which stays. Kept for the reasoning; every `file:line` it cites has moved or gone, so read it for the why, not as a map.
+
 # Player crash repro — the before/after oracle
 
 **Purpose:** a *reliable, human-runnable* reproduction of the two player crashes

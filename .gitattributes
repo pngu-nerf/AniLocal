@@ -15,7 +15,5 @@
 # Generated and vendored code: collapsed in diffs and review, and not
 # counted as the project's own language.
 lib/**/*.g.dart linguist-generated=true -diff
-third_party/sqlite3/sqlite3.c linguist-vendored=true -diff
-third_party/sqlite3/sqlite3.h linguist-vendored=true -diff
-third_party/sqlite3/sqlite3ext.h linguist-vendored=true -diff
-third_party/licenses/* linguist-vendored=true
+third_party/** linguist-vendored=true -diff
+third_party/**/*.md -linguist-vendored diff

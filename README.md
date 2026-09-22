@@ -10,6 +10,33 @@ no account, no key), caches everything locally, and plays via **libmpv**
 Source: <https://github.com/pngu-nerf/AniLocal> · Licence: GPL-3.0-or-later ·
 Status: **0.1.0**, unsigned developer builds — see [`CHANGELOG.md`](CHANGELOG.md).
 
+<!-- Screenshots: docs/brand/screenshot-library.png (the grid) and
+     docs/brand/screenshot-player.png (an episode with the control bar) —
+     taken by hand from a real library, not yet captured. -->
+
+## What it does
+
+- **Scan a folder, get a library.** Files are identified from their names
+  (an in-house Anitomy-style parser), matched against AniList, then Kitsu and
+  Jikan if AniList has no answer; covers and metadata are cached, so browsing
+  is instant and works offline. A scan shows its progress in the header and
+  can be stopped; what it found so far stays.
+- **Plays with libmpv**: styled ASS subtitles, chapters, resume where you
+  stopped, auto-advance to the next episode, and **auto-skip** for openings
+  and endings from AniSkip, the file's own chapters, or both agreeing.
+- **Several drives, one library.** An episode that exists in more than one
+  folder is one episode with several **sources**; Automatic prefers a
+  connected drive and a real file, fails over mid-play if a drive vanishes,
+  and you can pin one file from the show page or the player. Folders are an
+  ordered priority list you drag.
+- **Honest about what it cannot read.** An unplugged drive greys its shows
+  and says "reconnect"; a folder macOS refuses points at the exact Privacy
+  setting; a stream that dies mid-play says so and offers Retry.
+- **Fix what it got wrong.** Unmatched files live in Settings › Unmatched;
+  a wrong match is corrected in place and a rescan never overrides you.
+- **Up Next**, missing-episode markers, a Hidden tab, per-show preferences,
+  and a diagnostics report one click away in Settings › About.
+
 ## Requirements
 
 | | |
@@ -53,4 +80,5 @@ app under Settings → About → Licences; this repository is the corresponding 
 - [`CLAUDE.md`](CLAUDE.md) — working rules, the seams, the dependency log.
 - [`ROADMAP.md`](ROADMAP.md) — what's built and what's planned, in order.
 - [`docs/feature-log.md`](docs/feature-log.md) — how each shipped feature works and why.
+- [`docs/runtime-walkthrough.md`](docs/runtime-walkthrough.md) — the by-hand checklist for what a test cannot settle: unplugging, quitting, offline, scale.
 - [`docs/README.md`](docs/README.md) — the index of everything else (audits, player checklist, research).

@@ -1,3 +1,5 @@
+> **Archived (2026-09-21).** Historical: the oldest assessment here, written before the audit passes that closed every item it names (schema was v18; it is v22). Kept for the reasoning; every `file:line` it cites has moved or gone, so read it for the why, not as a map.
+
 # Maintainability assessment (read-only)
 
 > **Status (updated 2026-09-12): STALE — the oldest doc here. Read it for its

@@ -133,7 +133,7 @@ format changes ("Ep 5" vs "Episode 5"), 5 edits.
 **What:** `m:ss` / `h:mm:ss` formatting implemented independently in
 `player_controls.dart:70` (`TimeLabel._fmt`), `continue_watching_panel.dart:107`
 (`_clock`), `series_detail_screen.dart:~348` (`_fmt`), and
-`settings_dialog.dart:29` (`formatWatchedThreshold`, min:sec).
+`settings_dialog.dart:29` (`formatWatchedThreshold`, min:sec; that file is gone — Settings is a window of panels now).
 **Why it's a risk:** low — but they already differ subtly (hours shown or not,
 rounding), so "resume 1:05" can read inconsistently across surfaces.
 **Proposed single source:** one `formatDuration(d, {showHours})` util; the
@@ -141,7 +141,7 @@ min:sec threshold formatter can stay separate (different domain: capped input).
 
 ### A6 — `_Tappable` press-wrapper copied
 **What:** an identical private `_Tappable`/`_TappableState` in
-`series_detail_screen.dart:1197` and `unmatched_screen.dart:134` (the second added
+`series_detail_screen.dart:1197` and `unmatched_screen.dart:134` (that screen is gone — Unmatched is a Settings category; the second was added
 during the recent styling pass).
 **Why it's a risk:** low; but it's the start of copy-proliferation (fix-match now
 uses a bespoke inline `MouseRegion`+`GestureDetector` for the same job — a third

@@ -1,0 +1,50 @@
+name: Bug report
+description: Something AniLocal does wrong, with the diagnostics that let it be reproduced.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks. Two things make a report actionable: the diagnostics report and the exact steps.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      placeholder: "Played episode 3 from the external drive, unplugged it; the player advanced to episode 4 instead of showing the error."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics report
+      description: "In the app: Settings › About › Copy diagnostics, then paste here. It holds the version, library counts, active settings and the recent log; your home directory is shown as ~ and folder names may appear — trim those if you prefer."
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.6"
+    validations:
+      required: true
+  - type: dropdown
+    id: media
+    attributes:
+      label: Where the files live
+      options:
+        - Internal drive
+        - External drive
+        - Network share (SMB/NFS)
+        - Mixed
+    validations:
+      required: false
