@@ -4,10 +4,8 @@ import 'dart:math' as math;
 import 'package:anilocal/domain/models/titles.dart' show Titles;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../diagnostics/app_log.dart';
-import '../diagnostics/diagnostics.dart';
 import '../domain/folder_health.dart';
 import '../domain/missing_episodes.dart';
 import '../domain/models/cache_errors.dart';
@@ -34,7 +32,11 @@ import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
+import 'widgets/copy_diagnostics.dart';
 import 'widgets/guarded.dart';
+import 'widgets/notices.dart';
+import 'widgets/xp_error_state.dart';
+import 'widgets/xp_message.dart';
 import 'window_chrome.dart';
 
 /// Whether a series matches the live library search [query] — a case-insensitive
@@ -333,16 +335,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     // drive is unplugged must get the same reconnect hint the card gives.
     final folders = _sourceFoldersBySeries[series.seriesId] ?? const <String>{};
     if (seriesUnavailable(folders, widget.missingFolderPaths.value)) {
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              "${series.displayTitle} isn't connected. Reconnect its drive, "
-              'then scan again.',
-            ),
-          ),
-        );
+      showNotice(
+        context,
+        "${series.displayTitle} isn't connected. Reconnect its drive, then "
+        'scan again.',
+        replace: true,
+      );
       return;
     }
     await AppRoutes.theater(
@@ -386,13 +384,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     () => _openSettingsUnguarded(initialCategory: initialCategory),
     onError: (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Settings didn't close cleanly. ${userFacingMessage(e)}",
-          ),
-        ),
-      );
+      showFailure(context, "Settings didn't close cleanly.", e);
     },
   );
 
@@ -416,13 +408,10 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     if (outcome.sourceSetChanged) {
       if (_services.scanning.value) {
         _rescanQueued = true;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Folders changed — they will be scanned when the current scan '
-              'finishes.',
-            ),
-          ),
+        showNotice(
+          context,
+          'Folders changed — they will be scanned when the current scan '
+          'finishes.',
         );
       } else {
         await _scan();
@@ -475,25 +464,18 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
         _sourceName,
         missing: _services.missingFolderPaths.value,
       );
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            duration: Duration(seconds: result.problem ? 8 : 4),
-            backgroundColor: result.problem ? Xp.error : null,
-            content: Text(result.text),
-          ),
-        );
+      showNotice(
+        context,
+        result.text,
+        duration: result.problem ? kNoticeLong : kNoticeShort,
+        replace: true,
+        problem: result.problem,
+      );
       _reload();
     } catch (e, stack) {
       AppLog.error('Scan failed', error: e, stack: stack);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Scan failed. ${userFacingMessage(e)}'),
-          duration: const Duration(seconds: 8),
-        ),
-      );
+      showFailure(context, 'Scan failed.', e);
     } finally {
       _services.scan.end();
     }
@@ -509,12 +491,7 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       // either way the user hears why, through the one renderer.
       AppLog.warn('Add folder refused or failed', error: e, stack: stack);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(userFacingMessage(e)),
-          duration: const Duration(seconds: 6),
-        ),
-      );
+      showNotice(context, userFacingMessage(e), duration: kNoticeMedium);
       return;
     }
     if (!mounted) return;
@@ -747,16 +724,7 @@ class _NoSearchResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Xp.spaceXl),
-        child: Text(
-          'No shows match “${query.trim()}”.',
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeTitle),
-        ),
-      ),
-    );
+    return XpMessage('No shows match “${query.trim()}”.', emphasis: true);
   }
 }
 
@@ -797,27 +765,16 @@ class _LoadErrorStateState extends State<_LoadErrorState> {
       AppLog.error('Cache reset failed', error: e, stack: stack);
       if (mounted) {
         setState(() => _resetting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Couldn't reset. ${userFacingMessage(e)}")),
-        );
+        showFailure(context, "Couldn't reset.", e);
       }
     }
   }
 
-  /// The same report Settings › About produces — one payload for one button
-  /// label — awaited so the label can confirm, and caught so the screen whose
-  /// whole job is "report this" cannot fail silently at the clipboard.
+  /// The same report Settings › About produces, with this screen's error
+  /// under it — one payload, one set of words (`copyDiagnostics`).
   Future<void> _copy() async {
-    try {
-      final report = await Diagnostics.report();
-      await Clipboard.setData(
-        ClipboardData(text: '$report\n\n--- error ---\n${widget.error}'),
-      );
-      if (mounted) setState(() => _copyLabel = 'Copied');
-    } catch (e, stack) {
-      AppLog.error('Copy diagnostics failed', error: e, stack: stack);
-      if (mounted) setState(() => _copyLabel = 'Copy failed — see log file');
-    }
+    final outcome = await copyDiagnostics(extra: '${widget.error}');
+    if (mounted) setState(() => _copyLabel = outcome);
   }
 
   @override
@@ -825,77 +782,42 @@ class _LoadErrorStateState extends State<_LoadErrorState> {
     final error = widget.error;
     final newer = error is CacheNewerThanAppException;
     final movedTo = _movedTo;
-    const dim = TextStyle(color: Xp.textDim, fontSize: Xp.fontSizeBody);
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              newer
-                  ? 'This library was created by a newer version of AniLocal.'
-                  : "Couldn't open the library cache.",
-              style: const TextStyle(
-                color: Xp.text,
-                fontSize: Xp.fontSizeTitle,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              newer ? 'Update the app to open it.' : userFacingMessage(error),
-              style: dim,
-              textAlign: TextAlign.center,
-            ),
-            if (widget.cachePath case final path?) ...[
-              const SizedBox(height: 6),
-              Text(
-                'The cache is $path',
-                style: dim,
-                textAlign: TextAlign.center,
-              ),
-            ],
-            const SizedBox(height: Xp.spaceL),
-            if (movedTo != null)
-              Text(
-                'Moved the broken cache to $movedTo. Quit and reopen AniLocal '
-                'to start with an empty library; your folders will need to be '
-                'added and scanned again.',
-                style: dim,
-                textAlign: TextAlign.center,
-              ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              alignment: WrapAlignment.center,
-              children: [
-                XpButton(
-                  icon: Icons.copy_outlined,
-                  label: _copyLabel,
-                  onPressed: _copy,
-                ),
-                // Only for a cache that IS broken: a newer-schema cache is
-                // intact and wants the newer app, not a reset.
-                if (!newer && widget.onReset != null && movedTo == null)
-                  XpButton(
-                    icon: Icons.restart_alt,
-                    label: 'Reset library cache',
-                    onPressed: _resetting ? null : _reset,
-                  ),
-                if (movedTo != null)
-                  XpButton(
-                    lit: true,
-                    icon: Icons.power_settings_new,
-                    label: 'Quit AniLocal',
-                    onPressed: () => unawaited(WindowChrome.quit()),
-                  ),
-              ],
-            ),
-          ],
+    return XpErrorState(
+      headline: newer
+          ? 'This library was created by a newer version of AniLocal.'
+          : "Couldn't open the library cache.",
+      message: newer ? 'Update the app to open it.' : userFacingMessage(error),
+      extra: [
+        if (widget.cachePath case final path?) Text('The cache is $path'),
+        if (movedTo != null)
+          Text(
+            'Moved the broken cache to $movedTo. Quit and reopen AniLocal to '
+            'start with an empty library; your folders will need to be added '
+            'and scanned again.',
+          ),
+      ],
+      actions: [
+        XpButton(
+          icon: Icons.copy_outlined,
+          label: _copyLabel,
+          onPressed: _copy,
         ),
-      ),
+        // Only for a cache that IS broken: a newer-schema cache is intact and
+        // wants the newer app, not a reset.
+        if (!newer && widget.onReset != null && movedTo == null)
+          XpButton(
+            icon: Icons.restart_alt,
+            label: 'Reset library cache',
+            onPressed: _resetting ? null : _reset,
+          ),
+        if (movedTo != null)
+          XpButton(
+            lit: true,
+            icon: Icons.power_settings_new,
+            label: 'Quit AniLocal',
+            onPressed: () => unawaited(WindowChrome.quit()),
+          ),
+      ],
     );
   }
 }

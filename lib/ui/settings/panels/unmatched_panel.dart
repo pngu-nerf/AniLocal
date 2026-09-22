@@ -7,6 +7,7 @@ import '../../theme/xp_pressable.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
 import '../../widgets/guarded.dart';
+import '../../widgets/xp_message.dart';
 import '../settings_actions.dart';
 
 /// Settings › Unmatched: files that matched no show (kept on record across
@@ -73,21 +74,15 @@ class _UnmatchedPanelState extends State<UnmatchedPanel> {
     final files = _files;
     if (files == null) {
       if (_loadError != null) {
-        return const Center(
-          child: Text(
-            "Couldn't read the unmatched list — details are in About.",
-            style: TextStyle(color: Xp.textDim),
-          ),
+        return const XpMessage(
+          "Couldn't read the unmatched list — details are in About.",
         );
       }
       return const Center(child: CircularProgressIndicator());
     }
     if (files.isEmpty) {
-      return const Center(
-        child: Text(
-          'No unmatched files. Every scanned file matched a show.',
-          style: TextStyle(color: Xp.textDim),
-        ),
+      return const XpMessage(
+        'No unmatched files. Every scanned file matched a show.',
       );
     }
     return Column(

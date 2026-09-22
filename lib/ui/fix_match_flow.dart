@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../domain/models/identified_episode.dart';
 import 'library_services.dart';
 import 'routes.dart';
+import 'widgets/notices.dart';
 
 /// Open fix-match for one unmatched file, from wherever the file was listed.
 ///
@@ -20,12 +21,9 @@ Future<bool> fixMatchFor(
 ) async {
   if (!await File(file.filePath).exists()) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "That file isn't there any more. Scan to update the list.",
-          ),
-        ),
+      showNotice(
+        context,
+        "That file isn't there any more. Scan to update the list.",
       );
     }
     return false;

@@ -10,6 +10,8 @@ import '../../metadata_failure_message.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
 import '../../widgets/guarded.dart';
+import '../../widgets/notices.dart';
+import '../../widgets/xp_message.dart';
 import '../../widgets/xp_reorderable_list.dart';
 import '../settings_actions.dart';
 import 'client_id_dialog.dart';
@@ -125,9 +127,7 @@ class _SourceListPanelState extends State<SourceListPanel> {
   /// IS stored rather than what was attempted.
   void _sayWriteFailed(Object e) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("That didn't save. ${userFacingMessage(e)}")),
-    );
+    showWriteFailed(context, e);
     unawaited(_load());
   }
 
@@ -212,11 +212,8 @@ class _SourceListPanelState extends State<SourceListPanel> {
     if (ordered == null) {
       final error = _loadError;
       if (error != null) {
-        return Center(
-          child: Text(
-            "Couldn't read the source list. ${userFacingMessage(error)}",
-            style: const TextStyle(color: Xp.textDim),
-          ),
+        return XpMessage(
+          "Couldn't read the source list. ${userFacingMessage(error)}",
         );
       }
       return const Center(child: CircularProgressIndicator());

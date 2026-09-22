@@ -9,6 +9,8 @@ import '../../metadata_failure_message.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
 import '../../widgets/guarded.dart';
+import '../../widgets/notices.dart';
+import '../../widgets/xp_message.dart';
 import '../../widgets/xp_reorderable_list.dart';
 import '../settings_actions.dart';
 import '../sources_actions.dart';
@@ -64,9 +66,7 @@ class _SourcesPanelState extends State<SourcesPanel> {
 
   void _sayWriteFailed(Object e) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("That didn't save. ${userFacingMessage(e)}")),
-    );
+    showWriteFailed(context, e);
     unawaited(_reload()); // show what IS stored, not what was attempted
   }
 
@@ -79,12 +79,7 @@ class _SourcesPanelState extends State<SourcesPanel> {
       // why; anything else says it did not take.
       AppLog.warn('Add folder refused or failed', error: e, stack: stack);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(userFacingMessage(e)),
-          duration: const Duration(seconds: 6),
-        ),
-      );
+      showNotice(context, userFacingMessage(e), duration: kNoticeMedium);
       return;
     }
     if (!mounted) return;
@@ -128,11 +123,8 @@ class _SourcesPanelState extends State<SourcesPanel> {
     if (folders == null) {
       final error = _loadError;
       if (error != null) {
-        return Center(
-          child: Text(
-            "Couldn't read the folder list. ${userFacingMessage(error)}",
-            style: const TextStyle(color: Xp.textDim),
-          ),
+        return XpMessage(
+          "Couldn't read the folder list. ${userFacingMessage(error)}",
         );
       }
       return const Center(child: CircularProgressIndicator());

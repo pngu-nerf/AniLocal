@@ -181,6 +181,11 @@ abstract final class Xp {
   /// this threshold resizes (see `XpTitleBar`).
   static const double headerLabelWidth = 760;
 
+  /// Readable column widths: a dialog, and a body of text or an error state.
+  /// Four screens each picked their own number for the same idea.
+  static const double measureDialog = 460;
+  static const double measureBody = 480;
+
   /// Chunky control padding (icon/label buttons, toolbar items).
   static const EdgeInsets controlPadding = EdgeInsets.symmetric(
     horizontal: 14,

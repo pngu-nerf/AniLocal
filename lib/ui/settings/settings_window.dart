@@ -6,9 +6,9 @@ import 'package:flutter/services.dart';
 
 import '../../diagnostics/app_log.dart';
 import '../../domain/repositories/settings_repository.dart';
-import '../metadata_failure_message.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
+import '../widgets/notices.dart';
 import '../widgets/xp_dialog.dart';
 import 'panels/about_panel.dart';
 import 'panels/homepage_panel.dart';
@@ -54,12 +54,7 @@ Future<SettingsOutcome> showAppSettingsDialog(
     // used to make the ⚙ do nothing and reject unhandled. Say so instead.
     AppLog.error('Settings could not load', error: e, stack: stack);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Couldn't open Settings. ${userFacingMessage(e)}"),
-          duration: const Duration(seconds: 8),
-        ),
-      );
+      showFailure(context, "Couldn't open Settings.", e);
     }
     return const SettingsOutcome.unchanged();
   }

@@ -16,7 +16,7 @@ class XpDialog extends StatelessWidget {
     required this.title,
     required this.content,
     this.actions = const [],
-    this.maxWidth = 460,
+    this.maxWidth = Xp.measureDialog,
     this.contentPadding = const EdgeInsets.fromLTRB(16, 14, 16, 10),
   });
 

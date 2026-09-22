@@ -18,7 +18,6 @@ import 'access_recovery.dart' show kFilesAndFoldersPath;
 import 'fix_match_flow.dart';
 import 'library/library_search_bar.dart';
 import 'library_services.dart';
-import 'metadata_failure_message.dart';
 import 'routes.dart';
 import 'scan_control.dart';
 import 'series_detail/missing_episode_tiles.dart';
@@ -31,9 +30,12 @@ import 'theme/xp_widgets.dart';
 import 'widgets/download_tally_label.dart';
 import 'widgets/episode_tile.dart';
 import 'widgets/guarded.dart';
+import 'widgets/notices.dart';
 import 'widgets/show_cover.dart';
 import 'widgets/xp_banner.dart';
 import 'widgets/xp_dialog.dart';
+import 'widgets/xp_error_state.dart';
+import 'widgets/xp_message.dart';
 
 /// Whether an episode matches the live episode-search [query]. Matches on:
 ///  - the episode [number] by PREFIX, so it narrows as you type ("4" → 4, 40–49,
@@ -418,19 +420,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   }
 
   void _showReconnectHint() {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            _unreachable == _Unreachable.denied
-                ? "AniLocal can't read this show's folder. Grant access in "
-                      '$kFilesAndFoldersPath.'
-                : "This show's drive isn't connected. Reconnect it, then try "
-                      'again.',
-          ),
-        ),
-      );
+    showNotice(
+      context,
+      _unreachable == _Unreachable.denied
+          ? "AniLocal can't read this show's folder. Grant access in "
+                '$kFilesAndFoldersPath.'
+          : "This show's drive isn't connected. Reconnect it, then try again.",
+      replace: true,
+    );
   }
 
   Future<void> _play(Episode e) async {
@@ -657,10 +654,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   }, onError: _sayWriteFailed);
 
   void _sayWriteFailed(Object e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("That didn't save. ${userFacingMessage(e)}")),
-    );
+    if (mounted) showWriteFailed(context, e);
   }
 
   @override
@@ -988,24 +982,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   }
 
   /// The error state: a load failure shows this instead of an endless spinner.
-  Widget _errorState() {
-    return XpPanel(
-      inset: true,
-      padding: const EdgeInsets.all(Xp.spaceXl),
-      child: Column(
-        children: [
-          const Icon(Icons.error_outline, color: Xp.warning, size: 32),
-          const SizedBox(height: Xp.spaceS),
-          const Text(
-            "Couldn't load this show's episodes.",
-            style: TextStyle(color: Xp.text),
-          ),
-          const SizedBox(height: Xp.spaceM),
-          XpButton(icon: Icons.refresh, label: 'Retry', onPressed: _reload),
-        ],
-      ),
-    );
-  }
+  Widget _errorState() => XpErrorState(
+    icon: Icons.error_outline,
+    headline: "Couldn't load this show's episodes.",
+    actions: [
+      XpButton(icon: Icons.refresh, label: 'Retry', onPressed: _reload),
+    ],
+  );
 
   /// The Hidden tab.
   Widget _hiddenView(List<int> hiddenSorted, String query) {
@@ -1026,15 +1009,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
 
   /// A clean centered message in a sunken well — used for empty / no-match
   /// episode lists.
-  Widget _emptyState(String message) => XpPanel(
-    inset: true,
-    child: Padding(
-      padding: const EdgeInsets.all(Xp.spaceL),
-      child: Center(
-        child: Text(message, style: const TextStyle(color: Xp.textDim)),
-      ),
-    ),
-  );
+  Widget _emptyState(String message) => XpMessage(message, inset: true);
 
   /// The episode list as slivers inside the sunken well, rows separated by
   /// hairlines; each present tile renders from the Episode its row carries

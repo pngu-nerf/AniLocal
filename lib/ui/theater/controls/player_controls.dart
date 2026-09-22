@@ -8,6 +8,7 @@ import '../../../domain/models/episode.dart';
 import '../../theme/vfd_readout.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
+import '../../widgets/xp_error_state.dart';
 import 'player_controls_state.dart';
 import 'segmented_meter.dart';
 import 'vfd_control.dart';
@@ -469,53 +470,25 @@ class PlaybackErrorNotice extends StatelessWidget {
             ),
           );
         }
-        // The instrument's sunken display well — the same panel the show
-        // page's error state sits in. OPAQUE on purpose: a failed OPEN leaves
-        // the frame black and a stream that died mid-play leaves its last
-        // picture, and a translucent backing looked like nothing over the one
-        // and like a glass card over the other — two error screens for one
-        // widget. The well looks the same over both.
+        // The instrument's error state — the same well the show page and
+        // the library use. Opaque on purpose: a failed OPEN leaves the frame
+        // black and a stall leaves its last picture, and a translucent
+        // backing read as two error screens for one widget.
         return Padding(
           padding: const EdgeInsets.all(Xp.spaceXl),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: XpPanel(
-              inset: true,
-              padding: const EdgeInsets.all(Xp.spaceL),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Couldn’t play this episode',
-                    style: TextStyle(
-                      color: Xp.error,
-                      fontSize: Xp.fontSizeTitle,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: Xp.spaceS),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Xp.textDim,
-                      fontSize: Xp.fontSizeCaption,
-                    ),
-                  ),
-                  if (onRetry != null) ...[
-                    const SizedBox(height: Xp.spaceM),
-                    XpButton(
-                      lit: true,
-                      icon: Icons.refresh,
-                      label: 'Retry',
-                      onPressed: onRetry,
-                    ),
-                  ],
-                ],
-              ),
-            ),
+          child: XpErrorState(
+            severe: true,
+            headline: 'Couldn’t play this episode',
+            message: message,
+            actions: [
+              if (onRetry != null)
+                XpButton(
+                  lit: true,
+                  icon: Icons.refresh,
+                  label: 'Retry',
+                  onPressed: onRetry,
+                ),
+            ],
           ),
         );
       },

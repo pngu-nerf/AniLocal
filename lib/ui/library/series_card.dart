@@ -12,6 +12,7 @@ import '../theme/xp_pressable.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 import '../widgets/download_tally_label.dart';
+import '../widgets/notices.dart';
 import '../widgets/show_cover.dart';
 
 /// Poster aspect ratio (width / height) for every library card's cover.
@@ -97,15 +98,11 @@ class _SeriesCardState extends State<SeriesCard> {
     if (widget.unavailable) {
       // Fail gracefully with a reconnect hint (consistent with the banner) —
       // don't open into a screen that can't play anything.
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              "$title isn't connected. Reconnect its drive, then scan again.",
-            ),
-          ),
-        );
+      showNotice(
+        context,
+        "$title isn't connected. Reconnect its drive, then scan again.",
+        replace: true,
+      );
       return;
     }
     await AppRoutes.detail(

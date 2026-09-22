@@ -16,6 +16,7 @@ import 'shell/header_spec.dart';
 import 'theme/xp_pressable.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
+import 'widgets/notices.dart';
 
 /// Manual fix-match: search the metadata sources → pick from ranked candidates
 /// → assign. For a split (multiple files), a toggle chooses continuous vs
@@ -134,12 +135,7 @@ class _FixMatchScreenState extends State<FixMatchScreen> with HeaderPublisher {
       AppLog.error('Fix-match assign failed', error: e, stack: stack);
       if (mounted) {
         setState(() => _busy = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Couldn't assign. ${userFacingMessage(e)}"),
-            duration: const Duration(seconds: 8),
-          ),
-        );
+        showFailure(context, "Couldn't assign.", e);
       }
     }
   }

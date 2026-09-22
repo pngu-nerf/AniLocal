@@ -6,6 +6,7 @@ import '../../domain/models/identified_episode.dart';
 import '../../domain/models/refresh_summary.dart';
 import '../../domain/models/source_descriptor.dart';
 import '../metadata_failure_message.dart';
+import '../widgets/notices.dart';
 import 'sources_actions.dart';
 
 /// The one sentence every mid-scan-disabled control says.
@@ -128,47 +129,39 @@ Future<void> refreshMetadata(
   // Capture the app-level messenger AND the error colour before popping the
   // window — dialogContext is defunct once it's gone.
   final messenger = ScaffoldMessenger.of(dialogContext);
-  final errorBackground = Theme.of(dialogContext).colorScheme.errorContainer;
   Navigator.of(dialogContext).pop();
-  messenger
-    ..clearSnackBars()
-    ..showSnackBar(const SnackBar(content: Text('Refreshing metadata…')));
+  showNoticeOn(messenger, 'Refreshing metadata…', replace: true);
   try {
     final r = await actions.onRefreshMetadata();
     final failure = r.failure;
-    messenger
-      ..clearSnackBars()
-      ..showSnackBar(
-        failure == null
-            ? SnackBar(
-                content: Text(
-                  'Refreshed ${r.seriesRefreshed} shows · '
-                  '${r.skipsFetched} skip sets fetched'
-                  '${r.skipLookupsFailed > 0 ? ' · ${r.skipLookupsFailed} skip lookups failed, will retry' : ''}',
-                ),
-              )
-            : SnackBar(
-                // An unreachable metadata service is a FAILED refresh, not a refresh of
-                // zero series: reporting success here sent the user hunting for
-                // a local bug during an AniList outage.
-                duration: const Duration(seconds: 8),
-                backgroundColor: errorBackground,
-                content: Text(
-                  '⚠ ${metadataFailureCause(failure)} '
-                  'Your metadata was left untouched.',
-                ),
-              ),
+    if (failure == null) {
+      showNoticeOn(
+        messenger,
+        'Refreshed ${r.seriesRefreshed} shows · '
+        '${r.skipsFetched} skip sets fetched'
+        '${r.skipLookupsFailed > 0 ? ' · ${r.skipLookupsFailed} skip lookups failed, will retry' : ''}',
+        replace: true,
       );
+    } else {
+      // An unreachable metadata service is a FAILED refresh, not a refresh
+      // of zero shows: reporting success here sent the user hunting for a
+      // local bug during an AniList outage.
+      showNoticeOn(
+        messenger,
+        '⚠ ${metadataFailureCause(failure)} Your metadata was left untouched.',
+        duration: kNoticeLong,
+        replace: true,
+        problem: true,
+      );
+    }
     actions.onRefreshed();
   } catch (e) {
-    messenger
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Refresh failed. ${userFacingMessage(e)}'),
-          duration: const Duration(seconds: 8),
-        ),
-      );
+    showNoticeOn(
+      messenger,
+      'Refresh failed. ${userFacingMessage(e)}',
+      duration: kNoticeLong,
+      replace: true,
+    );
     AppLog.error('Refresh failed', error: e);
   }
 }

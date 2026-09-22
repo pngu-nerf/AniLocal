@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../diagnostics/app_log.dart';
 import '../../../diagnostics/diagnostics.dart';
 import '../../licences_screen.dart';
 import '../../theme/xp_widgets.dart';
+import '../../widgets/copy_diagnostics.dart';
 import '../../widgets/guarded.dart';
 import '../setting_row.dart';
 
@@ -24,18 +24,8 @@ class _AboutPanelState extends State<AboutPanel> {
   String? _copied;
 
   Future<void> _copyDiagnostics() async {
-    try {
-      final text = await Diagnostics.report();
-      await Clipboard.setData(ClipboardData(text: text));
-      if (!mounted) return;
-      setState(() => _copied = 'Copied ${AppLog.recent().length} log lines.');
-    } catch (e, stack) {
-      // The clipboard can refuse (a PlatformException); the one button meant
-      // for "something is wrong" must say so rather than do nothing.
-      AppLog.error('Copy diagnostics failed', error: e, stack: stack);
-      if (!mounted) return;
-      setState(() => _copied = 'Copy failed — the log file below has it.');
-    }
+    final outcome = await copyDiagnostics();
+    if (mounted) setState(() => _copied = outcome);
   }
 
   @override
