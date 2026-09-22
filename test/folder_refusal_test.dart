@@ -13,6 +13,10 @@ void main() {
 
   test('one folder, three spellings', () {
     expect(
+      folderRefusal('C:/Anime/', [r'C:\Anime'])?.userMessage,
+      contains('already in your library'),
+    );
+    expect(
       folderRefusal(r'c:\anime\', [
         r'C:\Anime',
       ], caseInsensitive: true)?.userMessage,

@@ -33,7 +33,12 @@ bool isUnderPath(String path, String folder, {bool? caseInsensitive}) {
   // One separator for the comparison; the replacement is one-to-one, so
   // lengths still index [path].
   var f = normalizeFolderPath(folder).replaceAll('\\', '/');
-  var p = path.replaceAll('\\', '/');
+  if (f.isEmpty) return false; // nothing is "under" no folder
+  // The path's own trailing separator is ignored too: a folder row stored
+  // before normalisation existed (`/Volumes/Anime/`) must still match its
+  // mount. `relativeTo` measures the folder, not the path, so slicing is
+  // unaffected.
+  var p = normalizeFolderPath(path).replaceAll('\\', '/');
   if (caseInsensitive ?? Platform.isWindows) {
     p = p.toLowerCase();
     f = f.toLowerCase();

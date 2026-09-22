@@ -232,7 +232,11 @@ Future<String?> resolveFolderPath({
 ) {
   String? best;
   for (final f in folderPaths) {
-    if (isUnderPath(absPath, f) && (best == null || f.length > best.length)) {
+    // Longest NORMALISED match: `/a/b///` must not outrank `/a/b/c` on the
+    // strength of its slashes.
+    if (isUnderPath(absPath, f) &&
+        (best == null ||
+            normalizeFolderPath(f).length > normalizeFolderPath(best).length)) {
       best = f;
     }
   }

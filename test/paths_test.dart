@@ -24,6 +24,14 @@ void main() {
         );
       },
     );
+    test(
+      "the path's own trailing separator is ignored; an empty folder is nobody's parent",
+      () {
+        expect(isUnderPath('/Volumes/Anime/', '/Volumes/Anime'), isTrue);
+        expect(isUnderPath('/a', ''), isFalse);
+        expect(volumeSubpathOf('/Volumes/Anime/', '/Volumes/Anime'), '');
+      },
+    );
     test('a root is a parent of everything on it', () {
       expect(isUnderPath('/a', '/'), isTrue);
       expect(isUnderPath('/', '/'), isTrue);
@@ -111,6 +119,15 @@ void main() {
         ), reason: 'no folder matches a root file: root + name');
       },
     );
+    test('the longest match is judged normalised, not by slash count', () {
+      expect(
+        rebaseToFolderRelative('/a/b/c/d.mkv', [
+          '/a/b///',
+          '/a/b/c',
+        ]).folderPath,
+        '/a/b/c',
+      );
+    });
     test('volumeSubpathOf under a drive root, and null off it', () {
       expect(volumeSubpathOf(r'D:\Anime\shows', r'D:\Anime'), 'shows');
       expect(volumeSubpathOf(r'D:\Anime', r'D:\Anime'), '');

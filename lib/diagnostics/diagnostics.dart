@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
-
 import 'app_log.dart';
 
 /// What the About panel and the error screens show and copy.
@@ -65,8 +63,8 @@ abstract final class Diagnostics {
   /// names), or null for a platform without one. Pure, so the argument forms
   /// are tested: Explorer takes its switch and target as ONE token,
   /// `/select,<path>` — split in two it opens the default folder and selects
-  /// nothing.
-  @visibleForTesting
+  /// nothing. Public for the test; `lib/diagnostics/` stays free of Flutter
+  /// imports (it is reached from isolate code), so no annotation.
   static (String, List<String>)? revealCommand(String os, String path) =>
       switch (os) {
         'macos' => ('open', ['-R', path]),
