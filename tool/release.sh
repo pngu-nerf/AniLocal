@@ -14,10 +14,38 @@ cd "$(dirname "$0")/.."
 
 version="${1:?usage: tool/release.sh <semver>}"
 app_name="AniLocal"
+today=$(date +%Y-%m-%d)
+
+# A release is cut from a clean tree, so the version bump and the changelog
+# roll are the only changes in the release commit.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "working tree is not clean — commit or stash first"; exit 1
+fi
+if ! grep -q '^## \[Unreleased\]' CHANGELOG.md; then
+  echo "CHANGELOG.md has no '## [Unreleased]' section to release"; exit 1
+fi
 app="build/macos/Build/Products/Release/${app_name}.app"
 dmg="build/${app_name}-${version}.dmg"
 
 step() { printf '\n== %s\n' "$*"; }
+
+step "0/6 changelog: Unreleased → ${version}"
+# Keep a Changelog: the Unreleased section becomes this version, dated; a
+# fresh empty Unreleased goes above it; the compare links at the foot move.
+python3 - "$version" "$today" <<'ROLL'
+import re, sys
+version, today = sys.argv[1], sys.argv[2]
+p = 'CHANGELOG.md'; s = open(p).read()
+s = s.replace('## [Unreleased]\n', f'## [Unreleased]\n\n## [{version}] — {today}\n', 1)
+m = re.search(r'^\[Unreleased\]: (https://\S+)/compare/v(\d+\.\d+\.\d+)\.\.\.HEAD$', s, re.M)
+if not m: sys.exit('CHANGELOG.md: no [Unreleased] compare link at the foot')
+repo, prev = m.group(1), m.group(2)
+s = s.replace(m.group(0),
+    f'[Unreleased]: {repo}/compare/v{version}...HEAD\n'
+    f'[{version}]: {repo}/compare/v{prev}...v{version}', 1)
+open(p, 'w').write(s)
+ROLL
+grep -n "^## \[${version}\]" CHANGELOG.md
 
 step "1/6 version → pubspec.yaml"
 # Build number = commit count, so two builds of the same version never share
@@ -62,4 +90,7 @@ hdiutil create -volname "$app_name" -srcfolder "$app" -ov -format UDZO "$dmg"
 codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$dmg"
 echo
 echo "Release artefact: $dmg"
-echo "Next: git tag v${version} && git push --tags, then attach the DMG to the GitHub release."
+echo "Next: commit pubspec.yaml + CHANGELOG.md as 'Release ${version}', then"
+echo "  git tag -a v${version} -m 'AniLocal ${version}' && git push && git push --tags"
+echo "  gh release create v${version} '$dmg' --title 'AniLocal ${version}' --notes-from-tag"
+echo "(unsigned build: say so in the notes — Gatekeeper needs right-click › Open)."
