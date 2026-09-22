@@ -99,3 +99,9 @@ abstract interface class FolderAccess {
   }
   return null;
 }
+
+/// How long a folder or volume probe waits on the filesystem before treating
+/// the path as absent (a hung network mount answers nothing, not "no"). One
+/// value for the TCC check, the volume resolver and the health probe, so a
+/// probe never outlasts the scan that asked for it.
+const Duration kFolderProbeTimeout = Duration(seconds: 5);

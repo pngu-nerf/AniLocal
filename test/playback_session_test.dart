@@ -387,6 +387,30 @@ void main() {
         });
       });
 
+      test(
+        'the stall message uses the ONE clock: an hour in reads h:mm:ss',
+        () {
+          fakeAsync((async) {
+            final rig = _Rig(episodes: [_episode(1)], fileExists: false);
+            rig.session.start();
+            async.flushMicrotasks();
+            rig.player.emitDuration(_s(minutes: 150));
+            rig.player.emitPlaying(true);
+            rig.player.emitPosition(_s(minutes: 70, seconds: 14));
+            async.flushMicrotasks();
+            async.elapse(kStallTolerance + const Duration(seconds: 1));
+            async.flushMicrotasks();
+            final message = rig.session.controls.value.errorMessage;
+            expect(message, contains('1:10:14'));
+            expect(
+              message,
+              isNot(contains('70:14')),
+              reason: 'no hours branch',
+            );
+          });
+        },
+      );
+
       test('a frozen position with the file PRESENT is buffering: probed '
           'again after another tolerance, nothing else', () {
         fakeAsync((async) {

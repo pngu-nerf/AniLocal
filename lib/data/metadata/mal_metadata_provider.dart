@@ -41,7 +41,7 @@ class MalMetadataProvider implements MetadataProvider {
   // from its own profile settings, which is worth saying plainly — "client ID"
   // makes it sound like something only an app publisher would have.
   String get setupInstructions =>
-      'Any MyAnimeList account can create one: Profile settings → API → '
+      'Any MyAnimeList account can create one: Profile settings › API › '
       'Create ID. AniLocal ships no key of its own, so this one is yours.';
 
   @override

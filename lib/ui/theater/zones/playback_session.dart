@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../data/paths.dart' show basenameOf;
 import '../../../diagnostics/app_log.dart';
+import '../../../domain/format_duration.dart';
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/episode_source.dart';
 import '../../../domain/models/next_result.dart';
@@ -274,17 +275,11 @@ class PlaybackSession {
         if (_disposed || gen != _generation || present) return;
         final at = _position;
         _onOpenFailed(
-          'Playback stopped at ${_clock(at)} — the file is no longer '
+          'Playback stopped at ${formatDuration(at)} — the file is no longer '
           'readable. Was the drive disconnected?',
         );
       }(), 'stall probe'),
     );
-  }
-
-  static String _clock(Duration d) {
-    final m = d.inMinutes;
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
   }
 
   /// Host-driven swap (a rail tap). Same episode → nothing.

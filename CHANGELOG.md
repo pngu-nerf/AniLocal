@@ -56,6 +56,9 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   `tool/perf.sh`; `docs/runtime-walkthrough.md`.
 
 ### Changed
+- One word per button: every "try that again" button says **Retry** (the
+  show page said "Try again", the player "Retry") and the scan button says
+  **Scan** everywhere (one said "Scan again").
 - The player's menu section is "Sources"; the show page says "Choose
   source…" and "N sources". "Copies" is retired from the vocabulary.
 - A scan identifies shows in batches of four — the cover-download width — so

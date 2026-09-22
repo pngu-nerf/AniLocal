@@ -109,7 +109,7 @@ class FolderHealthProbe {
       await Directory(path)
           .list(followLinks: false)
           .isEmpty
-          .timeout(const Duration(seconds: 5), onTimeout: () => true);
+          .timeout(kFolderProbeTimeout, onTimeout: () => true);
       return true;
     } on FileSystemException {
       return false;

@@ -961,7 +961,7 @@ class _EmptyState extends StatelessWidget {
           if (hasFolders)
             XpButton(
               icon: Icons.sync,
-              label: 'Scan again',
+              label: 'Scan',
               onPressed: scanning ? null : onScan,
             )
           else

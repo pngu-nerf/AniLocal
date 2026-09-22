@@ -30,7 +30,7 @@ class TccFolderAccess implements FolderAccess {
       // which hid the unplug from every health pass until relaunch.
       final present = await Directory(
         cat.root,
-      ).exists().timeout(const Duration(seconds: 5), onTimeout: () => false);
+      ).exists().timeout(kFolderProbeTimeout, onTimeout: () => false);
       if (present) return FolderAccessResult.granted(cat.label);
       _confirmed.remove(cat.root);
       return FolderAccessResult.missing(cat.label);

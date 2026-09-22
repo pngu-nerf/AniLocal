@@ -213,7 +213,8 @@ class LibrarySync {
     // Parse the deltas and collect distinct titles (parse the file's basename,
     // the last segment of its relative path).
     final parsed = {
-      for (final key in deltas.toIdentify) key: parser.parse(_basename(key.$2)),
+      for (final key in deltas.toIdentify)
+        key: parser.parse(basenameOf(key.$2)),
     };
     final deltaTitles = <String, String>{}; // normalised -> a sample spelling
     final filesByTitle = <String, List<FileKey>>{};
@@ -1204,8 +1205,6 @@ class LibrarySync {
     seriesId: r.seriesId,
     titles: Titles(romaji: r.romaji, english: r.english, native: r.nativeTitle),
   );
-
-  String _basename(String path) => basenameOf(path);
 }
 
 /// Scanned files split against the cache: what to (re)identify, what was

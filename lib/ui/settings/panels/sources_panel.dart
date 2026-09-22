@@ -164,8 +164,7 @@ class _SourcesPanelState extends State<SourcesPanel> {
     if (missing.contains(f.path)) return 'Not connected';
     final label = widget.sources.categoryLabelOf(f.path);
     if (label != null && denied.contains(label)) {
-      return 'Access needed — System Settings › Privacy & Security › '
-          'Files and Folders';
+      return 'Access needed — $kFilesAndFoldersPath';
     }
     return null;
   }

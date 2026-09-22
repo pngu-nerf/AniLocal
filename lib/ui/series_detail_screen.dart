@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../data/paths.dart' show basenameOf;
 import '../diagnostics/app_log.dart';
 import '../domain/folder_health.dart';
 import '../domain/format_duration.dart';
@@ -13,6 +14,7 @@ import '../domain/models/episode_slot.dart';
 import '../domain/models/episode_source.dart';
 import '../domain/models/series.dart';
 import '../domain/watch_order.dart';
+import 'access_recovery.dart' show kFilesAndFoldersPath;
 import 'fix_match_flow.dart';
 import 'library/library_search_bar.dart';
 import 'library_services.dart';
@@ -79,7 +81,7 @@ List<EpisodeListRow> episodeRowsFor({
       for (final e in episodes)
         if (episodeMatchesQuery(
           number: e.number,
-          fileName: _basename(e.fileRef),
+          fileName: basenameOf(e.fileRef),
           query: q,
         ))
           PresentRow(e),
@@ -102,14 +104,12 @@ List<EpisodeListRow> episodeRowsFor({
           episodeMatchesQuery(
             number: s.episode?.number ?? s.number,
             // A ghost (missing) slot has no file → number-only match.
-            fileName: s.episode == null ? null : _basename(s.episode!.fileRef),
+            fileName: s.episode == null ? null : basenameOf(s.episode!.fileRef),
             query: q,
           ))
         s,
   ]);
 }
-
-String _basename(String path) => path.split(Platform.pathSeparator).last;
 
 /// Series detail: cover + metadata + the episodes for this series. With the
 /// missing-episodes feature on, absent episodes appear as ghost tiles (single)
@@ -425,7 +425,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
           content: Text(
             _unreachable == _Unreachable.denied
                 ? "AniLocal can't read this show's folder. Grant access in "
-                      'System Settings › Privacy & Security › Files and Folders.'
+                      '$kFilesAndFoldersPath.'
                 : "This show's drive isn't connected. Reconnect it, then try "
                       'again.',
           ),
@@ -559,7 +559,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     // but not the picker.
     final pinnable = multi && !(_series ?? widget.series).pending;
     final subtitle = [
-      _basename(e.fileRef),
+      basenameOf(e.fileRef),
       if (multi) '${e.sources.length} sources · playing ${e.fileRef}',
       if (!e.watched && e.resumePosition > Duration.zero)
         '▸ resume ${formatDuration(e.resumePosition)}',
@@ -776,7 +776,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
             icon: Icons.lock_outline,
             message:
                 "AniLocal can't read this show's folder — grant access in "
-                'System Settings › Privacy & Security › Files and Folders.',
+                '$kFilesAndFoldersPath.',
             actions: [
               XpButton(
                 dense: true,
@@ -790,7 +790,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
               XpButton(
                 dense: true,
                 icon: Icons.refresh,
-                label: 'Try again',
+                label: 'Retry',
                 onPressed: _reload,
               ),
             ],
@@ -805,7 +805,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
               XpButton(
                 dense: true,
                 icon: Icons.refresh,
-                label: 'Try again',
+                label: 'Retry',
                 onPressed: _reload,
               ),
             ],
@@ -1001,7 +1001,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
             style: TextStyle(color: Xp.text),
           ),
           const SizedBox(height: Xp.spaceM),
-          XpButton(icon: Icons.refresh, label: 'Try again', onPressed: _reload),
+          XpButton(icon: Icons.refresh, label: 'Retry', onPressed: _reload),
         ],
       ),
     );

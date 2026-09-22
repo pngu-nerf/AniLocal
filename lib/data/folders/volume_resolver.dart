@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:anilocal/data/cache/cache_database.dart' show LibraryFolders;
 
-import 'package:anilocal/data/folders/folder_access.dart' show FolderAccess;
+import 'package:anilocal/data/folders/folder_access.dart'
+    show FolderAccess, kFolderProbeTimeout;
 
 import 'package:anilocal/data/scanner/folder_scanner.dart' show FolderScanner;
 
@@ -99,7 +100,7 @@ class DiskutilVolumeResolver implements VolumeResolver {
         // the rest of the process, so the library never greyed until relaunch.
         final present = await Directory(
           cached,
-        ).exists().timeout(const Duration(seconds: 5), onTimeout: () => false);
+        ).exists().timeout(kFolderProbeTimeout, onTimeout: () => false);
         if (present) return cached;
         _mountByVolumeId.remove(volumeId);
       } else {
@@ -209,7 +210,7 @@ Future<String?> resolveFolderPath({
   // recoverable state the reconnect banner already handles.
   final present = await Directory(
     storedPath,
-  ).exists().timeout(const Duration(seconds: 5), onTimeout: () => false);
+  ).exists().timeout(kFolderProbeTimeout, onTimeout: () => false);
   if (present) return storedPath;
   if (volumeId == null) return null; // internal path gone, or never bound
   final mount = await resolver.mountPointForVolumeId(volumeId);

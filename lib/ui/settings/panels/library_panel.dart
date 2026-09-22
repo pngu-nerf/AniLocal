@@ -87,7 +87,7 @@ class LibraryPanel extends StatelessWidget {
             info:
                 'Library folders are an ordered priority list: when an episode '
                 'exists in more than one folder, the highest one wins.\n\n'
-                'Reordering re-resolves which copy plays; it never moves or '
+                'Reordering re-resolves which source plays; it never moves or '
                 'deletes files, and it leaves per-episode source pins alone.',
             // Sources is a tab in this same window now, so this moves the
             // window rather than closing it and pushing a page.
