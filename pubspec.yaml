@@ -21,7 +21,7 @@ version: 0.1.0+3
 
 environment:
   sdk: ^3.12.1
-  flutter: '>=3.44.0'
+  flutter: '>=3.47.0'
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -31,7 +31,7 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   drift: ^2.33.0
-  equatable: ^2.0.8
+  equatable: ^3.0.0
   file_selector: ^1.1.0
   flutter:
     sdk: flutter
@@ -79,6 +79,13 @@ hooks:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # CocoaPods on purpose, stated: media_kit's Darwin plugins have Swift Package
+  # Manager support merged upstream (media-kit/media-kit#1412, 2026-05) but not
+  # published, so `flutter build` would fall back to CocoaPods and warn on every
+  # build. Lift when a media_kit release ships Package.swift (issue #1399), and
+  # before Flutter stops allowing this switch. See CLAUDE.md, "macOS notes".
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

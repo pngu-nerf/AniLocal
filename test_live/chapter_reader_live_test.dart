@@ -86,88 +86,80 @@ void main() {
   walk(root);
   files.sort((a, b) => a.path.compareTo(b.path));
 
-  test(
-    'LIVE: parsed chapter marks match ffprobe, file for file',
-    () async {
-      const reader = ChapterReader();
-      var compared = 0;
-      var withChapters = 0;
-      final mismatches = <String>[];
+  test('LIVE: parsed chapter marks match ffprobe, file for file', () async {
+    const reader = ChapterReader();
+    var compared = 0;
+    var withChapters = 0;
+    final mismatches = <String>[];
 
-      for (final file in files) {
-        final expected = _ffprobeStarts(file.path);
-        final actual = await reader.read(file.path);
-        compared++;
-        if (expected.isEmpty) {
-          if (actual.marks.isNotEmpty) {
-            mismatches.add('${file.path}: we found chapters, ffprobe did not');
-          }
-          continue;
+    for (final file in files) {
+      final expected = _ffprobeStarts(file.path);
+      final actual = await reader.read(file.path);
+      compared++;
+      if (expected.isEmpty) {
+        if (actual.marks.isNotEmpty) {
+          mismatches.add('${file.path}: we found chapters, ffprobe did not');
         }
-        withChapters++;
-        if (actual.marks.length != expected.length) {
-          mismatches.add(
-            '${file.path}: ${actual.marks.length} marks vs ffprobe '
-            '${expected.length}',
-          );
-          continue;
-        }
-        for (var i = 0; i < expected.length; i++) {
-          final ours = actual.marks[i].start.inMilliseconds / 1000.0;
-          if ((ours - expected[i]).abs() > 0.05) {
-            mismatches.add('${file.path}: mark $i $ours vs ${expected[i]}');
-          }
-        }
-        final duration = _ffprobeDuration(file.path);
-        if (duration != null) {
-          final ours = actual.duration.inMilliseconds / 1000.0;
-          if ((ours - duration).abs() > 1.0) {
-            mismatches.add('${file.path}: duration $ours vs $duration');
-          }
+        continue;
+      }
+      withChapters++;
+      if (actual.marks.length != expected.length) {
+        mismatches.add(
+          '${file.path}: ${actual.marks.length} marks vs ffprobe '
+          '${expected.length}',
+        );
+        continue;
+      }
+      for (var i = 0; i < expected.length; i++) {
+        final ours = actual.marks[i].start.inMilliseconds / 1000.0;
+        if ((ours - expected[i]).abs() > 0.05) {
+          mismatches.add('${file.path}: mark $i $ours vs ${expected[i]}');
         }
       }
-
-      print('  compared $compared files, $withChapters with chapters');
-      expect(compared, greaterThan(0), reason: 'no media found to compare');
-      expect(
-        withChapters,
-        greaterThan(0),
-        reason: 'nothing exercised the parser',
-      );
-      expect(mismatches, isEmpty);
-    },
-    timeout: const Timeout(Duration(minutes: 10)),
-  );
-
-  test(
-    'LIVE: inferred OP/ED windows look like openings',
-    () async {
-      const reader = ChapterReader();
-      var inferred = 0;
-      final wrongLength = <String>[];
-
-      for (final file in files) {
-        final chapters = await reader.read(file.path);
-        if (chapters.isEmpty) continue;
-        final skips = inferSkipsFromChapters(chapters.marks, chapters.duration);
-        if (skips == null) continue;
-        inferred++;
-        for (final window in [skips.intro, skips.outro]) {
-          if (window == null) continue;
-          final length = window.end - window.start;
-          if (length < kOpeningMinLength || length > kOpeningMaxLength) {
-            wrongLength.add('${file.path}: ${length.inSeconds}s');
-          }
-          if (window.end > chapters.duration) {
-            wrongLength.add('${file.path}: window past end of file');
-          }
+      final duration = _ffprobeDuration(file.path);
+      if (duration != null) {
+        final ours = actual.duration.inMilliseconds / 1000.0;
+        if ((ours - duration).abs() > 1.0) {
+          mismatches.add('${file.path}: duration $ours vs $duration');
         }
       }
+    }
 
-      print('  inferred skip windows for $inferred files');
-      expect(inferred, greaterThan(0));
-      expect(wrongLength, isEmpty);
-    },
-    timeout: const Timeout(Duration(minutes: 10)),
-  );
+    print('  compared $compared files, $withChapters with chapters');
+    expect(compared, greaterThan(0), reason: 'no media found to compare');
+    expect(
+      withChapters,
+      greaterThan(0),
+      reason: 'nothing exercised the parser',
+    );
+    expect(mismatches, isEmpty);
+  }, timeout: const Timeout(Duration(minutes: 10)));
+
+  test('LIVE: inferred OP/ED windows look like openings', () async {
+    const reader = ChapterReader();
+    var inferred = 0;
+    final wrongLength = <String>[];
+
+    for (final file in files) {
+      final chapters = await reader.read(file.path);
+      if (chapters.isEmpty) continue;
+      final skips = inferSkipsFromChapters(chapters.marks, chapters.duration);
+      if (skips == null) continue;
+      inferred++;
+      for (final window in [skips.intro, skips.outro]) {
+        if (window == null) continue;
+        final length = window.end - window.start;
+        if (length < kOpeningMinLength || length > kOpeningMaxLength) {
+          wrongLength.add('${file.path}: ${length.inSeconds}s');
+        }
+        if (window.end > chapters.duration) {
+          wrongLength.add('${file.path}: window past end of file');
+        }
+      }
+    }
+
+    print('  inferred skip windows for $inferred files');
+    expect(inferred, greaterThan(0));
+    expect(wrongLength, isEmpty);
+  }, timeout: const Timeout(Duration(minutes: 10)));
 }

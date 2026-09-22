@@ -324,11 +324,10 @@ void main() {
           ],
         ),
       );
-      expect(
-        (await reader.read(f.path)).marks.map((m) => m.start.inSeconds),
-        [0, 90],
-        reason: 'the flagged edition wins',
-      );
+      expect((await reader.read(f.path)).marks.map((m) => m.start.inSeconds), [
+        0,
+        90,
+      ], reason: 'the flagged edition wins');
     });
 
     test('with no default flag the FIRST edition is read', () async {

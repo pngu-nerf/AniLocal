@@ -1,4 +1,9 @@
-platform :osx, '10.15'
+platform :osx, '12.0'
+
+# Third-party pods only (Runner keeps its own Warnings.xcconfig): media_kit_video's
+# podspec quotes "$(inherited)" and its generated Swift header trips objc_ownership,
+# ~25 warnings per build that are not ours to fix.
+inhibit_all_warnings!
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'

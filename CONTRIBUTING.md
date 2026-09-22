@@ -9,7 +9,7 @@ before a change of any size.
 ## Prerequisites
 
 - macOS 13 or later, Xcode with the command-line tools, CocoaPods.
-- Flutter **3.44.1** on the stable channel (`flutter --version`). CI pins this
+- Flutter **3.47.5** on the stable channel (`flutter --version`). CI pins this
   version because the golden images in `test/goldens/` are rasterised by it.
 - The first native build needs the network once: media_kit's pods download the
   libmpv/FFmpeg frameworks (sha256-verified). After that, builds are offline.

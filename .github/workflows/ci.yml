@@ -25,7 +25,7 @@ jobs:
           # Pinned, not `stable`: test/goldens are rasterised by the engine,
           # so they hold only for the SDK that generated them. Bumping this
           # regenerates the goldens in the same commit.
-          flutter-version: 3.44.1
+          flutter-version: 3.47.5
           cache: true
       - run: flutter pub get
       - run: ./tool/check.sh
@@ -60,7 +60,7 @@ jobs:
           # Pinned, not `stable`: test/goldens are rasterised by the engine,
           # so they hold only for the SDK that generated them. Bumping this
           # regenerates the goldens in the same commit.
-          flutter-version: 3.44.1
+          flutter-version: 3.47.5
           cache: true
       - run: flutter pub get
       - run: flutter build macos --debug

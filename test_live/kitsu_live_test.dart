@@ -28,85 +28,69 @@ Future<T> _withRetries<T>(Future<T> Function() body, {int tries = 6}) async {
 }
 
 void main() {
-  test(
-    'LIVE: search maps into the shape the client promises',
-    () async {
-      final client = KitsuClient();
-      addTearDown(client.dispose);
+  test('LIVE: search maps into the shape the client promises', () async {
+    final client = KitsuClient();
+    addTearDown(client.dispose);
 
-      final results = await _withRetries(
-        () => client.searchCandidates('Cowboy Bebop', perPage: 5),
-      );
+    final results = await _withRetries(
+      () => client.searchCandidates('Cowboy Bebop', perPage: 5),
+    );
 
-      expect(results, isNotEmpty);
-      final bebop = results.firstWhere((s) => s.externalIds.kitsu == 1);
-      expect(bebop.titles.romaji, 'Cowboy Bebop');
-      // The charset trap: Kitsu sends raw UTF-8 with NO charset, so a regression
-      // to `response.body` shows up here as mojibake.
-      expect(bebop.titles.native, 'カウボーイビバップ');
-      expect(bebop.episodeCount, 26);
-      expect(bebop.format, kFormatTv);
-      expect(bebop.coverImageRef, startsWith('https://'));
-    },
-    timeout: const Timeout(Duration(minutes: 3)),
-  );
+    expect(results, isNotEmpty);
+    final bebop = results.firstWhere((s) => s.externalIds.kitsu == 1);
+    expect(bebop.titles.romaji, 'Cowboy Bebop');
+    // The charset trap: Kitsu sends raw UTF-8 with NO charset, so a regression
+    // to `response.body` shows up here as mojibake.
+    expect(bebop.titles.native, 'カウボーイビバップ');
+    expect(bebop.episodeCount, 26);
+    expect(bebop.format, kFormatTv);
+    expect(bebop.coverImageRef, startsWith('https://'));
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
-  test(
-    'LIVE: include=mappings really resolves AniList and MAL ids',
-    () async {
-      // This is the load-bearing one. If Kitsu ever stops returning mappings
-      // inline, every Kitsu-identified show would start minting its own identity
-      // instead of landing on the AniList one — silently.
-      final client = KitsuClient();
-      addTearDown(client.dispose);
+  test('LIVE: include=mappings really resolves AniList and MAL ids', () async {
+    // This is the load-bearing one. If Kitsu ever stops returning mappings
+    // inline, every Kitsu-identified show would start minting its own identity
+    // instead of landing on the AniList one — silently.
+    final client = KitsuClient();
+    addTearDown(client.dispose);
 
-      final results = await _withRetries(
-        () => client.searchCandidates('Cowboy Bebop', perPage: 5),
-      );
+    final results = await _withRetries(
+      () => client.searchCandidates('Cowboy Bebop', perPage: 5),
+    );
 
-      final bebop = results.firstWhere((s) => s.externalIds.kitsu == 1);
-      expect(
-        bebop.externalIds.anilist,
-        isNotNull,
-        reason: 'anilist/anime mapping',
-      );
-      expect(
-        bebop.externalIds.mal,
-        isNotNull,
-        reason: 'myanimelist/anime mapping',
-      );
-    },
-    timeout: const Timeout(Duration(minutes: 3)),
-  );
+    final bebop = results.firstWhere((s) => s.externalIds.kitsu == 1);
+    expect(
+      bebop.externalIds.anilist,
+      isNotNull,
+      reason: 'anilist/anime mapping',
+    );
+    expect(
+      bebop.externalIds.mal,
+      isNotNull,
+      reason: 'myanimelist/anime mapping',
+    );
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
-  test(
-    'LIVE: fetchByIds returns the same shape',
-    () async {
-      final client = KitsuClient();
-      addTearDown(client.dispose);
+  test('LIVE: fetchByIds returns the same shape', () async {
+    final client = KitsuClient();
+    addTearDown(client.dispose);
 
-      final results = await _withRetries(() => client.fetchByIds([1, 7442]));
+    final results = await _withRetries(() => client.fetchByIds([1, 7442]));
 
-      expect(results.length, 2);
-      final ids = results.map((s) => s.externalIds.kitsu).toSet();
-      expect(ids, {1, 7442});
-      expect(results.every((s) => s.titles.romaji != null), isTrue);
-    },
-    timeout: const Timeout(Duration(minutes: 3)),
-  );
+    expect(results.length, 2);
+    final ids = results.map((s) => s.externalIds.kitsu).toSet();
+    expect(ids, {1, 7442});
+    expect(results.every((s) => s.titles.romaji != null), isTrue);
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
-  test(
-    'LIVE: a nonsense query is a no-match, not an error',
-    () async {
-      final client = KitsuClient();
-      addTearDown(client.dispose);
+  test('LIVE: a nonsense query is a no-match, not an error', () async {
+    final client = KitsuClient();
+    addTearDown(client.dispose);
 
-      final results = await _withRetries(
-        () => client.searchCandidates('zzzzqqqxnotarealanime12345'),
-      );
+    final results = await _withRetries(
+      () => client.searchCandidates('zzzzqqqxnotarealanime12345'),
+    );
 
-      expect(results, isEmpty);
-    },
-    timeout: const Timeout(Duration(minutes: 3)),
-  );
+    expect(results, isEmpty);
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }

@@ -344,11 +344,9 @@ void main() {
       _bar(state: PlayerControlsState(episode: testEpisode(3))),
     );
     expect(find.byType(SeekBar), findsOneWidget);
-    expect(
-      ControlBarConfig.windowedDefault.controlsIn(ControlSlot.scrubber),
-      [PlayerControl.seekBar],
-      reason: 'the scrubber slot is the seek bar and nothing else',
-    );
+    expect(ControlBarConfig.windowedDefault.controlsIn(ControlSlot.scrubber), [
+      PlayerControl.seekBar,
+    ], reason: 'the scrubber slot is the seek bar and nothing else');
   });
 }
 

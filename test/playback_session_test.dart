@@ -703,11 +703,9 @@ void main() {
             reason: '20:00 is not in the intro',
           );
           rig.player.emitPosition(_s(seconds: 10)); // the viewer seeks back
-          expect(
-            rig.player.seeks,
-            [_s(seconds: 90)],
-            reason: 'a real position inside the window still fires',
-          );
+          expect(rig.player.seeks, [
+            _s(seconds: 90),
+          ], reason: 'a real position inside the window still fires');
         });
       },
     );
@@ -826,11 +824,9 @@ void main() {
           expect(rig.session.episode.number, 2);
           expect(rig.session.controls.value.episode?.number, 2);
           expect(rig.advanced.map((e) => e.number), [2]);
-          expect(
-            rig.watchState.marked.map((e) => e.number),
-            [1],
-            reason: 'the finished episode was marked on completion',
-          );
+          expect(rig.watchState.marked.map((e) => e.number), [
+            1,
+          ], reason: 'the finished episode was marked on completion');
           // A second completion event for the OLD file, arriving late, is inert.
           expect(
             rig.session.controls.value.upNext,

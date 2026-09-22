@@ -15,6 +15,9 @@ analyzer:
     # done or written into ROADMAP.md. (Generated code is exempt through its
     # own ignore_for_file.)
     todo: warning
+  exclude:
+    - build/**
+    - macos/**
 
 linter:
   rules:

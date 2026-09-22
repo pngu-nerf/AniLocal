@@ -30,40 +30,32 @@ Future<T> _withRetries<T>(Future<T> Function() body, {int tries = 120}) async {
 }
 
 void main() {
-  test(
-    'LIVE: search maps into the shape the client promises',
-    () async {
-      final client = JikanClient();
-      addTearDown(client.dispose);
+  test('LIVE: search maps into the shape the client promises', () async {
+    final client = JikanClient();
+    addTearDown(client.dispose);
 
-      final results = await _withRetries(
-        () => client.searchCandidates('Cowboy Bebop', perPage: 3),
-      );
+    final results = await _withRetries(
+      () => client.searchCandidates('Cowboy Bebop', perPage: 3),
+    );
 
-      expect(results, isNotEmpty);
-      final bebop = results.firstWhere((s) => s.externalIds.mal == 1);
-      expect(bebop.titles.romaji, 'Cowboy Bebop');
-      // The charset trap: if we regressed to response.body this is mojibake.
-      expect(bebop.titles.native, 'カウボーイビバップ');
-      expect(bebop.episodeCount, 26);
-      expect(bebop.format, kFormatTv, reason: "MAL's 'TV' normalises");
-      expect(bebop.coverImageRef, startsWith('https://'));
-    },
-    timeout: const Timeout(Duration(minutes: 15)),
-  );
+    expect(results, isNotEmpty);
+    final bebop = results.firstWhere((s) => s.externalIds.mal == 1);
+    expect(bebop.titles.romaji, 'Cowboy Bebop');
+    // The charset trap: if we regressed to response.body this is mojibake.
+    expect(bebop.titles.native, 'カウボーイビバップ');
+    expect(bebop.episodeCount, 26);
+    expect(bebop.format, kFormatTv, reason: "MAL's 'TV' normalises");
+    expect(bebop.coverImageRef, startsWith('https://'));
+  }, timeout: const Timeout(Duration(minutes: 15)));
 
-  test(
-    'LIVE: fetchByIds returns the same shape',
-    () async {
-      final client = JikanClient();
-      addTearDown(client.dispose);
+  test('LIVE: fetchByIds returns the same shape', () async {
+    final client = JikanClient();
+    addTearDown(client.dispose);
 
-      final results = await _withRetries(() => client.fetchByIds([1]));
+    final results = await _withRetries(() => client.fetchByIds([1]));
 
-      expect(results.single.externalIds.mal, 1);
-      expect(results.single.titles.native, 'カウボーイビバップ');
-      expect(results.single.format, kFormatTv);
-    },
-    timeout: const Timeout(Duration(minutes: 15)),
-  );
+    expect(results.single.externalIds.mal, 1);
+    expect(results.single.titles.native, 'カウボーイビバップ');
+    expect(results.single.format, kFormatTv);
+  }, timeout: const Timeout(Duration(minutes: 15)));
 }

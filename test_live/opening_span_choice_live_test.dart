@@ -67,191 +67,186 @@ List<ChapterSpan> _candidatesBeforeMidpoint(
 String _fmt(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(1);
 
 void main() {
-  test(
-    'LIVE: earliest vs latest theme-length span before the midpoint',
-    () async {
-      final lines = <String>[];
-      void log(String s) {
-        lines.add(s);
-        print(s);
-      }
+  test('LIVE: earliest vs latest theme-length span before the midpoint', () async {
+    final lines = <String>[];
+    void log(String s) {
+      lines.add(s);
+      print(s);
+    }
 
-      if (!liveReady(tools: ['sqlite3'])) return;
-      // Prove readability up front rather than reporting an empty library: TCC
-      // denies reads on a removable volume per RESPONSIBLE PROCESS, and
-      // ChapterReader turns any failure into "no chapters", so a permission
-      // problem would otherwise look exactly like a library with no chapter marks.
-      try {
-        Directory(liveLibraryRoot).listSync().take(1).toList();
-      } on FileSystemException catch (e) {
-        fail(
-          'Cannot read $liveLibraryRoot — ${e.osError?.message ?? e.message}.\n'
-          'This is a macOS permission denial, not an absent library: grant the '
-          'app hosting this shell access under Privacy & Security > Files and '
-          'Folders > Removable Volumes.',
-        );
-      }
-
-      final home = Platform.environment['HOME']!;
-      final live = File(
-        '$home/Library/Application Support/com.anilocal.anilocal/anilocal/cache.sqlite',
+    if (!liveReady(tools: ['sqlite3'])) return;
+    // Prove readability up front rather than reporting an empty library: TCC
+    // denies reads on a removable volume per RESPONSIBLE PROCESS, and
+    // ChapterReader turns any failure into "no chapters", so a permission
+    // problem would otherwise look exactly like a library with no chapter marks.
+    try {
+      Directory(liveLibraryRoot).listSync().take(1).toList();
+    } on FileSystemException catch (e) {
+      fail(
+        'Cannot read $liveLibraryRoot — ${e.osError?.message ?? e.message}.\n'
+        'This is a macOS permission denial, not an absent library: grant the '
+        'app hosting this shell access under Privacy & Security > Files and '
+        'Folders > Removable Volumes.',
       );
-      if (!live.existsSync()) {
-        markTestSkipped('no cache at ${live.path} — run the app once first');
-        return;
-      }
-      final copy = File(
-        '${Directory.systemTemp.path}/anilocal_span_probe.sqlite',
+    }
+
+    final home = Platform.environment['HOME']!;
+    final live = File(
+      '$home/Library/Application Support/com.anilocal.anilocal/anilocal/cache.sqlite',
+    );
+    if (!live.existsSync()) {
+      markTestSkipped('no cache at ${live.path} — run the app once first');
+      return;
+    }
+    final copy = File(
+      '${Directory.systemTemp.path}/anilocal_span_probe.sqlite',
+    );
+    // `VACUUM INTO`, not a file copy: the cache runs in WAL mode, so the
+    // most recent writes live in `cache.sqlite-wal` and a copy of the main
+    // file alone is a silently stale snapshot. VACUUM INTO reads through
+    // the WAL under a read transaction and writes one consistent file.
+    if (copy.existsSync()) copy.deleteSync();
+    final snapshot = Process.runSync('sqlite3', [
+      '-readonly',
+      live.path,
+      "VACUUM INTO '${copy.path}'",
+    ]);
+    if (snapshot.exitCode != 0) {
+      fail('could not snapshot the live cache: ${snapshot.stderr}');
+    }
+
+    // One row per matched file, carrying the MAL id AniSkip is keyed by. Unit
+    // separator rather than a comma: show titles contain commas.
+    const sep = '\x1f';
+    final query = Process.runSync('sqlite3', [
+      '-readonly',
+      '-noheader',
+      '-separator',
+      sep,
+      copy.path,
+      "SELECT f.folder_path || '/' || f.relative_path, f.episode_number, "
+          "COALESCE(sc.romaji, sc.english, 'series ' || f.series_id), "
+          'COALESCE(e.external_id, \'\') '
+          'FROM file_cache f '
+          'LEFT JOIN series_cache sc ON sc.series_id = f.series_id '
+          "LEFT JOIN series_external_ids e ON e.series_id = f.series_id AND e.provider = 'mal' "
+          'WHERE f.series_id IS NOT NULL AND f.episode_number IS NOT NULL '
+          'ORDER BY 3, 2',
+    ]);
+    if (query.exitCode != 0) {
+      fail('sqlite3 failed: ${query.stderr}');
+    }
+    final rows = [
+      for (final line in (query.stdout as String).split('\n'))
+        if (line.trim().isNotEmpty) line.split(sep),
+    ];
+
+    const reader = ChapterReader();
+    final aniskip = AniSkipSkipProvider(AniSkipClient());
+
+    var files = 0, withChapters = 0, noCandidate = 0, one = 0, several = 0;
+    var earliestWins = 0, latestWins = 0, neitherClose = 0, noAniSkip = 0;
+    final detail = <String>[];
+
+    for (final row in rows) {
+      final path = row[0];
+      if (!File(path).existsSync()) continue;
+      files++;
+      final chapters = await reader.read(path);
+      if (chapters.isEmpty) continue;
+      withChapters++;
+
+      final candidates = _candidatesBeforeMidpoint(
+        chapters.marks,
+        chapters.duration,
       );
-      // `VACUUM INTO`, not a file copy: the cache runs in WAL mode, so the
-      // most recent writes live in `cache.sqlite-wal` and a copy of the main
-      // file alone is a silently stale snapshot. VACUUM INTO reads through
-      // the WAL under a read transaction and writes one consistent file.
-      if (copy.existsSync()) copy.deleteSync();
-      final snapshot = Process.runSync('sqlite3', [
-        '-readonly',
-        live.path,
-        "VACUUM INTO '${copy.path}'",
-      ]);
-      if (snapshot.exitCode != 0) {
-        fail('could not snapshot the live cache: ${snapshot.stderr}');
+      if (candidates.isEmpty) {
+        noCandidate++;
+        continue;
       }
-
-      // One row per matched file, carrying the MAL id AniSkip is keyed by. Unit
-      // separator rather than a comma: show titles contain commas.
-      const sep = '\x1f';
-      final query = Process.runSync('sqlite3', [
-        '-readonly',
-        '-noheader',
-        '-separator',
-        sep,
-        copy.path,
-        "SELECT f.folder_path || '/' || f.relative_path, f.episode_number, "
-            "COALESCE(sc.romaji, sc.english, 'series ' || f.series_id), "
-            'COALESCE(e.external_id, \'\') '
-            'FROM file_cache f '
-            'LEFT JOIN series_cache sc ON sc.series_id = f.series_id '
-            "LEFT JOIN series_external_ids e ON e.series_id = f.series_id AND e.provider = 'mal' "
-            'WHERE f.series_id IS NOT NULL AND f.episode_number IS NOT NULL '
-            'ORDER BY 3, 2',
-      ]);
-      if (query.exitCode != 0) {
-        fail('sqlite3 failed: ${query.stderr}');
+      if (candidates.length == 1) {
+        one++;
+        continue;
       }
-      final rows = [
-        for (final line in (query.stdout as String).split('\n'))
-          if (line.trim().isNotEmpty) line.split(sep),
-      ];
+      several++;
 
-      const reader = ChapterReader();
-      final aniskip = AniSkipSkipProvider(AniSkipClient());
-
-      var files = 0, withChapters = 0, noCandidate = 0, one = 0, several = 0;
-      var earliestWins = 0, latestWins = 0, neitherClose = 0, noAniSkip = 0;
-      final detail = <String>[];
-
-      for (final row in rows) {
-        final path = row[0];
-        if (!File(path).existsSync()) continue;
-        files++;
-        final chapters = await reader.read(path);
-        if (chapters.isEmpty) continue;
-        withChapters++;
-
-        final candidates = _candidatesBeforeMidpoint(
-          chapters.marks,
-          chapters.duration,
-        );
-        if (candidates.isEmpty) {
-          noCandidate++;
-          continue;
-        }
-        if (candidates.length == 1) {
-          one++;
-          continue;
-        }
-        several++;
-
-        // Only the ambiguous files cost a request, which is why this is cheap.
-        final ep = int.parse(row[1]);
-        final show = row[2];
-        final mal = int.tryParse(row[3]);
-        final answer = mal == null
-            ? null
-            : await aniskip.fetchSkips(
-                SkipLookup(seriesId: 0, episode: ep, malId: mal),
-              );
-        final truth = answer?.intro;
-        if (truth == null) {
-          noAniSkip++;
-          detail.add(
-            '  $show ep$ep — ${candidates.length} candidates, '
-            'AniSkip has nothing to judge by',
-          );
-          continue;
-        }
-
-        final earliest = candidates.first;
-        final latest = candidates.last;
-        SkipRange asRange(ChapterSpan s) =>
-            SkipRange(start: s.start, end: s.end);
-        final oEarly = windowOverlap(asRange(earliest), truth);
-        final oLate = windowOverlap(asRange(latest), truth);
-
-        final String verdict;
-        if (oEarly < kSkipCorroborationMinOverlap &&
-            oLate < kSkipCorroborationMinOverlap) {
-          neitherClose++;
-          verdict = 'NEITHER';
-        } else if (oLate > oEarly) {
-          latestWins++;
-          verdict = 'LATEST';
-        } else {
-          earliestWins++;
-          verdict = 'earliest';
-        }
+      // Only the ambiguous files cost a request, which is why this is cheap.
+      final ep = int.parse(row[1]);
+      final show = row[2];
+      final mal = int.tryParse(row[3]);
+      final answer = mal == null
+          ? null
+          : await aniskip.fetchSkips(
+              SkipLookup(seriesId: 0, episode: ep, malId: mal),
+            );
+      final truth = answer?.intro;
+      if (truth == null) {
+        noAniSkip++;
         detail.add(
-          '  $show ep$ep  $verdict  '
-          'earliest ${_fmt(earliest.start)}→${_fmt(earliest.end)} '
-          '(${(oEarly * 100).toStringAsFixed(0)}%)  '
-          'latest ${_fmt(latest.start)}→${_fmt(latest.end)} '
-          '(${(oLate * 100).toStringAsFixed(0)}%)  '
-          'aniskip ${_fmt(truth.start)}→${_fmt(truth.end)}',
+          '  $show ep$ep — ${candidates.length} candidates, '
+          'AniSkip has nothing to judge by',
         );
-        await Future<void>.delayed(const Duration(milliseconds: 350));
+        continue;
       }
 
-      copy.deleteSync();
+      final earliest = candidates.first;
+      final latest = candidates.last;
+      SkipRange asRange(ChapterSpan s) => SkipRange(start: s.start, end: s.end);
+      final oEarly = windowOverlap(asRange(earliest), truth);
+      final oLate = windowOverlap(asRange(latest), truth);
 
-      log('=== files ===');
-      log('  matched files present on disk : $files');
-      log('  with readable chapters        : $withChapters');
-      log('  no theme-length span at all   : $noCandidate');
-      log('  exactly ONE candidate         : $one   (nothing to decide)');
-      log('  TWO OR MORE candidates        : $several   (the whole question)');
-      log('');
-      log('=== of the ambiguous files, which candidate matches AniSkip? ===');
-      log('  earliest (what we do today)   : $earliestWins');
-      log('  LATEST                        : $latestWins');
-      log('  neither is close              : $neitherClose');
-      log('  AniSkip had no answer         : $noAniSkip');
-      log('');
-      log('=== detail ===');
-      for (final d in detail) {
-        log(d);
+      final String verdict;
+      if (oEarly < kSkipCorroborationMinOverlap &&
+          oLate < kSkipCorroborationMinOverlap) {
+        neitherClose++;
+        verdict = 'NEITHER';
+      } else if (oLate > oEarly) {
+        latestWins++;
+        verdict = 'LATEST';
+      } else {
+        earliestWins++;
+        verdict = 'earliest';
       }
-      log('');
-      log(
-        'READ THIS AS: switching to latest-wins is justified only if LATEST '
-        'clearly outnumbers earliest. If earliest wins even a handful, the rule '
-        'is right as it stands and those nine windows stay a corroboration '
-        'problem rather than an inference one.',
+      detail.add(
+        '  $show ep$ep  $verdict  '
+        'earliest ${_fmt(earliest.start)}→${_fmt(earliest.end)} '
+        '(${(oEarly * 100).toStringAsFixed(0)}%)  '
+        'latest ${_fmt(latest.start)}→${_fmt(latest.end)} '
+        '(${(oLate * 100).toStringAsFixed(0)}%)  '
+        'aniskip ${_fmt(truth.start)}→${_fmt(truth.end)}',
       );
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+    }
 
-      Directory('build').createSync(recursive: true);
-      File(_reportPath).writeAsStringSync('${lines.join('\n')}\n');
-      print('\nreport written to $_reportPath');
-    },
-    timeout: const Timeout(Duration(minutes: 30)),
-  );
+    copy.deleteSync();
+
+    log('=== files ===');
+    log('  matched files present on disk : $files');
+    log('  with readable chapters        : $withChapters');
+    log('  no theme-length span at all   : $noCandidate');
+    log('  exactly ONE candidate         : $one   (nothing to decide)');
+    log('  TWO OR MORE candidates        : $several   (the whole question)');
+    log('');
+    log('=== of the ambiguous files, which candidate matches AniSkip? ===');
+    log('  earliest (what we do today)   : $earliestWins');
+    log('  LATEST                        : $latestWins');
+    log('  neither is close              : $neitherClose');
+    log('  AniSkip had no answer         : $noAniSkip');
+    log('');
+    log('=== detail ===');
+    for (final d in detail) {
+      log(d);
+    }
+    log('');
+    log(
+      'READ THIS AS: switching to latest-wins is justified only if LATEST '
+      'clearly outnumbers earliest. If earliest wins even a handful, the rule '
+      'is right as it stands and those nine windows stay a corroboration '
+      'problem rather than an inference one.',
+    );
+
+    Directory('build').createSync(recursive: true);
+    File(_reportPath).writeAsStringSync('${lines.join('\n')}\n');
+    print('\nreport written to $_reportPath');
+  }, timeout: const Timeout(Duration(minutes: 30)));
 }

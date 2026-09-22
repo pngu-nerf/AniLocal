@@ -54,11 +54,9 @@ void main() {
 
         expect(results, everyElement(_ep2));
         expect(resolver.asked, 1, reason: '"next" resolved once from ep 1');
-        expect(
-          player.opened.map((m) => m.uri),
-          ['/s/02.mkv'],
-          reason: 'ep 2 opened once, not three times — and ep 3 never',
-        );
+        expect(player.opened.map((m) => m.uri), [
+          '/s/02.mkv',
+        ], reason: 'ep 2 opened once, not three times — and ep 3 never');
         expect(playback.current, _ep2);
       },
     );

@@ -184,11 +184,11 @@ void main() {
         continuousOffset: 11,
         displayContinuous: true,
       );
-      expect(
-        (await repo.episodesFor(200)).map((e) => e.number),
-        [12, 13, 14],
-        reason: 'continuous = anchored(1,2,3) + prior count(11)',
-      );
+      expect((await repo.episodesFor(200)).map((e) => e.number), [
+        12,
+        13,
+        14,
+      ], reason: 'continuous = anchored(1,2,3) + prior count(11)');
 
       // Faithful display: AniList-relative positions.
       await fixMatch.assignRange(
@@ -227,11 +227,9 @@ void main() {
     await sync.sync([dir.path]); // re-scans; sync never touches overrides
 
     final eps = await repo.episodesFor(200);
-    expect(
-      eps.map((e) => e.fileRef),
-      [b.path],
-      reason: 'override followed the file by fingerprint, not path',
-    );
+    expect(eps.map((e) => e.fileRef), [
+      b.path,
+    ], reason: 'override followed the file by fingerprint, not path');
     expect(await repo.episodesFor(100), isEmpty);
   });
 
