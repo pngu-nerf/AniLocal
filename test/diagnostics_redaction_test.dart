@@ -30,4 +30,16 @@ void main() {
       'x /Users/pat',
     );
   });
+
+  test("the reveal command per OS, with Explorer's one-token switch", () {
+    (String, List<String>) on(String os, String path) =>
+        Diagnostics.revealCommand(os, path)!;
+    expect(on('macos', '/l/x.log').$1, 'open');
+    expect(on('macos', '/l/x.log').$2, ['-R', '/l/x.log']);
+    expect(on('windows', r'C:\l\x.log').$1, 'explorer.exe');
+    expect(on('windows', r'C:\l\x.log').$2, [r'/select,C:\l\x.log']);
+    expect(on('linux', '/l/x.log').$1, 'xdg-open');
+    expect(on('linux', '/l/x.log').$2, ['/l']);
+    expect(Diagnostics.revealCommand('fuchsia', '/l/x.log'), isNull);
+  });
 }

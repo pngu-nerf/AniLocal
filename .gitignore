@@ -49,3 +49,6 @@ flutter_*.png
 
 # Claude Code session state (personal permission allowlists etc.)
 .claude/
+
+# flutter_test writes these on a golden mismatch; they are evidence, not inputs.
+test/goldens/failures/

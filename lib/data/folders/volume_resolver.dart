@@ -240,10 +240,7 @@ Future<String?> resolveFolderPath({
     final split = splitLast(absPath);
     return (folderPath: split.parent, relativePath: split.name);
   }
-  final relative = absPath.length <= best.length
-      ? ''
-      : absPath.substring(best.length + 1);
-  return (folderPath: best, relativePath: relative);
+  return (folderPath: best, relativePath: relativeTo(absPath, best));
 }
 
 /// The folder-relative subpath of [folderPath] within [mountPoint] (e.g.
@@ -255,9 +252,7 @@ String? volumeSubpathOf(String folderPath, String mountPoint) {
   // used to return '' ("treat as the root"), which persisted a binding that
   // resolved the library folder to the whole volume after a remount.
   if (!isUnderPath(folderPath, mountPoint)) return null;
-  return folderPath.length <= mountPoint.length
-      ? ''
-      : folderPath.substring(mountPoint.length + 1);
+  return relativeTo(folderPath, mountPoint);
 }
 
 /// The [VolumeResolver] for a platform with no volume-identity mechanism yet

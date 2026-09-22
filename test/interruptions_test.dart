@@ -19,6 +19,7 @@ import 'package:anilocal/domain/models/episode.dart';
 import 'package:anilocal/domain/models/episode_source.dart';
 import 'package:anilocal/domain/models/folder_refused.dart';
 import 'package:anilocal/domain/models/metadata_failure.dart';
+import 'package:anilocal/domain/paths.dart';
 import 'package:anilocal/sync/library_sync.dart';
 import 'package:anilocal/sync/source_health.dart';
 import 'package:drift/native.dart';

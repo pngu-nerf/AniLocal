@@ -142,8 +142,14 @@ abstract final class WindowChrome {
     if (isNative) return _channel.invokeMethod<void>('quit');
     // No runner to ask: run the hooks ourselves, then end the process.
     await runQuitHooks();
-    exit(0);
+    debugExit(0);
   }
+
+  /// How [quit] ends the process where there is no runner: `dart:io`'s
+  /// `exit`. Replaceable so a test can reach that branch without killing the
+  /// test runner.
+  @visibleForTesting
+  static void Function(int code) debugExit = exit;
 }
 
 /// Wraps [child] so a click-drag inside it moves the window and a double-click

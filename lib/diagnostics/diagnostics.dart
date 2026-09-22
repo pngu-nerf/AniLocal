@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'app_log.dart';
 
 /// What the About panel and the error screens show and copy.
@@ -59,18 +61,27 @@ abstract final class Diagnostics {
     return text.replaceAll(home, '~');
   }
 
+  /// The command that reveals [path] on [os] (`Platform.operatingSystem`
+  /// names), or null for a platform without one. Pure, so the argument forms
+  /// are tested: Explorer takes its switch and target as ONE token,
+  /// `/select,<path>` — split in two it opens the default folder and selects
+  /// nothing.
+  @visibleForTesting
+  static (String, List<String>)? revealCommand(String os, String path) =>
+      switch (os) {
+        'macos' => ('open', ['-R', path]),
+        'windows' => ('explorer.exe', ['/select,$path']),
+        'linux' => ('xdg-open', [File(path).parent.path]),
+        _ => null,
+      };
+
   /// Reveal the log file in the platform's file browser: Finder (selected),
   /// Explorer (selected), or the folder in whatever handles `xdg-open`. An
   /// unknown platform is a no-op rather than an error.
   static Future<void> revealLogFolder() async {
     final path = AppLog.filePath;
     if (path == null) return;
-    final (String, List<String>)? command = switch (Platform.operatingSystem) {
-      'macos' => ('open', ['-R', path]),
-      'windows' => ('explorer.exe', ['/select,', path]),
-      'linux' => ('xdg-open', [File(path).parent.path]),
-      _ => null,
-    };
+    final command = revealCommand(Platform.operatingSystem, path);
     if (command == null) return;
     try {
       await Process.run(command.$1, command.$2);

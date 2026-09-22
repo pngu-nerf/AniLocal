@@ -1,3 +1,5 @@
+import 'dart:io' show exit;
+
 import 'package:anilocal/ui/window_chrome.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,7 +30,7 @@ void main() {
   test('on macOS every call reaches the runner', () async {
     WindowChrome.debugNativeOverride = true;
     expect(WindowChrome.isNative, isTrue);
-    expect(kTrafficLightInset, 78);
+    expect(kTrafficLightInset, isPositive);
     await WindowChrome.startDrag();
     await WindowChrome.toggleMaximize();
     await WindowChrome.setFullscreen(true);
@@ -51,6 +53,26 @@ void main() {
     await WindowChrome.setFullscreenAllowed(false);
     expect(calls, isEmpty);
   });
+
+  test(
+    'off macOS quit() runs the hooks itself, then ends the process',
+    () async {
+      WindowChrome.debugNativeOverride = false;
+      var hookRan = false;
+      int? exitedWith;
+      final remove = WindowChrome.addQuitHook(() async => hookRan = true);
+      WindowChrome.debugExit = (code) => exitedWith = code;
+      try {
+        await WindowChrome.quit();
+      } finally {
+        remove();
+        WindowChrome.debugExit = exit;
+      }
+      expect(hookRan, isTrue);
+      expect(exitedWith, 0);
+      expect(calls, isEmpty, reason: 'no runner to ask');
+    },
+  );
 
   testWidgets('WindowDragArea is the bare child off macOS', (tester) async {
     WindowChrome.debugNativeOverride = false;

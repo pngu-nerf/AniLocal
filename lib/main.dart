@@ -46,6 +46,7 @@ import 'domain/models/source_descriptor.dart';
 import 'domain/models/source_preference.dart';
 import 'domain/models/sync_control.dart';
 import 'domain/models/sync_summary.dart';
+import 'domain/paths.dart' show normalizeFolderPath;
 import 'playback/playback_controller.dart';
 import 'sync/fix_match_service.dart';
 import 'sync/library_sync.dart';
