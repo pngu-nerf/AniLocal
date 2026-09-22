@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../data/paths.dart' show basenameOf;
 import '../diagnostics/app_log.dart';
 import '../domain/models/series.dart';
+import '../domain/paths.dart' show basenameOf;
 import '../domain/repositories/fix_match_repository.dart';
 import 'library/library_search_bar.dart';
 import 'metadata_failure_message.dart';

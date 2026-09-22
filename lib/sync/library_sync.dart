@@ -8,7 +8,6 @@ import '../data/cache/series_identity.dart';
 import '../data/crossmap/cross_map_store.dart';
 import '../data/folders/volume_resolver.dart';
 import '../data/metadata/metadata_provider.dart';
-import '../data/paths.dart';
 import '../data/scanner/filename_parser.dart';
 import '../data/scanner/folder_scanner.dart';
 import '../data/scanner/series_matcher.dart';
@@ -24,6 +23,7 @@ import '../domain/models/source_preference.dart';
 import '../domain/models/sync_control.dart';
 import '../domain/models/sync_summary.dart';
 import '../domain/models/titles.dart';
+import '../domain/paths.dart';
 import 'source_health.dart';
 
 /// A file's identity in the cache: the owning folder's STABLE identity (the

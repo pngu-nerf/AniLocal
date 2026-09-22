@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:isolate';
 import '../../diagnostics/app_log.dart';
-import '../paths.dart';
+import '../../domain/paths.dart';
 
 /// A file's identity fingerprint: what the scan compares to decide whether
 /// the bytes changed. Plain values, so it crosses an isolate boundary.

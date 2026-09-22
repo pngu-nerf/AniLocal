@@ -1,8 +1,8 @@
-import '../../data/paths.dart' show basenameOf;
 import '../../domain/missing_episodes.dart';
 import '../../domain/models/episode.dart';
 import '../../domain/models/episode_list_row.dart';
 import '../../domain/models/episode_slot.dart';
+import '../../domain/paths.dart' show basenameOf;
 
 // The show page's list logic, pure: what matches the live search and which
 // rows the page lists. Its own file so it is tested without a widget and the

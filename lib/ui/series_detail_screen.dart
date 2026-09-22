@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../data/paths.dart' show basenameOf;
 import '../diagnostics/app_log.dart';
 import '../domain/folder_health.dart';
 import '../domain/format_duration.dart';
@@ -13,6 +12,7 @@ import '../domain/models/episode_list_row.dart';
 import '../domain/models/episode_slot.dart';
 import '../domain/models/episode_source.dart';
 import '../domain/models/series.dart';
+import '../domain/paths.dart' show basenameOf;
 import '../domain/watch_order.dart';
 import 'access_recovery.dart' show kFilesAndFoldersPath;
 import 'fix_match_flow.dart';

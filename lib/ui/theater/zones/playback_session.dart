@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../data/paths.dart' show basenameOf;
 import '../../../diagnostics/app_log.dart';
 import '../../../domain/format_duration.dart';
 import '../../../domain/models/episode.dart';
@@ -11,6 +10,7 @@ import '../../../domain/models/episode_source.dart';
 import '../../../domain/models/next_result.dart';
 import '../../../domain/models/skip_mode.dart';
 import '../../../domain/models/skip_range.dart';
+import '../../../domain/paths.dart' show basenameOf;
 import '../../../domain/repositories/settings_repository.dart';
 import '../../../domain/repositories/source_selection_repository.dart';
 import '../../../domain/repositories/watch_order_repository.dart';

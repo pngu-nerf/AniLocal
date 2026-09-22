@@ -22,7 +22,7 @@ AniLocal is a **light, offline-first, distributable** desktop anime library play
 - **No Shoko. No AniDB as a SOURCE. No trackers. No bundled server.** (An AniDB *id* is stored — `ExternalIds.anidb` — because the cross-map publishes it; nothing queries AniDB.)
 
 ## Architecture — the seams (YOU MUST keep these)
-1. **YOU MUST NOT import AniList, Drift, or scanner types inside `lib/ui`.** UI talks to repository interfaces and domain models only.
+1. **YOU MUST NOT import AniList, Drift, or scanner types inside `lib/ui`.** UI talks to repository interfaces and domain models only. Enforced by `test/architecture_seams_test.dart`: `lib/ui` imports nothing from `lib/data` or `lib/sync`, `lib/domain` imports nothing from `lib/data`, `lib/sync` or `lib/ui`.
 2. **The cache is the primary read path.** UI reads from cache; the pipeline fills it from the metadata sources at scan/refresh time. The UI MUST never wait on the network. Online vs offline is invisible to the UI.
 3. **Every metadata source lives behind `MetadataProvider`** (`lib/data/metadata`), and each source's HTTP/JSON stays in its OWN module (`lib/data/anilist`, `lib/data/kitsu`, `lib/data/jikan`, …). A schema/API change touches exactly one module; adding a source is a new module + one list entry at the composition root. The fill path catches `MetadataException`, never a provider's own type.
 4. **Identification lives behind one interface** in `lib/data/scanner`. The parser is swappable without touching anything else.

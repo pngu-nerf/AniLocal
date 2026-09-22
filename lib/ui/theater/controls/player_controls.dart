@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-import '../../../data/paths.dart' show basenameOf;
 import '../../../domain/format_duration.dart';
 import '../../../domain/models/episode.dart';
+import '../../../domain/paths.dart' show basenameOf;
 import '../../theme/vfd_readout.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
