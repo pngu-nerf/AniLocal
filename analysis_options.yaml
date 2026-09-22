@@ -17,7 +17,10 @@ analyzer:
     todo: warning
   exclude:
     - build/**
+    # The platform runners: generated, native, not Dart.
     - macos/**
+    - windows/**
+    - linux/**
 
 linter:
   rules:

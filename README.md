@@ -42,7 +42,7 @@ Status: **0.1.0**, unsigned developer builds — see [`CHANGELOG.md`](CHANGELOG.
 | | |
 |---|---|
 | Runs on | macOS 12 (Monterey) or later (Apple silicon and Intel) — Flutter 3.47 dropped 10.15 and 11 |
-| To build | Flutter 3.47.5 (stable), Xcode command-line tools, CocoaPods; network once for the first native build |
+| To build | Flutter 3.47.5 (stable). macOS: Xcode command-line tools, CocoaPods; network once for the first native build. Windows and Linux compile in CI (see `CONTRIBUTING.md`) but nothing is packaged for them yet |
 | Media | Anything libmpv plays — MKV/MP4 with ASS/SSA subtitles is the target |
 | Metadata | AniList, Kitsu, Jikan and AniSkip over HTTPS — public, no account, no key; everything is cached and the app works offline afterwards |
 

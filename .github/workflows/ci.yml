@@ -48,11 +48,27 @@ jobs:
           retention-days: 14
 
   build:
-    # Separate job: `pod install` curls the libmpv xcframeworks on a cold
+    # Separate jobs: `pod install` curls the libmpv xcframeworks on a cold
     # machine (documented in CLAUDE.md), so this needs network the check job
-    # does not, and a build failure should not mask a test failure.
-    name: build macOS (debug)
-    runs-on: macos-15
+    # does not, and a build failure should not mask a test failure. One job
+    # per desktop platform: Windows and Linux compile the same Dart against
+    # their own runners, which is how the platform seams (ARCHITECTURE.md)
+    # stay honest — nothing is packaged or signed here.
+    name: build ${{ matrix.label }} (debug)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: macOS
+            build: flutter build macos --debug
+          - os: windows-latest
+            label: Windows
+            build: flutter build windows --debug
+          - os: ubuntu-latest
+            label: Linux
+            build: flutter build linux --debug
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -62,5 +78,12 @@ jobs:
           # regenerates the goldens in the same commit.
           flutter-version: 3.47.5
           cache: true
+      # media_kit_libs_linux links the distro's libmpv (it does not bundle
+      # one — a Linux package must depend on it too); the GTK dev headers
+      # and ninja are Flutter's own Linux desktop prerequisites.
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmpv-dev libgtk-3-dev ninja-build clang cmake pkg-config
       - run: flutter pub get
-      - run: flutter build macos --debug
+      - run: ${{ matrix.build }}

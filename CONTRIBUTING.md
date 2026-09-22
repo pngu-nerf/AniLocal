@@ -8,16 +8,27 @@ before a change of any size.
 
 ## Prerequisites
 
-- macOS 13 or later, Xcode with the command-line tools, CocoaPods.
 - Flutter **3.47.5** on the stable channel (`flutter --version`). CI pins this
   version because the golden images in `test/goldens/` are rasterised by it.
-- The first native build needs the network once: media_kit's pods download the
-  libmpv/FFmpeg frameworks (sha256-verified). After that, builds are offline.
+- **macOS** (the platform the app ships on): macOS 13 or later to build, Xcode
+  with the command-line tools, CocoaPods. The first native build needs the
+  network once: media_kit's pods download the libmpv/FFmpeg frameworks
+  (sha256-verified). After that, builds are offline.
+- **Windows** (builds in CI; not packaged): Visual Studio with the "Desktop
+  development with C++" workload — Flutter's own Windows desktop requirement,
+  and what compiles the vendored SQLite. media_kit fetches libmpv at build time.
+- **Linux** (builds in CI; not packaged): `clang cmake ninja-build pkg-config
+  libgtk-3-dev` plus **`libmpv-dev`** — media_kit does not bundle libmpv on
+  Linux, so it is a build-time and a runtime dependency there.
 
 ```sh
 flutter pub get
-flutter run -d macos
+flutter run -d macos      # or -d windows / -d linux on those hosts
 ```
+
+The gate and the goldens run on macOS. The Windows and Linux CI jobs only
+prove the tree compiles against those runners; the platform seams that make
+that possible are listed in `docs/ARCHITECTURE.md` ("Platform seams").
 
 ## The gate
 
