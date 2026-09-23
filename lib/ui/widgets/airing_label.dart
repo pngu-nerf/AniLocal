@@ -9,7 +9,15 @@ import '../theme/xp_tokens.dart';
 /// is caught up ("Ep 9 · in 3d"); amber, the reserved status colour, when an
 /// aired episode is not in the library ("Ep 8 out"). The words are computed
 /// from the stored INSTANT against `now` at build time, never stored, so
-/// they cannot go stale in the cache; the tooltip carries the full sentence.
+/// they cannot go stale in the cache; the icon's tooltip carries the full
+/// sentence.
+///
+/// The spans are FLAT — the tally's exact shape: an icon `WidgetSpan`, then
+/// `TextSpan`s — and never a nested `Text` inside a `WidgetSpan`. A nested
+/// text box takes the font's own line metrics, not the line's `height`, and
+/// middle-aligned it grows the line; the card's meta line has a fixed 15 px
+/// and overflowed by a pixel the first time this ran with the real font
+/// (`test/series_card_layout_test.dart` holds it).
 abstract final class AiringLabel {
   static List<InlineSpan> spans(
     AiringState state, {
@@ -46,22 +54,17 @@ abstract final class AiringLabel {
         alignment: PlaceholderAlignment.middle,
         child: Tooltip(
           message: tooltip,
-          child: Text.rich(
-            TextSpan(
-              style: TextStyle(color: colour, fontSize: fontSize),
-              children: [
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.middle,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 2),
-                    child: Icon(icon, size: fontSize + 2, color: colour),
-                  ),
-                ),
-                TextSpan(text: text),
-              ],
-            ),
+          child: Padding(
+            padding: const EdgeInsets.only(right: 2),
+            child: Icon(icon, size: fontSize + 2, color: colour),
           ),
         ),
+      ),
+      // The colour rides on the span (the tally's "+X" precedent) so amber
+      // reads over the caller's dim line style.
+      TextSpan(
+        text: text,
+        style: TextStyle(color: colour),
       ),
     ];
   }

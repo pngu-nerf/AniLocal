@@ -42,15 +42,21 @@ void main() {
         ),
       );
 
-  // The inner Text.rich (icon span + words) — WidgetSpans render as an
-  // object-replacement character in the plain text, so match by containment.
+  // The spans are flat inside the ONE line: the icon WidgetSpan renders as an
+  // object-replacement character in the plain text, so match by containment,
+  // and the colour is on the words' own TextSpan (the tally's "+X" shape).
   Finder line(String text) => find.byWidgetPredicate(
     (w) => w is Text && (w.textSpan?.toPlainText().contains(text) ?? false),
   );
-  Color colourOf(WidgetTester tester, String text) =>
-      (tester.widget<Text>(line(text).last).textSpan! as TextSpan)
-          .style!
-          .color!;
+  Color colourOf(WidgetTester tester, String text) {
+    final root = tester.widget<Text>(line(text).last).textSpan!;
+    TextSpan? words;
+    root.visitChildren((span) {
+      if (span is TextSpan && span.text == text) words = span;
+      return words == null;
+    });
+    return words!.style!.color!;
+  }
 
   testWidgets(
     'caught up: the dim note with the next episode and its distance',
