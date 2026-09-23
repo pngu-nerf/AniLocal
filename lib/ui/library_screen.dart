@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../diagnostics/app_log.dart';
+import '../domain/airing.dart';
 import '../domain/folder_health.dart';
 import '../domain/missing_episodes.dart';
 import '../domain/models/continue_watching.dart';
@@ -174,6 +175,10 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   Map<int, Set<String>> _sourceFoldersBySeries = {};
   // seriesId -> downloaded-episode tally for the card's "⬇N of M +X" line.
   Map<int, DownloadTally> _downloadCounts = {};
+
+  /// The highest episode each show holds, for the airing rule.
+  Map<int, int> _highestPresent = {};
+  bool _airingEnabled = true;
   bool _continueCollapsed = false;
   // Global homepage visibility toggles (persisted). Default visible; re-read
   // after the Settings dialog closes so a change takes effect immediately.
@@ -265,13 +270,17 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
     unawaited(
       () async {
         final snapshot = await _services.repository.snapshot();
-        final missingEnabled = await _services.settings.loadMissingEnabled();
+        final (missingEnabled, airingEnabled) = await (
+          _services.settings.loadMissingEnabled(),
+          _services.settings.loadAiringEnabled(),
+        ).wait;
         if (!mounted || generation != _reloadGeneration) return;
         // Live for every header, not a push-time integer.
         _services.unmatchedCount.value = snapshot.unmatchedCount;
         final stats = _statsFrom(
           snapshot,
           missingEnabled ? snapshot.hidden : const <int, Set<int>>{},
+          now: DateTime.now(),
         );
         setState(() {
           _series = snapshot.series;
@@ -281,6 +290,8 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
           _folderCount = snapshot.folderCount;
           _sourceFoldersBySeries = stats.folders;
           _downloadCounts = stats.counts;
+          _highestPresent = stats.highest;
+          _airingEnabled = airingEnabled;
         });
       }().then(
         (_) {},
@@ -302,25 +313,47 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
   /// Per-series stats for the grid, derived from the snapshot: the library
   /// folders each show's sources occupy (for greying), and the downloaded-
   /// episode tally for the card's "⬇N of M +X" line. Pure.
-  static ({Map<int, Set<String>> folders, Map<int, DownloadTally> counts})
-  _statsFrom(LibrarySnapshot snapshot, Map<int, Set<int>> hidden) {
+  static ({
+    Map<int, Set<String>> folders,
+    Map<int, DownloadTally> counts,
+    Map<int, int> highest,
+  })
+  _statsFrom(
+    LibrarySnapshot snapshot,
+    Map<int, Set<int>> hidden, {
+    required DateTime now,
+  }) {
     final folders = <int, Set<String>>{};
     final counts = <int, DownloadTally>{};
+    final highest = <int, int>{};
     for (final s in snapshot.series) {
       final eps = snapshot.episodesBySeries[s.seriesId] ?? const <Episode>[];
       folders[s.seriesId] = {
         for (final e in eps)
           for (final src in e.sources) src.folderPath,
       };
-      // The SAME rule the show page uses, through the same function.
+      // The highest episode the library holds: what the airing rule compares
+      // the broadcast against. Standard positions only (specials are ≤ 0).
+      highest[s.seriesId] = eps.fold(
+        0,
+        (h, e) => e.anchoredNumber > h ? e.anchoredNumber : h,
+      );
+      // The SAME rule the show page uses, through the same function; while a
+      // show airs, the window stops at what has aired (the clock decides).
+      final airedThrough = airedThroughFor(s, now);
       final slots = computeEpisodeSlots(
         present: eps,
         hidden: hidden[s.seriesId] ?? const <int>{},
         episodeCount: s.episodeCount,
+        airedThrough: airedThrough,
       );
-      counts[s.seriesId] = computeDownloadTally(slots, s.episodeCount);
+      counts[s.seriesId] = computeDownloadTally(
+        slots,
+        s.episodeCount,
+        airedThrough: airedThrough,
+      );
     }
-    return (folders: folders, counts: counts);
+    return (folders: folders, counts: counts, highest: highest);
   }
 
   HeaderHooks get _header =>
@@ -699,6 +732,14 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
                         header: _header,
                         nextEpisode: _upNext[series[i].seriesId],
                         downloaded: _downloadCounts[series[i].seriesId],
+                        airing: _airingEnabled
+                            ? airingStateFor(
+                                series[i],
+                                highestPresent:
+                                    _highestPresent[series[i].seriesId] ?? 0,
+                                now: DateTime.now(),
+                              )
+                            : null,
                         unavailable: seriesUnavailable(folders, missing),
                         onPlay: _play,
                         onReturn: _reload,

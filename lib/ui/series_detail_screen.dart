@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../diagnostics/app_log.dart';
+import '../domain/airing.dart';
 import '../domain/folder_health.dart';
 import '../domain/format_duration.dart';
 import '../domain/missing_episodes.dart';
@@ -28,6 +29,7 @@ import 'shell/header_scope.dart';
 import 'shell/header_spec.dart';
 import 'theme/xp_tokens.dart';
 import 'theme/xp_widgets.dart';
+import 'widgets/airing_label.dart';
 import 'widgets/download_tally_label.dart';
 import 'widgets/episode_tile.dart';
 import 'widgets/guarded.dart';
@@ -90,6 +92,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   List<Episode> _episodes = const [];
   Set<int> _hidden = {};
   bool _missingEnabled = true;
+  bool _airingEnabled = true;
   bool _loading = true;
 
   /// True when the initial load failed (episodes couldn't be read) — shows the
@@ -184,11 +187,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       // exist, only whether gaps are surfaced — so they wait together instead
       // of one after the other. `hiddenEpisodes` below is NOT parallelised with
       // them: it genuinely depends on `enabled`.
-      final (enabled, eps, series) = await (
+      final (enabled, eps, series, airingEnabled) = await (
         _services.settings.loadMissingEnabled(),
         _services.repository.episodesFor(widget.series.seriesId),
         // LIVE: the show itself, not the push-time snapshot.
         _services.repository.seriesById(widget.series.seriesId),
+        _services.settings.loadAiringEnabled(),
       ).wait;
       // The feature never applies to a not-yet-identified placeholder (no
       // episode count, synthetic negative id) — treat it as nothing hidden.
@@ -209,6 +213,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         _episodes = eps;
         _hidden = hidden;
         _missingEnabled = enabled;
+        _airingEnabled = airingEnabled;
         _unreachable = unreachable;
         _loading = false;
         _error = false;
@@ -637,23 +642,42 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     ),
   );
 
-  ({List<Episode> eps, Set<int> hidden, int? count, List<EpisodeSlot> slots})?
+  ({
+    List<Episode> eps,
+    Set<int> hidden,
+    int? count,
+    int? aired,
+    List<EpisodeSlot> slots,
+  })?
   _slotsMemo;
 
-  List<EpisodeSlot> _slotsFor(List<Episode> eps, Set<int> hidden, int? count) {
+  List<EpisodeSlot> _slotsFor(
+    List<Episode> eps,
+    Set<int> hidden,
+    int? count,
+    int? aired,
+  ) {
     final m = _slotsMemo;
     if (m != null &&
         identical(m.eps, eps) &&
         identical(m.hidden, hidden) &&
-        m.count == count) {
+        m.count == count &&
+        m.aired == aired) {
       return m.slots;
     }
     final slots = computeEpisodeSlots(
       present: eps,
       hidden: hidden,
       episodeCount: count,
+      airedThrough: aired,
     );
-    _slotsMemo = (eps: eps, hidden: hidden, count: count, slots: slots);
+    _slotsMemo = (
+      eps: eps,
+      hidden: hidden,
+      count: count,
+      aired: aired,
+      slots: slots,
+    );
     return slots;
   }
 
@@ -663,8 +687,31 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     // Memoised on its inputs: build runs per keystroke of the episode search,
     // and the slot model is O(episodeCount) allocations — ~4,000 per typed
     // character on a 1,000-episode entry. The inputs change only on reload.
-    final slots = _slotsFor(_episodes, effectiveHidden, series.episodeCount);
-    final tally = computeDownloadTally(slots, series.episodeCount);
+    // While the show airs, the window stops at what has aired: the clock
+    // decides, once per build (a memo key, so a passing air time recomputes).
+    final now = DateTime.now();
+    final aired = airedThroughFor(series, now);
+    final slots = _slotsFor(
+      _episodes,
+      effectiveHidden,
+      series.episodeCount,
+      aired,
+    );
+    final tally = computeDownloadTally(
+      slots,
+      series.episodeCount,
+      airedThrough: aired,
+    );
+    final airing = _airingEnabled
+        ? airingStateFor(
+            series,
+            highestPresent: _episodes.fold(
+              0,
+              (h, e) => e.anchoredNumber > h ? e.anchoredNumber : h,
+            ),
+            now: now,
+          )
+        : null;
     final hiddenSorted = _hidden.toList()..sort();
     final hiddenTabAvailable = showMissing && hiddenSorted.isNotEmpty;
     final q = _episodeQuery.trim().toLowerCase();
@@ -740,7 +787,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                 SliverPadding(
                   padding: const EdgeInsets.all(Xp.spaceL),
                   sliver: SliverToBoxAdapter(
-                    child: _pageHeader(series, tally, hiddenSorted, ready),
+                    child: _pageHeader(
+                      series,
+                      tally,
+                      hiddenSorted,
+                      ready,
+                      airing: airing,
+                      now: now,
+                    ),
                   ),
                 ),
                 if (_loading)
@@ -779,8 +833,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     Series series,
     DownloadTally tally,
     List<int> hiddenSorted,
-    bool ready,
-  ) {
+    bool ready, {
+    required AiringState? airing,
+    required DateTime now,
+  }) {
     final hiddenTabAvailable =
         _missingEnabled && !series.pending && hiddenSorted.isNotEmpty;
     return Column(
@@ -824,16 +880,32 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                       style: const TextStyle(color: Xp.textDim),
                     ),
                   const SizedBox(height: Xp.spaceS),
-                  Text(
-                    series.pending
-                        ? 'Identifying… (not yet matched)'
-                        : [
-                            if (series.format != null) series.format,
-                            if (series.episodeCount != null)
-                              '${series.episodeCount} episodes',
-                            if (series.externalIds.anilist != null)
-                              'AniList #${series.externalIds.anilist}',
-                          ].join(' · '),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: series.pending
+                              ? 'Identifying… (not yet matched)'
+                              : [
+                                  if (series.format != null) series.format,
+                                  if (series.episodeCount != null)
+                                    '${series.episodeCount} episodes',
+                                  if (series.externalIds.anilist != null)
+                                    'AniList #${series.externalIds.anilist}',
+                                ].join(' · '),
+                        ),
+                        // The airing indicator sits on the episode-count
+                        // line, the same spans the card composes.
+                        if (airing != null) ...[
+                          const TextSpan(text: ' · '),
+                          ...AiringLabel.spans(
+                            airing,
+                            now: now,
+                            fontSize: Xp.fontSizeBody,
+                          ),
+                        ],
+                      ],
+                    ),
                     style: const TextStyle(
                       color: Xp.textDim,
                       fontSize: Xp.fontSizeBody,

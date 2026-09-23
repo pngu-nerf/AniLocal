@@ -36,6 +36,23 @@ class LibraryPanel extends StatelessWidget {
               onChanged: model.setMissingEnabled,
             ),
           ),
+          SettingRow(
+            label: 'Airing status',
+            subtitle: 'Which shows are airing, and when an episode is out.',
+            info:
+                'On the episode-count line: a dim note while a show is '
+                'airing and you are caught up ("Ep 9 · in 3d"), and an amber '
+                'flag once an episode has aired that is not in your library '
+                '("Ep 8 out"). The flag stays for a week after the finale.\n\n'
+                'Air times come from the metadata sources during a scan; the '
+                'words are measured against your clock, so they do not go '
+                'stale between scans.\n\n'
+                'A show can be muted on its own from the card\'s menu.',
+            control: SettingSwitch(
+              value: model.airingEnabled,
+              onChanged: model.setAiringEnabled,
+            ),
+          ),
         ],
       ),
       SettingsGroup(

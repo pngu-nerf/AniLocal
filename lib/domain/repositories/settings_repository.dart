@@ -97,6 +97,11 @@ abstract interface class SettingsRepository {
   Future<bool> loadMissingEnabled();
   Future<void> setMissingEnabled(bool enabled);
 
+  /// The airing indicator on the episode-count line ("Ep 9 · in 3d",
+  /// "Ep 8 out"). Default true. Per-show mutes live in ShowPreferences.
+  Future<bool> loadAiringEnabled();
+  Future<void> setAiringEnabled(bool enabled);
+
   /// Global "Hide next episode". Default false. [setHideNextEpisode] is a master
   /// apply-to-all: it persists the flag AND overwrites every per-show value.
   Future<bool> loadHideNextEpisode();

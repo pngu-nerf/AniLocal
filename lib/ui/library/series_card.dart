@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../domain/airing.dart';
 import '../../domain/missing_episodes.dart';
 import '../../domain/models/episode.dart';
 import '../../domain/models/picture_mode.dart';
@@ -11,6 +12,7 @@ import '../routes.dart';
 import '../theme/xp_pressable.dart';
 import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
+import '../widgets/airing_label.dart';
 import '../widgets/download_tally_label.dart';
 import '../widgets/notices.dart';
 import '../widgets/show_cover.dart';
@@ -62,6 +64,7 @@ class SeriesCard extends StatefulWidget {
     required this.header,
     required this.nextEpisode,
     required this.downloaded,
+    this.airing,
     required this.unavailable,
     required this.onPlay,
     required this.onReturn,
@@ -81,6 +84,10 @@ class SeriesCard extends StatefulWidget {
   /// the async stats load (the line then shows just the show-type until it
   /// arrives — no wrong numbers flashed).
   final DownloadTally? downloaded;
+
+  /// The airing indicator for the meta line, already decided by the library
+  /// against the clock (null: nothing to say, or the setting is off).
+  final AiringState? airing;
 
   /// True when every source folder of this show is currently missing (offline
   /// drive/NAS): dimmed + marked, and a tap shows a reconnect hint rather than
@@ -152,6 +159,17 @@ class _SeriesCardState extends State<SeriesCard> {
       if (spans.isNotEmpty) spans.add(const TextSpan(text: ' · '));
       spans.addAll(DownloadTallyLabel.spans(dl, fontSize: Xp.fontSizeCaption));
     }
+    final airing = widget.airing;
+    if (airing != null) {
+      if (spans.isNotEmpty) spans.add(const TextSpan(text: ' · '));
+      spans.addAll(
+        AiringLabel.spans(
+          airing,
+          now: DateTime.now(),
+          fontSize: Xp.fontSizeCaption,
+        ),
+      );
+    }
     return Text.rich(
       TextSpan(style: style, children: spans),
       maxLines: 1,
@@ -169,6 +187,14 @@ class _SeriesCardState extends State<SeriesCard> {
 
   Future<void> _setNextHidden(bool hidden) async {
     await widget.services.showPreferences.setNextEpisodeHidden(
+      widget.series.seriesId,
+      hidden: hidden,
+    );
+    widget.onReturn();
+  }
+
+  Future<void> _setAiringHidden(bool hidden) async {
+    await widget.services.showPreferences.setAiringHidden(
       widget.series.seriesId,
       hidden: hidden,
     );
@@ -235,6 +261,18 @@ class _SeriesCardState extends State<SeriesCard> {
           // Scoped in its label: this hides the CARD's button. The player's
           // auto-play pre-roll is the Playback › auto-play setting.
           child: const Text("Hide this card's Next button"),
+        ),
+        MenuItemButton(
+          leadingIcon: Icon(
+            series.airingHidden
+                ? Icons.check_box
+                : Icons.check_box_outline_blank,
+            size: 18,
+          ),
+          onPressed: () => _setAiringHidden(!series.airingHidden),
+          // The per-show mute of the airing indicator; the global switch is
+          // Settings › Library › Airing status.
+          child: const Text("Don't flag new episodes"),
         ),
       ],
     );

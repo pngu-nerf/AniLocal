@@ -61,6 +61,10 @@ class FakeSettings implements SettingsRepository {
   Future<bool> loadMissingEnabled() async => true;
   @override
   Future<void> setMissingEnabled(bool enabled) async {}
+  @override
+  Future<bool> loadAiringEnabled() async => true;
+  @override
+  Future<void> setAiringEnabled(bool enabled) async {}
 
   @override
   Future<bool> loadHideNextEpisode() async => false;

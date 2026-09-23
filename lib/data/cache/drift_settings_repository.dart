@@ -22,6 +22,7 @@ class DriftSettingsRepository implements SettingsRepository {
   // Watched-threshold (time-from-end), stored as whole milliseconds.
   static const _watchedThresholdKey = 'watched_threshold_ms';
   static const _missingEpisodesKey = 'missing_episodes_enabled';
+  static const _airingKey = 'airing_indicator_enabled';
   static const _hideNextEpisodeKey = 'hide_next_episode_global';
   static const _showContinueWatchingKey = 'show_continue_watching';
   static const _showSearchBarKey = 'show_search_bar';
@@ -180,6 +181,11 @@ class DriftSettingsRepository implements SettingsRepository {
   @override
   Future<void> setMissingEnabled(bool enabled) =>
       _saveBool(_missingEpisodesKey, enabled);
+
+  @override
+  Future<bool> loadAiringEnabled() => _loadBool(_airingKey, fallback: true);
+  @override
+  Future<void> setAiringEnabled(bool enabled) => _saveBool(_airingKey, enabled);
 
   @override
   Future<bool> loadHideNextEpisode() =>

@@ -25,6 +25,7 @@ class SettingsModel extends ChangeNotifier {
     required this.skipMode,
     required this.watchedThreshold,
     required this.missingEnabled,
+    required this.airingEnabled,
     required this.corroborateSkips,
     required this.minSkipLength,
     required this.hideNextEpisode,
@@ -50,6 +51,7 @@ class SettingsModel extends ChangeNotifier {
         corroborateSkips,
       ),
       (minSkipLength, hideNextEpisode, showContinueWatching, showSearchBar),
+      airingEnabled,
     ) = await (
       (
         repository.loadAutoPlayNext(),
@@ -64,6 +66,7 @@ class SettingsModel extends ChangeNotifier {
         repository.loadShowContinueWatching(),
         repository.loadShowSearchBar(),
       ).wait,
+      repository.loadAiringEnabled(),
     ).wait;
     return SettingsModel(
       repository: repository,
@@ -71,6 +74,7 @@ class SettingsModel extends ChangeNotifier {
       skipMode: skipMode,
       watchedThreshold: watchedThreshold,
       missingEnabled: missingEnabled,
+      airingEnabled: airingEnabled,
       corroborateSkips: corroborateSkips,
       minSkipLength: minSkipLength,
       hideNextEpisode: hideNextEpisode,
@@ -92,6 +96,9 @@ class SettingsModel extends ChangeNotifier {
   SkipMode skipMode;
   Duration watchedThreshold;
   bool missingEnabled;
+
+  /// The airing indicator on the episode-count line (Settings › Library).
+  bool airingEnabled;
 
   /// Cross-check skip sources against each other (Settings > Skip).
   bool corroborateSkips;
@@ -123,6 +130,12 @@ class SettingsModel extends ChangeNotifier {
   void setMissingEnabled(bool v) {
     missingEnabled = v;
     unawaited(repository.setMissingEnabled(v));
+    notifyListeners();
+  }
+
+  void setAiringEnabled(bool v) {
+    airingEnabled = v;
+    unawaited(repository.setAiringEnabled(v));
     notifyListeners();
   }
 
