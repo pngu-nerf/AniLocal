@@ -23,4 +23,7 @@ abstract interface class ShowPreferencesRepository {
   /// global "Hide Next Episode" master switch applying to all shows (a
   /// deliberate overwrite of per-show choices, not a merge).
   Future<void> setAllNextEpisodeHidden({required bool hidden});
+
+  /// Per-show mute of the airing indicator. A preference: no fill-path writer.
+  Future<void> setAiringHidden(int seriesId, {required bool hidden});
 }

@@ -30,10 +30,14 @@ String scanningTitle(SyncProgress? progress) {
   // long one, so the readout names it in full.
   final label = switch (phase) {
     'skips' => 'Identifying skips',
+    'airing' => 'Checking airing',
     _ => phase[0].toUpperCase() + phase.substring(1),
   };
-  // The metadata pass reports once, as a whole; a count would read 12/12.
-  if (phase == 'metadata' || progress.total <= 0) return '$label…';
+  // The metadata and airing passes report once, as a whole; a count would
+  // read 12/12.
+  if (phase == 'metadata' || phase == 'airing' || progress.total <= 0) {
+    return '$label…';
+  }
   return '$label ${progress.done}/${progress.total}';
 }
 

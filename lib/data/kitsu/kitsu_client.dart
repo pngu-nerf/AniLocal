@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 
+import '../../domain/models/airing_status.dart';
 import '../../domain/models/external_ids.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/series_format.dart';
@@ -127,6 +128,11 @@ class KitsuClient {
           ? attrs['episodeCount'] as int
           : null,
       coverImageRef: _posterFrom(attrs['posterImage']),
+      // Kitsu says whether it is airing and when the next episode drops, but
+      // not which number that is; the indicator degrades to the quiet note.
+      airingStatus: AiringStatus.fromKitsu(_string(attrs['status'])),
+      nextAiringAt: _instant(attrs['nextRelease']),
+      endDate: _instant(attrs['endDate']),
     );
   }
 
@@ -211,3 +217,8 @@ class KitsuClient {
 
   void dispose() => _http.close();
 }
+
+/// An ISO-8601 instant or date from Kitsu, or null. Local time, so a finale
+/// date compares against the user's calendar.
+DateTime? _instant(Object? v) =>
+    v is String ? DateTime.tryParse(v)?.toLocal() : null;

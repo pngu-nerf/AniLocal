@@ -1,3 +1,4 @@
+import '../../domain/models/airing_status.dart';
 import '../../domain/models/continue_watching.dart';
 import '../../domain/models/episode.dart';
 import '../../domain/models/episode_source.dart';
@@ -1006,11 +1007,19 @@ class DriftLibraryRepository
     // card's Next button render consistently (the store stays the source).
     pictureMode: prefs.pictureMode,
     nextEpisodeHidden: prefs.nextEpisodeHidden,
+    airingStatus: AiringStatus.fromToken(r.airingStatus),
+    nextAiringAt: r.nextAiringAtMs == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(r.nextAiringAtMs!),
+    nextAiringEpisode: r.nextAiringEpisode,
+    endDate: r.endDate == null ? null : DateTime.tryParse(r.endDate!),
+    airingHidden: prefs.airingHidden,
   );
 
   ShowPreferences _toPrefs(ShowPreferenceRow? r) => ShowPreferences(
     pictureMode: PictureMode.fromToken(r?.pictureMode),
     nextEpisodeHidden: r?.nextEpisodeHidden ?? false,
+    airingHidden: r?.airingHidden ?? false,
   );
 
   // --- Per-show preferences (ShowPreferencesRepository). Sacred: no fill-path
@@ -1039,6 +1048,10 @@ class DriftLibraryRepository
   @override
   Future<void> setAllNextEpisodeHidden({required bool hidden}) =>
       _db.setAllNextEpisodeHidden(hidden: hidden);
+
+  @override
+  Future<void> setAiringHidden(int seriesId, {required bool hidden}) =>
+      _db.setShowAiringHidden(seriesId, hidden: hidden);
 
   // Sort key = the same display title, lowercased. The empty-string fallback
   // this used to carry only differed for an all-null-title series (unreachable —

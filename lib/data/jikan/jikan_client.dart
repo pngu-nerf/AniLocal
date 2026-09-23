@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 
+import '../../domain/models/airing_status.dart';
 import '../../domain/models/external_ids.dart';
 import '../../domain/models/series.dart';
 import '../../domain/models/series_format.dart';
@@ -108,6 +109,9 @@ class JikanClient {
       format: normalizeSeriesFormat(_string(entry['type'])),
       episodeCount: entry['episodes'] is int ? entry['episodes'] as int : null,
       coverImageRef: _imageFrom(entry['images']),
+      // MAL knows whether it airs and when it ended; no per-episode schedule.
+      airingStatus: AiringStatus.fromJikan(_string(entry['status'])),
+      endDate: _airedTo(entry['aired']),
     );
   }
 
@@ -147,4 +151,10 @@ class JikanClient {
   }
 
   void dispose() => _http.close();
+}
+
+/// `aired.to` — the finale's ISO date, or null while airing.
+DateTime? _airedTo(Object? aired) {
+  final to = aired is Map<String, dynamic> ? aired['to'] : null;
+  return to is String ? DateTime.tryParse(to)?.toLocal() : null;
 }

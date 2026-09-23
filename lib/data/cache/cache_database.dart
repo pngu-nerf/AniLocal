@@ -24,6 +24,17 @@ class SeriesCache extends Table {
   TextColumn get coverImageUrl => text().nullable()();
   TextColumn get coverImagePath => text().nullable()();
 
+  /// Broadcast state (v23): `AiringStatus.token`, the next episode's air
+  /// instant (epoch ms — the UI measures it against the clock) and number,
+  /// the finale date (`YYYY-MM-DD`), and when this was last asked. Written by
+  /// `updateAiring` ONLY — every column at once, nulls included — because
+  /// `upsertSeries`'s no-wipe upsert cannot clear a finished show's "next".
+  TextColumn get airingStatus => text().nullable()();
+  IntColumn get nextAiringAtMs => integer().nullable()();
+  IntColumn get nextAiringEpisode => integer().nullable()();
+  TextColumn get endDate => text().nullable()();
+  IntColumn get airingCheckedAtMs => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {seriesId};
 
@@ -306,6 +317,9 @@ class ShowPrefs extends Table {
   BoolColumn get nextEpisodeHidden =>
       boolean().withDefault(const Constant(false))();
 
+  /// Whether the airing indicator is suppressed for this show (v23).
+  BoolColumn get airingHidden => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {seriesId};
 
@@ -373,7 +387,7 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// The schema this build writes, readable without an instance (the startup
   /// log line and the diagnostics report want it before the database opens).
-  static const int currentSchemaVersion = 22;
+  static const int currentSchemaVersion = 23;
 
   @override
   int get schemaVersion => currentSchemaVersion;
@@ -563,6 +577,27 @@ class CacheDatabase extends _$CacheDatabase {
   Future<CachedSeriesRow?> seriesRow(int seriesId) => (select(
     seriesCache,
   )..where((r) => r.seriesId.equals(seriesId))).getSingleOrNull();
+
+  /// The broadcast columns, ALL of them, for one show. Deliberately not part
+  /// of [upsertSeries]: that upsert omits null columns so a degraded payload
+  /// cannot wipe a field, but here null IS the news — a finished show has no
+  /// next episode any more, and the row must say so.
+  Future<void> updateAiring(
+    int seriesId, {
+    required String status,
+    required int? nextAiringAtMs,
+    required int? nextAiringEpisode,
+    required String? endDate,
+    required int checkedAtMs,
+  }) => (update(seriesCache)..where((r) => r.seriesId.equals(seriesId))).write(
+    SeriesCacheCompanion(
+      airingStatus: Value(status),
+      nextAiringAtMs: Value(nextAiringAtMs),
+      nextAiringEpisode: Value(nextAiringEpisode),
+      endDate: Value(endDate),
+      airingCheckedAtMs: Value(checkedAtMs),
+    ),
+  );
 
   /// Record the one provider id the id band itself implies.
   ///
@@ -1010,6 +1045,15 @@ class CacheDatabase extends _$CacheDatabase {
         "next_episode_hidden) VALUES (?, 'normal', ?) "
         'ON CONFLICT(series_id) DO UPDATE SET '
         'next_episode_hidden = excluded.next_episode_hidden',
+        [seriesId, hidden ? 1 : 0],
+      );
+
+  Future<void> setShowAiringHidden(int seriesId, {required bool hidden}) =>
+      customStatement(
+        "INSERT INTO show_preferences (series_id, picture_mode, "
+        "airing_hidden) VALUES (?, 'normal', ?) "
+        'ON CONFLICT(series_id) DO UPDATE SET '
+        'airing_hidden = excluded.airing_hidden',
         [seriesId, hidden ? 1 : 0],
       );
 

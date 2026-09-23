@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anilocal/data/kitsu/kitsu_client.dart';
+import 'package:anilocal/domain/models/airing_status.dart';
 import 'package:anilocal/domain/models/metadata_failure.dart';
 import 'package:anilocal/domain/models/series_format.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,8 @@ http.Response _page() => http.Response.bytes(
             },
             'subtype': 'TV',
             'episodeCount': 26,
+            'status': 'finished',
+            'endDate': '1999-04-24',
             'posterImage': {
               'tiny': 'https://media.kitsu.app/anime/1/tiny.jpg',
               'large': 'https://media.kitsu.app/anime/1/large.jpg',
@@ -111,6 +114,9 @@ void main() {
       expect(bebop.titles.native, 'カウボーイビバップ');
       expect(bebop.episodeCount, 26);
       expect(bebop.coverImageRef, contains('large.jpg'));
+      expect(bebop.airingStatus, AiringStatus.finished);
+      expect(bebop.endDate, DateTime(1999, 4, 24));
+      expect(bebop.nextAiringAt, isNull);
     });
 
     test("Kitsu's 'movie' becomes the shared MOVIE token", () async {

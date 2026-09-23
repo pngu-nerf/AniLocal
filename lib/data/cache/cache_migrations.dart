@@ -1,6 +1,6 @@
 part of 'cache_database.dart';
 
-/// The migration ladder, v1 → v22: every `if (from < n)` step
+/// The migration ladder, v1 → v23: every `if (from < n)` step
 /// the cache has ever needed, in order, plus the two steps big enough to be
 /// methods of their own. A part of `cache_database.dart` (like the generated
 /// code) rather than a library: the steps reach the tables and the private
@@ -235,6 +235,22 @@ extension CacheMigrations on CacheDatabase {
         // column here guards against.
         if (from >= 7) {
           await m.addColumn(sourceOverrides, sourceOverrides.relativePath);
+        }
+      }
+      if (from < 23) {
+        // v23: the airing indicator. Five nullable columns on series_cache
+        // (status, next air instant + number, finale date, last checked) and
+        // a per-show mute on show_preferences. Additive; every existing row
+        // reads as "unknown, never checked" until the next scan asks.
+        // series_cache is created by onCreate only, so no guard; show_prefs
+        // is created by the v13 step in its CURRENT shape, hence `from >= 13`.
+        await m.addColumn(seriesCache, seriesCache.airingStatus);
+        await m.addColumn(seriesCache, seriesCache.nextAiringAtMs);
+        await m.addColumn(seriesCache, seriesCache.nextAiringEpisode);
+        await m.addColumn(seriesCache, seriesCache.endDate);
+        await m.addColumn(seriesCache, seriesCache.airingCheckedAtMs);
+        if (from >= 13) {
+          await m.addColumn(showPrefs, showPrefs.airingHidden);
         }
       }
     });

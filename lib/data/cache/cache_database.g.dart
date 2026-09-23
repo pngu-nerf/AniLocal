@@ -93,6 +93,61 @@ class $SeriesCacheTable extends SeriesCache
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _airingStatusMeta = const VerificationMeta(
+    'airingStatus',
+  );
+  @override
+  late final GeneratedColumn<String> airingStatus = GeneratedColumn<String>(
+    'airing_status',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nextAiringAtMsMeta = const VerificationMeta(
+    'nextAiringAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> nextAiringAtMs = GeneratedColumn<int>(
+    'next_airing_at_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nextAiringEpisodeMeta = const VerificationMeta(
+    'nextAiringEpisode',
+  );
+  @override
+  late final GeneratedColumn<int> nextAiringEpisode = GeneratedColumn<int>(
+    'next_airing_episode',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endDateMeta = const VerificationMeta(
+    'endDate',
+  );
+  @override
+  late final GeneratedColumn<String> endDate = GeneratedColumn<String>(
+    'end_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _airingCheckedAtMsMeta = const VerificationMeta(
+    'airingCheckedAtMs',
+  );
+  @override
+  late final GeneratedColumn<int> airingCheckedAtMs = GeneratedColumn<int>(
+    'airing_checked_at_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     seriesId,
@@ -103,6 +158,11 @@ class $SeriesCacheTable extends SeriesCache
     episodeCount,
     coverImageUrl,
     coverImagePath,
+    airingStatus,
+    nextAiringAtMs,
+    nextAiringEpisode,
+    endDate,
+    airingCheckedAtMs,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -176,6 +236,48 @@ class $SeriesCacheTable extends SeriesCache
         ),
       );
     }
+    if (data.containsKey('airing_status')) {
+      context.handle(
+        _airingStatusMeta,
+        airingStatus.isAcceptableOrUnknown(
+          data['airing_status']!,
+          _airingStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_airing_at_ms')) {
+      context.handle(
+        _nextAiringAtMsMeta,
+        nextAiringAtMs.isAcceptableOrUnknown(
+          data['next_airing_at_ms']!,
+          _nextAiringAtMsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_airing_episode')) {
+      context.handle(
+        _nextAiringEpisodeMeta,
+        nextAiringEpisode.isAcceptableOrUnknown(
+          data['next_airing_episode']!,
+          _nextAiringEpisodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('end_date')) {
+      context.handle(
+        _endDateMeta,
+        endDate.isAcceptableOrUnknown(data['end_date']!, _endDateMeta),
+      );
+    }
+    if (data.containsKey('airing_checked_at_ms')) {
+      context.handle(
+        _airingCheckedAtMsMeta,
+        airingCheckedAtMs.isAcceptableOrUnknown(
+          data['airing_checked_at_ms']!,
+          _airingCheckedAtMsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -217,6 +319,26 @@ class $SeriesCacheTable extends SeriesCache
         DriftSqlType.string,
         data['${effectivePrefix}cover_image_path'],
       ),
+      airingStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}airing_status'],
+      ),
+      nextAiringAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}next_airing_at_ms'],
+      ),
+      nextAiringEpisode: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}next_airing_episode'],
+      ),
+      endDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}end_date'],
+      ),
+      airingCheckedAtMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}airing_checked_at_ms'],
+      ),
     );
   }
 
@@ -235,6 +357,17 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
   final int? episodeCount;
   final String? coverImageUrl;
   final String? coverImagePath;
+
+  /// Broadcast state (v23): `AiringStatus.token`, the next episode's air
+  /// instant (epoch ms — the UI measures it against the clock) and number,
+  /// the finale date (`YYYY-MM-DD`), and when this was last asked. Written by
+  /// `updateAiring` ONLY — every column at once, nulls included — because
+  /// `upsertSeries`'s no-wipe upsert cannot clear a finished show's "next".
+  final String? airingStatus;
+  final int? nextAiringAtMs;
+  final int? nextAiringEpisode;
+  final String? endDate;
+  final int? airingCheckedAtMs;
   const CachedSeriesRow({
     required this.seriesId,
     this.romaji,
@@ -244,6 +377,11 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     this.episodeCount,
     this.coverImageUrl,
     this.coverImagePath,
+    this.airingStatus,
+    this.nextAiringAtMs,
+    this.nextAiringEpisode,
+    this.endDate,
+    this.airingCheckedAtMs,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -269,6 +407,21 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     }
     if (!nullToAbsent || coverImagePath != null) {
       map['cover_image_path'] = Variable<String>(coverImagePath);
+    }
+    if (!nullToAbsent || airingStatus != null) {
+      map['airing_status'] = Variable<String>(airingStatus);
+    }
+    if (!nullToAbsent || nextAiringAtMs != null) {
+      map['next_airing_at_ms'] = Variable<int>(nextAiringAtMs);
+    }
+    if (!nullToAbsent || nextAiringEpisode != null) {
+      map['next_airing_episode'] = Variable<int>(nextAiringEpisode);
+    }
+    if (!nullToAbsent || endDate != null) {
+      map['end_date'] = Variable<String>(endDate);
+    }
+    if (!nullToAbsent || airingCheckedAtMs != null) {
+      map['airing_checked_at_ms'] = Variable<int>(airingCheckedAtMs);
     }
     return map;
   }
@@ -297,6 +450,21 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
       coverImagePath: coverImagePath == null && nullToAbsent
           ? const Value.absent()
           : Value(coverImagePath),
+      airingStatus: airingStatus == null && nullToAbsent
+          ? const Value.absent()
+          : Value(airingStatus),
+      nextAiringAtMs: nextAiringAtMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAiringAtMs),
+      nextAiringEpisode: nextAiringEpisode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAiringEpisode),
+      endDate: endDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endDate),
+      airingCheckedAtMs: airingCheckedAtMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(airingCheckedAtMs),
     );
   }
 
@@ -314,6 +482,11 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
       episodeCount: serializer.fromJson<int?>(json['episodeCount']),
       coverImageUrl: serializer.fromJson<String?>(json['coverImageUrl']),
       coverImagePath: serializer.fromJson<String?>(json['coverImagePath']),
+      airingStatus: serializer.fromJson<String?>(json['airingStatus']),
+      nextAiringAtMs: serializer.fromJson<int?>(json['nextAiringAtMs']),
+      nextAiringEpisode: serializer.fromJson<int?>(json['nextAiringEpisode']),
+      endDate: serializer.fromJson<String?>(json['endDate']),
+      airingCheckedAtMs: serializer.fromJson<int?>(json['airingCheckedAtMs']),
     );
   }
   @override
@@ -328,6 +501,11 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
       'episodeCount': serializer.toJson<int?>(episodeCount),
       'coverImageUrl': serializer.toJson<String?>(coverImageUrl),
       'coverImagePath': serializer.toJson<String?>(coverImagePath),
+      'airingStatus': serializer.toJson<String?>(airingStatus),
+      'nextAiringAtMs': serializer.toJson<int?>(nextAiringAtMs),
+      'nextAiringEpisode': serializer.toJson<int?>(nextAiringEpisode),
+      'endDate': serializer.toJson<String?>(endDate),
+      'airingCheckedAtMs': serializer.toJson<int?>(airingCheckedAtMs),
     };
   }
 
@@ -340,6 +518,11 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     Value<int?> episodeCount = const Value.absent(),
     Value<String?> coverImageUrl = const Value.absent(),
     Value<String?> coverImagePath = const Value.absent(),
+    Value<String?> airingStatus = const Value.absent(),
+    Value<int?> nextAiringAtMs = const Value.absent(),
+    Value<int?> nextAiringEpisode = const Value.absent(),
+    Value<String?> endDate = const Value.absent(),
+    Value<int?> airingCheckedAtMs = const Value.absent(),
   }) => CachedSeriesRow(
     seriesId: seriesId ?? this.seriesId,
     romaji: romaji.present ? romaji.value : this.romaji,
@@ -353,6 +536,17 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     coverImagePath: coverImagePath.present
         ? coverImagePath.value
         : this.coverImagePath,
+    airingStatus: airingStatus.present ? airingStatus.value : this.airingStatus,
+    nextAiringAtMs: nextAiringAtMs.present
+        ? nextAiringAtMs.value
+        : this.nextAiringAtMs,
+    nextAiringEpisode: nextAiringEpisode.present
+        ? nextAiringEpisode.value
+        : this.nextAiringEpisode,
+    endDate: endDate.present ? endDate.value : this.endDate,
+    airingCheckedAtMs: airingCheckedAtMs.present
+        ? airingCheckedAtMs.value
+        : this.airingCheckedAtMs,
   );
   CachedSeriesRow copyWithCompanion(SeriesCacheCompanion data) {
     return CachedSeriesRow(
@@ -372,6 +566,19 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
       coverImagePath: data.coverImagePath.present
           ? data.coverImagePath.value
           : this.coverImagePath,
+      airingStatus: data.airingStatus.present
+          ? data.airingStatus.value
+          : this.airingStatus,
+      nextAiringAtMs: data.nextAiringAtMs.present
+          ? data.nextAiringAtMs.value
+          : this.nextAiringAtMs,
+      nextAiringEpisode: data.nextAiringEpisode.present
+          ? data.nextAiringEpisode.value
+          : this.nextAiringEpisode,
+      endDate: data.endDate.present ? data.endDate.value : this.endDate,
+      airingCheckedAtMs: data.airingCheckedAtMs.present
+          ? data.airingCheckedAtMs.value
+          : this.airingCheckedAtMs,
     );
   }
 
@@ -385,7 +592,12 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
           ..write('format: $format, ')
           ..write('episodeCount: $episodeCount, ')
           ..write('coverImageUrl: $coverImageUrl, ')
-          ..write('coverImagePath: $coverImagePath')
+          ..write('coverImagePath: $coverImagePath, ')
+          ..write('airingStatus: $airingStatus, ')
+          ..write('nextAiringAtMs: $nextAiringAtMs, ')
+          ..write('nextAiringEpisode: $nextAiringEpisode, ')
+          ..write('endDate: $endDate, ')
+          ..write('airingCheckedAtMs: $airingCheckedAtMs')
           ..write(')'))
         .toString();
   }
@@ -400,6 +612,11 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
     episodeCount,
     coverImageUrl,
     coverImagePath,
+    airingStatus,
+    nextAiringAtMs,
+    nextAiringEpisode,
+    endDate,
+    airingCheckedAtMs,
   );
   @override
   bool operator ==(Object other) =>
@@ -412,7 +629,12 @@ class CachedSeriesRow extends DataClass implements Insertable<CachedSeriesRow> {
           other.format == this.format &&
           other.episodeCount == this.episodeCount &&
           other.coverImageUrl == this.coverImageUrl &&
-          other.coverImagePath == this.coverImagePath);
+          other.coverImagePath == this.coverImagePath &&
+          other.airingStatus == this.airingStatus &&
+          other.nextAiringAtMs == this.nextAiringAtMs &&
+          other.nextAiringEpisode == this.nextAiringEpisode &&
+          other.endDate == this.endDate &&
+          other.airingCheckedAtMs == this.airingCheckedAtMs);
 }
 
 class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
@@ -424,6 +646,11 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
   final Value<int?> episodeCount;
   final Value<String?> coverImageUrl;
   final Value<String?> coverImagePath;
+  final Value<String?> airingStatus;
+  final Value<int?> nextAiringAtMs;
+  final Value<int?> nextAiringEpisode;
+  final Value<String?> endDate;
+  final Value<int?> airingCheckedAtMs;
   const SeriesCacheCompanion({
     this.seriesId = const Value.absent(),
     this.romaji = const Value.absent(),
@@ -433,6 +660,11 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     this.episodeCount = const Value.absent(),
     this.coverImageUrl = const Value.absent(),
     this.coverImagePath = const Value.absent(),
+    this.airingStatus = const Value.absent(),
+    this.nextAiringAtMs = const Value.absent(),
+    this.nextAiringEpisode = const Value.absent(),
+    this.endDate = const Value.absent(),
+    this.airingCheckedAtMs = const Value.absent(),
   });
   SeriesCacheCompanion.insert({
     this.seriesId = const Value.absent(),
@@ -443,6 +675,11 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     this.episodeCount = const Value.absent(),
     this.coverImageUrl = const Value.absent(),
     this.coverImagePath = const Value.absent(),
+    this.airingStatus = const Value.absent(),
+    this.nextAiringAtMs = const Value.absent(),
+    this.nextAiringEpisode = const Value.absent(),
+    this.endDate = const Value.absent(),
+    this.airingCheckedAtMs = const Value.absent(),
   });
   static Insertable<CachedSeriesRow> custom({
     Expression<int>? seriesId,
@@ -453,6 +690,11 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     Expression<int>? episodeCount,
     Expression<String>? coverImageUrl,
     Expression<String>? coverImagePath,
+    Expression<String>? airingStatus,
+    Expression<int>? nextAiringAtMs,
+    Expression<int>? nextAiringEpisode,
+    Expression<String>? endDate,
+    Expression<int>? airingCheckedAtMs,
   }) {
     return RawValuesInsertable({
       if (seriesId != null) 'series_id': seriesId,
@@ -463,6 +705,11 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
       if (episodeCount != null) 'episode_count': episodeCount,
       if (coverImageUrl != null) 'cover_image_url': coverImageUrl,
       if (coverImagePath != null) 'cover_image_path': coverImagePath,
+      if (airingStatus != null) 'airing_status': airingStatus,
+      if (nextAiringAtMs != null) 'next_airing_at_ms': nextAiringAtMs,
+      if (nextAiringEpisode != null) 'next_airing_episode': nextAiringEpisode,
+      if (endDate != null) 'end_date': endDate,
+      if (airingCheckedAtMs != null) 'airing_checked_at_ms': airingCheckedAtMs,
     });
   }
 
@@ -475,6 +722,11 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     Value<int?>? episodeCount,
     Value<String?>? coverImageUrl,
     Value<String?>? coverImagePath,
+    Value<String?>? airingStatus,
+    Value<int?>? nextAiringAtMs,
+    Value<int?>? nextAiringEpisode,
+    Value<String?>? endDate,
+    Value<int?>? airingCheckedAtMs,
   }) {
     return SeriesCacheCompanion(
       seriesId: seriesId ?? this.seriesId,
@@ -485,6 +737,11 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
       episodeCount: episodeCount ?? this.episodeCount,
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,
       coverImagePath: coverImagePath ?? this.coverImagePath,
+      airingStatus: airingStatus ?? this.airingStatus,
+      nextAiringAtMs: nextAiringAtMs ?? this.nextAiringAtMs,
+      nextAiringEpisode: nextAiringEpisode ?? this.nextAiringEpisode,
+      endDate: endDate ?? this.endDate,
+      airingCheckedAtMs: airingCheckedAtMs ?? this.airingCheckedAtMs,
     );
   }
 
@@ -515,6 +772,21 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
     if (coverImagePath.present) {
       map['cover_image_path'] = Variable<String>(coverImagePath.value);
     }
+    if (airingStatus.present) {
+      map['airing_status'] = Variable<String>(airingStatus.value);
+    }
+    if (nextAiringAtMs.present) {
+      map['next_airing_at_ms'] = Variable<int>(nextAiringAtMs.value);
+    }
+    if (nextAiringEpisode.present) {
+      map['next_airing_episode'] = Variable<int>(nextAiringEpisode.value);
+    }
+    if (endDate.present) {
+      map['end_date'] = Variable<String>(endDate.value);
+    }
+    if (airingCheckedAtMs.present) {
+      map['airing_checked_at_ms'] = Variable<int>(airingCheckedAtMs.value);
+    }
     return map;
   }
 
@@ -528,7 +800,12 @@ class SeriesCacheCompanion extends UpdateCompanion<CachedSeriesRow> {
           ..write('format: $format, ')
           ..write('episodeCount: $episodeCount, ')
           ..write('coverImageUrl: $coverImageUrl, ')
-          ..write('coverImagePath: $coverImagePath')
+          ..write('coverImagePath: $coverImagePath, ')
+          ..write('airingStatus: $airingStatus, ')
+          ..write('nextAiringAtMs: $nextAiringAtMs, ')
+          ..write('nextAiringEpisode: $nextAiringEpisode, ')
+          ..write('endDate: $endDate, ')
+          ..write('airingCheckedAtMs: $airingCheckedAtMs')
           ..write(')'))
         .toString();
   }
@@ -3981,11 +4258,27 @@ class $ShowPrefsTable extends ShowPrefs
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _airingHiddenMeta = const VerificationMeta(
+    'airingHidden',
+  );
+  @override
+  late final GeneratedColumn<bool> airingHidden = GeneratedColumn<bool>(
+    'airing_hidden',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("airing_hidden" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     seriesId,
     pictureMode,
     nextEpisodeHidden,
+    airingHidden,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4023,6 +4316,15 @@ class $ShowPrefsTable extends ShowPrefs
         ),
       );
     }
+    if (data.containsKey('airing_hidden')) {
+      context.handle(
+        _airingHiddenMeta,
+        airingHidden.isAcceptableOrUnknown(
+          data['airing_hidden']!,
+          _airingHiddenMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4044,6 +4346,10 @@ class $ShowPrefsTable extends ShowPrefs
         DriftSqlType.bool,
         data['${effectivePrefix}next_episode_hidden'],
       )!,
+      airingHidden: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}airing_hidden'],
+      )!,
     );
   }
 
@@ -4062,10 +4368,14 @@ class ShowPreferenceRow extends DataClass
 
   /// Whether the card's "Next episode" button is hidden for this show.
   final bool nextEpisodeHidden;
+
+  /// Whether the airing indicator is suppressed for this show (v23).
+  final bool airingHidden;
   const ShowPreferenceRow({
     required this.seriesId,
     required this.pictureMode,
     required this.nextEpisodeHidden,
+    required this.airingHidden,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4073,6 +4383,7 @@ class ShowPreferenceRow extends DataClass
     map['series_id'] = Variable<int>(seriesId);
     map['picture_mode'] = Variable<String>(pictureMode);
     map['next_episode_hidden'] = Variable<bool>(nextEpisodeHidden);
+    map['airing_hidden'] = Variable<bool>(airingHidden);
     return map;
   }
 
@@ -4081,6 +4392,7 @@ class ShowPreferenceRow extends DataClass
       seriesId: Value(seriesId),
       pictureMode: Value(pictureMode),
       nextEpisodeHidden: Value(nextEpisodeHidden),
+      airingHidden: Value(airingHidden),
     );
   }
 
@@ -4093,6 +4405,7 @@ class ShowPreferenceRow extends DataClass
       seriesId: serializer.fromJson<int>(json['seriesId']),
       pictureMode: serializer.fromJson<String>(json['pictureMode']),
       nextEpisodeHidden: serializer.fromJson<bool>(json['nextEpisodeHidden']),
+      airingHidden: serializer.fromJson<bool>(json['airingHidden']),
     );
   }
   @override
@@ -4102,6 +4415,7 @@ class ShowPreferenceRow extends DataClass
       'seriesId': serializer.toJson<int>(seriesId),
       'pictureMode': serializer.toJson<String>(pictureMode),
       'nextEpisodeHidden': serializer.toJson<bool>(nextEpisodeHidden),
+      'airingHidden': serializer.toJson<bool>(airingHidden),
     };
   }
 
@@ -4109,10 +4423,12 @@ class ShowPreferenceRow extends DataClass
     int? seriesId,
     String? pictureMode,
     bool? nextEpisodeHidden,
+    bool? airingHidden,
   }) => ShowPreferenceRow(
     seriesId: seriesId ?? this.seriesId,
     pictureMode: pictureMode ?? this.pictureMode,
     nextEpisodeHidden: nextEpisodeHidden ?? this.nextEpisodeHidden,
+    airingHidden: airingHidden ?? this.airingHidden,
   );
   ShowPreferenceRow copyWithCompanion(ShowPrefsCompanion data) {
     return ShowPreferenceRow(
@@ -4123,6 +4439,9 @@ class ShowPreferenceRow extends DataClass
       nextEpisodeHidden: data.nextEpisodeHidden.present
           ? data.nextEpisodeHidden.value
           : this.nextEpisodeHidden,
+      airingHidden: data.airingHidden.present
+          ? data.airingHidden.value
+          : this.airingHidden,
     );
   }
 
@@ -4131,45 +4450,53 @@ class ShowPreferenceRow extends DataClass
     return (StringBuffer('ShowPreferenceRow(')
           ..write('seriesId: $seriesId, ')
           ..write('pictureMode: $pictureMode, ')
-          ..write('nextEpisodeHidden: $nextEpisodeHidden')
+          ..write('nextEpisodeHidden: $nextEpisodeHidden, ')
+          ..write('airingHidden: $airingHidden')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(seriesId, pictureMode, nextEpisodeHidden);
+  int get hashCode =>
+      Object.hash(seriesId, pictureMode, nextEpisodeHidden, airingHidden);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ShowPreferenceRow &&
           other.seriesId == this.seriesId &&
           other.pictureMode == this.pictureMode &&
-          other.nextEpisodeHidden == this.nextEpisodeHidden);
+          other.nextEpisodeHidden == this.nextEpisodeHidden &&
+          other.airingHidden == this.airingHidden);
 }
 
 class ShowPrefsCompanion extends UpdateCompanion<ShowPreferenceRow> {
   final Value<int> seriesId;
   final Value<String> pictureMode;
   final Value<bool> nextEpisodeHidden;
+  final Value<bool> airingHidden;
   const ShowPrefsCompanion({
     this.seriesId = const Value.absent(),
     this.pictureMode = const Value.absent(),
     this.nextEpisodeHidden = const Value.absent(),
+    this.airingHidden = const Value.absent(),
   });
   ShowPrefsCompanion.insert({
     this.seriesId = const Value.absent(),
     this.pictureMode = const Value.absent(),
     this.nextEpisodeHidden = const Value.absent(),
+    this.airingHidden = const Value.absent(),
   });
   static Insertable<ShowPreferenceRow> custom({
     Expression<int>? seriesId,
     Expression<String>? pictureMode,
     Expression<bool>? nextEpisodeHidden,
+    Expression<bool>? airingHidden,
   }) {
     return RawValuesInsertable({
       if (seriesId != null) 'series_id': seriesId,
       if (pictureMode != null) 'picture_mode': pictureMode,
       if (nextEpisodeHidden != null) 'next_episode_hidden': nextEpisodeHidden,
+      if (airingHidden != null) 'airing_hidden': airingHidden,
     });
   }
 
@@ -4177,11 +4504,13 @@ class ShowPrefsCompanion extends UpdateCompanion<ShowPreferenceRow> {
     Value<int>? seriesId,
     Value<String>? pictureMode,
     Value<bool>? nextEpisodeHidden,
+    Value<bool>? airingHidden,
   }) {
     return ShowPrefsCompanion(
       seriesId: seriesId ?? this.seriesId,
       pictureMode: pictureMode ?? this.pictureMode,
       nextEpisodeHidden: nextEpisodeHidden ?? this.nextEpisodeHidden,
+      airingHidden: airingHidden ?? this.airingHidden,
     );
   }
 
@@ -4197,6 +4526,9 @@ class ShowPrefsCompanion extends UpdateCompanion<ShowPreferenceRow> {
     if (nextEpisodeHidden.present) {
       map['next_episode_hidden'] = Variable<bool>(nextEpisodeHidden.value);
     }
+    if (airingHidden.present) {
+      map['airing_hidden'] = Variable<bool>(airingHidden.value);
+    }
     return map;
   }
 
@@ -4205,7 +4537,8 @@ class ShowPrefsCompanion extends UpdateCompanion<ShowPreferenceRow> {
     return (StringBuffer('ShowPrefsCompanion(')
           ..write('seriesId: $seriesId, ')
           ..write('pictureMode: $pictureMode, ')
-          ..write('nextEpisodeHidden: $nextEpisodeHidden')
+          ..write('nextEpisodeHidden: $nextEpisodeHidden, ')
+          ..write('airingHidden: $airingHidden')
           ..write(')'))
         .toString();
   }
@@ -4551,6 +4884,11 @@ typedef $$SeriesCacheTableCreateCompanionBuilder =
       Value<int?> episodeCount,
       Value<String?> coverImageUrl,
       Value<String?> coverImagePath,
+      Value<String?> airingStatus,
+      Value<int?> nextAiringAtMs,
+      Value<int?> nextAiringEpisode,
+      Value<String?> endDate,
+      Value<int?> airingCheckedAtMs,
     });
 typedef $$SeriesCacheTableUpdateCompanionBuilder =
     SeriesCacheCompanion Function({
@@ -4562,6 +4900,11 @@ typedef $$SeriesCacheTableUpdateCompanionBuilder =
       Value<int?> episodeCount,
       Value<String?> coverImageUrl,
       Value<String?> coverImagePath,
+      Value<String?> airingStatus,
+      Value<int?> nextAiringAtMs,
+      Value<int?> nextAiringEpisode,
+      Value<String?> endDate,
+      Value<int?> airingCheckedAtMs,
     });
 
 class $$SeriesCacheTableFilterComposer
@@ -4610,6 +4953,31 @@ class $$SeriesCacheTableFilterComposer
 
   ColumnFilters<String> get coverImagePath => $composableBuilder(
     column: $table.coverImagePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get airingStatus => $composableBuilder(
+    column: $table.airingStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get nextAiringAtMs => $composableBuilder(
+    column: $table.nextAiringAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get nextAiringEpisode => $composableBuilder(
+    column: $table.nextAiringEpisode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get endDate => $composableBuilder(
+    column: $table.endDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get airingCheckedAtMs => $composableBuilder(
+    column: $table.airingCheckedAtMs,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4662,6 +5030,31 @@ class $$SeriesCacheTableOrderingComposer
     column: $table.coverImagePath,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get airingStatus => $composableBuilder(
+    column: $table.airingStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get nextAiringAtMs => $composableBuilder(
+    column: $table.nextAiringAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get nextAiringEpisode => $composableBuilder(
+    column: $table.nextAiringEpisode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get endDate => $composableBuilder(
+    column: $table.endDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get airingCheckedAtMs => $composableBuilder(
+    column: $table.airingCheckedAtMs,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SeriesCacheTableAnnotationComposer
@@ -4702,6 +5095,29 @@ class $$SeriesCacheTableAnnotationComposer
 
   GeneratedColumn<String> get coverImagePath => $composableBuilder(
     column: $table.coverImagePath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get airingStatus => $composableBuilder(
+    column: $table.airingStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get nextAiringAtMs => $composableBuilder(
+    column: $table.nextAiringAtMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get nextAiringEpisode => $composableBuilder(
+    column: $table.nextAiringEpisode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get endDate =>
+      $composableBuilder(column: $table.endDate, builder: (column) => column);
+
+  GeneratedColumn<int> get airingCheckedAtMs => $composableBuilder(
+    column: $table.airingCheckedAtMs,
     builder: (column) => column,
   );
 }
@@ -4745,6 +5161,11 @@ class $$SeriesCacheTableTableManager
                 Value<int?> episodeCount = const Value.absent(),
                 Value<String?> coverImageUrl = const Value.absent(),
                 Value<String?> coverImagePath = const Value.absent(),
+                Value<String?> airingStatus = const Value.absent(),
+                Value<int?> nextAiringAtMs = const Value.absent(),
+                Value<int?> nextAiringEpisode = const Value.absent(),
+                Value<String?> endDate = const Value.absent(),
+                Value<int?> airingCheckedAtMs = const Value.absent(),
               }) => SeriesCacheCompanion(
                 seriesId: seriesId,
                 romaji: romaji,
@@ -4754,6 +5175,11 @@ class $$SeriesCacheTableTableManager
                 episodeCount: episodeCount,
                 coverImageUrl: coverImageUrl,
                 coverImagePath: coverImagePath,
+                airingStatus: airingStatus,
+                nextAiringAtMs: nextAiringAtMs,
+                nextAiringEpisode: nextAiringEpisode,
+                endDate: endDate,
+                airingCheckedAtMs: airingCheckedAtMs,
               ),
           createCompanionCallback:
               ({
@@ -4765,6 +5191,11 @@ class $$SeriesCacheTableTableManager
                 Value<int?> episodeCount = const Value.absent(),
                 Value<String?> coverImageUrl = const Value.absent(),
                 Value<String?> coverImagePath = const Value.absent(),
+                Value<String?> airingStatus = const Value.absent(),
+                Value<int?> nextAiringAtMs = const Value.absent(),
+                Value<int?> nextAiringEpisode = const Value.absent(),
+                Value<String?> endDate = const Value.absent(),
+                Value<int?> airingCheckedAtMs = const Value.absent(),
               }) => SeriesCacheCompanion.insert(
                 seriesId: seriesId,
                 romaji: romaji,
@@ -4774,6 +5205,11 @@ class $$SeriesCacheTableTableManager
                 episodeCount: episodeCount,
                 coverImageUrl: coverImageUrl,
                 coverImagePath: coverImagePath,
+                airingStatus: airingStatus,
+                nextAiringAtMs: nextAiringAtMs,
+                nextAiringEpisode: nextAiringEpisode,
+                endDate: endDate,
+                airingCheckedAtMs: airingCheckedAtMs,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -6689,12 +7125,14 @@ typedef $$ShowPrefsTableCreateCompanionBuilder =
       Value<int> seriesId,
       Value<String> pictureMode,
       Value<bool> nextEpisodeHidden,
+      Value<bool> airingHidden,
     });
 typedef $$ShowPrefsTableUpdateCompanionBuilder =
     ShowPrefsCompanion Function({
       Value<int> seriesId,
       Value<String> pictureMode,
       Value<bool> nextEpisodeHidden,
+      Value<bool> airingHidden,
     });
 
 class $$ShowPrefsTableFilterComposer
@@ -6718,6 +7156,11 @@ class $$ShowPrefsTableFilterComposer
 
   ColumnFilters<bool> get nextEpisodeHidden => $composableBuilder(
     column: $table.nextEpisodeHidden,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get airingHidden => $composableBuilder(
+    column: $table.airingHidden,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6745,6 +7188,11 @@ class $$ShowPrefsTableOrderingComposer
     column: $table.nextEpisodeHidden,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get airingHidden => $composableBuilder(
+    column: $table.airingHidden,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ShowPrefsTableAnnotationComposer
@@ -6766,6 +7214,11 @@ class $$ShowPrefsTableAnnotationComposer
 
   GeneratedColumn<bool> get nextEpisodeHidden => $composableBuilder(
     column: $table.nextEpisodeHidden,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get airingHidden => $composableBuilder(
+    column: $table.airingHidden,
     builder: (column) => column,
   );
 }
@@ -6804,20 +7257,24 @@ class $$ShowPrefsTableTableManager
                 Value<int> seriesId = const Value.absent(),
                 Value<String> pictureMode = const Value.absent(),
                 Value<bool> nextEpisodeHidden = const Value.absent(),
+                Value<bool> airingHidden = const Value.absent(),
               }) => ShowPrefsCompanion(
                 seriesId: seriesId,
                 pictureMode: pictureMode,
                 nextEpisodeHidden: nextEpisodeHidden,
+                airingHidden: airingHidden,
               ),
           createCompanionCallback:
               ({
                 Value<int> seriesId = const Value.absent(),
                 Value<String> pictureMode = const Value.absent(),
                 Value<bool> nextEpisodeHidden = const Value.absent(),
+                Value<bool> airingHidden = const Value.absent(),
               }) => ShowPrefsCompanion.insert(
                 seriesId: seriesId,
                 pictureMode: pictureMode,
                 nextEpisodeHidden: nextEpisodeHidden,
+                airingHidden: airingHidden,
               ),
           withReferenceMapper: (p0) => p0
               .map(

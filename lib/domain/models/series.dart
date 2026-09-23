@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'airing_status.dart';
 import 'external_ids.dart';
 import 'picture_mode.dart';
 import 'related_series.dart';
@@ -24,6 +25,11 @@ class Series extends Equatable {
     this.pending = false,
     this.pictureMode = PictureMode.normal,
     this.nextEpisodeHidden = false,
+    this.airingStatus = AiringStatus.unknown,
+    this.nextAiringAt,
+    this.nextAiringEpisode,
+    this.endDate,
+    this.airingHidden = false,
   });
 
   /// AniLocal's own opaque identity for this show. Positive values were seeded
@@ -74,6 +80,23 @@ class Series extends Equatable {
   /// per-show preference).
   final bool nextEpisodeHidden;
 
+  /// Where the broadcast is, as of the last scan or refresh that asked.
+  final AiringStatus airingStatus;
+
+  /// The next episode's air time and number, when the source publishes a
+  /// schedule (AniList does). An INSTANT, never "in 3 days": the UI measures
+  /// it against the clock when it draws, so it cannot go stale in the cache.
+  final DateTime? nextAiringAt;
+  final int? nextAiringEpisode;
+
+  /// The finale's date (day precision), when known — what bounds the week
+  /// after the last episode during which "the last one is out" still shows.
+  final DateTime? endDate;
+
+  /// When true, the airing indicator is suppressed for this show (a per-show
+  /// preference).
+  final bool airingHidden;
+
   /// The ONE source of truth for a show's displayed name: English → romaji →
   /// native, falling back to the AniList id (`#123`) when a show somehow has no
   /// title. Every surface (grid, detail, player, continue-watching, fix-match)
@@ -99,5 +122,10 @@ class Series extends Equatable {
     pending,
     pictureMode,
     nextEpisodeHidden,
+    airingStatus,
+    nextAiringAt,
+    nextAiringEpisode,
+    endDate,
+    airingHidden,
   ];
 }

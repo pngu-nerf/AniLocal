@@ -3,8 +3,6 @@
 /// Kept as plain strings (no `graphql_flutter`): AniList reads are simple POSTs.
 library;
 
-import 'package:media_kit/media_kit.dart' show Media;
-
 /// The `Media` fields the UI projects, plus `relations` (fetched now, surfaced
 /// as watch-order later). Shared by the filtered/unfiltered search queries.
 const String _mediaFields = r'''
@@ -12,6 +10,16 @@ const String _mediaFields = r'''
     idMal
     format
     episodes
+    status
+    nextAiringEpisode {
+      airingAt
+      episode
+    }
+    endDate {
+      year
+      month
+      day
+    }
     title {
       romaji
       english
@@ -39,7 +47,7 @@ const String _mediaFields = r'''
     }
 ''';
 
-/// Search for a single anime [Media] by title (no format filter).
+/// Search for a single anime `Media` by title (no format filter).
 ///
 /// `$search` is supplied via GraphQL variables, never string-interpolated.
 const String mediaSearchQuery =

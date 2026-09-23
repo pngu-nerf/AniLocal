@@ -218,4 +218,7 @@ class FakeLibraryRepository
   }) async {}
   @override
   Future<void> setAllNextEpisodeHidden({required bool hidden}) async {}
+
+  @override
+  Future<void> setAiringHidden(int seriesId, {required bool hidden}) async {}
 }

@@ -24,10 +24,15 @@ import 'models/episode_slot.dart';
 ///  - Only standard positions (>= 1) are gap-detected. Specials / non-standard
 ///    positions (<= 0) are surfaced as present slots but never flagged missing,
 ///    so we never conjure a phantom "missing special".
+///  - [airedThrough]: while a show is airing, the highest episode that has
+///    aired (from `airedThroughFor`). Episodes above it do not exist yet, so
+///    they are never missing; the window is capped at it, and when M is
+///    unknown it IS the window.
 List<EpisodeSlot> computeEpisodeSlots({
   required List<Episode> present,
   required Set<int> hidden,
   required int? episodeCount,
+  int? airedThrough,
 }) {
   final byPosition = <int, Episode>{
     for (final e in present) e.anchoredNumber: e,
@@ -37,7 +42,7 @@ List<EpisodeSlot> computeEpisodeSlots({
   // The window over which an absent position counts as "missing".
   int? low;
   int? high;
-  final m = episodeCount;
+  final m = knownEpisodeWindow(episodeCount, airedThrough);
   if (m != null && m >= 1) {
     low = 1;
     high = m;
@@ -146,8 +151,21 @@ class DownloadTally {
   final int? total;
 }
 
-DownloadTally computeDownloadTally(List<EpisodeSlot> slots, int? episodeCount) {
-  final m = episodeCount;
+/// The episodes known to EXIST: the source's count, capped at what has aired
+/// when the show is still airing; the aired count alone when the total is
+/// unknown. Null when neither is known.
+int? knownEpisodeWindow(int? episodeCount, int? airedThrough) {
+  if (airedThrough == null) return episodeCount;
+  if (episodeCount == null) return airedThrough;
+  return airedThrough < episodeCount ? airedThrough : episodeCount;
+}
+
+DownloadTally computeDownloadTally(
+  List<EpisodeSlot> slots,
+  int? episodeCount, {
+  int? airedThrough,
+}) {
+  final m = knownEpisodeWindow(episodeCount, airedThrough);
   var inRange = 0;
   var outOfRange = 0;
   var hiddenInRange = 0;

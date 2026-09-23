@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:anilocal/data/crossmap/cross_map_store.dart';
 import 'package:anilocal/data/jikan/jikan_client.dart';
 import 'package:anilocal/data/metadata/jikan_metadata_provider.dart';
+import 'package:anilocal/domain/models/airing_status.dart';
 import 'package:anilocal/domain/models/metadata_failure.dart';
 import 'package:anilocal/domain/models/series_format.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,11 @@ http.Response _searchPage() => http.Response.bytes(
           'title_japanese': 'カウボーイビバップ',
           'type': 'TV',
           'episodes': 26,
+          'status': 'Finished Airing',
+          'aired': {
+            'from': '1998-04-03T00:00:00+00:00',
+            'to': '1999-04-24T00:00:00+00:00',
+          },
           'images': {
             'jpg': {
               'image_url':
@@ -66,6 +72,8 @@ void main() {
       expect(results.first.titles.native, 'カウボーイビバップ');
       expect(results.first.episodeCount, 26);
       expect(results.first.coverImageRef, contains('19644l.jpg'));
+      expect(results.first.airingStatus, AiringStatus.finished);
+      expect(results.first.endDate?.year, 1999);
     });
 
     test("MAL's 'Movie' becomes the shared MOVIE token", () async {

@@ -19,6 +19,7 @@ class SyncSummary extends Equatable {
     this.cancelled = false,
     this.skipLookupsFailed = 0,
     this.sourcesDown = const [],
+    this.airingChecked = 0,
   });
 
   /// Total video files found on disk.
@@ -87,6 +88,9 @@ class SyncSummary extends Equatable {
   /// and empty.
   final List<String> sourcesDown;
 
+  /// Shows whose broadcast state was re-asked this run (phase 4).
+  final int airingChecked;
+
   @override
   List<Object?> get props => [
     filesScanned,
@@ -100,5 +104,6 @@ class SyncSummary extends Equatable {
     unreadableFolders,
     apiFailure,
     cancelled,
+    airingChecked,
   ];
 }

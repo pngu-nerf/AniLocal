@@ -14,6 +14,8 @@ import '../data/scanner/series_matcher.dart';
 import '../data/scanner/title_matching.dart';
 import '../data/skip/skip_provider.dart';
 import '../diagnostics/app_log.dart';
+import '../domain/airing.dart' show kAiringGrace;
+import '../domain/models/airing_status.dart';
 import '../domain/models/external_ids.dart';
 import '../domain/models/metadata_failure.dart';
 import '../domain/models/refresh_summary.dart';
@@ -33,6 +35,11 @@ typedef FileKey = (String folderPath, String relativePath);
 
 /// An episode's identity: our series id plus the anchored episode number.
 typedef EpisodeKey = (int seriesId, int episode);
+
+/// How long an airing check is trusted before a scan asks again. Episodes
+/// come weekly; a scan a few times a day should not re-ask every time, but a
+/// day-old answer is stale by the next one.
+const Duration kAiringRecheck = Duration(hours: 12);
 
 /// The fill path: scan a folder, identify only the deltas, and write the cache.
 /// Runs on scan/refresh only — never on a UI read.
@@ -79,9 +86,14 @@ class LibrarySync {
     this.crossMap,
     VolumeResolver? resolver,
     this.batchSize = kArtConcurrency,
+    this.now = DateTime.now,
   }) : resolver = resolver ?? DiskutilVolumeResolver();
 
   final FolderScanner scanner;
+
+  /// The clock, injectable so "has this show's next episode aired" and "is
+  /// its airing check stale" are testable. Production: `DateTime.now`.
+  final DateTime Function() now;
   final FilenameParser parser;
   final SeriesMatcher matcher;
   final CacheDatabase cache;
@@ -392,6 +404,22 @@ class LibrarySync {
       }
     }
 
+    // PHASE 4 (network): the broadcast state of shows that can change —
+    // airing ones, and the finished-this-week. One batched ask; nothing the
+    // clock says is unchanged is refetched (`needsAiringCheck`).
+    var airingChecked = 0;
+    if (!run.cancelled) {
+      try {
+        airingChecked = await _refreshAiring(
+          externalIds,
+          cancellation: cancellation,
+          onProgress: onProgress,
+        );
+      } on SyncCancelled {
+        run.cancelled = true;
+      }
+    }
+
     return SyncSummary(
       filesScanned: stats.length,
       unchanged: deltas.unchanged,
@@ -406,8 +434,15 @@ class LibrarySync {
       cancelled: run.cancelled,
       skipLookupsFailed: _skipFailureCount,
       sourcesDown: [...run.health.down, ..._skipHealth.down],
+      airingChecked: airingChecked,
     );
   }
+
+  /// `YYYY-MM-DD`, the stored form of a finale date.
+  static String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   /// Stable folder identity -> where it is mounted RIGHT NOW.
   ///
@@ -797,27 +832,12 @@ class LibrarySync {
     MetadataFailure? failure;
     var cancelled = false;
     try {
-      for (final provider in await matcher.activeProviders()) {
-        cancellation.throwIfCancelled();
-        if (!await provider.isConfigured()) continue;
-        final refreshed = await _refreshWith(
-          provider,
-          ids,
-          externalIds,
-          cachedSeriesRows,
-        );
-        if (refreshed == null) {
-          // Transient — keep existing metadata and try the next source.
-          // Reported rather than swallowed: a silent catch here made an
-          // outage look like a successful "Refreshed 0 series".
-          failure = _lastRefreshFailure;
-          continue;
-        }
-        if (refreshed == 0) continue; // held no ids for this source
-        seriesRefreshed = refreshed;
-        failure = null;
-        break; // the preferred source answered; lower ones are the fallback
-      }
+      (seriesRefreshed, failure) = await _refreshSeries(
+        ids,
+        externalIds,
+        cachedSeriesRows,
+        cancellation,
+      );
       onProgress?.call(
         SyncProgress(done: ids.length, total: ids.length, phase: 'metadata'),
       );
@@ -880,6 +900,104 @@ class LibrarySync {
   }
 
   MetadataFailure? _lastRefreshFailure;
+
+  /// Re-ask the sources, in preference order, about [ids]: the first that
+  /// refreshes anything wins and lower ones are the fallback. Returns the
+  /// count and the failure of the last source that could not be reached
+  /// (null when one answered). Shared by Refresh metadata and the scan's
+  /// airing phase.
+  Future<(int, MetadataFailure?)> _refreshSeries(
+    Set<int> ids,
+    Map<int, ExternalIds> externalIds,
+    Map<int, CachedSeriesRow> cachedSeriesRows,
+    SyncCancellation cancellation,
+  ) async {
+    MetadataFailure? failure;
+    for (final provider in await matcher.activeProviders()) {
+      cancellation.throwIfCancelled();
+      if (!await provider.isConfigured()) continue;
+      final refreshed = await _refreshWith(
+        provider,
+        ids,
+        externalIds,
+        cachedSeriesRows,
+      );
+      if (refreshed == null) {
+        // Transient — keep existing metadata and try the next source.
+        // Reported rather than swallowed: a silent catch here made an
+        // outage look like a successful "Refreshed 0 series".
+        failure = _lastRefreshFailure;
+        continue;
+      }
+      if (refreshed == 0) continue; // held no ids for this source
+      return (refreshed, null);
+    }
+    return (0, failure);
+  }
+
+  /// Which cached shows the airing phase should ask about, and why: airing
+  /// ones; finished ones still inside the week that shows "the last one is
+  /// out"; and rows never asked at all. Of those, only the STALE — asked more
+  /// than [kAiringRecheck] ago, or whose scheduled next episode has already
+  /// aired (the cache knows it is out of date). Never refetches a show the
+  /// clock says cannot have changed. Pure; `nowMs` is the injected clock.
+  static bool needsAiringCheck(CachedSeriesRow r, int nowMs) {
+    final status = AiringStatus.fromToken(r.airingStatus);
+    final checked = r.airingCheckedAtMs;
+    final relevant = switch (status) {
+      AiringStatus.releasing => true,
+      AiringStatus.finished => _withinGrace(r.endDate, nowMs),
+      AiringStatus.notYetReleased => true,
+      AiringStatus.unknown => checked == null,
+    };
+    if (!relevant) return false;
+    if (checked == null) return true;
+    if (nowMs - checked > kAiringRecheck.inMilliseconds) return true;
+    final next = r.nextAiringAtMs;
+    return next != null && next <= nowMs;
+  }
+
+  static bool _withinGrace(String? endDate, int nowMs) {
+    final end = endDate == null ? null : DateTime.tryParse(endDate);
+    if (end == null) return false;
+    final since = DateTime.fromMillisecondsSinceEpoch(nowMs).difference(end);
+    return since <= kAiringGrace;
+  }
+
+  /// PHASE 4 of a scan: the broadcast state of the shows that can change.
+  /// One batched fetch through the source chain (AniList answers with the
+  /// schedule; Kitsu and Jikan with the status alone), written through the
+  /// same refresh path. Reported as `phase: 'airing'`.
+  Future<int> _refreshAiring(
+    Map<int, ExternalIds> externalIds, {
+    required SyncCancellation cancellation,
+    required void Function(SyncProgress progress)? onProgress,
+  }) async {
+    final nowMs = now().millisecondsSinceEpoch;
+    final rows = await cache.allSeriesRows();
+    final candidates = <int, CachedSeriesRow>{
+      for (final r in rows)
+        if (needsAiringCheck(r, nowMs)) r.seriesId: r,
+    };
+    if (candidates.isEmpty) return 0;
+    onProgress?.call(
+      SyncProgress(done: 0, total: candidates.length, phase: 'airing'),
+    );
+    final (count, _) = await _refreshSeries(
+      candidates.keys.toSet(),
+      externalIds,
+      candidates,
+      cancellation,
+    );
+    onProgress?.call(
+      SyncProgress(
+        done: candidates.length,
+        total: candidates.length,
+        phase: 'airing',
+      ),
+    );
+    return count;
+  }
 
   /// Re-fetch every series [provider] has an id for and write the answers in
   /// ONE transaction. Returns how many were refreshed, 0 when we hold no ids
@@ -944,6 +1062,16 @@ class LibrarySync {
         // guarantee this method promises. Pinned by
         // test/metadata_refresh_failure_test.dart.
         await cache.upsertSeries(_seriesRow(fresh, artPath, seriesId));
+        // The broadcast columns go through their own write, nulls included:
+        // a show that finished since the last check must LOSE its "next".
+        await cache.updateAiring(
+          seriesId,
+          status: fresh.airingStatus.token,
+          nextAiringAtMs: fresh.nextAiringAt?.millisecondsSinceEpoch,
+          nextAiringEpisode: fresh.nextAiringEpisode,
+          endDate: fresh.endDate == null ? null : _isoDate(fresh.endDate!),
+          checkedAtMs: now().millisecondsSinceEpoch,
+        );
         // Learn any ids this answer carried that we didn't have.
         final merged = fresh.externalIds.fillFrom(
           externalIds[seriesId] ?? ExternalIds.empty,
@@ -1189,17 +1317,30 @@ class LibrarySync {
 
   /// [seriesId] overrides the provider's own id: the provider reports what IT
   /// calls the show, but the cache is keyed by our surrogate.
-  CachedSeriesRow _seriesRow(Series s, String? artPath, [int? seriesId]) =>
-      CachedSeriesRow(
-        seriesId: seriesId ?? s.seriesId,
-        romaji: s.titles.romaji,
-        english: s.titles.english,
-        nativeTitle: s.titles.native,
-        format: s.format,
-        episodeCount: s.episodeCount,
-        coverImageUrl: s.coverImageRef,
-        coverImagePath: artPath,
-      );
+  CachedSeriesRow _seriesRow(Series s, String? artPath, [int? seriesId]) {
+    // Every row built here is a source's ANSWER (identity or refresh;
+    // placeholders are written elsewhere), and the answer is the airing
+    // check too: status and schedule land with the row, stamped now, so the
+    // airing phase never re-asks about a show identified in the same scan —
+    // even when the source had no status to give (`unknown`, checked). Nulls
+    // here cannot wipe (the upsert omits them); a finished show's stale
+    // "next" is cleared by updateAiring on refresh.
+    return CachedSeriesRow(
+      seriesId: seriesId ?? s.seriesId,
+      romaji: s.titles.romaji,
+      english: s.titles.english,
+      nativeTitle: s.titles.native,
+      format: s.format,
+      episodeCount: s.episodeCount,
+      coverImageUrl: s.coverImageRef,
+      coverImagePath: artPath,
+      airingStatus: s.airingStatus.token,
+      nextAiringAtMs: s.nextAiringAt?.millisecondsSinceEpoch,
+      nextAiringEpisode: s.nextAiringEpisode,
+      endDate: s.endDate == null ? null : _isoDate(s.endDate!),
+      airingCheckedAtMs: now().millisecondsSinceEpoch,
+    );
+  }
 
   Series _seriesFromRow(CachedSeriesRow r) => Series(
     seriesId: r.seriesId,

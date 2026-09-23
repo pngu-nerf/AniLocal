@@ -1,3 +1,4 @@
+import '../../domain/models/airing_status.dart';
 import '../../domain/models/external_ids.dart';
 import '../../domain/models/related_series.dart';
 import '../../domain/models/series.dart';
@@ -36,7 +37,23 @@ Series seriesFromMediaJson(Map<String, dynamic> media) {
     episodeCount: _int(media['episodes']),
     coverImageRef: _coverImageFrom(_map(media['coverImage'])),
     relations: _relationsFrom(_map(media['relations'])),
+    airingStatus: AiringStatus.fromAniList(_string(media['status'])),
+    nextAiringAt: _epochSeconds(_map(media['nextAiringEpisode'])?['airingAt']),
+    nextAiringEpisode: _int(_map(media['nextAiringEpisode'])?['episode']),
+    endDate: _fuzzyDate(_map(media['endDate'])),
   );
+}
+
+/// AniList's `airingAt` is epoch SECONDS; stored and compared as an instant.
+DateTime? _epochSeconds(Object? v) =>
+    v is int ? DateTime.fromMillisecondsSinceEpoch(v * 1000) : null;
+
+/// AniList's `FuzzyDate`: any part may be null. A year alone is still a date
+/// (Jan 1); no year is no date.
+DateTime? _fuzzyDate(Map<String, dynamic>? d) {
+  final year = _int(d?['year']);
+  if (year == null) return null;
+  return DateTime(year, _int(d?['month']) ?? 1, _int(d?['day']) ?? 1);
 }
 
 /// Maps a `Page.media` list of AniList entries to domain [Series]. Entries

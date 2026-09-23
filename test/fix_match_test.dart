@@ -67,7 +67,20 @@ void main() {
     final artDir = await Directory('${dir.path}/.art').create();
     final mock = MockClient((req) async {
       if (req.method == 'POST') {
-        final q = (graphqlVariables(req)['search'] as String).toLowerCase();
+        // The scan's airing phase asks BY ID for rows the fix-match path
+        // wrote (no search variable): answer with nothing to refresh.
+        final search = graphqlVariables(req)['search'] as String?;
+        if (search == null) {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'Page': {'media': <Object>[]},
+              },
+            }),
+            200,
+          );
+        }
+        final q = search.toLowerCase();
         final media = <Map<String, dynamic>>[];
         if (q.contains('sakamoto')) {
           media
