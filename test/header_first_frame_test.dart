@@ -102,6 +102,11 @@ void main() {
       scanningTitle(const SyncProgress(done: 120, total: 600, phase: 'skips')),
       'Identifying skips 120/600',
     );
+    expect(
+      scanningTitle(const SyncProgress(done: 0, total: 20, phase: 'airing')),
+      'Checking airing…',
+      reason: 'the airing pass reports as a whole',
+    );
     // Every character of every status paints as a glyph, not a hole.
     for (final s in [
       scanningTitle(null),

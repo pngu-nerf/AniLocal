@@ -281,6 +281,19 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       never a raw exception.
 - [ ] **J2.** Refresh metadata while a **scan is running** → disabled with
       *Wait for the scan to finish* (never a `SyncAlreadyRunning` string).
+- [ ] **J3.** **Airing.** With a show that is airing this season in the
+      library and its latest episode present, **Scan** → the header passes
+      through *Checking airing…* once; the card's meta line and the show
+      page's episode-count line gain a dim podcast note *Ep N · in Xd* (hover:
+      the calendar time). The show page's ghosts stop at the last AIRED
+      episode, not the season total. Move the latest episode's file out of
+      the folder and scan → the note turns amber, *Ep N out* (hover: when it
+      aired). Put the file back and scan → dim again. Settings › Library ›
+      **Airing status** off → the note is gone everywhere; on again → back.
+      The card menu's **Don't flag new episodes** mutes that one show only.
+      Wait past a scheduled air time WITHOUT scanning → the note flips to
+      amber on its own (the clock decides, not the fetch). A show that
+      finished more than a week ago shows nothing.
 
 ## K. Symlinks and odd files
 

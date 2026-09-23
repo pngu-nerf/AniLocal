@@ -12,6 +12,17 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- **Airing status on the episode-count line.** A show that is still airing
+  shows a dim note with the next episode and when it airs ("Ep 9 · in 3d");
+  the moment an episode has aired that is not in your library the note turns
+  amber ("Ep 8 out") so a show you follow week to week is not forgotten. The
+  flag stays for a week after the finale, and goes when the episode is there.
+  Air times come from AniList (Kitsu and Jikan give airing/finished only)
+  during a scan — a fourth phase, "Checking airing…", that asks once, batched,
+  only about shows that can have changed — and the words are measured against
+  your clock when drawn, never stored. While a show airs, missing-episode
+  ghosts and the "N of M" tally stop at what has aired. Settings › Library ›
+  Airing status turns it off; a show's menu mutes it alone. Cache schema v23.
 - A stream that dies mid-play (a drive pulled while an episode runs) shows
   the error with Retry within a few seconds and stays on that episode instead
   of advancing — including when the engine reports nothing at all and the
