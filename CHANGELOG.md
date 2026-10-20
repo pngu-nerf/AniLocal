@@ -12,6 +12,14 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- **A drive that disconnects or reconnects is noticed on its own.** Between
+  scans the app checks every library folder about every 30 s; a drive pulled
+  while you browse greys its shows and raises the reconnect banner within
+  that window, and plugging it back clears both without pressing Scan. The
+  check pauses during a scan (the scan checks itself), backs off to five
+  minutes while a network share is not answering, and logs each change as
+  one `Folder health:` line. No alert or automatic scan yet — those come one
+  at a time. No schema change.
 - **Airing status on the episode-count line.** A show that is still airing
   shows a dim note with the next episode and when it airs ("Ep 9 · in 3d");
   the moment an episode has aired that is not in your library the note turns

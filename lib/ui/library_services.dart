@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../domain/folder_health.dart';
 import '../domain/repositories/fix_match_repository.dart';
 import '../domain/repositories/library_repository.dart';
 import '../domain/repositories/missing_episodes_repository.dart';
@@ -39,6 +40,8 @@ class LibraryServices {
     required this.scan,
     required this.missingFolderPaths,
     required this.accessIssues,
+    required this.folderChanges,
+    required this.refreshFolderHealth,
     required this.categoryLabelOf,
     required this.unmatchedCount,
     this.cachePath,
@@ -82,6 +85,18 @@ class LibraryServices {
   /// currently DENIED — distinct from missing: the fix is System Settings,
   /// not a cable.
   final ValueListenable<List<String>> accessIssues;
+
+  /// A library folder's drive leaving or coming back, as it happens — the
+  /// folder-health monitor's transitions (it polls between scans, so this
+  /// fires without anyone pressing Scan). The HOOK for a reconnect alert, an
+  /// automatic scan and the player's live switch-back; no screen consumes it
+  /// yet. Broadcast: subscribe and cancel freely.
+  final Stream<FolderAvailabilityChange> folderChanges;
+
+  /// Ask for a folder-health pass NOW (a Retry button, a native mount
+  /// notification). Joins a pass already in flight; the notifiers above and
+  /// [folderChanges] carry the result.
+  final Future<void> Function() refreshFolderHealth;
 
   /// The TCC category label a folder path falls under, or null when it is
   /// freely readable. Supplied by the composition root so the UI can relate

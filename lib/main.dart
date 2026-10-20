@@ -19,6 +19,7 @@ import 'data/cache/skip_view_source.dart';
 import 'data/crossmap/cross_map_store.dart';
 import 'data/folders/file_selector_folder_picker.dart';
 import 'data/folders/folder_access.dart';
+import 'data/folders/folder_health_monitor.dart';
 import 'data/folders/folder_health_probe.dart';
 import 'data/folders/tcc_folder_access.dart';
 import 'data/folders/volume_resolver.dart';
@@ -268,20 +269,6 @@ Future<void> main() async {
       corroborate: settings.loadCorroborateSkips,
     ),
   );
-  // The diagnostics report is built HERE because only the composition root can
-  // see the database, the repositories and the settings together; the About
-  // panel just asks for the string.
-  Diagnostics.reportBuilder = () async {
-    final series = await repository.allSeries();
-    final unmatched = await repository.unmatchedFiles();
-    return [
-      'schema v${CacheDatabase.currentSchemaVersion}',
-      'series: ${series.length} · unmatched files: ${unmatched.length}',
-      'skip sources: ${(await settings.loadSkipSourceOrder()).map((p) => '${p.token}:${p.enabled ? 1 : 0}').join(', ')}',
-      'cross-check: ${await settings.loadCorroborateSkips()}',
-      'min skip: ${(await settings.loadMinSkipLength()).inSeconds}s',
-    ].join('\n');
-  };
   // Read fresh on every use, so pasting a key in Settings works immediately and
   // clearing one disables the source immediately.
   Future<String?> malClientId() =>
@@ -384,12 +371,65 @@ Future<void> main() async {
   // out shows sourced only from these. Populated by [scan] from the same
   // ensureAccess results that drive the reconnect banner.
   final missingFolderPaths = ValueNotifier<Set<String>>(const {});
-  // ONE probe rebuilds all three, together, at launch and at the start of
-  // every scan — see FolderHealthProbe for the two rules it holds.
+  // ONE probe rebuilds all three, together — see FolderHealthProbe for the
+  // two rules it holds — and ONE monitor decides when it runs: at launch, at
+  // the start and end of every scan, on a timer between scans (a drive pulled
+  // while browsing used to go unnoticed until the user happened to press
+  // Scan), and on request. Every pass, whoever asked, lands in `reports`.
   final folderHealth = FolderHealthProbe(
     resolver: volumeResolver,
     access: folderAccess,
   );
+  final folderMonitor = FolderHealthMonitor(
+    probe: () async {
+      // Folder ROWS (not just paths) carry each folder's volume binding, so
+      // the probe can resolve the CURRENT mount before checking access. Read
+      // fresh each pass: a folder added or removed is in the next one.
+      final folders = await database.allFolderRows();
+      return folderHealth.probe([
+        for (final f in folders)
+          (path: f.path, volumeId: f.volumeId, volumeSubpath: f.volumeSubpath),
+      ]);
+    },
+    // A scan probes at its own start and end; the timer stays out of its way.
+    paused: () => sync.isRunning,
+  );
+  // Published together, wholesale, from the one report: the greying, the
+  // reconnect banner and the access banner can no longer disagree about the
+  // same folder. App-lifetime subscription, never cancelled.
+  folderMonitor.reports.listen((report) {
+    missingFolderPaths.value = report.missingPaths;
+    missingFolders.value = report.missingLabels;
+    accessIssues.value = report.deniedLabels;
+  });
+
+  // The diagnostics report is built HERE because only the composition root can
+  // see the database, the repositories, the settings and the folder monitor
+  // together; the About panel just asks for the string.
+  Diagnostics.reportBuilder = () async {
+    final series = await repository.allSeries();
+    final unmatched = await repository.unmatchedFiles();
+    final health = folderMonitor.latest;
+    return [
+      'schema v${CacheDatabase.currentSchemaVersion}',
+      'series: ${series.length} · unmatched files: ${unmatched.length}',
+      'skip sources: ${(await settings.loadSkipSourceOrder()).map((p) => '${p.token}:${p.enabled ? 1 : 0}').join(', ')}',
+      'cross-check: ${await settings.loadCorroborateSkips()}',
+      'min skip: ${(await settings.loadMinSkipLength()).inSeconds}s',
+      // Folder health as the monitor last saw it — what a "drive not
+      // detected" report needs: each folder's state and how old the pass is.
+      if (health == null)
+        'folder health: no pass yet'
+      else ...[
+        'folder health: last pass ${folderMonitor.lastPassAt?.toIso8601String()}'
+            '${folderMonitor.isRunning ? '' : ' (monitor stopped)'}',
+        for (final e
+            in health.stateByPath.entries.toList()
+              ..sort((a, b) => a.key.compareTo(b.key)))
+          '  ${e.key} → ${e.value.name}',
+      ],
+    ].join('\n');
+  };
 
   // Folders are user-picked via the native panel — there is NO hardcoded path.
   // Adding a folder under a TCC category provokes the folder-wide prompt (so
@@ -426,34 +466,16 @@ Future<void> main() async {
     return moved;
   }
 
-  /// Which folders are reachable RIGHT NOW: resolve each folder's current
-  /// mount, confirm/upgrade its category access, and publish the results the
-  /// banners and the greying read. Runs at LAUNCH and at the start of every
-  /// scan. It used to run only inside a scan, so a cold start into an
-  /// unplugged drive or a revoked permission showed a healthy library with
-  /// nothing greyed and no banner until the user happened to press Scan.
-  Future<List<LibraryFolderRow>> refreshFolderHealth() async {
-    // Folder ROWS (not just paths) carry each folder's volume binding, so the
-    // probe can resolve the CURRENT mount before checking access.
-    final folders = await database.allFolderRows();
-    final report = await folderHealth.probe([
-      for (final f in folders)
-        (path: f.path, volumeId: f.volumeId, volumeSubpath: f.volumeSubpath),
-    ]);
-    // Published together, wholesale: the greying, the reconnect banner and
-    // the access banner can no longer disagree about the same folder.
-    missingFolderPaths.value = report.missingPaths;
-    missingFolders.value = report.missingLabels;
-    accessIssues.value = report.deniedLabels;
-    return folders;
-  }
-
   Future<SyncSummary> scan(
     void Function() onDiscovered, {
     void Function(SyncProgress progress)? onProgress,
     SyncCancellation? cancellation,
   }) async {
-    final folders = await refreshFolderHealth();
+    // Which folders are reachable RIGHT NOW, before the walk: resolve each
+    // folder's current mount and confirm/upgrade its category access, so the
+    // banners and the greying tell the truth from the scan's first moment.
+    await folderMonitor.refresh();
+    final folders = await database.allFolderRows();
     final summary = await sync.sync(
       [for (final f in folders) f.path],
       onDiscovered: onDiscovered,
@@ -462,7 +484,7 @@ Future<void> main() async {
     );
     // Probed AGAIN at the end: a drive pulled during the run is greyed and
     // bannered by this scan, not discovered by the next one.
-    await refreshFolderHealth();
+    await folderMonitor.refresh();
     // The access banner tells the truth about THIS scan: a category stays
     // flagged only while a folder in it could not be read. Picking
     // ~/Downloads denies the folder-wide grant while the folder itself reads
@@ -490,13 +512,21 @@ Future<void> main() async {
 
   // Folder health for the first frame's banners and greying — not awaited:
   // it opens the database and may ask diskutil, and the library paints from
-  // the cache the moment it can; the notifiers update when this lands.
+  // the cache the moment it can; the notifiers update when this lands. It
+  // used to run only inside a scan, so a cold start into an unplugged drive
+  // or a revoked permission showed a healthy library with nothing greyed and
+  // no banner until the user happened to press Scan. This pass is the
+  // monitor's BASELINE (no transition events); the timer then takes over.
   unawaited(
-    refreshFolderHealth().catchError((Object e, StackTrace s) {
+    folderMonitor.refresh().catchError((Object e, StackTrace s) {
       AppLog.warn('Folder health at launch failed', error: e, stack: s);
-      return const <LibraryFolderRow>[];
+      return const FolderHealthReport();
     }),
   );
+  folderMonitor.start();
+  // Cmd-Q: a tick during teardown would read a closing database and log an
+  // error for nothing. A pass in flight finishes on its own.
+  WindowChrome.addQuitHook(() async => folderMonitor.stop());
 
   // Where the cache lives, for the load-error panel — the one failure that
   // needs to name a file.
@@ -544,6 +574,8 @@ Future<void> main() async {
       accessIssues: accessIssues,
       missingFolders: missingFolders,
       missingFolderPaths: missingFolderPaths,
+      folderChanges: folderMonitor.changes,
+      onRefreshFolderHealth: folderMonitor.refresh,
       // The UI relates a folder to a denied category by label without
       // importing the data layer; the home dir is the real one here.
       categoryLabelOf: (path) =>

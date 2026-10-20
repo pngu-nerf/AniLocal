@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../diagnostics/app_log.dart';
+import '../domain/folder_health.dart';
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/source_descriptor.dart';
 import '../domain/models/sync_control.dart';
@@ -54,6 +55,8 @@ class AniLocalApp extends StatelessWidget {
     required this.missingFolderPaths,
     required this.categoryLabelOf,
     required this.onOpenAccessSettings,
+    this.folderChanges = const Stream<FolderAvailabilityChange>.empty(),
+    this.onRefreshFolderHealth,
     this.metadataSources = const [],
     this.skipSources = const [],
     this.cachePath,
@@ -110,6 +113,14 @@ class AniLocalApp extends StatelessWidget {
   /// PATHS of those missing folders — lets the grid grey out shows whose only
   /// sources live there. Same detection as [missingFolders], different shape.
   final ValueListenable<Set<String>> missingFolderPaths;
+
+  /// See [LibraryServices.folderChanges] — the folder-health monitor's
+  /// transitions. Empty by default (a test without a monitor).
+  final Stream<FolderAvailabilityChange> folderChanges;
+
+  /// See [LibraryServices.refreshFolderHealth]. Null when there is no
+  /// monitor (tests): the services bundle then carries a no-op.
+  final Future<void> Function()? onRefreshFolderHealth;
 
   /// See [LibraryServices.categoryLabelOf].
   final String? Function(String path) categoryLabelOf;
@@ -191,6 +202,8 @@ class _AppLifetimeState extends State<_AppLifetime> {
     scan: _scan,
     missingFolderPaths: widget.app.missingFolderPaths,
     accessIssues: widget.app.accessIssues,
+    folderChanges: widget.app.folderChanges,
+    refreshFolderHealth: widget.app.onRefreshFolderHealth ?? () async {},
     categoryLabelOf: widget.app.categoryLabelOf,
     unmatchedCount: _unmatchedCount,
     cachePath: widget.app.cachePath,

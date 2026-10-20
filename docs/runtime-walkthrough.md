@@ -118,12 +118,22 @@ measured at 600 shows / 8,000 files.
 
 Use the external folder from §C.
 
-- [ ] **D1.** **While browsing:** unplug (or unmount) the drive, then press
-      **Scan** → a banner: *the volume "<name>" isn't connected. Reconnect it
-      to access this library, then scan again.* with a **Scan** button and
-      **no Open Settings** button. Cards sourced only from that drive are greyed
-      with their "not connected" line; shows also present on the internal
-      disk are not greyed. **One** red snackbar appears at once, carrying the
+- [ ] **D0.** *(new)* **While browsing:** unplug (or unmount) the drive and
+      **touch nothing** → within about **30 s** (the folder-health monitor's
+      poll; up to 35 s) the reconnect banner appears, cards sourced only from
+      that drive grey, and Settings › Folders says **Not connected** — no
+      Scan pressed. `app.log` gains one line: `Folder health: <path>
+      accessible → missing`. *Note* if it takes longer than a minute, or if
+      the banner and the greying appear at different moments (they are one
+      report; they must land together).
+- [ ] **D1.** Then press **Scan** → the banner stays: *the volume "<name>"
+      isn't connected. Reconnect it to access this library, then scan again.*
+      with a **Scan** button and **no Open Settings** button. Cards sourced
+      only from that drive are greyed with their "not connected" line; shows
+      also present on the internal disk are not greyed. (Without D0 — a scan
+      pressed inside the poll gap — the scan's own start pass raises the same
+      banner and greying; the picture is identical either way.) **One** red
+      snackbar appears at once, carrying the
       summary line and, under it, `… is not connected — reconnect the drive
       and scan again. Cached items were kept.` — **not** "re-add the folder",
       and not a plain summary first with the warning queued behind it.
@@ -134,8 +144,15 @@ Use the external folder from §C.
       list.
 - [ ] **D4.** Quit and relaunch with the drive still unplugged → the banner and
       greying are there **on first paint**, before you press anything.
-- [ ] **D5.** Plug the drive back in, press Scan → banner gone, greying gone,
-      summary shows `N unchanged · 0 removed`. Nothing was re-identified.
+- [ ] **D5.** Plug the drive back in and **wait** → within about 30 s the
+      banner and the greying clear **by themselves**; `app.log` says `Folder
+      health: <path> missing → accessible`; Settings › Folders drops **Not
+      connected**. Then press Scan → summary shows `N unchanged · 0 removed`.
+      Nothing was re-identified. *(Pressing Scan before the poll lands clears
+      them too — the scan's start pass — so a fast finger is not a failure;
+      the wait is the point of this step.)* During the scan itself the
+      monitor is paused: no `Folder health:` lines land while the header
+      shows scan progress.
 - [ ] **D6.** **Mid-scan:** start a scan of the external
       folder and unplug the drive at any point while it runs → when the scan
       ends, the cards from that drive are **greyed**, the reconnect banner is

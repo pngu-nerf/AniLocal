@@ -121,6 +121,14 @@ void main() {
         expect(report.deniedLabels, [
           'Downloads',
         ], reason: 'raised by the unreadable folder only');
+        // The per-folder states the monitor diffs: the same verdicts, keyed
+        // by stored path, every probed folder present.
+        expect(report.stateByPath, {
+          present.path: FolderAccessState.accessible,
+          '/Volumes/NAS/Anime': FolderAccessState.missing,
+          anime.path: FolderAccessState.accessible,
+          locked.path: FolderAccessState.denied,
+        });
 
         // A readable Downloads folder alone raises nothing: the grant being
         // denied is not the user's problem while the folder reads.
@@ -141,6 +149,10 @@ void main() {
           ref('/nowhere/b', volume: 'BOOM', sub: 'b'),
         ]);
         expect(report.missingPaths, {'/nowhere/a', '/nowhere/b'});
+        expect(
+          report.stateByPath.values,
+          everyElement(FolderAccessState.missing),
+        );
       },
     );
   });

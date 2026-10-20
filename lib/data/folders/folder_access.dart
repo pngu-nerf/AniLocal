@@ -1,3 +1,7 @@
+import '../../domain/folder_health.dart' show FolderAccessState;
+
+export '../../domain/folder_health.dart' show FolderAccessState;
+
 /// Access to a library folder, abstracted so the rest of the app resolves
 /// folders through a token rather than a raw path string.
 ///
@@ -24,24 +28,9 @@ abstract interface class FolderPicker {
   Future<FolderAccessToken?> pickFolder();
 }
 
-/// The three distinct readability conditions a library folder can be in. A
-/// failed read is NOT automatically a permission problem — an unplugged drive
-/// or offline NAS is a different condition with a different fix.
-enum FolderAccessState {
-  /// Readable — freely, or folder-wide access is held.
-  accessible,
-
-  /// The path/mount doesn't exist: an unplugged external drive or offline NAS.
-  /// Recoverable by reconnecting (no Settings interaction); the folder is a
-  /// valid library that's merely offline right now — never forget it.
-  missing,
-
-  /// The path exists but reading is blocked (TCC / EPERM / EACCES) — the
-  /// Settings → Files-and-Folders recovery flow.
-  denied,
-}
-
 /// Outcome of ensuring folder-wide access to a (possibly TCC-protected) folder.
+/// Its [FolderAccessState] is the domain's (`lib/domain/folder_health.dart`),
+/// re-exported here so the access seam's callers keep one import.
 class FolderAccessResult {
   const FolderAccessResult._(this.categoryLabel, this.state);
 

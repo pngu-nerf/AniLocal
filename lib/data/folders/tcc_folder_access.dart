@@ -42,9 +42,18 @@ class TccFolderAccess implements FolderAccess {
     try {
       // Enumerate the category root, reading at most one entry. The opendir is
       // what triggers TCC; an empty dir completes fine, a denial throws.
-      await for (final _ in Directory(cat.root).list(followLinks: false)) {
-        break;
-      }
+      // Bounded like every other probe: the folder-health monitor asks this
+      // every poll, and a wedged network mount answers an opendir with
+      // nothing, not "no" — unbounded, one hung share would stall every pass
+      // that followed. Not answering in time reads as missing, the same
+      // recoverable state `resolveFolderPath` gives a hung mount.
+      final answered = await Directory(cat.root)
+          .list(followLinks: false)
+          .take(1)
+          .drain<void>()
+          .then((_) => true)
+          .timeout(kFolderProbeTimeout, onTimeout: () => false);
+      if (!answered) return FolderAccessResult.missing(cat.label);
       _confirmed.add(cat.root);
       return FolderAccessResult.granted(cat.label);
     } on FileSystemException {
@@ -53,9 +62,12 @@ class TccFolderAccess implements FolderAccess {
       // category root simply doesn't exist. Branch on which actually occurred
       // rather than treating every failure as access-denied. (A genuine TCC
       // denial leaves the well-known dir in place, so it still exists.)
-      if (!Directory(cat.root).existsSync()) {
-        return FolderAccessResult.missing(cat.label);
-      }
+      // Async and bounded for the same reason as the listing above; a stat
+      // that does not answer is a mount that is not there.
+      final present = await Directory(
+        cat.root,
+      ).exists().timeout(kFolderProbeTimeout, onTimeout: () => false);
+      if (!present) return FolderAccessResult.missing(cat.label);
       return FolderAccessResult.denied(cat.label);
     }
   }

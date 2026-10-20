@@ -21,10 +21,18 @@ class FolderHealthReport {
     this.missingPaths = const {},
     this.missingLabels = const [],
     this.deniedLabels = const [],
+    this.stateByPath = const {},
   });
 
   /// Stored folder paths whose volume is not mounted — the greying key.
   final Set<String> missingPaths;
+
+  /// Every probed folder's state, by stored path — what the monitor diffs
+  /// pass against pass to notice a drive leaving or coming back. `denied`
+  /// here means the probe's own reading: the grant is denied AND the folder
+  /// itself could not be listed (a denied grant over a readable folder is
+  /// `accessible`, exactly as the banner treats it).
+  final Map<String, FolderAccessState> stateByPath;
 
   /// Human labels (category or volume) of the missing folders — the
   /// reconnect banner. Sorted.
@@ -65,7 +73,11 @@ class FolderHealthProbe {
     final missingPaths = <String>{};
     final missingLabels = <String>{};
     final deniedLabels = <String>{};
+    final stateByPath = <String, FolderAccessState>{};
     for (final f in folders) {
+      // Accessible unless one of the branches below says otherwise — so a
+      // folder that falls through every check is recorded, not omitted.
+      stateByPath[f.path] = FolderAccessState.accessible;
       try {
         final current = await resolveFolderPath(
           storedPath: f.path,
@@ -80,9 +92,13 @@ class FolderHealthProbe {
         final label = result.categoryLabel;
         if (current == null || result.isMissing) {
           missingPaths.add(f.path);
+          stateByPath[f.path] = FolderAccessState.missing;
           if (label != null) missingLabels.add(label);
         } else if (result.isDenied && label != null) {
-          if (!await _readable(current)) deniedLabels.add(label);
+          if (!await _readable(current)) {
+            deniedLabels.add(label);
+            stateByPath[f.path] = FolderAccessState.denied;
+          }
         }
       } catch (e, stack) {
         // A wedged mount or a probe that throws: the folder is not reachable,
@@ -93,12 +109,14 @@ class FolderHealthProbe {
           stack: stack,
         );
         missingPaths.add(f.path);
+        stateByPath[f.path] = FolderAccessState.missing;
       }
     }
     return FolderHealthReport(
       missingPaths: missingPaths,
       missingLabels: missingLabels.toList()..sort(),
       deniedLabels: deniedLabels.toList()..sort(),
+      stateByPath: stateByPath,
     );
   }
 

@@ -1,3 +1,4 @@
+import 'package:anilocal/domain/folder_health.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
@@ -45,6 +46,10 @@ LibraryServices testLibraryServices(
     scan: ScanControl(),
     missingFolderPaths: missingN,
     accessIssues: deniedN,
+    // No monitor behind a screen test: nothing ever changes, a refresh is a
+    // no-op. A test that needs transitions builds its LibraryServices itself.
+    folderChanges: const Stream<FolderAvailabilityChange>.empty(),
+    refreshFolderHealth: () async {},
     categoryLabelOf: label,
     unmatchedCount: ValueNotifier<int>(0),
     settingsActions: SettingsActions(
