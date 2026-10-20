@@ -34,7 +34,11 @@ void main() {
     )..addFont(rootBundle.load('fonts/Archivo-Variable.ttf'))).load();
   });
 
-  final now = DateTime(2026, 9, 23, 20);
+  // The REAL clock: the label measures the instant against the computer's
+  // clock at build time (docs/feature-log.md, airing), so a pinned date rots
+  // as soon as the offset instant is in the past. Offsets sit half a day off
+  // a whole number because `relativeAirTime` floors.
+  final now = DateTime.now();
   const series = Series(
     seriesId: 1,
     titles: Titles(romaji: 'Sousou no Frieren'),
@@ -84,7 +88,10 @@ void main() {
     testWidgets('with the dim airing note', (tester) async {
       await pumpCard(
         tester,
-        Airing(nextEpisode: 9, nextAt: now.add(const Duration(days: 3))),
+        Airing(
+          nextEpisode: 9,
+          nextAt: now.add(const Duration(days: 3, hours: 12)),
+        ),
       );
       expect(tester.takeException(), isNull);
       expect(find.textContaining('Ep 9 · in 3d'), findsOneWidget);

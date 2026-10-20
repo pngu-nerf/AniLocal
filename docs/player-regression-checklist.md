@@ -69,7 +69,7 @@ behavior, new styling. Grounded in the code as of the VFD player-finish pass.
 - [ ] Rail resize divider: drag resizes (video reflows); invisible at rest, accent on hover/drag; resize cursor; clamps 0.18–0.45; persists on drag end.
 
 ## D. Fragile / invisible behavior — verify explicitly
-- [ ] **Focus ownership** (`player_controls.dart` `_focus`): shortcuts keep working after clicking a control, hovering back over the video, tapping an episode, and returning from fullscreen (reclaimed on `onEnter`/`onPointerDown`).
+- [ ] **Focus ownership** (`player_control_bar.dart` `_focus`, in `_PlayerControlsState`): shortcuts keep working after clicking a control, hovering back over the video, tapping an episode, and returning from fullscreen (reclaimed on `onEnter`/`onPointerDown`).
 - [ ] **Bar never holds keyboard focus** (`Focus(canRequestFocus:false, descendantsAreFocusable:false)` around the bar): a focused slider/button must not swallow space/←/→.
 - [ ] **Rail can't steal focus** (`InkWell canRequestFocus:false`, episode tile).
 - [ ] **Fullscreen enter/exit** works via ⛶ and `Esc`, both through the ONE `PlayerControlsActions.toggleFullscreen`; same bar/config both modes. **No route is pushed** — the theater's own state hides the chrome and the OS window is toggled directly.
