@@ -234,6 +234,13 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       pick it in Settings › Unmatched → *That file isn't there any more. Scan
       to update the list.* Its Assign is refused the same way from the Fix
       match page.
+- [ ] **G2b.** A file whose name carries a loose language word before the
+      episode marker (`…_Eng_Dub_-_01_…`, `Title Dual Audio - 03`) identifies
+      on Scan without fix-match. A file that was ALREADY on the Unmatched
+      list for that reason identifies on the **next Scan** after the parser
+      learned the word — the header's Unmatched count drops by one and the
+      show's card appears; an Unmatched file whose name the parser still
+      reads the same way is NOT looked up again (no network for it).
 - [ ] **G3.** On a show page, episode menu → **Reassign Show** to a different
       show → the page's title, art and episode count follow the **new** show
       at once (it used to keep the old identity over the new episodes). Back

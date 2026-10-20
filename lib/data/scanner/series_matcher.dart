@@ -15,9 +15,12 @@ import 'title_matching.dart';
 /// a no-match, not a failure, so the chain stops there rather than shopping the
 /// title around until some provider guesses something.
 ///
-/// Within a provider, if the search returns nothing the title is retried once
-/// with the leading word dropped — a general fix for unrecognized leading junk
-/// (site-ripper prefixes) without enumerating site names.
+/// Within a provider, if the search returns nothing the title is retried with
+/// the leading word dropped, then (still nothing) with the TRAILING word
+/// dropped — a general fix for unrecognized junk at either end (site-ripper
+/// prefixes; a language word or bare group name the parser's noise list does
+/// not know) without enumerating them. Each retry runs only after an EMPTY
+/// answer, so a title that finds candidates costs one request as before.
 ///
 /// Propagates [MetadataException] when EVERY provider failed, so the caller can
 /// still distinguish "lookup failed" (stay pending, retry next scan) from "no
@@ -112,27 +115,31 @@ class SeriesMatcher {
     MetadataProvider provider,
     String title,
   ) async {
-    var candidates = await provider.searchCandidates(
-      title,
-      perPage: candidatesPerTitle,
-    );
-    if (candidates.isEmpty) {
-      final trimmed = _dropLeadingWord(title);
-      if (trimmed != null) {
-        candidates = await provider.searchCandidates(
-          trimmed,
-          perPage: candidatesPerTitle,
-        );
-        if (candidates.isNotEmpty) return rankCandidates(trimmed, candidates);
-      }
+    List<Series> candidates = const [];
+    for (final query in fallbackQueries(title)) {
+      candidates = await provider.searchCandidates(
+        query,
+        perPage: candidatesPerTitle,
+      );
+      // Ranked against the query that produced them, not the original: a
+      // dropped junk word would only depress every score.
+      if (candidates.isNotEmpty) return rankCandidates(query, candidates);
     }
     return rankCandidates(title, candidates);
   }
 
-  static String? _dropLeadingWord(String title) {
-    final i = title.indexOf(' ');
-    if (i <= 0) return null;
-    final rest = title.substring(i + 1).trim();
-    return rest.isEmpty ? null : rest;
+  /// The queries to try for [title], in order: as given, without its leading
+  /// word, without its trailing word. A one-word title yields only itself; a
+  /// two-word title yields each word once (both trims give a distinct word).
+  static List<String> fallbackQueries(String title) {
+    final words = title.trim().split(RegExp(r'\s+'));
+    if (words.length < 2) return [title];
+    final withoutLeading = words.sublist(1).join(' ');
+    final withoutTrailing = words.sublist(0, words.length - 1).join(' ');
+    return [
+      title,
+      withoutLeading,
+      if (withoutTrailing != withoutLeading) withoutTrailing,
+    ];
   }
 }

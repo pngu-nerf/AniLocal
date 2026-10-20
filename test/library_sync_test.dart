@@ -8,6 +8,7 @@ import 'package:anilocal/data/cache/cache_database.dart';
 import 'package:anilocal/data/cache/drift_library_repository.dart';
 import 'package:anilocal/data/cache/skip_view_source.dart';
 import 'package:anilocal/data/metadata/anilist_metadata_provider.dart';
+import 'package:anilocal/data/scanner/filename_parser.dart';
 import 'package:anilocal/data/scanner/folder_scanner.dart';
 import 'package:anilocal/data/scanner/heuristic_filename_parser.dart';
 import 'package:anilocal/data/scanner/series_matcher.dart';
@@ -46,6 +47,9 @@ void main() {
     late CacheDatabase db;
     late LibrarySync sync;
     late DriftLibraryRepository repo;
+    // The same pipeline over the same cache with another parser — how the
+    // "parser learned a word" rescan is exercised.
+    late LibrarySync Function(FilenameParser parser) buildSync;
     var anilistCalls = 0;
 
     Future<File> touch(String name, {String content = 'x'}) async {
@@ -72,9 +76,9 @@ void main() {
         return http.Response.bytes(kFakeJpeg, 200); // art bytes
       });
 
-      sync = LibrarySync(
+      buildSync = (FilenameParser parser) => LibrarySync(
         scanner: const FileSystemFolderScanner(),
-        parser: const HeuristicFilenameParser(),
+        parser: parser,
         matcher: SeriesMatcher(
           providers: [AniListMetadataProvider(AniListClient(httpClient: mock))],
         ),
@@ -88,6 +92,7 @@ void main() {
           ),
         ],
       );
+      sync = buildSync(const HeuristicFilenameParser());
       repo = DriftLibraryRepository(
         db,
         skipView: SkipViewSource.fixed(order: kBuiltInSkipOrder),
@@ -143,6 +148,32 @@ void main() {
         expect((await repo.unmatchedFiles()).length, 1);
       },
     );
+
+    test('a confirmed-unmatched file is re-identified once the parser reads it '
+        'differently, and not before', () async {
+      await touch('Cowboy Bebop - 01.mkv');
+      // Yesterday's parser left junk in the title: no match, confirmed.
+      final stale = buildSync(const _JunkTitleParser());
+      await stale.sync([dir.path]);
+      expect((await repo.unmatchedFiles()).single.parsedTitle, 'Zzz Junk');
+      final callsAfterFirst = anilistCalls;
+
+      // Same parser, same name: still never retried.
+      final again = await stale.sync([dir.path]);
+      expect(again.unchanged, 1);
+      expect(anilistCalls, callsAfterFirst);
+
+      // Today's parser reads the name to a different title: asked again,
+      // matched, gone from Unmatched — no fix-match needed.
+      final s = await buildSync(
+        const HeuristicFilenameParser(),
+      ).sync([dir.path]);
+      expect(s.processed, 1);
+      expect(s.matched, 1);
+      expect(anilistCalls, greaterThan(callsAfterFirst));
+      expect(await repo.unmatchedFiles(), isEmpty);
+      expect((await repo.allSeries()).single.titles.romaji, 'Cowboy Bebop');
+    });
 
     test(
       'adding an episode of a known series: only that file, no AniList call',
@@ -324,4 +355,14 @@ class _GhostScanner extends FolderScanner {
     ...await inner.findVideoFiles(folderPath),
     extra,
   ];
+}
+
+/// A parser that reads every name to the same junk title the mock never
+/// answers — stands in for "the noise list did not know a word yet".
+class _JunkTitleParser implements FilenameParser {
+  const _JunkTitleParser();
+
+  @override
+  ParsedFilename parse(String filename) =>
+      ParsedFilename(rawName: filename, title: 'Zzz Junk', episodeNumber: 1);
 }

@@ -84,6 +84,37 @@ void main() {
       expect(p.episodeNumber, 1);
     });
 
+    test('loose language/audio words before the episode marker are noise', () {
+      // The real name that shipped as "Gakkou no Kaidan Dub" — a query AniList
+      // answers with nothing.
+      final p = parser.parse(
+        'AnimePahe_Gakkou_no_Kaidan_Eng_Dub_-_01_DVD_480p_Exiled-Destiny.mp4',
+      );
+      expect(p.title, 'Gakkou no Kaidan');
+      expect(p.episodeNumber, 1);
+    });
+
+    test('"Dual Audio" drops both words', () {
+      final p = parser.parse('[Group] Title Dual Audio - 03 [1080p].mkv');
+      expect(p.title, 'Title');
+      expect(p.episodeNumber, 3);
+    });
+
+    test('dotted "English.Dub" ahead of S01E02', () {
+      final p = parser.parse('Show.Name.English.Dub.S01E02.mkv');
+      expect(p.title, 'Show Name');
+      expect(p.seasonNumber, 1);
+      expect(p.episodeNumber, 2);
+    });
+
+    test('trailing language words after a bare episode number', () {
+      // Rule (d) skips trailing noise, so the number is found and the words
+      // never reach the title.
+      final p = parser.parse('Title 01 English Dub.mkv');
+      expect(p.title, 'Title');
+      expect(p.episodeNumber, 1);
+    });
+
     test('source prefix strip keeps season/qualifier text', () {
       final p = parser.parse(
         'AnimePahe_One_Punch_Man_2nd_Season_-_01_BD_1080p_EMBER.mp4',

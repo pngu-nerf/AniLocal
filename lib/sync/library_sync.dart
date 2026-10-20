@@ -551,9 +551,14 @@ class LibrarySync {
   /// PENDING placeholder — a pending row is unidentified, so it's re-attempted
   /// every scan (this is how it auto-resolves once back online) even though the
   /// file on disk hasn't changed. A confirmed-unmatched row (seriesId null,
-  /// pending false) is NOT retried — it stays put until fix-match. Removed =
-  /// cached files not found this scan, EXCEPT those under a folder we couldn't
-  /// read/resolve (preserve those — access lapsed or volume unplugged).
+  /// pending false) is NOT retried — it stays put until fix-match — with ONE
+  /// exception: when the parser now reads its name to a DIFFERENT title (the
+  /// noise list learned a word), the earlier no-match was for a query that no
+  /// longer exists, so it is identified again. That keeps the incremental
+  /// rule honest — the same failed title is never shopped around twice, and
+  /// the check is a local parse, no network. Removed = cached files not found
+  /// this scan, EXCEPT those under a folder we couldn't read/resolve
+  /// (preserve those — access lapsed or volume unplugged).
   _Deltas _classifyDeltas(
     Map<FileKey, FileSig> stats,
     Map<FileKey, CachedFileRow> cachedFiles,
@@ -567,7 +572,12 @@ class LibrarySync {
           c != null && c.fileSize == s.size && c.modifiedAtMs == s.modifiedMs;
       final isPending =
           c != null && c.seriesId == null && c.pendingIdentification;
-      if (bytesUnchanged && !isPending) {
+      final rereadUnmatched =
+          c != null &&
+          c.seriesId == null &&
+          !c.pendingIdentification &&
+          _parsesDifferently(key, c);
+      if (bytesUnchanged && !isPending && !rereadUnmatched) {
         unchanged++;
       } else {
         toIdentify.add(key);
@@ -582,6 +592,16 @@ class LibrarySync {
       unchanged: unchanged,
       removed: removed,
     );
+  }
+
+  /// True when today's parser reads [key]'s name to a non-empty title that is
+  /// not the one cached on [c] (compared normalised, the same way titles are
+  /// grouped for lookup). Re-parsed once more at the delta step (cheap, and
+  /// only the few confirmed-unmatched rows reach here).
+  bool _parsesDifferently(FileKey key, CachedFileRow c) {
+    final fresh = parser.parse(basenameOf(key.$2)).title;
+    if (fresh.isEmpty) return false;
+    return normalizeTitle(fresh) != normalizeTitle(c.parsedTitle);
   }
 
   /// PHASE 1 (no network): write every NEWLY-SEEN, titled file as a pending

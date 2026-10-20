@@ -141,6 +141,12 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   rounded-square set from it.
 
 ### Fixed
+- A loose language or audio word in a file name (`…_Eng_Dub_-_01_…`, `Title
+  Dual Audio - 03`) no longer pollutes the parsed title, so the file
+  identifies instead of landing in Unmatched; a title that finds nothing is
+  retried without its first word and then without its last; and a file
+  already in Unmatched whose name the parser now reads differently is looked
+  up again on the next scan (a name it still reads the same way is not).
 - A file that failed to open no longer skips the player forward an episode
   (or two): a "completed" from a file that never played is a failed open.
   An error mid-play clears when playback resumes.
