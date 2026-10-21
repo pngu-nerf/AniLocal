@@ -67,6 +67,9 @@ LibraryServices testLibraryServices(
       onRefreshMetadata: () async =>
           const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
       scanning: ValueNotifier<bool>(false),
+      // The one fake answers this too (empty: no show carries its own
+      // choice, so the Next episode switch never asks).
+      showPreferences: repo,
     ),
   );
 }

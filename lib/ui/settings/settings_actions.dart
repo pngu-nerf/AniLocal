@@ -5,6 +5,7 @@ import '../../diagnostics/app_log.dart';
 import '../../domain/models/identified_episode.dart';
 import '../../domain/models/refresh_summary.dart';
 import '../../domain/models/source_descriptor.dart';
+import '../../domain/repositories/show_preferences_repository.dart';
 import '../metadata_failure_message.dart';
 import '../widgets/notices.dart';
 import 'sources_actions.dart';
@@ -32,11 +33,17 @@ class SettingsActions {
     required this.skipSources,
     required this.onRefreshMetadata,
     required this.scanning,
+    required this.showPreferences,
   });
 
   /// True while a scan runs; Refresh metadata is disabled then (the fill path
   /// would refuse it anyway — this makes the row say so instead of failing).
   final ValueListenable<bool> scanning;
+
+  /// Per-show preferences, read (never written) by the window: the Next
+  /// episode master switch asks how many shows carry their own choice before
+  /// it overwrites them. The interface only — seam #1 holds.
+  final ShowPreferencesRepository showPreferences;
 
   /// Everything the Sources tab needs. One object rather than three more
   /// threaded callbacks — see [SourcesActions].
@@ -68,6 +75,7 @@ class SettingsActions {
     loadUnmatched: loadUnmatched,
     onFixMatch: onFixMatch,
     scanning: scanning,
+    showPreferences: showPreferences,
   );
 }
 
@@ -86,10 +94,14 @@ class SettingsDialogActions {
     required this.loadUnmatched,
     required this.onFixMatch,
     required this.scanning,
+    required this.showPreferences,
   });
 
   /// See [SettingsActions.scanning].
   final ValueListenable<bool> scanning;
+
+  /// See [SettingsActions.showPreferences].
+  final ShowPreferencesRepository showPreferences;
 
   /// Everything the Sources tab needs. One object rather than three more
   /// threaded callbacks — see [SourcesActions].

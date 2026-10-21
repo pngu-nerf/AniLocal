@@ -223,6 +223,7 @@ class _AppLifetimeState extends State<_AppLifetime> {
       metadataSources: widget.app.metadataSources,
       skipSources: widget.app.skipSources,
       onRefreshMetadata: widget.app.onRefreshMetadata,
+      showPreferences: widget.app.showPreferences,
       scanning: _scan.scanning,
     ),
   );

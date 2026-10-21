@@ -1,7 +1,9 @@
 import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
+import 'package:anilocal/domain/models/show_preferences.dart';
 import 'package:anilocal/domain/models/skip_mode.dart';
 import 'package:anilocal/domain/models/source_descriptor.dart';
+import 'package:anilocal/domain/repositories/show_preferences_repository.dart';
 import 'package:anilocal/ui/settings/setting_row.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:anilocal/ui/settings/settings_window.dart';
@@ -11,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_library_repository.dart';
 import 'support/fake_sources.dart';
 import 'support/finders.dart';
 import 'support/recorder_settings.dart';
@@ -48,8 +51,10 @@ SettingsDialogActions _actions({
   FakeSourcesRepository? sources,
   ValueListenable<int>? unmatchedCount,
   ValueListenable<bool>? scanning,
+  ShowPreferencesRepository? showPreferences,
 }) =>
     SettingsActions(
+      showPreferences: showPreferences ?? FakeLibraryRepository(),
       sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
       metadataSources: const [
         SourceDescriptor(token: 'anilist', displayName: 'AniList'),
@@ -291,8 +296,48 @@ void main() {
               'only the DISPLAY polarity was inverted; the persisted '
               'hide-semantics must be untouched',
         );
+        expect(
+          findXpLabel('Apply to all'),
+          findsNothing,
+          reason: 'no show carries its own choice, so nothing to ask about',
+        );
       },
     );
+
+    testWidgets('Next episode asks before overwriting a show\'s own choice', (
+      tester,
+    ) async {
+      // One show shows the button on purpose; the master switch is about to
+      // hide it everywhere.
+      final prefs = FakeLibraryRepository(
+        preferences: {7: const ShowPreferences(nextEpisodeHidden: false)},
+      );
+      final settings = await _openSettings(
+        tester,
+        actions: _actions(showPreferences: prefs),
+      );
+      await _openCategory(tester, 'Display');
+
+      await tester.tap(_switchIn('Next episode'));
+      await tester.pumpAndSettle();
+      expect(findXpLabel('Apply to every show?'), findsOneWidget);
+      expect(settings.writes, isEmpty, reason: 'nothing until answered');
+
+      await tester.tap(findXpLabel('Cancel'));
+      await tester.pumpAndSettle();
+      expect(settings.writes, isEmpty);
+      expect(
+        tester.widget<Switch>(_switchIn('Next episode')).value,
+        isTrue,
+        reason: 'the switch stays where it was',
+      );
+
+      await tester.tap(_switchIn('Next episode'));
+      await tester.pumpAndSettle();
+      await tester.tap(findXpLabel('Apply to all'));
+      await tester.pumpAndSettle();
+      expect(settings.writes, ['hideNext=true']);
+    });
 
     testWidgets('long explanations live in the ⓘ popover, not on the surface', (
       tester,

@@ -42,11 +42,17 @@ class FakeLibraryRepository
     this.episodesCompleter,
     List<ContinueWatching> continuing = const [],
     Map<int, Episode> upNext = const {},
+    Map<int, ShowPreferences> preferences = const {},
   }) : series = [...series],
        folders = [...folders],
        episodes = {...episodes},
        continuing = [...continuing],
-       upNext = {...upNext};
+       upNext = {...upNext},
+       preferences = {...preferences};
+
+  /// What `allPreferences` returns: the shows that carry their OWN choice.
+  /// Empty by default — the shape of a library nobody has customised.
+  Map<int, ShowPreferences> preferences;
 
   /// What `allSeries` returns. Mutable so a scan callback can grow it.
   List<Series> series;
@@ -206,7 +212,7 @@ class FakeLibraryRepository
   @override
   Future<Map<int, ShowPreferences>> allPreferences() async {
     calls.add('allPreferences');
-    return const {};
+    return preferences;
   }
 
   @override

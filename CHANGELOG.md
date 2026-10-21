@@ -12,6 +12,12 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- **Two destructive actions ask first.** Removing a folder from Settings ›
+  Folders says what leaves the library (its files; shows that live only
+  there) and what is kept (everything on disk, watch progress, fix-matches,
+  per-show choices) before it does it. The Next episode master switch asks
+  before overwriting a show's own choice — and only then; a library where no
+  show carries one just flips. Cancel is the lit button in both.
 - **A drive that disconnects or reconnects is noticed on its own.** Between
   scans the app checks every library folder about every 30 s; a drive pulled
   while you browse greys its shows and raises the reconnect banner within

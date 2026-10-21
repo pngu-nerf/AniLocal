@@ -6,6 +6,7 @@ import 'package:anilocal/ui/theme/xp_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_library_repository.dart';
 import 'support/fake_settings.dart';
 import 'support/fake_sources.dart';
 import 'support/finders.dart';
@@ -55,6 +56,7 @@ Future<_Closed> _open(
                       skipsFetched: 0,
                     ),
                     scanning: ValueNotifier<bool>(false),
+                    showPreferences: FakeLibraryRepository(),
                   ).forScreen(
                     onRefreshed: () {},
                     unmatchedCount: ValueNotifier<int>(0),
@@ -142,17 +144,44 @@ void main() {
       },
     );
 
-    testWidgets('removing a source still goes through the repository', (
-      tester,
-    ) async {
+    testWidgets(
+      'removing a folder asks first, then goes through the repository',
+      (tester) async {
+        final repo = FakeSourcesRepository(['/media/A', '/media/B']);
+        await _open(tester, repo);
+
+        await tester.tap(find.byTooltip('Remove from library').first);
+        await tester.pumpAndSettle();
+        expect(repo.order, [
+          '/media/A',
+          '/media/B',
+        ], reason: 'nothing happens until the question is answered');
+        expect(
+          find.textContaining('/media/A'),
+          findsNWidgets(2),
+          reason: 'the row, and the dialog naming the folder it is about',
+        );
+
+        await tester.tap(findXpLabel('Remove folder'));
+        await tester.pumpAndSettle();
+
+        expect(repo.order, ['/media/B']);
+        expect(find.text('/media/A'), findsNothing);
+      },
+    );
+
+    testWidgets('cancelling the question keeps the folder', (tester) async {
       final repo = FakeSourcesRepository(['/media/A', '/media/B']);
       await _open(tester, repo);
 
-      await tester.tap(find.byTooltip('Remove (drops its cached files)').first);
+      await tester.tap(find.byTooltip('Remove from library').first);
+      await tester.pumpAndSettle();
+      await tester.tap(findXpLabel('Cancel'));
       await tester.pumpAndSettle();
 
-      expect(repo.order, ['/media/B']);
-      expect(find.text('/media/A'), findsNothing);
+      expect(repo.order, ['/media/A', '/media/B']);
+      expect(find.text('/media/A'), findsOneWidget);
+      expect(findXpLabel('Done'), findsOneWidget, reason: 'Settings still up');
     });
 
     testWidgets('adding a folder goes through the injected picker', (

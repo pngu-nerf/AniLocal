@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/confirm_dialog.dart';
+import '../../widgets/guarded.dart';
+import '../../widgets/notices.dart';
 import '../setting_row.dart';
+import '../settings_actions.dart';
 import '../settings_model.dart';
 
 /// Display: what the screens show.
@@ -9,9 +13,39 @@ import '../settings_model.dart';
 /// here is a thing the user does or does not want to SEE. None of them changes
 /// what the library contains or what the player does.
 class DisplayPanel extends StatelessWidget {
-  const DisplayPanel({super.key, required this.model});
+  const DisplayPanel({super.key, required this.model, required this.actions});
 
   final SettingsModel model;
+  final SettingsDialogActions actions;
+
+  /// The Next episode master switch OVERWRITES every show's own choice. Ask
+  /// only when that would actually change something: a library where no show
+  /// carries a choice (the common case) just flips. "Would change" is a row
+  /// whose stored value differs from the one about to be written; a show with
+  /// no row has no choice to lose.
+  Future<void> _setNextEpisodeShown(BuildContext context, bool shown) async {
+    final hidden = !shown;
+    final prefs = await actions.showPreferences.allPreferences();
+    final overwrites = prefs.values
+        .where((p) => p.nextEpisodeHidden != hidden)
+        .length;
+    if (overwrites > 0) {
+      if (!context.mounted) return;
+      final ok = await confirmAction(
+        context,
+        title: 'Apply to every show?',
+        body:
+            '$overwrites ${overwrites == 1 ? 'show has its' : 'shows have their'} '
+            'own "Next episode" choice. Turning this ${shown ? 'on' : 'off'} '
+            'replaces ${overwrites == 1 ? 'it' : 'all of them'}, and '
+            '${overwrites == 1 ? 'it is' : 'they are'} not restored if you '
+            'change it back.',
+        confirmLabel: 'Apply to all',
+      );
+      if (!ok) return;
+    }
+    model.setHideNextEpisode(hidden);
+  }
 
   @override
   Widget build(BuildContext context) => Column(
@@ -45,9 +79,10 @@ class DisplayPanel extends StatelessWidget {
             info:
                 'Shows the "Next: Ep N" button on show cards and on the show '
                 'page.\n\n'
-                'Warning: this is a master switch. Changing it OVERWRITES each '
+                'This is a master switch. Changing it OVERWRITES each '
                 "show's own next-episode choice to match, and those individual "
-                'choices are not restored if you change it back.',
+                'choices are not restored if you change it back — it asks '
+                'first when any show would lose one.',
             // DISPLAY is inverted, the stored value is not: the setting
             // persists as "hide next episode", and a row labelled "Next
             // episode" that was ON when the button was HIDDEN would read
@@ -55,7 +90,15 @@ class DisplayPanel extends StatelessWidget {
             // apply-to-all overwrite — is unchanged.
             control: SettingSwitch(
               value: !model.hideNextEpisode,
-              onChanged: (shown) => model.setHideNextEpisode(!shown),
+              onChanged: (shown) => guarded(
+                'next episode switch',
+                () => _setNextEpisodeShown(context, shown),
+                onError: (e) {
+                  if (context.mounted) {
+                    showFailure(context, "Couldn't read per-show choices.", e);
+                  }
+                },
+              ),
             ),
           ),
           SettingRow(

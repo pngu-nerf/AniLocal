@@ -8,6 +8,7 @@ import '../../access_recovery.dart';
 import '../../metadata_failure_message.dart';
 import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
+import '../../widgets/confirm_dialog.dart';
 import '../../widgets/guarded.dart';
 import '../../widgets/notices.dart';
 import '../../widgets/xp_message.dart';
@@ -93,11 +94,27 @@ class _FoldersPanelState extends State<FoldersPanel> {
     if (result.added) await _reload();
   }
 
-  Future<void> _remove(LibraryFolder folder) =>
-      guarded('remove folder', () async {
-        await widget.sources.repository.removeFolder(folder);
-        await _reload();
-      }, onError: _sayWriteFailed);
+  /// Asks first. The body says exactly what `removeFolder` does — the folder's
+  /// file rows go, shows left with no file go with them, and nothing else: no
+  /// file on disk, no watch progress, no fix-match, no per-show choice.
+  Future<void> _remove(LibraryFolder folder) async {
+    final ok = await confirmAction(
+      context,
+      title: 'Remove this folder?',
+      body:
+          '${folder.path}\n\n'
+          'Its files leave the library — nothing on disk is deleted or moved. '
+          'Shows that live only in this folder disappear; their watch '
+          'progress, fix-matches and per-show choices are kept and come back '
+          'if you add the folder again and scan.',
+      confirmLabel: 'Remove folder',
+    );
+    if (!ok || !mounted) return;
+    await guarded('remove folder', () async {
+      await widget.sources.repository.removeFolder(folder);
+      await _reload();
+    }, onError: _sayWriteFailed);
+  }
 
   /// Drag committed: reorder optimistically, then persist the new priority.
   /// Folder order IS source priority, so this re-ranks the preferred default
@@ -216,9 +233,8 @@ class _FoldersPanelState extends State<FoldersPanel> {
             trailingBuilder: (f) => XpButton(
               dense: true,
               icon: Icons.delete_outline,
-              tooltip: scanning
-                  ? _waitTooltip
-                  : 'Remove (drops its cached files)',
+              // The dialog carries the explanation; the tooltip names the act.
+              tooltip: scanning ? _waitTooltip : 'Remove from library',
               onPressed: scanning ? null : () => _remove(f),
             ),
           ),

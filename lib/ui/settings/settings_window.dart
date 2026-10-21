@@ -181,7 +181,7 @@ class _SettingsWindow extends StatelessWidget {
       id: displayCategoryId,
       label: 'Display',
       icon: Icons.grid_view_outlined,
-      builder: (_) => DisplayPanel(model: model),
+      builder: (_) => DisplayPanel(model: model, actions: actions),
     ),
     // Library upkeep the header used to push a page for. The label carries
     // the live count so the sidebar says whether there is anything to do.

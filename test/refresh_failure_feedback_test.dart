@@ -5,6 +5,7 @@ import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_library_repository.dart';
 import 'support/fake_sources.dart';
 
 /// What the user is TOLD when metadata can't be fetched. The bug being pinned:
@@ -18,6 +19,7 @@ SettingsDialogActions _actions(RefreshSummary result) =>
       skipSources: const [],
       onRefreshMetadata: () async => result,
       scanning: ValueNotifier<bool>(false),
+      showPreferences: FakeLibraryRepository(),
     ).forScreen(
       onRefreshed: () {},
       unmatchedCount: ValueNotifier<int>(0),
