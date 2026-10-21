@@ -30,6 +30,14 @@ class NoSearchResults extends StatelessWidget {
   }
 }
 
+/// What the user is told once the cache has been set aside — the same words
+/// from the load-error panel and from Settings › Maintenance, since both end
+/// in the same quit.
+String cacheResetMovedMessage(String movedTo) =>
+    'Moved the old library cache to $movedTo. Quit and reopen AniLocal to '
+    'start with an empty library; your folders will need to be added and '
+    'scanned again.';
+
 /// The library could not be read at all. Distinguishes the ONE failure with
 /// a specific remedy (a cache from a newer build → update the app) from every
 /// other, and hands the user the log so a report contains evidence.
@@ -96,12 +104,7 @@ class _LibraryLoadErrorState extends State<LibraryLoadError> {
       message: newer ? 'Update the app to open it.' : userFacingMessage(error),
       extra: [
         if (widget.cachePath case final path?) Text('The cache is $path'),
-        if (movedTo != null)
-          Text(
-            'Moved the broken cache to $movedTo. Quit and reopen AniLocal to '
-            'start with an empty library; your folders will need to be added '
-            'and scanned again.',
-          ),
+        if (movedTo != null) Text(cacheResetMovedMessage(movedTo)),
       ],
       actions: [
         XpButton(

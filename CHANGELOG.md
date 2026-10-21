@@ -12,6 +12,14 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- **The data folder, in Settings › Maintenance:** where AniLocal keeps its
+  index, covers, log and id map, with Reveal, and how much disk it takes
+  (measured when the page opens, broken down by part). **Reset library
+  cache** lives there too, not only on the load-error screen: it asks, says
+  exactly what is lost and kept, sets the index AND the covers aside under
+  one stamp (a cover left behind would be shown for a different show once
+  ids are minted afresh), and then holds at a quit prompt. Refused while a
+  scan runs.
 - **Reset settings** (Settings › Maintenance): every preference back to how
   AniLocal ships — the toggles, skipping, both source orders, the panel and
   rail widths, and every show's own "Next episode" choice — after a question.

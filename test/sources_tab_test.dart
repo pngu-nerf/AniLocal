@@ -57,6 +57,7 @@ Future<_Closed> _open(
                     ),
                     scanning: ValueNotifier<bool>(false),
                     showPreferences: FakeLibraryRepository(),
+                    maintenance: const MaintenanceActions.absent(),
                   ).forScreen(
                     onRefreshed: () {},
                     unmatchedCount: ValueNotifier<int>(0),

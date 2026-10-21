@@ -42,4 +42,12 @@ void main() {
     expect(on('linux', '/l/x.log').$2, ['/l']);
     expect(Diagnostics.revealCommand('fuchsia', '/l/x.log'), isNull);
   });
+
+  test('a FOLDER is opened, not selected inside its parent', () {
+    List<String> on(String os, String path) =>
+        Diagnostics.revealCommand(os, path, isDirectory: true)!.$2;
+    expect(on('macos', '/d/anilocal'), ['/d/anilocal']);
+    expect(on('windows', r'C:\d\anilocal'), [r'C:\d\anilocal']);
+    expect(on('linux', '/d/anilocal'), ['/d/anilocal']);
+  });
 }

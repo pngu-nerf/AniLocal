@@ -1,3 +1,4 @@
+import 'package:anilocal/domain/models/cache_footprint.dart';
 import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/show_preferences.dart';
@@ -53,9 +54,11 @@ SettingsDialogActions _actions({
   ValueListenable<int>? unmatchedCount,
   ValueListenable<bool>? scanning,
   ShowPreferencesRepository? showPreferences,
+  MaintenanceActions maintenance = const MaintenanceActions.absent(),
 }) =>
     SettingsActions(
       showPreferences: showPreferences ?? FakeLibraryRepository(),
+      maintenance: maintenance,
       sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
       metadataSources: const [
         SourceDescriptor(token: 'anilist', displayName: 'AniList'),
@@ -418,6 +421,102 @@ void main() {
       expect(find.text('Settings reset.'), findsOneWidget);
       expect(findXpLabel('Done'), findsOneWidget, reason: 'window stays open');
     });
+
+    testWidgets('Maintenance names and measures the data folder', (
+      tester,
+    ) async {
+      await _openSettings(
+        tester,
+        actions: _actions(
+          maintenance: MaintenanceActions(
+            dataPath: '/x/anilocal',
+            measureFootprint: () async => const CacheFootprint(
+              databaseBytes: 1000,
+              artBytes: 2000,
+              logsBytes: 0,
+              otherBytes: 0,
+            ),
+            resetCache: () async => '/x/cache.sqlite.broken-1',
+            scanning: ValueNotifier<bool>(false),
+          ),
+        ),
+      );
+      await _openCategory(tester, 'Maintenance');
+      expect(find.text('/x/anilocal'), findsOneWidget);
+      expect(find.textContaining('3.00 kB — database 1.00 kB'), findsOneWidget);
+    });
+
+    testWidgets('without a folder behind it, Maintenance says so', (
+      tester,
+    ) async {
+      await _openSettings(tester);
+      await _openCategory(tester, 'Maintenance');
+      expect(find.text('Not available'), findsNWidgets(2));
+      expect(
+        tester.widget<XpButton>(_buttonIn('Data folder')).onPressed,
+        isNull,
+      );
+      expect(
+        tester.widget<XpButton>(_buttonIn('Reset library cache')).onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets(
+      'Reset library cache asks, resets, then holds at a quit prompt',
+      (tester) async {
+        var resets = 0;
+        final scanning = ValueNotifier<bool>(true);
+        await _openSettings(
+          tester,
+          actions: _actions(
+            maintenance: MaintenanceActions(
+              dataPath: '/x/anilocal',
+              measureFootprint: null,
+              resetCache: () async {
+                resets++;
+                return '/x/cache.sqlite.broken-1';
+              },
+              scanning: scanning,
+            ),
+          ),
+        );
+        await _openCategory(tester, 'Maintenance');
+
+        // Refused while a scan runs: the scan writes the database the reset
+        // closes.
+        expect(
+          tester.widget<XpButton>(_buttonIn('Reset library cache')).onPressed,
+          isNull,
+        );
+        scanning.value = false;
+        await tester.pumpAndSettle();
+
+        await tester.tap(_buttonIn('Reset library cache'));
+        await tester.pumpAndSettle();
+        expect(findXpLabel('Reset library cache?'), findsOneWidget);
+        await tester.tap(findXpLabel('Cancel'));
+        await tester.pumpAndSettle();
+        expect(resets, 0, reason: 'nothing until confirmed');
+
+        await tester.tap(_buttonIn('Reset library cache'));
+        await tester.pumpAndSettle();
+        await tester.tap(findXpLabel('Reset and quit'));
+        await tester.pumpAndSettle();
+        expect(resets, 1);
+        expect(
+          find.textContaining('/x/cache.sqlite.broken-1'),
+          findsOneWidget,
+          reason: 'the prompt names where the old cache went',
+        );
+        expect(findXpLabel('Quit AniLocal'), findsOneWidget);
+        // The prompt cannot be dismissed: the database behind the window is
+        // closed, so the only way on is out.
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(findXpLabel('Quit AniLocal'), findsOneWidget);
+      },
+    );
 
     testWidgets('Unmatched is a category whose label carries the live count', (
       tester,

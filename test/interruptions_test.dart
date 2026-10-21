@@ -521,5 +521,32 @@ void main() {
       expect(File('$moved-wal').readAsStringSync(), 'wal');
       expect(File('${file.path}-wal').existsSync(), isFalse);
     });
+
+    test('the covers go with it, under the same stamp', () async {
+      // Covers are named by series id and reused when the cached URL is
+      // unknown; a fresh cache mints ids from the start, so a cover left
+      // behind would be shown for a different show.
+      final file = File('${dir.path}/cache.sqlite')..writeAsStringSync('db');
+      final art = Directory('${dir.path}/art')..createSync();
+      File('${art.path}/1.jpg').writeAsStringSync('jpg');
+
+      final moved = await quarantineCacheFile(file, art: art);
+
+      final stamp = moved.split('.broken-').last;
+      expect(art.existsSync(), isFalse);
+      expect(
+        File('${dir.path}/art.broken-$stamp/1.jpg').readAsStringSync(),
+        'jpg',
+      );
+    });
+
+    test('no cover directory is fine', () async {
+      final file = File('${dir.path}/cache.sqlite')..writeAsStringSync('db');
+      final moved = await quarantineCacheFile(
+        file,
+        art: Directory('${dir.path}/absent'),
+      );
+      expect(File(moved).existsSync(), isTrue);
+    });
   });
 }

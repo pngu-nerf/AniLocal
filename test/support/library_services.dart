@@ -70,6 +70,7 @@ LibraryServices testLibraryServices(
       // The one fake answers this too (empty: no show carries its own
       // choice, so the Next episode switch never asks).
       showPreferences: repo,
+      maintenance: const MaintenanceActions.absent(),
     ),
   );
 }

@@ -20,6 +20,7 @@ SettingsDialogActions _actions(RefreshSummary result) =>
       onRefreshMetadata: () async => result,
       scanning: ValueNotifier<bool>(false),
       showPreferences: FakeLibraryRepository(),
+      maintenance: const MaintenanceActions.absent(),
     ).forScreen(
       onRefreshed: () {},
       unmatchedCount: ValueNotifier<int>(0),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../diagnostics/app_log.dart';
 import '../domain/folder_health.dart';
+import '../domain/models/cache_footprint.dart';
 import '../domain/models/refresh_summary.dart';
 import '../domain/models/source_descriptor.dart';
 import '../domain/models/sync_control.dart';
@@ -60,6 +61,8 @@ class AniLocalApp extends StatelessWidget {
     this.metadataSources = const [],
     this.skipSources = const [],
     this.cachePath,
+    this.dataPath,
+    this.measureCacheFootprint,
     this.onResetCache,
   });
 
@@ -133,9 +136,18 @@ class AniLocalApp extends StatelessWidget {
   /// so "couldn't open the library cache" says WHICH file. Null in tests.
   final String? cachePath;
 
-  /// Set the unopenable cache aside (returning where it went); the panel then
-  /// quits the app so the next launch starts empty. Null when there is
-  /// nothing to reset (tests).
+  /// The data folder the cache sits in (database, covers, logs, the id map),
+  /// named by Settings › Maintenance with a Reveal. Null in tests.
+  final String? dataPath;
+
+  /// Measures that folder, off the UI isolate — injected so the UI never
+  /// walks a directory itself. Null in tests: the Size row says so.
+  final Future<CacheFootprint> Function()? measureCacheFootprint;
+
+  /// Set the cache aside (returning where it went); the caller then quits the
+  /// app so the next launch starts empty. Two doors: the load-error panel for
+  /// a cache that cannot be opened, Settings › Maintenance for a user
+  /// starting over. Null when there is nothing to reset (tests).
   final Future<String> Function()? onResetCache;
 
   @override
@@ -225,6 +237,12 @@ class _AppLifetimeState extends State<_AppLifetime> {
       onRefreshMetadata: widget.app.onRefreshMetadata,
       showPreferences: widget.app.showPreferences,
       scanning: _scan.scanning,
+      maintenance: MaintenanceActions(
+        dataPath: widget.app.dataPath,
+        measureFootprint: widget.app.measureCacheFootprint,
+        resetCache: widget.app.onResetCache,
+        scanning: _scan.scanning,
+      ),
     ),
   );
 

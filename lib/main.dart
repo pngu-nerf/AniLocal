@@ -13,6 +13,7 @@ import 'data/aniskip/aniskip_client.dart';
 import 'data/cache/art_cache.dart';
 import 'data/cache/cache_connection.dart';
 import 'data/cache/cache_database.dart';
+import 'data/cache/cache_footprint_measure.dart';
 import 'data/cache/drift_library_repository.dart';
 import 'data/cache/drift_settings_repository.dart';
 import 'data/cache/skip_view_source.dart';
@@ -206,7 +207,7 @@ Future<void> main() async {
     httpClient: httpClient,
   );
   final crossMap = CrossMapStore(
-    directory: derivedDataDirectory,
+    directory: dataDirectory,
     httpClient: httpClient,
   );
   // ALL settings live behind one injected object (was ~20 threaded functions).
@@ -457,9 +458,24 @@ Future<void> main() async {
     );
   }
 
-  /// The cache could not be opened: set it aside and quit, so the next
-  /// launch starts empty. Returns where the broken file went.
+  // The playback engine is APP-LIFETIME: built once here, injected, and kept
+  // alive across navigation. Leaving the theater now stops it instead of
+  // destroying it, so libmpv is constructed once per app run rather than once
+  // per visit — see PlaybackController's doc and
+  // docs/player-architecture-research.md. `repository` is the WatchOrder
+  // resolver (the single "what's next" source) the advance path routes through.
+  // Built here, above resetCache, because the reset must stop it first.
+  final playback = PlaybackController(resolver: repository);
+
+  /// Set the cache aside and quit, so the next launch starts empty — from the
+  /// load-error panel (a cache that could not be opened) or from Settings ›
+  /// Maintenance (a user starting over). Returns where the old file went.
+  /// The two writers that would otherwise race the close are stopped first:
+  /// the health monitor's tick reads the folder table, and the player writes
+  /// a position every second.
   Future<String> resetCache() async {
+    folderMonitor.stop();
+    await playback.stop();
     await database.close();
     final moved = await quarantineCacheDatabase();
     AppLog.error('Cache reset: moved to $moved');
@@ -502,14 +518,6 @@ Future<void> main() async {
     return summary;
   }
 
-  // The playback engine is APP-LIFETIME: built once here, injected, and kept
-  // alive across navigation. Leaving the theater now stops it instead of
-  // destroying it, so libmpv is constructed once per app run rather than once
-  // per visit — see PlaybackController's doc and
-  // docs/player-architecture-research.md. `repository` is the WatchOrder
-  // resolver (the single "what's next" source) the advance path routes through.
-  final playback = PlaybackController(resolver: repository);
-
   // Folder health for the first frame's banners and greying — not awaited:
   // it opens the database and may ask diskutil, and the library paints from
   // the cache the moment it can; the notifiers update when this lands. It
@@ -529,12 +537,16 @@ Future<void> main() async {
   WindowChrome.addQuitHook(() async => folderMonitor.stop());
 
   // Where the cache lives, for the load-error panel — the one failure that
-  // needs to name a file.
+  // needs to name a file — and the data folder it sits in, for Settings ›
+  // Maintenance to name and measure.
   final cachePath = (await cacheDatabaseFile()).path;
+  final dataPath = (await dataDirectory()).path;
 
   runApp(
     AniLocalApp(
       cachePath: cachePath,
+      dataPath: dataPath,
+      measureCacheFootprint: measureCacheFootprint,
       onResetCache: resetCache,
       repository: repository,
       fixMatch: fixMatch,

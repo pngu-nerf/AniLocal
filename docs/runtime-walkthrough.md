@@ -289,6 +289,17 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       once and the Sources lists are back in built-in order, without closing
       the window; on Done the panel is its default width without a relaunch.
       Watch progress, fix-matches and the folder list are untouched.
+- [ ] **H7.** Settings › Maintenance › **Data folder** → the path is the one
+      under Application Support; **Reveal** opens that folder in Finder (not
+      its parent). **Size** reads "Measuring…" for a moment, then a total
+      with the breakdown; compare with Finder's Get Info on the folder —
+      same units, same order of magnitude. With a scan running, **Reset
+      library cache** is disabled with *Wait for the scan to finish*; with
+      none, it asks (**Cancel** / **Reset and quit**) → after
+      confirming, a prompt names where the old cache went and offers only
+      **Quit AniLocal**; Escape does nothing. Quit, then look: both
+      `cache.sqlite.broken-<stamp>` and `art.broken-<stamp>` carry the same
+      stamp. Relaunch → an empty library asking for a folder.
 
 ## I. A binge
 

@@ -65,26 +65,41 @@ abstract final class Diagnostics {
   /// `/select,<path>` — split in two it opens the default folder and selects
   /// nothing. Public for the test; `lib/diagnostics/` stays free of Flutter
   /// imports (it is reached from isolate code), so no annotation.
-  static (String, List<String>)? revealCommand(String os, String path) =>
-      switch (os) {
-        'macos' => ('open', ['-R', path]),
-        'windows' => ('explorer.exe', ['/select,$path']),
-        'linux' => ('xdg-open', [File(path).parent.path]),
-        _ => null,
-      };
+  static (String, List<String>)? revealCommand(
+    String os,
+    String path, {
+    bool isDirectory = false,
+  }) => switch (os) {
+    // A FILE is selected inside its folder; a FOLDER is opened, because
+    // "select the folder in its parent" is not where the user wants to be.
+    'macos' => ('open', [if (!isDirectory) '-R', path]),
+    'windows' => ('explorer.exe', [isDirectory ? path : '/select,$path']),
+    'linux' => ('xdg-open', [isDirectory ? path : File(path).parent.path]),
+    _ => null,
+  };
 
-  /// Reveal the log file in the platform's file browser: Finder (selected),
-  /// Explorer (selected), or the folder in whatever handles `xdg-open`. An
-  /// unknown platform is a no-op rather than an error.
-  static Future<void> revealLogFolder() async {
-    final path = AppLog.filePath;
-    if (path == null) return;
-    final command = revealCommand(Platform.operatingSystem, path);
+  /// Reveal [path] in the platform's file browser: a file selected in Finder
+  /// or Explorer (or its folder opened by whatever handles `xdg-open`), a
+  /// folder opened. An unknown platform is a no-op rather than an error.
+  static Future<void> revealPath(String path) async {
+    final isDirectory = await FileSystemEntity.isDirectory(path);
+    final command = revealCommand(
+      Platform.operatingSystem,
+      path,
+      isDirectory: isDirectory,
+    );
     if (command == null) return;
     try {
       await Process.run(command.$1, command.$2);
     } on ProcessException catch (e) {
-      AppLog.warn('Could not reveal log folder', error: e);
+      AppLog.warn('Could not reveal $path', error: e);
     }
+  }
+
+  /// [revealPath] for the log file, when there is one.
+  static Future<void> revealLogFolder() async {
+    final path = AppLog.filePath;
+    if (path == null) return;
+    await revealPath(path);
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../diagnostics/app_log.dart';
+import '../../domain/models/cache_footprint.dart';
 import '../../domain/models/identified_episode.dart';
 import '../../domain/models/refresh_summary.dart';
 import '../../domain/models/source_descriptor.dart';
@@ -12,6 +13,40 @@ import 'sources_actions.dart';
 
 /// The one sentence every mid-scan-disabled control says.
 const String kWaitForScanTooltip = 'Wait for the scan to finish';
+
+/// What Settings › Maintenance needs to name, measure and reset the data
+/// folder. Closures from the composition root, so the UI holds no path logic
+/// and walks no directory; each is nullable because a test has no folder,
+/// and the rows then say so (a disabled Reveal, "Not available") rather than
+/// pretending.
+class MaintenanceActions {
+  const MaintenanceActions({
+    required this.dataPath,
+    required this.measureFootprint,
+    required this.resetCache,
+    required this.scanning,
+  });
+
+  /// No folder behind the rows — the shape every test uses.
+  const MaintenanceActions.absent()
+    : dataPath = null,
+      measureFootprint = null,
+      resetCache = null,
+      scanning = const AlwaysStoppedAnimation<bool>(false);
+
+  /// The data folder, as a path the user can read and Reveal.
+  final String? dataPath;
+
+  /// Its size, measured off the UI isolate.
+  final Future<CacheFootprint> Function()? measureFootprint;
+
+  /// Set the cache aside; returns where it went. The app must quit after.
+  final Future<String> Function()? resetCache;
+
+  /// The reset is refused while a scan runs — the scan is writing the very
+  /// database the reset closes.
+  final ValueListenable<bool> scanning;
+}
 
 /// The app-wide half of what the Settings window needs, built ONCE at the
 /// composition root and handed down as a single object. Which sources this
@@ -34,11 +69,15 @@ class SettingsActions {
     required this.onRefreshMetadata,
     required this.scanning,
     required this.showPreferences,
+    required this.maintenance,
   });
 
   /// True while a scan runs; Refresh metadata is disabled then (the fill path
   /// would refuse it anyway — this makes the row say so instead of failing).
   final ValueListenable<bool> scanning;
+
+  /// The data folder's name, size and reset — see [MaintenanceActions].
+  final MaintenanceActions maintenance;
 
   /// Per-show preferences, read (never written) by the window: the Next
   /// episode master switch asks how many shows carry their own choice before
@@ -76,6 +115,7 @@ class SettingsActions {
     onFixMatch: onFixMatch,
     scanning: scanning,
     showPreferences: showPreferences,
+    maintenance: maintenance,
   );
 }
 
@@ -95,10 +135,14 @@ class SettingsDialogActions {
     required this.onFixMatch,
     required this.scanning,
     required this.showPreferences,
+    required this.maintenance,
   });
 
   /// See [SettingsActions.scanning].
   final ValueListenable<bool> scanning;
+
+  /// See [SettingsActions.maintenance].
+  final MaintenanceActions maintenance;
 
   /// See [SettingsActions.showPreferences].
   final ShowPreferencesRepository showPreferences;
