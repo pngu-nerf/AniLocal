@@ -12,6 +12,12 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- **⌘, opens Settings** from every page, and the menu bar's AniLocal ›
+  Settings… item does the same — it was a "Preferences…" entry with nothing
+  behind it, which beeped. Each page's own post-close behaviour runs, exactly
+  as from its ⚙; with Settings already open the key does nothing. **About ›
+  Keyboard** lists every shortcut (Space, ← →, ↑ ↓, Esc, ⌘,), derived from
+  the player's key map so it cannot drift from what the keys do.
 - **The data folder, in Settings › Maintenance:** where AniLocal keeps its
   index, covers, log and id map, with Reveal, and how much disk it takes
   (measured when the page opens, broken down by part). **Reset library

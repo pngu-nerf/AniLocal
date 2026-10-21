@@ -74,6 +74,22 @@ void main() {
     },
   );
 
+  test("the runner's settingsRequested reaches the shell's hook", () async {
+    WindowChrome.ensureInitialized();
+    var asked = 0;
+    WindowChrome.onSettingsRequested = () => asked++;
+    addTearDown(() => WindowChrome.onSettingsRequested = null);
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          'anilocal/window',
+          const StandardMethodCodec().encodeMethodCall(
+            const MethodCall('settingsRequested'),
+          ),
+          (_) {},
+        );
+    expect(asked, 1);
+  });
+
   testWidgets('WindowDragArea is the bare child off macOS', (tester) async {
     WindowChrome.debugNativeOverride = false;
     await tester.pumpWidget(

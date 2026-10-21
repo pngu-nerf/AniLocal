@@ -88,6 +88,12 @@ abstract final class WindowChrome {
 
   static bool _initialized = false;
 
+  /// The menu bar's Settings… item (⌘,), as the runner reports it. Set by the
+  /// app shell, which opens Settings for whichever page is on top — the same
+  /// action that page's ⚙ fires. Null until the shell mounts, and then a
+  /// menu click does nothing rather than something stale.
+  static VoidCallback? onSettingsRequested;
+
   /// Start listening for native window-state callbacks. Call once, from the
   /// composition root, before any UI reads [fullscreen]. Idempotent.
   static void ensureInitialized() {
@@ -99,6 +105,8 @@ abstract final class WindowChrome {
           _fullscreen.value = call.arguments as bool? ?? false;
         case 'quitRequested':
           await runQuitHooks();
+        case 'settingsRequested':
+          onSettingsRequested?.call();
       }
       return null;
     });

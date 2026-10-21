@@ -54,6 +54,19 @@ class HeaderController extends ChangeNotifier {
   /// because a stale action still fires its side effect.
   HeaderActions get actions => spec?.actions ?? const NoActions();
 
+  /// Open Settings for the TOP page: the SAME callback the header's ⚙ fires,
+  /// so the page's own post-close behaviour runs (the library rescans if a
+  /// folder changed, the show page reloads, the player re-reads its skip
+  /// settings). False when the page publishes no app actions — fix-match,
+  /// licences, a page with no spec — so the keyboard and the menu bar fail
+  /// ABSENT exactly where the ⚙ tab is absent.
+  bool openSettings() {
+    final current = actions;
+    if (current is! AppActions) return false;
+    current.onSettings();
+    return true;
+  }
+
   /// GROUND TRUTH for the back button — the navigator itself, never a spec.
   /// If the navigator can't be reached, this answers TRUE: an inert back button
   /// is a mild oddity, a missing one is a dead end.

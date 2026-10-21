@@ -88,16 +88,45 @@ class _AppShellState extends State<AppShell> {
     // that bubble up from a focused node, and "nothing is focused" is exactly
     // the broken state a backstop has to survive.
     HardwareKeyboard.instance.addHandler(_onKeyEvent);
+    // The menu bar's Settings… item lands here too, so the key and the menu
+    // are ONE door into the same per-page action.
+    WindowChrome.onSettingsRequested = _menuSettings;
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKeyEvent);
+    if (WindowChrome.onSettingsRequested == _menuSettings) {
+      WindowChrome.onSettingsRequested = null;
+    }
     super.dispose();
+  }
+
+  /// The menu's door. A method tear-off, so dispose can tell its own hook
+  /// from a later shell's.
+  void _menuSettings() => _requestSettings();
+
+  /// Open Settings for whichever page is on top — the same callback its ⚙
+  /// fires. A dialog already up (Settings itself, a confirm) makes this a
+  /// no-op: a second window over the first is a trap, and the ⚙ is not
+  /// reachable then either.
+  bool _requestSettings() {
+    if ((widget.modalDepth?.value ?? 0) > 0) return false;
+    return widget.controller.openSettings();
   }
 
   bool _onKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
+    // ⌘, (Ctrl+, elsewhere) — Settings, from any page, focused or not. On
+    // the same app-wide handler as Escape for the same reason: a focus-tree
+    // shortcut only sees keys that bubble from a focused node. Either
+    // modifier is accepted everywhere; nothing else binds Ctrl+, on macOS,
+    // and the reference in About shows the platform's own glyph.
+    if (event.logicalKey == LogicalKeyboardKey.comma) {
+      final keyboard = HardwareKeyboard.instance;
+      if (!keyboard.isMetaPressed && !keyboard.isControlPressed) return false;
+      return _requestSettings();
+    }
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
     if (!WindowChrome.fullscreen.value) return false;
     // A dialog is up: its own Escape (dismiss) comes first. This handler runs

@@ -300,6 +300,14 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       **Quit AniLocal**; Escape does nothing. Quit, then look: both
       `cache.sqlite.broken-<stamp>` and `art.broken-<stamp>` carry the same
       stamp. Relaunch → an empty library asking for a folder.
+- [ ] **H8.** **⌘,** on the library, on a show page and in the player → the
+      same Settings window each time, and on Done each page does what its ⚙
+      would (the player re-reads skip mode; the library rescans if a folder
+      changed). The menu bar's **AniLocal › Settings…** does the same (it
+      used to beep). With Settings already open, ⌘, does nothing; on the
+      Licences page (no ⚙) it does nothing. About › **Keyboard** lists
+      Space, ← →, ↑ ↓, Esc and ⌘ , — press each in the player and check the
+      words match what happened.
 
 ## I. A binge
 

@@ -103,6 +103,17 @@ class MainFlutterWindow: NSWindow {
     super.awakeFromNib()
   }
 
+  // MARK: - Settings
+
+  /// The menu bar's Settings… item (⌘,). Connected to First Responder in the
+  /// xib, so the window — in the responder chain while it is key — resolves
+  /// it; Dart then opens Settings for whichever page is on top. Before this
+  /// the item had no action: AppKit left it disabled but still CLAIMED its
+  /// key equivalent, so ⌘, beeped and Flutter never saw the key at all.
+  @objc func openSettings(_ sender: Any?) {
+    windowChannel?.invokeMethod("settingsRequested", arguments: nil)
+  }
+
   // MARK: - Quitting
 
   /// Ask Dart to finish what must not be lost (the player's last position, the

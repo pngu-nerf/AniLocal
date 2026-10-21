@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../diagnostics/app_log.dart';
 import '../../../diagnostics/diagnostics.dart';
 import '../../licences_screen.dart';
+import '../../theater/controls/shortcut_labels.dart';
+import '../../theme/xp_tokens.dart';
 import '../../theme/xp_widgets.dart';
 import '../../widgets/copy_diagnostics.dart';
 import '../../widgets/guarded.dart';
@@ -92,6 +95,27 @@ class _AboutPanelState extends State<AboutPanel> {
                   : Diagnostics.revealLogFolder,
             ),
           ),
+        ],
+      ),
+      // Read-only rows: the key on the right where a control would sit. The
+      // list is DERIVED from the player's key map, so it cannot drift from
+      // what the keys actually do.
+      SettingsGroup(
+        title: 'Keyboard',
+        children: [
+          for (final shortcut in shortcutReference(
+            mac: defaultTargetPlatform == TargetPlatform.macOS,
+          ))
+            SettingRow(
+              label: shortcut.action,
+              control: Text(
+                shortcut.keys,
+                style: const TextStyle(
+                  color: Xp.textDim,
+                  fontSize: Xp.fontSizeLabel,
+                ),
+              ),
+            ),
         ],
       ),
       const SettingsGroup(
