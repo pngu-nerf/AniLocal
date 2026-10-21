@@ -237,4 +237,43 @@ class DriftSettingsRepository implements SettingsRepository {
   @override
   Future<void> setPanelWidth(double width) =>
       _db.setSetting(_panelWidthKey, '$width');
+
+  /// The WHITELIST of what "Reset settings" deletes — every preference key
+  /// this class owns, plus the one inert legacy row. A whitelist, never a
+  /// table wipe: `app_settings` also holds `next_minted_series_id` (the
+  /// library's identity counter — wiping it would re-mint ids and fork shows)
+  /// and `source_client_id_<token>` (a key the user pasted; a credential,
+  /// not a preference, and the only way back is re-registering).
+  ///
+  /// RULE: a new `_…Key` constant above is also a line here. The repository
+  /// test counts them so a key that skips the list fails the suite instead of
+  /// quietly surviving every reset. Public only for that test.
+  static const List<String> preferenceKeys = [
+    _continueCollapsedKey,
+    _autoPlayNextKey,
+    _skipModeKey,
+    _metadataSourceOrderKey,
+    _skipSourceOrderKey,
+    _corroborateSkipsKey,
+    _minSkipLengthKey,
+    _watchedThresholdKey,
+    _missingEpisodesKey,
+    _airingKey,
+    _hideNextEpisodeKey,
+    _showContinueWatchingKey,
+    _showSearchBarKey,
+    _railFractionKey,
+    _panelWidthKey,
+    'continue_panel_fraction', // the retired fraction key, inert but present
+  ];
+
+  // Deleting the rows — not writing defaults — keeps "the default" defined in
+  // exactly one place: each `load*`'s fallback. The per-show half of the
+  // next-episode master switch rides in the same transaction, as it does in
+  // setHideNextEpisode, so the switch and the cards cannot disagree.
+  @override
+  Future<void> resetToDefaults() => _db.transaction(() async {
+    await _db.deleteSettings(preferenceKeys);
+    await _db.setAllNextEpisodeHidden(hidden: false);
+  });
 }

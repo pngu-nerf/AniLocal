@@ -12,6 +12,11 @@ ten times the reference one, a drive that unplugs, a quit mid-scan, a network
 that answers nothing. `docs/runtime-walkthrough.md` is the human half.
 
 ### Added
+- **Reset settings** (Settings › Maintenance): every preference back to how
+  AniLocal ships — the toggles, skipping, both source orders, the panel and
+  rail widths, and every show's own "Next episode" choice — after a question.
+  Your library, watch progress, fix-matches and any client ID you pasted are
+  kept. The window re-reads itself on the spot.
 - **Two destructive actions ask first.** Removing a folder from Settings ›
   Folders says what leaves the library (its files; shows that live only
   there) and what is kept (everything on disk, watch progress, fix-matches,

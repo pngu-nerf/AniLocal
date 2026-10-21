@@ -175,5 +175,80 @@ void main() {
         expect((await repo.preferencesFor(2)).nextEpisodeHidden, isFalse);
       },
     );
+
+    test('resetToDefaults restores every preference and keeps identity and '
+        'credentials', () async {
+      await db.applySync(
+        seriesUpserts: [_series(1), _series(2)],
+        fileUpserts: [_file(1), _file(2)],
+        removedKeys: const [],
+      );
+      // Every setter, to a non-default.
+      await settings.setContinueCollapsed(true);
+      await settings.setAutoPlayNext(false);
+      await settings.setSkipMode(SkipMode.auto);
+      await settings.setMetadataSourceOrder(const [
+        SourcePreference(token: 'kitsu', enabled: true),
+        SourcePreference(token: 'anilist', enabled: false),
+      ]);
+      await settings.setSkipSourceOrder(const [
+        SourcePreference(token: 'aniskip', enabled: true),
+      ]);
+      await settings.setCorroborateSkips(true);
+      await settings.setMinSkipLength(const Duration(seconds: 30));
+      await settings.setWatchedThreshold(const Duration(seconds: 10));
+      await settings.setMissingEnabled(false);
+      await settings.setAiringEnabled(false);
+      await settings.setHideNextEpisode(true);
+      await settings.setShowContinueWatching(false);
+      await settings.setShowSearchBar(false);
+      await settings.setRailFraction(0.4);
+      await settings.setPanelWidth(400);
+      // The two rows that share the store and are NOT preferences.
+      await settings.setSourceClientId('mal', 'abc');
+      await db.setSetting('next_minted_series_id', '900001');
+
+      await settings.resetToDefaults();
+
+      expect(await settings.loadContinueCollapsed(), isFalse);
+      expect(await settings.loadAutoPlayNext(), isTrue);
+      expect(await settings.loadSkipMode(), SkipMode.button);
+      expect(await settings.loadMetadataSourceOrder(), isEmpty);
+      expect(await settings.loadSkipSourceOrder(), isEmpty);
+      expect(await settings.loadCorroborateSkips(), isFalse);
+      expect(await settings.loadMinSkipLength(), Duration.zero);
+      expect(await settings.loadWatchedThreshold(), watchedThresholdDefault);
+      expect(await settings.loadMissingEnabled(), isTrue);
+      expect(await settings.loadAiringEnabled(), isTrue);
+      expect(await settings.loadHideNextEpisode(), isFalse);
+      expect(await settings.loadShowContinueWatching(), isTrue);
+      expect(await settings.loadShowSearchBar(), isTrue);
+      expect(await settings.loadRailFraction(), railFractionDefault);
+      expect(await settings.loadPanelWidth(), panelWidthDefault);
+      // The master switch's other half went with it.
+      expect((await repo.preferencesFor(1)).nextEpisodeHidden, isFalse);
+      expect((await repo.preferencesFor(2)).nextEpisodeHidden, isFalse);
+      // Kept: a credential and the library's identity.
+      expect(await settings.loadSourceClientId('mal'), 'abc');
+      expect(await db.getSetting('next_minted_series_id'), '900001');
+      // And NOTHING else survived: the only rows left are those two.
+      final remaining = (await db.select(db.appSettings).get())
+          .map((r) => r.key)
+          .toSet();
+      expect(remaining, {'source_client_id_mal', 'next_minted_series_id'});
+    });
+
+    test('the reset whitelist names every preference key, once', () {
+      // Fifteen live keys plus the retired fraction row. A new `_…Key` in the
+      // repository is a new line in the list AND a bump here — the count is
+      // what makes forgetting the list a failing test instead of a key that
+      // quietly survives every reset.
+      expect(DriftSettingsRepository.preferenceKeys, hasLength(16));
+      expect(
+        DriftSettingsRepository.preferenceKeys.toSet(),
+        hasLength(DriftSettingsRepository.preferenceKeys.length),
+        reason: 'no key listed twice',
+      );
+    });
   });
 }

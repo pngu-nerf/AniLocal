@@ -46,6 +46,8 @@ class RecorderSettings extends FakeSettings {
   @override
   Future<void> setMinSkipLength(Duration v) async =>
       writes.add('minSkip=${v.inSeconds}');
+  @override
+  Future<void> resetToDefaults() async => writes.add('reset');
 
   @override
   Future<List<SourcePreference>> loadMetadataSourceOrder() async =>

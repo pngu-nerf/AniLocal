@@ -8,6 +8,7 @@ import 'package:anilocal/ui/settings/setting_row.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:anilocal/ui/settings/settings_window.dart';
 import 'package:anilocal/ui/theme/xp_theme.dart';
+import 'package:anilocal/ui/theme/xp_widgets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -122,6 +123,12 @@ Finder _switchIn(String label) => find.descendant(
 Finder _fieldIn(String label) => find.descendant(
   of: find.ancestor(of: find.text(label), matching: find.byType(SettingRow)),
   matching: find.byType(TextField),
+);
+
+/// The action button of a named row.
+Finder _buttonIn(String label) => find.descendant(
+  of: find.ancestor(of: find.text(label), matching: find.byType(SettingRow)),
+  matching: find.byType(XpButton),
 );
 
 Future<void> _openCategory(WidgetTester tester, String label) async {
@@ -390,6 +397,26 @@ void main() {
           );
         }
       }
+    });
+
+    testWidgets('Reset settings asks, then resets and says so', (tester) async {
+      final settings = await _openSettings(tester);
+      await _openCategory(tester, 'Maintenance');
+
+      await tester.tap(_buttonIn('Reset settings'));
+      await tester.pumpAndSettle();
+      expect(findXpLabel('Reset all settings?'), findsOneWidget);
+      await tester.tap(findXpLabel('Cancel'));
+      await tester.pumpAndSettle();
+      expect(settings.writes, isEmpty, reason: 'cancel resets nothing');
+
+      await tester.tap(_buttonIn('Reset settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(findXpLabel('Reset to defaults'));
+      await tester.pumpAndSettle();
+      expect(settings.writes, ['reset']);
+      expect(find.text('Settings reset.'), findsOneWidget);
+      expect(findXpLabel('Done'), findsOneWidget, reason: 'window stays open');
     });
 
     testWidgets('Unmatched is a category whose label carries the live count', (

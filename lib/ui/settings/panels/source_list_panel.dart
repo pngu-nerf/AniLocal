@@ -39,7 +39,13 @@ class SourceListPanel extends StatefulWidget {
     required this.saveOrder,
     required this.caption,
     this.scanning,
+    this.revision = 0,
   });
+
+  /// Bumped by the window after a reset. The order lives in this panel's own
+  /// state (loaded once per window, so switching tabs never flashes it), so
+  /// a change here is the one signal that the stored order moved under it.
+  final int revision;
 
   /// True while a scan runs: reordering and switching are disabled, like the
   /// Folders panel — the scan reads the order per match, and a list that
@@ -83,6 +89,14 @@ class _SourceListPanelState extends State<SourceListPanel> {
   void initState() {
     super.initState();
     unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(SourceListPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // In place: _load never clears the list, so the rows update under the
+    // user rather than passing through a spinner.
+    if (oldWidget.revision != widget.revision) unawaited(_load());
   }
 
   /// Set when the load failed; rendered instead of the spinner.

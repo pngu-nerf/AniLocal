@@ -1017,6 +1017,12 @@ class CacheDatabase extends _$CacheDatabase {
     appSettings,
   ).insertOnConflictUpdate(AppSettingRow(key: key, value: value));
 
+  /// Remove exactly these rows — a reader then sees its default. The caller
+  /// names the keys (`DriftSettingsRepository.preferenceKeys`); this table
+  /// also holds the minted-id counter, which no reset may touch.
+  Future<void> deleteSettings(List<String> keys) =>
+      (delete(appSettings)..where((s) => s.key.isIn(keys))).go();
+
   // --- Per-show preferences. Written ONLY by the per-show menu actions; the
   //     fill path (applySync) + refreshMetadata never touch this table, so a
   //     rescan/refresh can't wipe a preference (seam #5). ---

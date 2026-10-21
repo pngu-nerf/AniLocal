@@ -282,6 +282,13 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       nothing; use the header route instead) — with Settings open over a
       fullscreen player, the first **Escape closes Settings**; the second
       leaves fullscreen.
+- [ ] **H6.** Change several settings (skip mode, a Display toggle, drag a
+      source in Sources, widen the Continue watching panel), then Settings ›
+      Maintenance › **Reset settings** → a question naming what is kept;
+      **Reset to defaults** → every row in the window reads its default at
+      once and the Sources lists are back in built-in order, without closing
+      the window; on Done the panel is its default width without a relaunch.
+      Watch progress, fix-matches and the folder list are untouched.
 
 ## I. A binge
 

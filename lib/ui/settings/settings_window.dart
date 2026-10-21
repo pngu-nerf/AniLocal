@@ -196,7 +196,7 @@ class _SettingsWindow extends StatelessWidget {
       id: maintenanceCategoryId,
       label: 'Maintenance',
       icon: Icons.build_outlined,
-      builder: (_) => MaintenancePanel(actions: actions),
+      builder: (_) => MaintenancePanel(model: model, actions: actions),
     ),
     SettingsCategory(
       id: aboutCategoryId,

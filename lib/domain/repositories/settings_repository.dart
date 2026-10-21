@@ -119,9 +119,16 @@ abstract interface class SettingsRepository {
   Future<double> loadRailFraction();
   Future<void> setRailFraction(double fraction);
 
-  /// Continue-watching panel width (fraction); the library clamps to its bounds.
   /// Continue-watching panel width in LOGICAL POINTS (absolute, not a fraction
   /// of the window — see `LibraryLayoutConfig.panelWidth`).
   Future<double> loadPanelWidth();
   Future<void> setPanelWidth(double width);
+
+  /// Every PREFERENCE back to its shipped default, in one transaction: the
+  /// toggles, the skip settings, both source orders, the layout sizes, and —
+  /// because the master switch owns both halves — every show's own
+  /// next-episode choice, as `setHideNextEpisode(false)` would. Kept: anything
+  /// that is not a preference and happens to share the store (a pasted
+  /// client ID is a credential; the library's identity counter is identity).
+  Future<void> resetToDefaults();
 }

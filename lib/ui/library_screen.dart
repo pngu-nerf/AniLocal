@@ -206,11 +206,15 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       final v = await _services.settings.loadContinueCollapsed();
       if (mounted) setState(() => _continueCollapsed = v);
     });
-    // Already clamped by the repository; the layout clamps again on drag.
-    fireAndForget('panel width setting', () async {
-      final v = await _services.settings.loadPanelWidth();
-      if (mounted) setState(() => _panelWidth = v);
-    });
+    fireAndForget('panel width setting', _loadPanelWidth);
+  }
+
+  /// Already clamped by the repository; the layout clamps again on drag. Read
+  /// at init and again after Settings closes — a reset puts the width back,
+  /// and the screen should show that without a relaunch.
+  Future<void> _loadPanelWidth() async {
+    final v = await _services.settings.loadPanelWidth();
+    if (mounted) setState(() => _panelWidth = v);
   }
 
   void _onScanningChanged() {
@@ -425,10 +429,12 @@ class _LibraryScreenState extends State<LibraryScreen> with HeaderPublisher {
       initialCategory: initialCategory,
     );
     if (!mounted) return;
-    // Reflect any change made in the window: homepage-toggle visibility, and a
-    // reload (the global "hide next episode" apply-to-all rewrote per-show prefs
-    // that the cards render).
+    // Reflect any change made in the window: homepage-toggle visibility, the
+    // panel width (a reset restores it), and a reload (the global "hide next
+    // episode" apply-to-all rewrote per-show prefs that the cards render).
     await _loadHomepageToggles();
+    if (!mounted) return;
+    await _loadPanelWidth();
     if (!mounted) return;
     // A folder added or removed means files to discover or drop, so it needs
     // a SCAN; a pure reorder only re-ranks which copy of a duplicated episode

@@ -5,6 +5,20 @@ import '../../domain/models/skip_mode.dart';
 import '../../domain/repositories/settings_repository.dart';
 import 'watched_threshold.dart';
 
+/// Everything the model caches, read in one go.
+typedef _Values = ({
+  bool autoPlayNext,
+  SkipMode skipMode,
+  Duration watchedThreshold,
+  bool missingEnabled,
+  bool airingEnabled,
+  bool corroborateSkips,
+  Duration minSkipLength,
+  bool hideNextEpisode,
+  bool showContinueWatching,
+  bool showSearchBar,
+});
+
 /// The open window's live view of the settings, and the ONLY thing the panels
 /// talk to.
 ///
@@ -17,7 +31,9 @@ import 'watched_threshold.dart';
 /// open, mirroring what the old dialog held in its `StatefulBuilder` locals.
 ///
 /// Writes are fire-and-forget, exactly as before: the control flips
-/// immediately, and the repository persists behind it.
+/// immediately, and the repository persists behind it. The one exception is
+/// [resetToDefaults], which is awaited: the window may only say "reset" once
+/// the store agrees, and then re-reads everything.
 class SettingsModel extends ChangeNotifier {
   SettingsModel({
     required this.repository,
@@ -40,8 +56,26 @@ class SettingsModel extends ChangeNotifier {
   static Future<SettingsModel> load({
     required SettingsRepository repository,
   }) async {
-    // Independent reads, issued together: ten sequential awaits before the
-    // window could open was the whole wait behind the ⚙ click.
+    final v = await _read(repository);
+    return SettingsModel(
+      repository: repository,
+      autoPlayNext: v.autoPlayNext,
+      skipMode: v.skipMode,
+      watchedThreshold: v.watchedThreshold,
+      missingEnabled: v.missingEnabled,
+      airingEnabled: v.airingEnabled,
+      corroborateSkips: v.corroborateSkips,
+      minSkipLength: v.minSkipLength,
+      hideNextEpisode: v.hideNextEpisode,
+      showContinueWatching: v.showContinueWatching,
+      showSearchBar: v.showSearchBar,
+    );
+  }
+
+  /// The ONE read of everything the window shows, used at open and after a
+  /// reset. Independent reads, issued together: ten sequential awaits before
+  /// the window could open was the whole wait behind the ⚙ click.
+  static Future<_Values> _read(SettingsRepository repository) async {
     final (
       (
         autoPlayNext,
@@ -68,8 +102,7 @@ class SettingsModel extends ChangeNotifier {
       ).wait,
       repository.loadAiringEnabled(),
     ).wait;
-    return SettingsModel(
-      repository: repository,
+    return (
       autoPlayNext: autoPlayNext,
       skipMode: skipMode,
       watchedThreshold: watchedThreshold,
@@ -114,6 +147,11 @@ class SettingsModel extends ChangeNotifier {
 
   bool showContinueWatching;
   bool showSearchBar;
+
+  /// Bumped by every reset. The source lists keep their own loaded order in
+  /// widget state (they are not in this model), so they watch this number
+  /// and re-read when it changes.
+  int resetRevision = 0;
 
   void setAutoPlayNext(bool v) {
     autoPlayNext = v;
@@ -168,6 +206,34 @@ class SettingsModel extends ChangeNotifier {
   void setShowSearchBar(bool v) {
     showSearchBar = v;
     unawaited(repository.setShowSearchBar(v));
+    notifyListeners();
+  }
+
+  /// Every preference back to its default, then re-read so the window shows
+  /// what the store now holds — never what a reset was expected to produce.
+  Future<void> resetToDefaults() async {
+    await repository.resetToDefaults();
+    resetRevision++;
+    await reload();
+  }
+
+  /// Re-read everything and notify. The threshold field is re-seeded too (its
+  /// controller is kept — the panel holds it).
+  Future<void> reload() async {
+    final v = await _read(repository);
+    if (_disposed) return;
+    autoPlayNext = v.autoPlayNext;
+    skipMode = v.skipMode;
+    watchedThreshold = v.watchedThreshold;
+    missingEnabled = v.missingEnabled;
+    airingEnabled = v.airingEnabled;
+    corroborateSkips = v.corroborateSkips;
+    minSkipLength = v.minSkipLength;
+    hideNextEpisode = v.hideNextEpisode;
+    showContinueWatching = v.showContinueWatching;
+    showSearchBar = v.showSearchBar;
+    thresholdController.text = formatWatchedThreshold(watchedThreshold);
+    thresholdValid = true;
     notifyListeners();
   }
 

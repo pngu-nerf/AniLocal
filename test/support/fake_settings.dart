@@ -90,4 +90,7 @@ class FakeSettings implements SettingsRepository {
   Future<double> loadPanelWidth() async => 300;
   @override
   Future<void> setPanelWidth(double width) async {}
+
+  @override
+  Future<void> resetToDefaults() async {}
 }

@@ -38,6 +38,7 @@ class SourcesPanel extends StatelessWidget {
             caption:
                 'Top source is used first. The rest are tried only if it fails.',
             scanning: actions.scanning,
+            revision: model.resetRevision,
           ),
         ],
       ),
@@ -53,6 +54,7 @@ class SourcesPanel extends StatelessWidget {
                 'Top source is used first. The rest are tried only if it has '
                 'no data for an episode.',
             scanning: actions.scanning,
+            revision: model.resetRevision,
           ),
         ],
       ),
