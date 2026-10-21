@@ -1,6 +1,7 @@
 import 'package:anilocal/domain/models/identified_episode.dart';
 import 'package:anilocal/domain/models/refresh_summary.dart';
 import 'package:anilocal/domain/models/skip_mode.dart';
+import 'package:anilocal/domain/models/source_descriptor.dart';
 import 'package:anilocal/ui/settings/setting_row.dart';
 import 'package:anilocal/ui/settings/settings_actions.dart';
 import 'package:anilocal/ui/settings/settings_window.dart';
@@ -14,12 +15,14 @@ import 'support/fake_sources.dart';
 import 'support/finders.dart';
 import 'support/recorder_settings.dart';
 
-/// The Settings window was rebuilt from one scrolling list of collapsibles into
-/// a two-pane sidebar shell. That was a STRUCTURAL and PRESENTATIONAL change
-/// only, so these lock the part that must not have moved: every setting still
-/// present, still reachable, and still writing through the same repository.
+/// The Settings window is a two-pane sidebar shell of SEVEN tabs, each the
+/// answer to one question: Folders · Sources · Playback · Display · Unmatched ·
+/// Maintenance · About. These lock what a re-sort must not lose: every setting
+/// still present, still reachable, and still writing through the same
+/// repository — and the tab each row lives on, since putting a row back where
+/// it used to be is exactly the drift the seven-tab layout replaced.
 ///
-/// They also pin the two rules the rebuild exists to enforce — no long copy on
+/// They also pin the two rules the shell exists to enforce — no long copy on
 /// the always-visible surface, and no "Show / hide" labels — because those are
 /// the things a later edit would quietly undo.
 
@@ -29,6 +32,17 @@ const _unmatchedFile = IdentifiedEpisode(
   parsedEpisodeNumber: 1,
 );
 
+/// The sidebar, top to bottom. The Unmatched label carries the fake's count.
+const _sidebar = [
+  'Folders',
+  'Sources',
+  'Playback',
+  'Display',
+  'Unmatched (3)',
+  'Maintenance',
+  'About',
+];
+
 SettingsDialogActions _actions({
   Future<void> Function(IdentifiedEpisode)? onFixMatch,
   FakeSourcesRepository? sources,
@@ -37,8 +51,17 @@ SettingsDialogActions _actions({
 }) =>
     SettingsActions(
       sources: fakeSourcesActions(sources ?? FakeSourcesRepository()),
-      metadataSources: const [],
-      skipSources: const [],
+      metadataSources: const [
+        SourceDescriptor(token: 'anilist', displayName: 'AniList'),
+        SourceDescriptor(token: 'kitsu', displayName: 'Kitsu'),
+      ],
+      skipSources: const [
+        SourceDescriptor(
+          token: 'chapters',
+          displayName: 'Chapters in the file',
+        ),
+        SourceDescriptor(token: 'aniskip', displayName: 'AniSkip'),
+      ],
       onRefreshMetadata: () async =>
           const RefreshSummary(seriesRefreshed: 0, skipsFetched: 0),
       scanning: scanning ?? ValueNotifier<bool>(false),
@@ -52,6 +75,7 @@ SettingsDialogActions _actions({
 Future<RecorderSettings> _openSettings(
   WidgetTester tester, {
   SettingsDialogActions? actions,
+  String? initialCategory,
 }) async {
   tester.view.physicalSize = const Size(1200, 820);
   tester.view.devicePixelRatio = 1.0;
@@ -68,6 +92,7 @@ Future<RecorderSettings> _openSettings(
               context,
               settings: settings,
               actions: actions ?? _actions(),
+              initialCategory: initialCategory,
             ),
             child: const Text('open'),
           ),
@@ -87,6 +112,13 @@ Finder _switchIn(String label) => find.descendant(
   matching: find.byType(Switch),
 );
 
+/// Playback holds TWO text fields (m:ss and seconds), so a field is always
+/// found through its row.
+Finder _fieldIn(String label) => find.descendant(
+  of: find.ancestor(of: find.text(label), matching: find.byType(SettingRow)),
+  matching: find.byType(TextField),
+);
+
 Future<void> _openCategory(WidgetTester tester, String label) async {
   await tester.tap(find.text(label));
   await tester.pumpAndSettle();
@@ -94,15 +126,47 @@ Future<void> _openCategory(WidgetTester tester, String label) async {
 
 void main() {
   group('settings window', () {
-    testWidgets('every migrated setting is present and reachable', (
+    testWidgets('the sidebar lists the seven categories in order', (
+      tester,
+    ) async {
+      await _openSettings(tester);
+      var lastY = double.negativeInfinity;
+      for (final label in _sidebar) {
+        final y = tester.getTopLeft(find.text(label)).dy;
+        expect(y, greaterThan(lastY), reason: '$label is out of order');
+        lastY = y;
+      }
+      // The tabs the re-sort folded away must not come back as entries.
+      for (final gone in ['Library', 'Homepage', 'Metadata', 'Skip']) {
+        expect(find.text(gone), findsNothing, reason: '$gone is a dead tab');
+      }
+    });
+
+    testWidgets('every setting is present, on the tab its question lives on', (
       tester,
     ) async {
       await _openSettings(tester);
 
-      // Sources is the landing panel (it leads the sidebar); this fake has no
+      // Folders is the landing panel (it leads the sidebar); this fake has no
       // folders, so it shows its empty state.
       expect(findXpLabel('Add a folder'), findsOneWidget);
 
+      // Sources: BOTH provider lists on one page, each with its own top row.
+      await _openCategory(tester, 'Sources');
+      expect(findXpLabel('Show information'), findsOneWidget);
+      expect(findXpLabel('Intro / outro timings'), findsOneWidget);
+      for (final name in [
+        'AniList',
+        'Kitsu',
+        'Chapters in the file',
+        'AniSkip',
+      ]) {
+        expect(find.text(name), findsOneWidget);
+      }
+      expect(find.text('Source of truth'), findsNWidgets(2));
+
+      // Playback: everything about skipping together, plus autoplay and the
+      // watched threshold.
       await _openCategory(tester, 'Playback');
       expect(find.text('Autoplay next episode'), findsOneWidget);
       expect(find.text('Skip intro / outro'), findsOneWidget);
@@ -116,20 +180,27 @@ void main() {
           findsOneWidget,
         );
       }
+      expect(find.text('Ignore skips shorter than'), findsOneWidget);
+      expect(find.text('Cross-check sources'), findsOneWidget);
       expect(find.text('Mark as watched'), findsOneWidget);
 
-      await _openCategory(tester, 'Library');
-      expect(find.text('Missing episode placeholders'), findsOneWidget);
-      expect(find.text('Refresh metadata'), findsOneWidget);
-      expect(find.text('Edit sources'), findsOneWidget);
-      // Moved down from the old top level into library health.
-      expect(find.text('Unmatched files'), findsOneWidget);
-      expect(find.text('3 file(s) we could not identify'), findsOneWidget);
-
-      await _openCategory(tester, 'Homepage');
+      // Display: what the homepage and the show pages show.
+      await _openCategory(tester, 'Display');
       expect(find.text('Continue watching'), findsOneWidget);
       expect(find.text('Search bar'), findsOneWidget);
       expect(find.text('Next episode'), findsOneWidget);
+      expect(find.text('Missing episode placeholders'), findsOneWidget);
+      expect(find.text('Airing status'), findsOneWidget);
+
+      await _openCategory(tester, 'Maintenance');
+      expect(find.text('Refresh metadata'), findsOneWidget);
+
+      // The two rows that only jumped to another tab are gone for good.
+      for (final category in ['Display', 'Maintenance']) {
+        await _openCategory(tester, category);
+        expect(find.text('Edit sources'), findsNothing);
+        expect(find.text('Unmatched files'), findsNothing);
+      }
     });
 
     testWidgets('the sidebar swaps panels — one category is shown at a time', (
@@ -140,7 +211,7 @@ void main() {
       expect(find.text('Autoplay next episode'), findsOneWidget);
       expect(find.text('Search bar'), findsNothing);
 
-      await _openCategory(tester, 'Homepage');
+      await _openCategory(tester, 'Display');
       expect(find.text('Search bar'), findsOneWidget);
       expect(
         find.text('Autoplay next episode'),
@@ -148,6 +219,15 @@ void main() {
         reason: 'the previous panel must be gone, not merely scrolled away',
       );
     });
+
+    testWidgets(
+      'a remembered category that no longer exists lands on Folders',
+      (tester) async {
+        await _openSettings(tester, initialCategory: 'library');
+        expect(findXpLabel('Add a folder'), findsOneWidget);
+        expect(findXpLabel('Done'), findsOneWidget, reason: 'window open');
+      },
+    );
 
     testWidgets('toggling writes through the repository, unchanged', (
       tester,
@@ -160,11 +240,9 @@ void main() {
       await tester.tap(find.text('Auto skip'));
       await tester.pumpAndSettle();
 
-      await _openCategory(tester, 'Library');
+      await _openCategory(tester, 'Display');
       await tester.tap(_switchIn('Missing episode placeholders'));
       await tester.pumpAndSettle();
-
-      await _openCategory(tester, 'Homepage');
       await tester.tap(_switchIn('Continue watching'));
       await tester.pumpAndSettle();
       await tester.tap(_switchIn('Search bar'));
@@ -184,7 +262,7 @@ void main() {
     ) async {
       final settings = await _openSettings(tester);
       await _openCategory(tester, 'Playback');
-      final field = find.byType(TextField);
+      final field = _fieldIn('Mark as watched');
 
       await tester.enterText(field, '2:15');
       await tester.pumpAndSettle();
@@ -199,7 +277,7 @@ void main() {
       'Next episode reads positively but persists the hide flag unchanged',
       (tester) async {
         final settings = await _openSettings(tester);
-        await _openCategory(tester, 'Homepage');
+        await _openCategory(tester, 'Display');
 
         // Stored hideNextEpisode is false, so the positive row shows ON.
         expect(tester.widget<Switch>(_switchIn('Next episode')).value, isTrue);
@@ -222,11 +300,17 @@ void main() {
       await _openSettings(tester);
       await _openCategory(tester, 'Playback');
       const detail = '0:00 turns off automatic watched-marking entirely.';
+      const skipDetail = 'about 90 seconds';
 
       expect(
         find.textContaining(detail),
         findsNothing,
         reason: 'the always-visible surface must stay scannable',
+      );
+      expect(
+        find.textContaining(skipDetail),
+        findsNothing,
+        reason: 'the seconds row used to carry a three-sentence subtitle',
       );
 
       await tester.tap(
@@ -246,7 +330,7 @@ void main() {
       tester,
     ) async {
       await _openSettings(tester);
-      for (final category in ['Playback', 'Library', 'Homepage', 'About']) {
+      for (final category in ['Playback', 'Display', 'Maintenance', 'About']) {
         await _openCategory(tester, category);
         for (final row in tester.widgetList<SettingRow>(
           find.byType(SettingRow),
@@ -261,17 +345,6 @@ void main() {
           );
         }
       }
-    });
-
-    testWidgets('the Library row jumps to the Unmatched category in-window', (
-      tester,
-    ) async {
-      await _openSettings(tester);
-      await _openCategory(tester, 'Library');
-      await tester.tap(find.text('Unmatched files'));
-      await tester.pumpAndSettle();
-      expect(find.text('Mystery - 01.mkv'), findsOneWidget);
-      expect(findXpLabel('Done'), findsOneWidget, reason: 'window still open');
     });
 
     testWidgets('Unmatched is a category whose label carries the live count', (
@@ -320,17 +393,16 @@ void main() {
       tester,
     ) async {
       final settings = await _openSettings(tester);
-      await _openCategory(tester, 'Skip');
-      final field = find.byType(TextField);
-      await tester.enterText(field, '45');
+      await _openCategory(tester, 'Playback');
+      await tester.enterText(_fieldIn('Ignore skips shorter than'), '45');
       // Escape with the field focused: the route pops with no blur cycle.
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(settings.writes, contains('minSkip=45'));
 
       final again = await _openSettings(tester);
-      await _openCategory(tester, 'Skip');
-      await tester.enterText(find.byType(TextField), '50');
+      await _openCategory(tester, 'Playback');
+      await tester.enterText(_fieldIn('Ignore skips shorter than'), '50');
       await tester.tapAt(const Offset(5, 5)); // the barrier
       await tester.pumpAndSettle();
       expect(again.writes, contains('minSkip=50'));

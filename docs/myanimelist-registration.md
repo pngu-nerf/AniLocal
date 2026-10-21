@@ -2,7 +2,7 @@
 
 **Status: built, tested, and deliberately NOT shipped.**
 `kShipMyAnimeListSource` in `lib/main.dart` is `false`. Flip it to `true` and
-MyAnimeList appears in Settings → Metadata, inert until a user pastes a key.
+MyAnimeList appears in Settings › Sources, inert until a user pastes a key.
 That flag is the entire re-enable — no code to write.
 
 This file exists so the decision can be revisited without re-deriving any of it.

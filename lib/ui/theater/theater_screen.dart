@@ -274,8 +274,8 @@ class _TheaterScreenState extends State<TheaterScreen> with HeaderPublisher {
   Widget build(BuildContext context) {
     publishHeader();
 
-    // Another page pushed OVER the player (Settings › Library › Unmatched
-    // files, About › Licences) leaves this route mounted, so audio kept
+    // Another page pushed OVER the player (Settings › Unmatched,
+    // About › Licences) leaves this route mounted, so audio kept
     // playing behind an unrelated screen. `ModalRoute.of` subscribes to the
     // route's state, so this rebuilds when it stops being current.
     final obscured = !(ModalRoute.of(context)?.isCurrent ?? true);

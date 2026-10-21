@@ -9,8 +9,8 @@ import 'package:anilocal/ui/licences_screen.dart';
 import 'package:anilocal/ui/routes.dart';
 import 'package:anilocal/ui/scan_control.dart';
 import 'package:anilocal/ui/series_detail_screen.dart';
+import 'package:anilocal/ui/settings/panels/folders_panel.dart';
 import 'package:anilocal/ui/settings/panels/source_list_panel.dart';
-import 'package:anilocal/ui/settings/panels/sources_panel.dart';
 import 'package:anilocal/ui/theater/zones/episode_list_zone.dart';
 import 'package:anilocal/ui/theater/zones/series_info_zone.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
@@ -287,7 +287,7 @@ void main() {
           MaterialApp(
             theme: XpTheme.data(),
             home: Scaffold(
-              body: SourcesPanel(
+              body: FoldersPanel(
                 sources: fakeSourcesActions(_ThrowingSources()),
               ),
             ),
@@ -311,7 +311,7 @@ void main() {
         MaterialApp(
           theme: XpTheme.data(),
           home: Scaffold(
-            body: SourcesPanel(
+            body: FoldersPanel(
               sources: fakeSourcesActions(
                 FakeSourcesRepository([
                   '/lib/usb',

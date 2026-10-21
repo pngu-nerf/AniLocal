@@ -25,7 +25,7 @@ String metadataFailureCause(MetadataFailure failure) => switch (failure) {
     'The metadata service is rate-limiting requests — wait a minute, then '
         'try again.',
   MetadataFailure.unauthorized =>
-    'That source rejected its client ID — check it in Settings › Metadata. '
+    'That source rejected its client ID — check it in Settings › Sources. '
         'Waiting will not help.',
 };
 

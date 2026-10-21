@@ -74,7 +74,7 @@ const List<String> kEpisodicAnimeFormats = [
 /// AniSkip needs already arrives via AniList and the cross-map.
 ///
 /// Everything behind this flag is complete and covered by tests; flip it to
-/// true and MAL appears in Settings > Metadata, inert until a key is pasted.
+/// true and MAL appears in Settings › Sources, inert until a key is pasted.
 /// `docs/myanimelist-registration.md` records the registration flow so the
 /// decision can be revisited without re-deriving it.
 ///
@@ -277,7 +277,7 @@ Future<void> main() async {
   // can never disagree about which source is preferred. Today it holds a single
   // provider; adding one is appending to this list.
   // Built-in order; the user can reorder or disable any of them in
-  // Settings > Metadata, and that order is read fresh on every lookup.
+  // Settings › Sources, and that order is read fresh on every lookup.
   final metadataProviders = <MetadataProvider>[
     AniListMetadataProvider(
       AniListClient(httpClient: httpClient),
@@ -335,7 +335,7 @@ Future<void> main() async {
     cache: database,
     loadOrder: settings.loadMetadataSourceOrder,
   );
-  // Descriptors for the Settings > Metadata list, derived from the ONE provider
+  // Descriptors for the Settings › Sources list, derived from the ONE provider
   // list so the two can't list different sources. `configured` is a snapshot
   // for first paint; the panel re-derives it live from the stored key, so
   // pasting one takes effect without a restart.
@@ -550,7 +550,7 @@ Future<void> main() async {
       // …and ShowPreferencesRepository (per-show cover/next-episode prefs).
       showPreferences: repository,
       settings: settings,
-      // Descriptors for the Settings > Metadata list, derived from the ONE
+      // Descriptors for the Settings › Sources list, derived from the ONE
       // provider list so the two can't list different sources.
       metadataSources: metadataSourceDescriptors,
       skipSources: [

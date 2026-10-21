@@ -5,11 +5,12 @@ import '../theme/xp_widgets.dart';
 
 /// A drag-to-reorder priority list in the instrument style.
 ///
-/// ONE implementation, shared by the Sources panel (library folders) and the
-/// Metadata panel (metadata sources). Both express the same idea — an ordered
-/// list where the top entry wins and the rest are fallbacks — so building a
-/// second version would guarantee the two drift apart (CLAUDE.md: reuse before
-/// you build, make it configurable per location).
+/// ONE implementation, shared by the Folders panel (library folders) and the
+/// two provider lists on Settings › Sources (metadata, skip timings). All
+/// express the same idea — an ordered list where the top entry wins and the
+/// rest are fallbacks — so building a second version would guarantee the two
+/// drift apart (CLAUDE.md: reuse before you build, make it configurable per
+/// location).
 ///
 /// Rows are identified by [keyOf], never by index, so reordering and filtering
 /// can't mis-target an action.
@@ -26,11 +27,21 @@ class XpReorderableList<T> extends StatelessWidget {
     this.trailingBuilder,
     this.dimmed,
     this.enabled = true,
+    this.shrinkWrap = false,
   });
 
   /// False while the list must not be reordered (a scan holds the folder
   /// order it started with); the handles stay visible but inert.
   final bool enabled;
+
+  /// True lays every row out at its full height and hands scrolling to the
+  /// enclosing view, so the list can sit inside a scrolling panel next to
+  /// other groups. What is lost is drag-autoscroll — a row dragged to the
+  /// edge of a shrink-wrapped list does not scroll it. ASSUMPTION at the call
+  /// sites: the provider lists hold two to four rows, all on screen at once,
+  /// so there is never anywhere to autoscroll to. The Folders list, which can
+  /// grow, keeps the default and scrolls itself.
+  final bool shrinkWrap;
 
   final List<T> items;
 
@@ -65,6 +76,8 @@ class XpReorderableList<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ReorderableListView(
     buildDefaultDragHandles: false,
+    shrinkWrap: shrinkWrap,
+    physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
     onReorderItem: onReorder,
     padding: const EdgeInsets.only(bottom: 4),
     children: [

@@ -34,7 +34,7 @@ class SettingsCategory {
 
   /// False for a panel that fills the pane and scrolls ITSELF.
   ///
-  /// Most panels are a short column and let the shell scroll them. Sources is
+  /// Most panels are a short column and let the shell scroll them. Folders is
   /// a reorderable list, which needs bounded height and owns its own scrolling
   /// — nesting it inside the shell's scroll view would be an unbounded-height
   /// error and would fight drag-autoscroll. One flag, handled generically; the
@@ -180,19 +180,16 @@ class _SettingsShellState extends State<SettingsShell> {
         ),
         const VerticalDivider(width: 1, thickness: 1, color: Xp.divider),
         Expanded(
-          child: SettingsNavigation(
-            select: _selectById,
-            // Every panel stays mounted; only the selected one is shown. A
-            // panel that loads its list (Folders, Metadata, Skip) therefore
-            // loads it ONCE per window rather than flashing a spinner every
-            // time the user switches away and back.
-            child: IndexedStack(
-              index: widget.categories.indexOf(selected),
-              children: [
-                for (final c in widget.categories)
-                  KeyedSubtree(key: ValueKey(c.id), child: _panel(context, c)),
-              ],
-            ),
+          // Every panel stays mounted; only the selected one is shown. A
+          // panel that loads its list (Folders, Sources) therefore loads it
+          // ONCE per window rather than flashing a spinner every time the
+          // user switches away and back.
+          child: IndexedStack(
+            index: widget.categories.indexOf(selected),
+            children: [
+              for (final c in widget.categories)
+                KeyedSubtree(key: ValueKey(c.id), child: _panel(context, c)),
+            ],
           ),
         ),
       ],
@@ -244,27 +241,4 @@ class _SidebarItem extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Lets a panel move the window to another category — the "Edit sources" row
-/// jumping to the Sources tab, for instance.
-///
-/// An inherited handle rather than a callback threaded into every panel, so
-/// [SettingsCategory] stays a plain `WidgetBuilder` and the shell keeps no
-/// per-category wiring.
-class SettingsNavigation extends InheritedWidget {
-  const SettingsNavigation({
-    super.key,
-    required this.select,
-    required super.child,
-  });
-
-  final void Function(String categoryId) select;
-
-  static void goTo(BuildContext context, String categoryId) => context
-      .dependOnInheritedWidgetOfExactType<SettingsNavigation>()
-      ?.select(categoryId);
-
-  @override
-  bool updateShouldNotify(SettingsNavigation oldWidget) => false;
 }

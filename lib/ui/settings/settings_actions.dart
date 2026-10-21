@@ -21,7 +21,7 @@ const String kWaitForScanTooltip = 'Wait for the scan to finish';
 ///
 /// Structural rather than a convention: the show page used to build its own
 /// [SettingsDialogActions] and left the two source lists at their defaults, so
-/// Settings › Metadata and › Skip rendered EMPTY from two of the window's three
+/// Settings › Sources rendered EMPTY from two of the window's three
 /// doors. Two things make that impossible to repeat: [SettingsDialogActions]
 /// has a private constructor, and the two lists here have NO default — a
 /// caller that forgets them does not compile.

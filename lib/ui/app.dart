@@ -94,11 +94,11 @@ class AniLocalApp extends StatelessWidget {
   /// scanning files or touching overrides/watch-state. Returns counts.
   final Future<RefreshSummary> Function() onRefreshMetadata;
 
-  /// Metadata sources this build ships, for the Settings > Metadata list.
+  /// Metadata sources this build ships, for the Settings › Sources list.
   /// Descriptors only — the UI never sees a provider (seam #1).
   final List<SourceDescriptor> metadataSources;
 
-  /// Skip sources this build ships, for the Settings > Skip list.
+  /// Skip sources this build ships, for the Settings › Sources list.
   final List<SourceDescriptor> skipSources;
 
   final Future<({bool added, String? deniedLabel})> Function() onAddFolder;

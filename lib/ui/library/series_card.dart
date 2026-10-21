@@ -271,7 +271,7 @@ class _SeriesCardState extends State<SeriesCard> {
           ),
           onPressed: () => _setAiringHidden(!series.airingHidden),
           // The per-show mute of the airing indicator; the global switch is
-          // Settings › Library › Airing status.
+          // Settings › Display › Airing status.
           child: const Text("Don't flag new episodes"),
         ),
       ],

@@ -91,7 +91,7 @@ void main() {
 /// The shipped bug was upstream of the show page: it assembled its own
 /// settings bundle and the library screen did not forward the source lists.
 /// So this drives the real wiring — `AniLocalApp` → library grid → card tap →
-/// show page → header ⚙ → Metadata — rather than constructing the show page
+/// show page → header ⚙ → Sources — rather than constructing the show page
 /// with the lists already in hand, which would pass whatever the wiring did.
 void _settingsWiringTests() {
   testWidgets('Settings from the show page shows the sources the app ships', (
@@ -122,14 +122,11 @@ void _settingsWiringTests() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
-    await tester.tap(find.text('Metadata'));
+    // One tab carries both provider lists.
+    await tester.tap(find.text('Sources'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Kitsu Probe'), findsOneWidget);
-
-    await tester.tap(find.text('Skip'));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
     expect(find.text('Chapters Probe'), findsOneWidget);
   });
 }

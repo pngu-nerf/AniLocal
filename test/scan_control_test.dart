@@ -8,7 +8,7 @@ import 'package:anilocal/domain/models/titles.dart';
 import 'package:anilocal/playback/playback_controller.dart';
 import 'package:anilocal/ui/app.dart';
 import 'package:anilocal/ui/scan_control.dart';
-import 'package:anilocal/ui/settings/panels/sources_panel.dart';
+import 'package:anilocal/ui/settings/panels/folders_panel.dart';
 import 'package:anilocal/ui/theme/header_readout.dart';
 import 'package:anilocal/ui/theme/xp_theme.dart';
 import 'package:anilocal/ui/theme/xp_widgets.dart';
@@ -212,7 +212,7 @@ void main() {
         MaterialApp(
           theme: XpTheme.data(),
           home: Scaffold(
-            body: SourcesPanel(
+            body: FoldersPanel(
               sources: fakeSourcesActions(repo, scanning: scanning),
             ),
           ),

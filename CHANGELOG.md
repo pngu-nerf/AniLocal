@@ -29,7 +29,7 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   during a scan — a fourth phase, "Checking airing…", that asks once, batched,
   only about shows that can have changed — and the words are measured against
   your clock when drawn, never stored. While a show airs, missing-episode
-  ghosts and the "N of M" tally stop at what has aired. Settings › Library ›
+  ghosts and the "N of M" tally stop at what has aired. Settings › Display ›
   Airing status turns it off; a show's menu mutes it alone. Cache schema v23.
 - A stream that dies mid-play (a drive pulled while an episode runs) shows
   the error with Retry within a few seconds and stays on that episode instead
@@ -75,6 +75,15 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   `tool/perf.sh`; `docs/runtime-walkthrough.md`.
 
 ### Changed
+- **Settings is seven tabs, each the answer to one question.** Folders (what
+  you own), Sources (where show information and intro/outro timings come from
+  — the two provider lists on one page), Playback (everything the player does
+  on its own, with all of skipping together: mode, minimum length,
+  cross-check), Display (what the homepage and show pages show), Unmatched,
+  Maintenance (Refresh metadata) and About. The Library, Homepage, Metadata
+  and Skip tabs are folded in, and the two rows that only jumped to another
+  tab are gone. Long explanations moved off the visible surface into each
+  row's ⓘ; a library folder is now called a folder everywhere.
 - **Minimum macOS is 12 (Monterey).** Flutter 3.47 dropped 10.15 and 11 to
   support Xcode 27; AniLocal builds on Flutter 3.47.5 and the renderer under
   the video is the engine's default (Impeller).
@@ -131,7 +140,7 @@ that answers nothing. `docs/runtime-walkthrough.md` is the human half.
   category; the add-time dialog says the folder itself reads. The
   unreadable-folder message tells an unplugged drive ("reconnect") from a
   denied one ("re-add or grant access"). Scan is disabled until a folder
-  exists. Settings › Library › Unmatched files and About › Licences pop the
+  exists. Settings › Unmatched and About › Licences pop the
   player first; anything pushed over the player pauses it.
 - The empty library distinguishes "no folders yet" from "nothing found in
   your folders"; the Licences page has a header; the window remembers its

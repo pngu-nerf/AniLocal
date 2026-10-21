@@ -38,12 +38,14 @@ class _AboutPanelState extends State<AboutPanel> {
           SettingRow(label: 'Version', subtitle: Diagnostics.appVersion),
           SettingRow(
             label: 'Licences',
-            subtitle:
+            subtitle: 'GNU GPL v3 or later. No warranty.',
+            info:
                 'AniLocal is free software under the GNU GPL v3 or later, and '
                 'comes with ABSOLUTELY NO WARRANTY. You may redistribute it '
                 'under the terms of that licence; the source is at the '
-                'project repository. Bundled: libmpv/FFmpeg (GPL/LGPL), '
-                'libass, Archivo (OFL), and every package it builds on.',
+                'project repository.\n\n'
+                'Bundled: libmpv/FFmpeg (GPL/LGPL), libass, Archivo (OFL), '
+                'and every package it builds on.',
             control: XpButton(
               label: 'View',
               // Close the window, then open OUR licences page (it publishes a
@@ -64,11 +66,15 @@ class _AboutPanelState extends State<AboutPanel> {
         children: [
           SettingRow(
             label: 'Copy diagnostics',
+            // The outcome of the last copy replaces the subtitle, so the row
+            // itself says whether it worked.
             subtitle:
-                _copied ??
-                'Version, library counts, active settings and the recent log — '
-                    'paste it into a bug report. May include your library '
-                    'folder names; your home directory is shown as ~.',
+                _copied ?? 'Version, counts, settings and the recent log.',
+            info:
+                'Paste it into a bug report: the app version, library counts, '
+                'active settings and the recent log.\n\n'
+                'May include your library folder names; your home directory '
+                'is shown as ~.',
             control: XpButton(
               icon: Icons.copy_outlined,
               label: 'Copy',
@@ -92,13 +98,16 @@ class _AboutPanelState extends State<AboutPanel> {
         title: 'Privacy',
         children: [
           SettingRow(
-            label: 'What leaves this Mac',
+            label: 'What leaves this computer',
             subtitle:
+                'Show titles and ids go to the sources you enable. Nothing '
+                'that identifies you.',
+            info:
                 'To identify a show, its parsed title is sent to the metadata '
                 'services you have enabled (AniList, Kitsu, Jikan), and a '
                 'MyAnimeList id and episode number to AniSkip for skip times. '
                 'Cover images are downloaded from those services, and a public '
-                'id-mapping list is fetched from GitHub about once a week. '
+                'id-mapping list is fetched from GitHub about once a week.\n\n'
                 'File names, folder paths and anything that identifies you or '
                 'this computer are never sent. There is no telemetry, no '
                 'analytics and no account.',

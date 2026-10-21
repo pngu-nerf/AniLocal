@@ -61,7 +61,7 @@ Future<_Closed> _open(
                     loadUnmatched: () async => const [],
                     onFixMatch: (_) async {},
                   ),
-              initialCategory: sourcesCategoryId,
+              initialCategory: foldersCategoryId,
             ),
             child: const Text('open'),
           ),
@@ -106,7 +106,7 @@ void main() {
       expect(find.text('/media/A'), findsOneWidget);
       expect(find.text('/media/B'), findsOneWidget);
       expect(
-        find.text('Preferred source'),
+        find.text('Preferred folder'),
         findsOneWidget,
         reason: 'only the top folder is marked preferred',
       );

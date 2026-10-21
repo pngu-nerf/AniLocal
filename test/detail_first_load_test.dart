@@ -192,7 +192,7 @@ void _settingsFromShowPageTests() {
     tester,
   ) async {
     // The show page built its own SettingsDialogActions and left the two
-    // source lists at their empty defaults, so Metadata and Skip rendered
+    // source lists at their empty defaults, so Settings › Sources rendered
     // EMPTY from two of the window's three entry points. This drives the real
     // shell header (the ⚙ lives there), opens Settings from the show page, and
     // looks for a source by name.
@@ -226,16 +226,14 @@ void _settingsFromShowPageTests() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Metadata'));
+    // One tab carries both provider lists.
+    await tester.tap(find.text('Sources'));
     await tester.pumpAndSettle();
     expect(
       find.text('Kitsu Probe'),
       findsOneWidget,
       reason: 'metadata list populated',
     );
-
-    await tester.tap(find.text('Skip'));
-    await tester.pumpAndSettle();
     expect(
       find.text('Chapters Probe'),
       findsOneWidget,

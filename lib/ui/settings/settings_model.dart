@@ -97,17 +97,17 @@ class SettingsModel extends ChangeNotifier {
   Duration watchedThreshold;
   bool missingEnabled;
 
-  /// The airing indicator on the episode-count line (Settings › Library).
+  /// The airing indicator on the episode-count line (Settings › Display).
   bool airingEnabled;
 
-  /// Cross-check skip sources against each other (Settings > Skip).
+  /// Cross-check skip sources against each other (Settings › Playback).
   bool corroborateSkips;
 
   /// Ignore skip windows shorter than this. Zero = no filter.
   Duration minSkipLength;
 
   /// NOTE the stored sense: true means the next-episode button is HIDDEN. The
-  /// Homepage panel presents it as the positive "Next episode", inverting only
+  /// Display panel presents it as the positive "Next episode", inverting only
   /// the DISPLAY — what gets persisted is unchanged, including the
   /// apply-to-all overwrite of every show's own choice.
   bool hideNextEpisode;

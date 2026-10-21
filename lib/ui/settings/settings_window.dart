@@ -2,22 +2,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../diagnostics/app_log.dart';
 import '../../domain/repositories/settings_repository.dart';
-import '../theme/xp_tokens.dart';
 import '../theme/xp_widgets.dart';
 import '../widgets/notices.dart';
 import '../widgets/xp_dialog.dart';
 import 'panels/about_panel.dart';
-import 'panels/homepage_panel.dart';
-import 'panels/library_panel.dart';
+import 'panels/display_panel.dart';
+import 'panels/folders_panel.dart';
+import 'panels/maintenance_panel.dart';
 import 'panels/playback_panel.dart';
-import 'panels/source_list_panel.dart';
 import 'panels/sources_panel.dart';
 import 'panels/unmatched_panel.dart';
-import 'setting_row.dart';
 import 'settings_actions.dart';
 import 'settings_categories.dart';
 import 'settings_model.dart';
@@ -95,7 +92,9 @@ Future<SettingsOutcome> showAppSettingsDialog(
 }
 
 /// The category the settings window was on when it last closed, for this
-/// app run. Session memory, not a setting.
+/// app run. Session memory, not a setting. A remembered id that no longer
+/// exists (a tab renamed between runs cannot happen within one run, but the
+/// shell guards it anyway) lands on the first tab.
 String? _lastCategory;
 
 Future<List<String>> _folderPaths(SettingsDialogActions actions) async => [
@@ -103,8 +102,8 @@ Future<List<String>> _folderPaths(SettingsDialogActions actions) async => [
 ];
 
 /// What changed while the window was open, so the screen underneath can catch
-/// up. Sources moved INTO settings, and reordering them changes which copy of a
-/// duplicated episode plays — a change the caller cannot see for itself.
+/// up. Folders moved INTO settings, and reordering them changes which source
+/// of a duplicated episode plays — a change the caller cannot see for itself.
 ///
 /// The two are distinct because they cost differently: a folder added or
 /// removed needs a SCAN (there are files to discover or drop), while a pure
@@ -143,90 +142,34 @@ class _SettingsWindow extends StatelessWidget {
   /// Told each time the user picks a category, so the window can reopen there.
   final ValueChanged<String>? onCategoryChanged;
 
-  /// THE category list. Adding one later is an entry here plus its panel —
+  /// THE category list — seven tabs, each the answer to one question (the
+  /// ids file names them). Adding one later is an entry here plus its panel —
   /// `SettingsShell` never changes, and nothing else in this file does either.
   ///
   /// Only categories with content are listed; there are no placeholder pages.
   List<SettingsCategory> _categories(int unmatched) => [
-    // Sources leads, and so is the landing panel: it is the only category that
-    // decides what the library CONTAINS (and, by its order, which copy plays)
-    // rather than how it behaves — and with no Sources tab in the header, this
-    // window is the only way to it.
+    // Folders leads, and so is the landing panel: it is the only category that
+    // decides what the library CONTAINS (and, by its order, which source
+    // plays) rather than how it behaves — and with no Folders tab in the
+    // header, this window is the only way to it.
     SettingsCategory(
-      id: sourcesCategoryId,
-      // "Folders": what you own. "Sources" was doing three jobs — library
-      // folders, metadata/skip providers, and an episode's file copies.
+      id: foldersCategoryId,
+      // "Folders": what you own. "Sources" is the providers tab below, and an
+      // episode's own files in the player; it is never a library folder.
       label: 'Folders',
       icon: Icons.folder_open,
-      // Fills the pane and scrolls itself: it hosts a reorderable list.
+      // Fills the pane and scrolls itself: it hosts a reorderable list that
+      // can grow.
       scrollable: false,
-      builder: (_) => SourcesPanel(sources: actions.sources),
+      builder: (_) => FoldersPanel(sources: actions.sources),
     ),
-    // Distinct from Sources on purpose: that is library folders ("what do I
-    // own"), this is metadata sources ("what is this show"). Same interaction,
-    // different question, independent failure modes.
+    // Where information comes from: the metadata list and the skip-timings
+    // list, two groups with two orders, shrink-wrapped so the shell scrolls.
     SettingsCategory(
-      id: metadataCategoryId,
-      label: 'Metadata',
+      id: sourcesCategoryId,
+      label: 'Sources',
       icon: Icons.travel_explore_outlined,
-      scrollable: false, // hosts a reorderable list, like Sources
-      builder: (_) => SourceListPanel(
-        sources: actions.metadataSources,
-        settings: model.repository,
-        loadOrder: model.repository.loadMetadataSourceOrder,
-        saveOrder: model.repository.setMetadataSourceOrder,
-        caption:
-            'Top source is used first. The rest are tried only if it fails.',
-        scanning: actions.scanning,
-      ),
-    ),
-    // Same interaction, different question: this one decides where OP/ED
-    // timings come from, and fails independently of metadata.
-    SettingsCategory(
-      id: skipCategoryId,
-      label: 'Skip',
-      icon: Icons.fast_forward_outlined,
-      scrollable: false,
-      builder: (_) => SourceListPanel(
-        sources: actions.skipSources,
-        settings: model.repository,
-        loadOrder: model.repository.loadSkipSourceOrder,
-        saveOrder: model.repository.setSkipSourceOrder,
-        caption:
-            'Top source is used first. The rest are tried only if it has no '
-            'data for an episode.',
-        scanning: actions.scanning,
-        extra: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SettingRow(
-              label: 'Ignore skips shorter than',
-              subtitle:
-                  'An opening runs about 90 seconds, so a very short "skip" is '
-                  'usually a source mistaking something else for a theme. '
-                  '0 keeps every window.',
-              control: SizedBox(
-                width: 96,
-                child: _SecondsField(
-                  seconds: model.minSkipLength.inSeconds,
-                  onChanged: model.setMinSkipLength,
-                ),
-              ),
-            ),
-            SettingRow(
-              label: 'Cross-check sources',
-              subtitle:
-                  'Ask every source and compare. Two that agree can auto-skip; '
-                  'ones that disagree offer a button instead. A source with no '
-                  'data for an episode is not a disagreement. Slower.',
-              control: SettingSwitch(
-                value: model.corroborateSkips,
-                onChanged: model.setCorroborateSkips,
-              ),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => SourcesPanel(model: model, actions: actions),
     ),
     SettingsCategory(
       id: playbackCategoryId,
@@ -235,10 +178,10 @@ class _SettingsWindow extends StatelessWidget {
       builder: (_) => PlaybackPanel(model: model),
     ),
     SettingsCategory(
-      id: libraryCategoryId,
-      label: 'Library',
-      icon: Icons.video_library_outlined,
-      builder: (_) => LibraryPanel(model: model, actions: actions),
+      id: displayCategoryId,
+      label: 'Display',
+      icon: Icons.grid_view_outlined,
+      builder: (_) => DisplayPanel(model: model),
     ),
     // Library upkeep the header used to push a page for. The label carries
     // the live count so the sidebar says whether there is anything to do.
@@ -250,10 +193,10 @@ class _SettingsWindow extends StatelessWidget {
       builder: (_) => UnmatchedPanel(actions: actions),
     ),
     SettingsCategory(
-      id: homepageCategoryId,
-      label: 'Homepage',
-      icon: Icons.home_outlined,
-      builder: (_) => HomepagePanel(model: model),
+      id: maintenanceCategoryId,
+      label: 'Maintenance',
+      icon: Icons.build_outlined,
+      builder: (_) => MaintenancePanel(actions: actions),
     ),
     SettingsCategory(
       id: aboutCategoryId,
@@ -292,74 +235,5 @@ class _SettingsWindow extends StatelessWidget {
     actions: [
       XpButton(label: 'Done', onPressed: () => Navigator.of(context).pop()),
     ],
-  );
-}
-
-/// A plain seconds field.
-///
-/// Deliberately not the m:ss control the watched-threshold uses: this is a
-/// short duration the user thinks about in seconds ("ignore anything under
-/// 30"), and m:ss would make them type a colon to say so.
-class _SecondsField extends StatefulWidget {
-  const _SecondsField({required this.seconds, required this.onChanged});
-
-  final int seconds;
-  final void Function(int) onChanged;
-
-  @override
-  State<_SecondsField> createState() => _SecondsFieldState();
-}
-
-class _SecondsFieldState extends State<_SecondsField> {
-  late final TextEditingController _controller = TextEditingController(
-    text: '${widget.seconds}',
-  );
-
-  /// What was last written, so a blur that changed nothing writes nothing.
-  late String _committed = '${widget.seconds}';
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  /// Committed on blur/submit rather than per keystroke: mid-typing "3" on the
-  /// way to "30" is a different setting, and saving it would briefly hide
-  /// windows the user never meant to exclude.
-  void _commit() {
-    final text = _controller.text.trim();
-    if (text == _committed) return;
-    final parsed = int.tryParse(text);
-    if (parsed == null) {
-      _controller.text = _committed; // unparseable -> leave it alone
-      return;
-    }
-    final clamped = parsed.clamp(0, minSkipLengthMax.inSeconds);
-    _controller.text = '$clamped';
-    _committed = '$clamped';
-    widget.onChanged(clamped);
-  }
-
-  @override
-  Widget build(BuildContext context) => Focus(
-    onFocusChange: (hasFocus) {
-      if (!hasFocus) _commit();
-    },
-    child: TextField(
-      controller: _controller,
-      inputFormatters: [
-        FilteringTextInputFormatter.digitsOnly,
-        LengthLimitingTextInputFormatter(3),
-      ],
-      keyboardType: TextInputType.number,
-      style: const TextStyle(color: Xp.text, fontSize: Xp.fontSizeLabel),
-      decoration: const InputDecoration(
-        isDense: true,
-        suffixText: 's',
-        border: OutlineInputBorder(),
-      ),
-      onSubmitted: (_) => _commit(),
-    ),
   );
 }

@@ -98,8 +98,8 @@ measured at 600 shows / 8,000 files.
       already identified is re-fetched (the lookup count is only the
       remainder).
 - [ ] **C4.** With the scan running, open Settings → in
-      **Folders**, Add / Remove / drag-reorder; in **Metadata** and **Skip**,
-      the checkboxes and drag-reorder; in **Library**, Refresh metadata — all
+      **Folders**, Add / Remove / drag-reorder; in **Sources**, both lists'
+      checkboxes and drag-reorder; in **Maintenance**, Refresh metadata — all
       disabled, each saying *Wait for the scan to finish*. They come back the
       moment the scan ends, with the window still open.
 - [ ] **C5.** Scroll the full grid fast, top to bottom and back → covers appear
@@ -227,9 +227,7 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       Unmatched category** (the sidebar entry reads `Unmatched (N)`); pick a
       file → the window closes and the **Fix match** page opens; search,
       **Assign** → back on the library the show's card is there **and** the
-      header's Unmatched count is lower, without pressing Scan. Settings ›
-      Library › *Unmatched files* jumps to the same category **inside** the
-      window.
+      header's Unmatched count is lower, without pressing Scan.
 - [ ] **G2.** Rename a file that is on the Unmatched list (in Finder), then
       pick it in Settings › Unmatched → *That file isn't there any more. Scan
       to update the list.* Its Assign is refused the same way from the Fix
@@ -276,7 +274,7 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       the header's Back working; opened from the player, same as H2.
 - [ ] **H4.** Settings remembers the category you were on when
       reopened in the same session; **Escape**, a **click outside** and
-      **Done** all close it. Type `45` into Skip › *Ignore skips shorter than*
+      **Done** all close it. Type `45` into Playback › *Ignore skips shorter than*
       and press Escape with the field still focused → reopen: it reads 45.
 - [ ] **H5.** Play an episode, enter **fullscreen**, open
       Settings from the header (leave fullscreen with Escape first if the
@@ -300,7 +298,7 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
 
 ## J. Metadata refresh and the window
 
-- [ ] **J1.** Settings › Library › **Refresh metadata** with the network off →
+- [ ] **J1.** Settings › Maintenance › **Refresh metadata** with the network off →
       one red snackbar with the cause and *Your metadata was left untouched*;
       never a raw exception.
 - [ ] **J2.** Refresh metadata while a **scan is running** → disabled with
@@ -312,7 +310,7 @@ Cut the network (§ "You need"). Add a folder with a few **new** shows.
       the calendar time). The show page's ghosts stop at the last AIRED
       episode, not the season total. Move the latest episode's file out of
       the folder and scan → the note turns amber, *Ep N out* (hover: when it
-      aired). Put the file back and scan → dim again. Settings › Library ›
+      aired). Put the file back and scan → dim again. Settings › Display ›
       **Airing status** off → the note is gone everywhere; on again → back.
       The card menu's **Don't flag new episodes** mutes that one show only.
       Wait past a scheduled air time WITHOUT scanning → the note flips to
