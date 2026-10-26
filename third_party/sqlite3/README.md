@@ -3,8 +3,8 @@
 `sqlite3.c` / `sqlite3.h` / `sqlite3ext.h` are the official SQLite **amalgamation**,
 vendored here so the build compiles SQLite from source and needs **no network**.
 
-- **Version:** 3.53.4 (`SQLITE_VERSION` in `sqlite3.h`)
-- **Source:** <https://sqlite.org/2026/sqlite-amalgamation-3530400.zip>
+- **Version:** 3.54.1 (`SQLITE_VERSION` in `sqlite3.h`)
+- **Source:** <https://sqlite.org/2026/sqlite-amalgamation-3540100.zip>
 - **License:** public domain (SQLite)
 
 ## Why this exists
